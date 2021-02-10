@@ -393,7 +393,6 @@ bool processArgv(int argc, char ** argv, const char *versionString)
     return result;
 }
 
-
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 // Main
 //
