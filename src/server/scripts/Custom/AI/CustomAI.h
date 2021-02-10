@@ -32,6 +32,8 @@ class TC_GAME_API CustomAI : public ScriptedAI
         void JustDied(Unit* /*killer*/) override;
         void UpdateAI(uint32 diff) override;
 
+        bool CanAIAttack(Unit const* who) const override;
+
     protected:
         TaskScheduler scheduler;
         SummonList summons;

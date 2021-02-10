@@ -59,14 +59,9 @@ class npc_pet_mage_mirror_image : public CreatureScript
                 if (!owner)
                     return;
 
-                // here mirror image casts on summoner spell (not present in client dbc) 49866
-                // here should be auras (not present in client dbc): 35657, 35658, 35659, 35660 selfcast by mirror images (stats related?)
-                // Clone Me!
                 owner->CastSpell(me, SPELL_MAGE_CLONE_ME, true);
             }
 
-            // custom UpdateVictim implementation to handle special target selection
-            // we prioritize between things that are in combat with owner based on the owner's threat to them
             bool UpdateVictim()
             {
                 Unit* owner = me->GetOwner();

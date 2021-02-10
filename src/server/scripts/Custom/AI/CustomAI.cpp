@@ -79,3 +79,10 @@ void CustomAI::UpdateAI(uint32 diff)
             DoMeleeAttackIfReady();
     });
 }
+
+bool CustomAI::CanAIAttack(Unit const* who) const
+{
+    return who->IsAlive() && me->IsValidAttackTarget(who)
+        && !who->HasBreakableByDamageCrowdControlAura()
+        && ScriptedAI::CanAIAttack(who);
+}

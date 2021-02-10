@@ -441,10 +441,16 @@ class theramore_waves_invoker : public CreatureScript
             jaina->AI()->Talk(JAINA_SAY_WAVE_ALERT);
             jaina->AI()->Talk(groupId);
 
-            if (playerForQuest)
+            if (playerForQuest && playerForQuest->IsWithinDist(jaina, 25.f))
             {
                 Position playerPos = GetRandomPosition(position, 3.f);
-                playerForQuest->NearTeleportTo(playerPos);
+
+                // Si le joueur est à plus de 25 mètre de la destination d'attaque
+                float distance = playerPos.GetExactDist2d(playerForQuest->GetPosition());
+                if (distance > 25.0f)
+                {
+                    playerForQuest->NearTeleportTo(playerPos);
+                }
             }
         }
 

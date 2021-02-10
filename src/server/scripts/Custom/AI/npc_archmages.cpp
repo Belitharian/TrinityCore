@@ -12,12 +12,12 @@ enum Spells
     SPELL_PYROBLAST             = 100005,
     SPELL_LIVING_BOMB           = 100080,
     SPELL_IGNITE                = 100092,
+    SPELL_DRAGON_BREATH         = 37289,
 
     SPELL_FROSTBOLT             = 100006,
     SPELL_ICE_LANCE             = 100007,
     SPELL_ICE_BLOCK             = 100008,
     SPELL_HYPOTHERMIA           = 41425,
-    SPELL_BLINK                 = 57869,
     SPELL_FROT_NOVA             = 71320,
     SPELL_ICE_BARRIER           = 100068,
     SPELL_FROSTBITE             = 12494,
@@ -31,21 +31,28 @@ enum Spells
     SPELL_EVOCATION             = 100014,
     SPELL_PRISMATIC_BARRIER     = 100069,
     SPELL_ARCANE_POWER          = 100081,
+    SPELL_MIRROR_IMAGE          = 100105,
 
-    SPELL_COUNTERSPELL          = 15122
+    SPELL_COUNTERSPELL          = 15122,
+    SPELL_BLINK                 = 57869,
+    SPELL_POLYMORPH             = 61721,
+
+    SPELL_CLONE_ME              = 45204,
+    SPELL_MASTERS_THREAT_LIST   = 58838
 };
 
 enum Misc
 {
     // NPCs
     NPC_RHONIN                  = 100005,
+    NPC_MIRROR_IMAGE            = 100085,
 
     // Zones
     ZONE_THERAMORE              = 726,
 
     // Phases
     PHASE_COMBAT                = 1,
-    PHASE_ICE_BLOCKED
+    PHASE_BLINK_SEQUENCE
 };
 
 class npc_archmage_fire : public CreatureScript
@@ -55,9 +62,16 @@ class npc_archmage_fire : public CreatureScript
 
     struct npc_archmage_fireAI : public CustomAI
     {
-        npc_archmage_fireAI(Creature* creature) : CustomAI(creature)
+        npc_archmage_fireAI(Creature* creature) : CustomAI(creature), closeTarget(false)
         {
             SetCombatMovement(false);
+        }
+
+        void Reset() override
+        {
+            CustomAI::Reset();
+
+            closeTarget = false;
         }
 
         void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
@@ -73,12 +87,12 @@ class npc_archmage_fire : public CreatureScript
         void JustEngagedWith(Unit* /*who*/) override
         {
             scheduler
-                .Schedule(1s, 5s, [this](TaskContext fireball)
+                .Schedule(1s, 5s, PHASE_COMBAT, [this](TaskContext fireball)
                 {
                     DoCastVictim(SPELL_FIREBALL);
                     fireball.Repeat(2s);
                 })
-                .Schedule(1s, 5s, [this](TaskContext counterspell)
+                .Schedule(1s, 5s, PHASE_COMBAT, [this](TaskContext counterspell)
                 {
                     if (Unit* target = DoSelectCastingUnit(SPELL_COUNTERSPELL, 35.f))
                     {
@@ -91,18 +105,18 @@ class npc_archmage_fire : public CreatureScript
                         counterspell.Repeat(1s);
                     }
                 })
-                .Schedule(5s, 8s, [this](TaskContext living_bomb)
+                .Schedule(5s, 8s, PHASE_COMBAT, [this](TaskContext living_bomb)
                 {
                     DoCastVictim(SPELL_LIVING_BOMB);
                     living_bomb.Repeat(20s, 28s);
                 })
-                .Schedule(8s, 10s, [this](TaskContext fireblast)
+                .Schedule(8s, 10s, PHASE_COMBAT, [this](TaskContext fireblast)
                 {
                     if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                         DoCast(target, SPELL_FIREBLAST);
                     fireblast.Repeat(14s, 22s);
                 })
-                .Schedule(12s, 18s, [this](TaskContext pyroblast)
+                .Schedule(12s, 18s, PHASE_COMBAT, [this](TaskContext pyroblast)
                 {
                     if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
                         DoCast(target, SPELL_PYROBLAST);
@@ -131,6 +145,57 @@ class npc_archmage_fire : public CreatureScript
                     damage = 0;
             }
         }
+
+        void UpdateAI(uint32 diff) override
+        {
+            ScriptedAI::UpdateAI(diff);
+
+            if (!closeTarget)
+            {
+                if (Unit* victim = me->GetVictim())
+                {
+                    if (victim->IsWithinDist(me, 3.f, false))
+                    {
+                        closeTarget = true;
+
+                        scheduler.DelayGroup(PHASE_COMBAT, 2s);
+
+                        me->InterruptNonMeleeSpells(true);
+
+                        scheduler.Schedule(1s, PHASE_BLINK_SEQUENCE, [this](TaskContext context)
+                        {
+                            switch (context.GetRepeatCounter())
+                            {
+                                case 0:
+                                    me->InterruptNonMeleeSpells(true);
+                                    DoCastAOE(SPELL_DRAGON_BREATH, true);
+                                    context.Repeat(3s);
+                                    break;
+
+                                case 1:
+                                    DoCastSelf(SPELL_BLINK, true);
+                                    scheduler.CancelGroup(PHASE_BLINK_SEQUENCE);
+                                    context.Repeat(500ms);
+                                    break;
+
+                                case 2:
+                                    closeTarget = false;
+                                    break;
+                            }
+                        });
+                    }
+                }
+            }
+
+            scheduler.Update(diff, [this]
+            {
+                if (UpdateVictim())
+                    DoMeleeAttackIfReady();
+            });
+        }
+
+        private:
+        bool closeTarget;
     };
 
     CreatureAI* GetAI(Creature* creature) const override
@@ -146,9 +211,30 @@ class npc_archmage_arcanes : public CreatureScript
 
     struct npc_archmage_arcanesAI : public CustomAI
     {
-        npc_archmage_arcanesAI(Creature* creature) : CustomAI(creature)
+        npc_archmage_arcanesAI(Creature* creature) : CustomAI(creature), closeTarget(false), summons(me)
         {
             SetCombatMovement(false);
+        }
+
+        void JustSummoned(Creature* summon) override
+        {
+            if (!me->IsInCombat())
+                return;
+
+            if (summon->GetEntry() == NPC_MIRROR_IMAGE)
+            {
+                summon->Attack(me->GetVictim(), false);
+                summons.Summon(summon);
+            }
+        }
+
+        void Reset() override
+        {
+            CustomAI::Reset();
+
+            closeTarget = false;
+
+            summons.DespawnAll();
         }
 
         void JustEngagedWith(Unit* /*who*/) override
@@ -158,7 +244,7 @@ class npc_archmage_arcanes : public CreatureScript
                 DoCast(SPELL_PRISMATIC_BARRIER);
 
                 scheduler
-                    .Schedule(30s, [this](TaskContext prismatic_barrier)
+                    .Schedule(30s, PHASE_COMBAT,[this](TaskContext prismatic_barrier)
                     {
                         if (!me->HasAura(SPELL_PRISMATIC_BARRIER))
                         {
@@ -170,7 +256,7 @@ class npc_archmage_arcanes : public CreatureScript
                             prismatic_barrier.Repeat(1s);
                         }
                     })
-                    .Schedule(15s, [this](TaskContext arcane_projectile)
+                    .Schedule(15s, PHASE_COMBAT, [this](TaskContext arcane_projectile)
                     {
                         me->InterruptNonMeleeSpells(true);
                         DoCastVictim(SPELL_ARCANE_PROJECTILE);
@@ -183,7 +269,7 @@ class npc_archmage_arcanes : public CreatureScript
             }
 
             scheduler
-                .Schedule(1s, 5s, [this](TaskContext arcane_blast)
+                .Schedule(1s, 5s, PHASE_COMBAT, [this](TaskContext arcane_blast)
                 {
                     if (Aura* aura = me->GetAura(AURA_ARCANE_BLAST))
                     {
@@ -197,7 +283,7 @@ class npc_archmage_arcanes : public CreatureScript
 
                     arcane_blast.Repeat(500ms);
                 })
-                .Schedule(1s, 5s, [this](TaskContext evocation)
+                .Schedule(1s, 5s, PHASE_COMBAT, [this](TaskContext evocation)
                 {
                     float manaPct = me->GetPower(POWER_MANA) * 100 / me->GetMaxPower(POWER_MANA);
                     if (manaPct <= 20)
@@ -222,7 +308,7 @@ class npc_archmage_arcanes : public CreatureScript
                         evocation.Repeat(5s);
                     }
                 })
-                .Schedule(1s, 5s, [this](TaskContext counterspell)
+                .Schedule(1s, 5s, PHASE_COMBAT, [this](TaskContext counterspell)
                 {
                     if (Unit* target = DoSelectCastingUnit(SPELL_COUNTERSPELL, 35.f))
                     {
@@ -235,7 +321,7 @@ class npc_archmage_arcanes : public CreatureScript
                         counterspell.Repeat(1s);
                     }
                 })
-                .Schedule(3s, 6s, [this](TaskContext arcane_barrage)
+                .Schedule(3s, 6s, PHASE_COMBAT, [this](TaskContext arcane_barrage)
                 {
                     if (Aura* aura = me->GetAura(AURA_ARCANE_BLAST))
                     {
@@ -249,7 +335,7 @@ class npc_archmage_arcanes : public CreatureScript
 
                     arcane_barrage.Repeat(500ms);
                 })
-                .Schedule(8s, 12s, [this](TaskContext arcane_explosion)
+                .Schedule(8s, 12s, PHASE_COMBAT, [this](TaskContext arcane_explosion)
                 {
                     DoCastAOE(SPELL_ARCANE_EXPLOSION);
                     arcane_explosion.Repeat(1min, 2min);
@@ -277,6 +363,58 @@ class npc_archmage_arcanes : public CreatureScript
                     damage = 0;
             }
         }
+
+        void UpdateAI(uint32 diff) override
+        {
+            ScriptedAI::UpdateAI(diff);
+
+            if (!closeTarget)
+            {
+                if (Unit* victim = me->GetVictim())
+                {
+                    if (victim->IsWithinDist(me, 3.f, false))
+                    {
+                        closeTarget = true;
+
+                        scheduler.DelayGroup(PHASE_COMBAT, 2s);
+
+                        me->InterruptNonMeleeSpells(true);
+
+                        scheduler.Schedule(1s, PHASE_BLINK_SEQUENCE, [this](TaskContext context)
+                        {
+                            switch (context.GetRepeatCounter())
+                            {
+                                case 0:
+                                    me->InterruptNonMeleeSpells(true);
+                                    DoCastSelf(SPELL_MIRROR_IMAGE, true);
+                                    context.Repeat(1s);
+                                    break;
+
+                                case 1:
+                                    DoCastSelf(SPELL_BLINK, true);
+                                    scheduler.CancelGroup(PHASE_BLINK_SEQUENCE);
+                                    context.Repeat(1min);
+                                    break;
+
+                                case 2:
+                                    closeTarget = false;
+                                    break;
+                            }
+                        });
+                    }
+                }
+            }
+
+            scheduler.Update(diff, [this]
+            {
+                if (UpdateVictim())
+                    DoMeleeAttackIfReady();
+            });
+        }
+
+        private:
+        bool closeTarget;
+        SummonList summons;
     };
 
     CreatureAI* GetAI(Creature* creature) const override
@@ -292,7 +430,7 @@ class npc_archmage_frost : public CreatureScript
 
     struct npc_archmage_frostAI : public CustomAI
     {
-        npc_archmage_frostAI(Creature* creature) : CustomAI(creature)
+        npc_archmage_frostAI(Creature* creature) : CustomAI(creature), closeTarget(false), polymorphedGUID(ObjectGuid::Empty), polymorphTarget(false)
         {
             SetCombatMovement(false);
         }
@@ -305,6 +443,11 @@ class npc_archmage_frost : public CreatureScript
                 if (victim && roll_chance_i(60))
                     DoCast(victim, SPELL_FROSTBITE, true);
             }
+
+            if (spellInfo->Id == SPELL_POLYMORPH)
+            {
+                polymorphedGUID = target->GetGUID();
+            }
         }
 
         void JustEngagedWith(Unit* /*who*/) override
@@ -312,6 +455,52 @@ class npc_archmage_frost : public CreatureScript
             DoCast(SPELL_ICE_BARRIER);
 
             scheduler
+                .Schedule(5ms, PHASE_COMBAT, [this](TaskContext polymorph)
+                {
+                    if (polymorphTarget)
+                    {
+                        if (Unit* target = ObjectAccessor::GetCreature(*me, polymorphedGUID))
+                        {
+                            if (!target->IsAlive())
+                            {
+                                polymorphedGUID.Clear();
+                                polymorphTarget = false;
+                                polymorph.Repeat(5ms);
+                            }
+                            else if (!target->HasBreakableByDamageCrowdControlAura())
+                            {
+                                me->InterruptNonMeleeSpells(true);
+                                DoCast(target, SPELL_POLYMORPH);
+                                polymorphTarget = true;
+                                polymorph.Repeat(2s);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (me->GetThreatManager().GetThreatenedByMeList().size() >= 2)
+                        {
+                            if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
+                            {
+                                if (!target->HasBreakableByDamageCrowdControlAura())
+                                {
+                                    me->InterruptNonMeleeSpells(true);
+                                    DoCast(target, SPELL_POLYMORPH);
+                                    polymorphTarget = true;
+                                    polymorph.Repeat(2s);
+                                }
+                                else
+                                {
+                                    polymorph.Repeat(5ms);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            polymorph.Repeat(5ms);
+                        }
+                    }
+                })
                 .Schedule(1s, 5s, PHASE_COMBAT, [this](TaskContext frostbotl)
                 {
                     DoCastVictim(SPELL_FROSTBOLT);
@@ -355,12 +544,17 @@ class npc_archmage_frost : public CreatureScript
         {
             CustomAI::Reset();
 
+            closeTarget = false;
+            polymorphTarget = false;
+            polymorphedGUID = ObjectGuid::Empty;
+
             me->RemoveAurasDueToSpell(SPELL_HYPOTHERMIA);
         }
 
         void DamageTaken(Unit* attacker, uint32& damage) override
         {
             // Que pour la bataille de Theramore
+            #pragma region THERAMORE
             if (me->GetMapId() == 726)
             {
                 if (attacker->GetTypeId() == TYPEID_PLAYER)
@@ -378,7 +572,9 @@ class npc_archmage_frost : public CreatureScript
                 if (HealthBelowPct(20))
                     damage = 0;
             }
+            #pragma endregion
 
+            // Séquence Bloc de glace
             if (!me->HasAura(SPELL_HYPOTHERMIA) && HealthBelowPct(30))
             {
                 damage = 0;
@@ -386,26 +582,69 @@ class npc_archmage_frost : public CreatureScript
                 scheduler.DelayGroup(PHASE_COMBAT, 6s);
 
                 me->InterruptNonMeleeSpells(true);
+
                 DoCastSelf(SPELL_ICE_BLOCK);
                 DoCastSelf(SPELL_HYPOTHERMIA, true);
 
-                scheduler.Schedule(5s, PHASE_ICE_BLOCKED, [this](TaskContext context)
-                {
-                    switch (context.GetRepeatCounter())
-                    {
-                        case 0:
-                            me->InterruptNonMeleeSpells(true);
-                            DoCastSelf(SPELL_FROT_NOVA, true);
-                            context.Repeat(1s);
-                            break;
-
-                        case 1:
-                            scheduler.DelayAll(2s);
-                            DoCastSelf(SPELL_BLINK, true);
-                            break;
-                    }
-                });
+                CastIceBlockedSequence(5s);
             }
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            ScriptedAI::UpdateAI(diff);
+
+            if (!UpdateVictim())
+                return;
+
+            if (!me->HasAura(SPELL_ICE_BLOCK) && !closeTarget)
+            {
+                if (Unit* victim = me->GetVictim())
+                {
+                    if (victim->IsWithinDist(me, 3.f, false))
+                    {
+                        closeTarget = true;
+                        scheduler.DelayGroup(PHASE_COMBAT, 2s);
+                        me->InterruptNonMeleeSpells(true);
+                        CastIceBlockedSequence(1s);
+                    }
+                }
+            }
+
+            scheduler.Update(diff, [this]
+            {
+                DoMeleeAttackIfReady();
+            });
+        }
+
+        private:
+        bool closeTarget;
+        bool polymorphTarget;
+        ObjectGuid polymorphedGUID;
+
+        void CastIceBlockedSequence(const std::chrono::seconds start)
+        {
+            scheduler.Schedule(start, PHASE_BLINK_SEQUENCE, [this](TaskContext context)
+            {
+                switch (context.GetRepeatCounter())
+                {
+                    case 0:
+                        me->InterruptNonMeleeSpells(true);
+                        DoCastSelf(SPELL_FROT_NOVA, true);
+                        context.Repeat(500ms);
+                        break;
+
+                    case 1:
+                        DoCastSelf(SPELL_BLINK, true);
+                        scheduler.CancelGroup(PHASE_BLINK_SEQUENCE);
+                         context.Repeat(500ms);
+                        break;
+
+                    case 2:
+                        closeTarget = false;
+                        break;
+                }
+            });
         }
     };
 
@@ -415,9 +654,96 @@ class npc_archmage_frost : public CreatureScript
     }
 };
 
+class npc_mirror_image : public CreatureScript
+{
+    public:
+    npc_mirror_image() : CreatureScript("npc_mirror_image")
+    {
+    }
+
+    struct npc_mirror_imageAI : CustomAI
+    {
+        const float CHASE_DISTANCE = 35.0f;
+
+        npc_mirror_imageAI(Creature* creature) : CustomAI(creature)
+        {
+            SetCombatMovement(false);
+        }
+
+        void InitializeAI() override
+        {
+            Unit* owner = me->GetOwner();
+            if (!owner)
+                return;
+
+            owner->CastSpell(me, SPELL_CLONE_ME, true);
+        }
+
+        void JustEngagedWith(Unit* /*who*/) override
+        {
+            scheduler.Schedule(5ms, [this](TaskContext arcane_blast)
+            {
+                DoCastVictim(SPELL_ARCANE_BLAST);
+                arcane_blast.Repeat(2s);
+            });
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            Unit* owner = me->GetOwner();
+            if (!owner)
+            {
+                me->DespawnOrUnsummon();
+                return;
+            }
+
+            ScriptedAI::UpdateAI(diff);
+
+            if (!UpdateVictim())
+                return;
+
+            scheduler.Update(diff, [this]
+            {
+                DoMeleeAttackIfReady();
+            });
+        }
+
+        bool CanAIAttack(Unit const* who) const override
+        {
+            Unit* owner = me->GetOwner();
+            return owner && who->IsAlive() && me->IsValidAttackTarget(who) &&
+                !who->HasBreakableByDamageCrowdControlAura() &&
+                who->IsInCombatWith(owner) && ScriptedAI::CanAIAttack(who);
+        }
+
+        void EnterEvadeMode(EvadeReason why) override
+        {
+            if (me->IsInEvadeMode() || !me->IsAlive())
+                return;
+
+            Unit* owner = me->GetCharmerOrOwner();
+
+            me->CombatStop(true);
+            if (owner && !me->HasUnitState(UNIT_STATE_FOLLOW))
+            {
+                me->GetMotionMaster()->Clear();
+                me->GetMotionMaster()->MoveFollow(owner, PET_FOLLOW_DIST, me->GetFollowAngle());
+            }
+
+            CustomAI::EnterEvadeMode(why);
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_mirror_imageAI(creature);
+    }
+};
+
 void AddSC_npc_archmages()
 {
     new npc_archmage_fire();
     new npc_archmage_arcanes();
     new npc_archmage_frost();
+    new npc_mirror_image();
 }

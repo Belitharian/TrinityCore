@@ -233,7 +233,7 @@ class npc_priest : public CreatureScript
                 })
                 .Schedule(25s, PHASE_COMBAT, [this](TaskContext power_word_barrier)
                 {
-                    if (Unit* target = DoSelectLowestHpFriendly(true))
+                    if (Unit* target = DoSelectBelowHpPctFriendly(30.0f, 10, false))
                     {
                         me->CastSpell(target->GetPosition(), SPELL_POWER_WORD_BARRIER);
                         power_word_barrier.Repeat(60s, 80s);
