@@ -366,6 +366,14 @@ class npc_jaina_theramore : public CreatureScript
             scheduler.CancelAll();
         }
 
+        void AttackStart(Unit* /*target*/) override
+        {
+            if (roll_chance_i(60))
+            {
+                me->AI()->Talk(SAY_AGGRO_01);
+            }
+        }
+
         void JustEngagedWith(Unit* who) override
         {
             scheduler
@@ -384,16 +392,22 @@ class npc_jaina_theramore : public CreatureScript
 
         void OnSpellCastFinished(SpellInfo const* spell, SpellFinishReason reason) override
         {
+            if (!me->IsInCombat())
+                return;
+
+            if (reason != SPELL_FINISHED_SUCCESSFUL_CAST)
+                return;
+
             switch (spell->Id)
             {
                 case SPELL_BLIZZARD:
-                    if (reason == SPELL_FINISHED_SUCCESSFUL_CAST)
-                        me->AI()->Talk(RAND(SAY_BLIZZARD_1, SAY_BLIZZARD_2));
-                    break;
-                default:
-                    if (reason == SPELL_FINISHED_SUCCESSFUL_CAST && roll_chance_i(30))
-                        me->AI()->Talk(RAND(SAY_CASTING_1, SAY_CASTING_2, SAY_CASTING_3));
-                    break;
+                    me->AI()->Talk(RAND(SAY_BLIZZARD_1, SAY_BLIZZARD_2, SAY_BLIZZARD_3));
+                    return;
+            }
+
+            if (roll_chance_i(30))
+            {
+                me->AI()->Talk(RAND(SAY_CASTING_1, SAY_CASTING_2, SAY_CASTING_3));
             }
         }
 
@@ -404,6 +418,14 @@ class npc_jaina_theramore : public CreatureScript
 
             if (playerForQuest)
                 playerForQuest->FailQuest(QUEST_PREPARE_FOR_WAR);
+        }
+
+        void KilledUnit(Unit* /*victim*/) override
+        {
+            if (roll_chance_i(60))
+            {
+                me->AI()->Talk(RAND(SAY_SLAIN_01, SAY_SLAIN_02));
+            }
         }
 
         void UpdateAI(uint32 diff) override

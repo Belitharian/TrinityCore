@@ -337,8 +337,15 @@ enum Text
     SAY_CASTING_1       = 65,
     SAY_CASTING_2       = 68,
     SAY_CASTING_3       = 69,
+
     SAY_BLIZZARD_1      = 66,
     SAY_BLIZZARD_2      = 67,
+    SAY_BLIZZARD_3      = 71,
+
+    SAY_AGGRO_01        = 72,
+
+    SAY_SLAIN_01        = 70,
+    SAY_SLAIN_02        = 73,
 
     SAY_KALECGOS_1      = 1,
     SAY_KALECGOS_2      = 2

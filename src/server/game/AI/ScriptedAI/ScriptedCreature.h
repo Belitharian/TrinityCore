@@ -214,6 +214,10 @@ struct TC_GAME_API ScriptedAI : public CreatureAI
         // Returns casting unit
         Unit* DoSelectCastingUnit(uint32 uiSpelli0d, float range);
 
+        // Returns power type unity
+        Unit* DoSelectTargetByPowerFriendly(float range, Powers power);
+        Unit* DoSelectTargetByPowerEnemy(float range, Powers power);
+
         // Returns a list of friendly CC'd units within range
         std::list<Creature*> DoFindFriendlyCC(float range);
 

@@ -55,29 +55,35 @@ enum Spells
 
 enum Misc
 {
-	SOUND_REUNION_MUSIC         = 28092,
-	SOUND_JAINA_DARNA_MUSIC     = 28096,
+    TEXT_JAINA_DALARAN              = 100000,
+    TEXT_JAINA_DALARAN_FATE         = 100001,
+    TEXT_JAINA_DARNASSUS_ATTACKED   = 100002,
 
-	GOB_ANTONIDAS_STATUE        = 500011,
-	GOB_PORTAL_TO_DALARAN       = 500013,
+    OPTION_JAINA_DALARAN_FATE       = 100002,
 
-	MOUNT_WHITE_STEED           = 14338,
+	SOUND_REUNION_MUSIC             = 28092,
+	SOUND_JAINA_DARNA_MUSIC         = 28096,
 
-	PHASEMASK_DALARAN           = 4,
-	PHASEMASK_DALARAN_A         = 12,
-	PHASEMASK_DARNASSUS         = 17,
+	GOB_ANTONIDAS_STATUE            = 500011,
+	GOB_PORTAL_TO_DALARAN           = 500013,
 
-	QUEST_THE_FATE_OF_DALARAN   = 80012,
-	QUEST_DARNASSUS_ATTACKED    = 80013,
-	QUEST_TRACKING_THE_THIEVES  = 80014,
-	QUEST_JAINAS_RESOLUTION     = 80015,
+	MOUNT_WHITE_STEED               = 14338,
 
-	MAP_KALIMDOR                = 1,
-	MAP_DALARAN_INSTANCED       = 727,
+	PHASEMASK_DALARAN               = 4,
+	PHASEMASK_DALARAN_A             = 12,
+	PHASEMASK_DARNASSUS             = 17,
 
-	MAIL_DARNASSUS_ENTRY        = 293,
-	MAIL_DELIVER_DELAY_MIN      = 1 * MINUTE,
-	MAIL_DELIVER_DELAY_MAX      = 2 * MINUTE
+	QUEST_THE_FATE_OF_DALARAN       = 80012,
+	QUEST_DARNASSUS_ATTACKED        = 80013,
+	QUEST_TRACKING_THE_THIEVES      = 80014,
+	QUEST_JAINAS_RESOLUTION         = 80015,
+
+	MAP_KALIMDOR                    = 1,
+	MAP_DALARAN_INSTANCED           = 727,
+
+	MAIL_DARNASSUS_ENTRY            = 293,
+	MAIL_DELIVER_DELAY_MIN          = 1 * MINUTE,
+	MAIL_DELIVER_DELAY_MAX          = 2 * MINUTE
 };
 
 enum Events
@@ -132,11 +138,11 @@ enum Events
 	EVENT_OUTRO_REUNION_10
 };
 
-enum Phases
+enum class Phases
 {
-	PHASE_NONE              = 1,
-	PHASE_NOT_STARTED,
-	PHASE_STARTED
+	None,
+    Unstarted,
+	Started
 };
 
 enum Texts
@@ -474,26 +480,29 @@ class dalaran_jaina_anduin : public CreatureScript
 			talkIndex = SAY_JAINA_6;
 			player = nullptr;
 			anduin = nullptr;
-			phase = PHASE_NONE;
+			phase = Phases::None;
 		}
 
 		bool OnGossipHello(Player* player) override
 		{
+            // Darnassus attacked?
 			if (me->IsQuestGiver())
 			{
 				player->PrepareQuestMenu(me->GetGUID());
-				SendGossipMenuFor(player, 100002, me->GetGUID());
+				SendGossipMenuFor(player, TEXT_JAINA_DARNASSUS_ATTACKED, me->GetGUID());
 				return true;
 			}
 
+            // The Fate of Dalaran - Incomplete
 			if (player->GetQuestStatus(QUEST_THE_FATE_OF_DALARAN) == QUEST_STATUS_INCOMPLETE)
 			{
-				AddGossipItemFor(player, 57022, 0, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
-				SendGossipMenuFor(player, 100001, me->GetGUID());
+                AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Je resterais au-dessus des querelles entre factions. Le Kirin Tor doit rester neutre.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
+				SendGossipMenuFor(player, TEXT_JAINA_DALARAN_FATE, me->GetGUID());
 				return true;
 			}
 
-			SendGossipMenuFor(player, 100000, me->GetGUID());
+            // The Fate of Dalaran - None
+            SendGossipMenuFor(player, TEXT_JAINA_DALARAN, me->GetGUID());
 			return true;
 		}
 
@@ -544,7 +553,7 @@ class dalaran_jaina_anduin : public CreatureScript
 					me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
 					anduin->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
 					anduin->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
-					phase = PHASE_STARTED;
+					phase = Phases::Started;
 					events.CancelEvent(EVENT_TELEPORT);
 					events.ScheduleEvent(EVENT_REUNION_1, 2s);
 					break;
@@ -553,7 +562,7 @@ class dalaran_jaina_anduin : public CreatureScript
 					if (!player) player = me->SelectNearestPlayer(50.f);
 					me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
 					me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
-					phase = PHASE_STARTED;
+					phase = Phases::Started;
 					events.ScheduleEvent(EVENT_DARNASSUS_1, 1s);
 					break;
 			}
@@ -561,7 +570,7 @@ class dalaran_jaina_anduin : public CreatureScript
 
 		void MoveInLineOfSight(Unit* who) override
 		{
-			if (who->GetTypeId() != TYPEID_PLAYER || phase != PHASE_NONE)
+			if (who->GetTypeId() != TYPEID_PLAYER || phase != Phases::None)
 				return;
 
 			player = who->ToPlayer();
@@ -574,7 +583,7 @@ class dalaran_jaina_anduin : public CreatureScript
 				{
 					if (player->GetPhaseMask() == PHASEMASK_DALARAN && me->IsFriendlyTo(player) && me->IsWithinDist(player, 6.f, false))
 					{
-						phase = PHASE_NOT_STARTED;
+						phase = Phases::Unstarted;
 						SetData(ACTION_INTRO_TELEPORT, 1U);
 					}
 					break;
@@ -584,7 +593,7 @@ class dalaran_jaina_anduin : public CreatureScript
 				{
 					if (player->GetPhaseMask() == PHASEMASK_DARNASSUS && me->IsFriendlyTo(player) && me->IsWithinDist(player, 30.f))
 					{
-						phase = PHASE_NOT_STARTED;
+						phase = Phases::Unstarted;
 						me->PlayDirectMusic(SOUND_JAINA_DARNA_MUSIC);
 						me->m_Events.AddEvent(new JainaArrivesEvent(me, player), me->m_Events.CalculateTime(3s));
 					}
@@ -774,21 +783,24 @@ class dalaran_jaina_anduin : public CreatureScript
 
 					case EVENT_DARNASSUS_3:
 					{
-						Position pos =
-						{
-							MagicTracksPos[magicTracks].GetPositionX(),
-							MagicTracksPos[magicTracks].GetPositionY(),
-							MagicTracksPos[magicTracks].GetPositionZ() + frand(-0.8f, 0.8f),
-							MagicTracksPos[magicTracks].GetOrientation()
-						};
+                        if (Creature* track = me->SummonCreature(NPC_INVISIBLE_STALKER,
+                            // Position
+                            {
+                                MagicTracksPos[magicTracks].GetPositionX(),
+                                MagicTracksPos[magicTracks].GetPositionY(),
+                                MagicTracksPos[magicTracks].GetPositionZ() + frand(-0.8f, 0.8f),
+                                MagicTracksPos[magicTracks].GetOrientation()
+                            }, TEMPSUMMON_MANUAL_DESPAWN))
+                        {
+                            track->CastSpell(track, SPELL_MAGIC_TRACKS);
+                        }
 
-						if (Creature* track = me->SummonCreature(NPC_INVISIBLE_STALKER, pos, TEMPSUMMON_MANUAL_DESPAWN))
-							track->CastSpell(track, SPELL_MAGIC_TRACKS);
 						magicTracks++;
 						if (magicTracks >= TOTAL_TRACKERS_COUNT)
 							events.CancelEvent(EVENT_DARNASSUS_3);
 						else
 							events.RescheduleEvent(EVENT_DARNASSUS_3, 1ms);
+
 						break;
 					}
 

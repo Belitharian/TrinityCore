@@ -461,6 +461,26 @@ Unit* ScriptedAI::DoSelectCastingUnit(uint32 uiSpellid, float range)
     return unit;
 }
 
+Unit* ScriptedAI::DoSelectTargetByPowerFriendly(float range, Powers power)
+{
+    Unit* unit = nullptr;
+    Trinity::UsingPowerTypeInRange u_check(me, range, power, true);
+    Trinity::UnitLastSearcher<Trinity::UsingPowerTypeInRange> searcher(me, unit, u_check);
+    Cell::VisitAllObjects(me, searcher, range);
+
+    return unit;
+}
+
+Unit* ScriptedAI::DoSelectTargetByPowerEnemy(float range, Powers power)
+{
+    Unit* unit = nullptr;
+    Trinity::UsingPowerTypeInRange u_check(me, range, power, false);
+    Trinity::UnitLastSearcher<Trinity::UsingPowerTypeInRange> searcher(me, unit, u_check);
+    Cell::VisitAllObjects(me, searcher, range);
+
+    return unit;
+}
+
 std::list<Creature*> ScriptedAI::DoFindFriendlyCC(float range)
 {
     std::list<Creature*> list;

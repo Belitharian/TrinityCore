@@ -336,13 +336,28 @@ class theramore_waves_invoker : public CreatureScript
                     }
 
                     case WAVE_EXIT:
+                    {
                         playerForQuest->CompleteQuest(QUEST_PREPARE_FOR_WAR);
                         jaina->NearTeleportTo(JainaHomePos);
                         jaina->SetHomePosition(JainaHomePos);
                         jaina->AI()->SetData(EVENT_STOP_KALECGOS, 1U);
                         jaina->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
                         kalecgos->DespawnOrUnsummon();
+
+                        if (playerForQuest && playerForQuest->IsWithinDist(jaina, 25.f))
+                        {
+                            Position playerPos = GetRandomPosition(JainaHomePos, 3.f);
+
+                            // Si le joueur est à plus de 25 mètre de la destination d'attaque
+                            float distance = playerPos.GetExactDist2d(playerForQuest->GetPosition());
+                            if (distance > 25.0f)
+                            {
+                                playerForQuest->NearTeleportTo(playerPos);
+                            }
+                        }
+
                         break;
+                    }
 
                     default:
                         break;

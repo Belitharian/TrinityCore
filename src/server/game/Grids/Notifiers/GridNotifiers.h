@@ -833,6 +833,40 @@ namespace Trinity
             bool i_friendly;
     };
 
+    class UsingPowerTypeInRange
+    {
+        public:
+            UsingPowerTypeInRange(Unit const* obj, float range, Powers power, bool friendly) : i_obj(obj), i_range(range), e_power(power), i_friendly(friendly){ }
+
+            bool operator()(Unit* u)
+            {
+                bool friendly = i_friendly ? !i_obj->IsHostileTo(u) : i_obj->IsHostileTo(u);
+                if (u->IsAlive() && u->IsInCombat() && friendly && i_obj->IsWithinDistInMap(u, i_range))
+                {
+                    if (Creature* creature = u->ToCreature())
+                    {
+                        uint32 unit_class = creature->GetCreatureTemplate()->unit_class;
+                        if (e_power == POWER_MANA && (unit_class == UNIT_CLASS_MAGE || unit_class == UNIT_CLASS_PALADIN))
+                            return true;
+                        else
+                            return false;
+                    }
+
+                    if (u->GetPowerType() == e_power)
+                        return true;
+
+                    return false;
+                }
+                return false;
+            }
+
+        private:
+            Unit const* i_obj;
+            float i_range;
+            Powers e_power;
+            bool i_friendly;
+    };
+
     class CastingUnitInRange
     {
         public:

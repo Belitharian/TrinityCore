@@ -109,6 +109,7 @@ enum Events
     EVENT_AETHAS_8,
     EVENT_AETHAS_9,
     EVENT_AETHAS_10,
+    EVENT_AETHAS_11,
 
     EVNT_ISIAN_1,
     EVNT_ISIAN_2,
@@ -576,24 +577,29 @@ class dalaran_aethas_event : public CreatureScript
                         elemental->CastSpell(aethas, SPELL_ICE_PRISON, args);
 
                         jaina->GetMotionMaster()->MoveCloserAndStop(0, aethas, 3.f);
-                        events.ScheduleEvent(EVENT_AETHAS_8, 5s);
+                        events.ScheduleEvent(EVENT_AETHAS_8, 2s);
+                        events.ScheduleEvent(EVENT_AETHAS_9, 5s);
                         break;
                     }
 
                     case EVENT_AETHAS_8:
-                        jaina->AI()->Talk(SAY_JAINA_7);
-                        events.ScheduleEvent(EVENT_AETHAS_9, 4s);
+                        aethas->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
                         break;
 
                     case EVENT_AETHAS_9:
+                        jaina->AI()->Talk(SAY_JAINA_7);
+                        events.ScheduleEvent(EVENT_AETHAS_10, 4s);
+                        break;
+
+                    case EVENT_AETHAS_10:
                         jaina->CastSpell(jaina, SPELL_POWER_BALL_VISUAL);
                         aethas->CastSpell(aethas, SPELL_POWER_BALL_VISUAL);
                         jaina->DespawnOrUnsummon(2s);
                         aethas->DespawnOrUnsummon(2s);
-                        events.ScheduleEvent(EVENT_AETHAS_10, 3s);
+                        events.ScheduleEvent(EVENT_AETHAS_11, 3s);
                         break;
 
-                    case EVENT_AETHAS_10:
+                    case EVENT_AETHAS_11:
                         player->CompleteQuest(QUEST_JAINAS_RESOLUTION);
                         player->SetPhaseMask(1, true);
                         elemental->KillSelf();
