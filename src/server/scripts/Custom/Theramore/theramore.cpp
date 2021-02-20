@@ -439,7 +439,7 @@ class npc_jaina_theramore : public CreatureScript
                     // Event - Convo
                     #pragma region EVENT_CONVO
 
-                    // D�but de la r�union
+                    // Début de la réunion
                     case EVENT_CONVO_1:
                     {
                         playerForQuest->SetWalk(true);
@@ -560,7 +560,7 @@ class npc_jaina_theramore : public CreatureScript
                         tervosh->SetVisible(false);
                         break;
 
-                    // Fin de la r�union
+                    // Fin de la réunion
                     case EVENT_CONVO_23:
                         playerForQuest->GetMotionMaster()->MovePoint(0, -3746.76f, -4445.30f, 30.55f, true, 1.38f);
                         me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
@@ -1570,7 +1570,108 @@ class npc_jaina_theramore : public CreatureScript
     }
 };
 
+class npc_civil_of_theramore : public CreatureScript
+{
+    public:
+    npc_civil_of_theramore() : CreatureScript("npc_civil_of_theramore")
+    {
+    }
+
+    struct npc_civil_of_theramoreAI : public ScriptedAI
+    {
+        npc_civil_of_theramoreAI(Creature* creature) : ScriptedAI(creature)
+        {
+            Initialize();
+        }
+
+        void Initialize()
+        {
+        }
+
+        void MovementInform(uint32 /*type*/, uint32 id) override
+        {
+            if (id == 0)
+            {
+                me->SetPhaseMask(32, true);
+            }
+        }
+
+        bool OnGossipHello(Player* player) override
+        {
+            if (player->GetQuestStatus(QUEST_EVACUATION) == QUEST_STATUS_INCOMPLETE)
+            {
+                AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Je n'ai pas le temps de vous expliquer, mais vous devez évacuer ! Un bâteau est prêt à partir pour Hurlevent.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
+            }
+
+            SendGossipMenuFor(player, NPC_TEXT_CIVIL_OF_THERAMORE, me->GetGUID());
+            return true;
+        }
+
+        bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
+        {
+            uint32 const action = player->PlayerTalkClass->GetGossipOptionAction(gossipListId);
+            ClearGossipMenuFor(player);
+            switch (action)
+            {
+                case GOSSIP_ACTION_INFO_DEF + 1:
+                {
+                    me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STAND_STATE_NONE);
+                    scheduler.Schedule(5ms, [this, player](TaskContext context)
+                    {
+                        switch (context.GetRepeatCounter())
+                        {
+                            case 0:
+                                me->SetFacingToObject(player);
+                                me->SetWalk(false);
+                                context.Repeat(1s);
+                                break;
+                            case 1:
+                                Talk(0);
+                                context.Repeat(5s);
+                                break;
+                            case 2:
+                                if (Creature* stalker = GetClosestCreatureWithEntry(me, NPC_INVISIBLE_STALKER, 30.f))
+                                    me->GetMotionMaster()->MovePoint(0, stalker->GetPosition());
+                                context.Repeat(6s);
+                                break;
+                            case 3:
+                                player->KilledMonsterCredit(100074);
+                                break;
+                            default:
+                                break;
+                        }
+                    });
+                    break;
+                }
+            }
+
+            CloseGossipMenuFor(player);
+            return true;
+        }
+
+        void Reset() override
+        {
+            scheduler.CancelAll();
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            scheduler.Update(diff);
+        }
+
+        private:
+        ObjectGuid* stalker;
+        TaskScheduler scheduler;
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_civil_of_theramoreAI(creature);
+    }
+};
+
 void AddSC_theramore()
 {
     new npc_jaina_theramore();
+    new npc_civil_of_theramore();
 }

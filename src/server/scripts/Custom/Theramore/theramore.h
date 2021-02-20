@@ -47,7 +47,9 @@ enum Misc
     QUEST_LOOKING_FOR_THE_ARTEFACT  = 80000,
     QUEST_EVACUATION                = 80001,
     QUEST_PREPARE_FOR_WAR           = 80006,
-    QUEST_LIMIT_THE_NUKE            = 80007
+    QUEST_LIMIT_THE_NUKE            = 80007,
+
+    NPC_TEXT_CIVIL_OF_THERAMORE     = 68
 };
 
 enum Events
