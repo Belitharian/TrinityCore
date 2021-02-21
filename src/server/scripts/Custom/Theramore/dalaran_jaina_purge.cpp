@@ -21,13 +21,13 @@ constexpr uint32 NPCS_TOTAL_COUNT = 5;
 
 enum NPCs
 {
-    NPC_JAINA_PROUDMOORE        = 100045,
-    NPC_DISPLACED_SUNREAVER     = 100048,
-    NPC_WATER_ELEMENTAL         = 100011,
-    NPC_AETHAS_SUNREAVER        = 100050,
-    NPC_SUNREAVER_GUARDIAN      = 100046,
-    NPC_SILVER_COV_GUARDIAN     = 100047,
-    NPC_INVISIBLE_STALKER       = 32780
+    NPC_JAINA_PROUDMOORE            = 100045,
+    NPC_DISPLACED_SUNREAVER         = 100048,
+    NPC_WATER_ELEMENTAL             = 100011,
+    NPC_AETHAS_SUNREAVER            = 100050,
+    NPC_SUNREAVER_GUARDIAN          = 100046,
+    NPC_SILVER_COVENENT_GUARDIAN    = 100047,
+    NPC_INVISIBLE_STALKER           = 32780
 };
 
 enum Spells
@@ -47,6 +47,7 @@ enum Spells
     SPELL_ARCANE_SHIELD         = 100048,
     SPELL_FROST_CHANNELING      = 45846,
     SPELL_TELEPORT_STORMWIND    = 100057,
+    SPELL_ARCANE_CANALISATION   = 39550,
 
     SPELL_SHOT                  = 100086,
     SPELL_MULTI_SHOT            = 100088,
@@ -88,7 +89,10 @@ enum Misc
 
     // Ice wall sunreaver Event
     SAY_ISIAN_1                 = 0,
-    SAY_ISIAN_2                 = 1
+    SAY_ISIAN_2                 = 1,
+
+    // Maps
+    MAP_PURGE_OF_DALARAN        = 727
 };
 
 enum Events
@@ -135,7 +139,7 @@ const Location npcsLocation[NPCS_TOTAL_COUNT] =
 
 const Position destinationAethas1 = { 5799.26f, 812.35f, 662.02f, 4.62f };
 
-const Position spawnSilverCovGuardian[] =
+const Position spawnSilverCovenentGuardian[] =
 {
     { 5769.24f, 669.04f, 643.82f, 5.59f },
     { 5833.89f, 676.41f, 643.60f, 4.06f },
@@ -649,71 +653,81 @@ class dalaran_aethas_event : public CreatureScript
 class npc_arcanist_ivrenne : public CreatureScript
 {
     public:
-    npc_arcanist_ivrenne() : CreatureScript("npc_arcanist_ivrenne") {}
+    npc_arcanist_ivrenne() : CreatureScript("npc_arcanist_ivrenne")
+    {
+    }
 
     struct npc_arcanist_ivrenneAI : public ScriptedAI
     {
-        npc_arcanist_ivrenneAI(Creature* creature) : ScriptedAI(creature)
+        npc_arcanist_ivrenneAI(Creature* creature) : ScriptedAI(creature), progress(false)
         {
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            playingEvent = false;
         }
 
         void MoveInLineOfSight(Unit* who) override
         {
-            if (playingEvent || who->GetTypeId() != TYPEID_PLAYER)
+            if (progress || who->GetTypeId() != TYPEID_PLAYER)
                 return;
 
-            player = who->ToPlayer();
-            if (me->GetMapId() == 727)
+            if (Player* player = who->ToPlayer())
             {
-                if (me->IsFriendlyTo(player) && me->IsWithinDist2d(player, 10.f))
-                {
-                    playingEvent = true;
+                if (player->IsGameMaster())
+                    return;
 
-                    me->AI()->Talk(SAY_IVRENNE_1);
-                    events.ScheduleEvent(1, 2s);
+                if (me->GetMapId() == MAP_PURGE_OF_DALARAN)
+                {
+                    if (me->IsFriendlyTo(player) && me->IsWithinDist2d(player, 10.f))
+                    {
+                        progress = true;
+
+                        me->AI()->Talk(SAY_IVRENNE_1);
+
+                        scheduler.Schedule(2s, [this, player](TaskContext context)
+                        {
+                            switch (context.GetRepeatCounter())
+                            {
+                                case 0:
+                                    DoCast(player, SPELL_KNOCKBACK);
+                                    context.Repeat(5s);
+                                    break;
+                                case 1:
+                                    progress = false;
+                                    break;
+                                default:
+                                    break;
+                            }
+
+                        });
+                    }
                 }
             }
         }
 
         void Reset() override
         {
-            events.Reset();
-            Initialize();
+            progress = false;
+
+            scheduler.CancelAll();
+
+            scheduler.Schedule(2s, [this](TaskContext /*context*/)
+            {
+                me->GetCreatureListWithEntryInGrid(silverMages, NPC_SILVER_COVENENT_GUARDIAN, 8.0f);
+                if (!silverMages.empty())
+                {
+                    for (Creature* silverMage : silverMages)
+                        silverMage->CastSpell(silverMage, SPELL_ARCANE_CANALISATION);
+                }
+            });
         }
 
         void UpdateAI(uint32 diff) override
         {
-            events.Update(diff);
-
-            while (uint32 eventId = events.ExecuteEvent())
-            {
-                switch (eventId)
-                {
-                    case 1:
-                        DoCast(player, SPELL_KNOCKBACK);
-                        events.ScheduleEvent(2, 5s);
-                        break;
-
-                    case 2:
-                        playingEvent = false;
-                        break;
-
-                    default:
-                        break;
-                }
-            }
+            scheduler.Update(diff);
         }
 
         private:
-        EventMap events;
-        Player* player;
-        bool playingEvent;
+        TaskScheduler scheduler;
+        bool progress;
+        std::list<Creature*> silverMages;
     };
 
     CreatureAI* GetAI(Creature* creature) const override
@@ -725,7 +739,9 @@ class npc_arcanist_ivrenne : public CreatureScript
 class SilverCovenantGuardian : public BasicEvent
 {
     public:
-    SilverCovenantGuardian(Creature* owner, Creature* uovril, const Position& final) : owner(owner), step(0), uovril(uovril), finalPos(final) { }
+    SilverCovenantGuardian(Creature* owner, Creature* uovril, const Position& final) : owner(owner), step(0), uovril(uovril), finalPos(final)
+    {
+    }
 
     bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
     {
@@ -736,7 +752,6 @@ class SilverCovenantGuardian : public BasicEvent
                 owner->GetMotionMaster()->MoveCloserAndStop(0, uovril, 6.f);
                 owner->m_Events.AddEvent(this, Milliseconds(eventTime + 1000));
                 break;
-
             case 1:
             {
                 if (!owner->IsWithinDist2d(uovril, 8.f))
@@ -750,7 +765,6 @@ class SilverCovenantGuardian : public BasicEvent
                 owner->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
                 owner->GetMotionMaster()->MovePoint(0, finalPos, true, finalPos.GetOrientation());
                 owner->DespawnOrUnsummon(30s);
-
                 return true;
             }
         }
@@ -769,56 +783,42 @@ class SilverCovenantGuardian : public BasicEvent
 class npc_arcanist_uovril : public CreatureScript
 {
     public:
-    npc_arcanist_uovril() : CreatureScript("npc_arcanist_uovril") {}
+    npc_arcanist_uovril() : CreatureScript("npc_arcanist_uovril")
+    {
+    }
 
     struct npc_arcanist_uovrilAI : public ScriptedAI
     {
         npc_arcanist_uovrilAI(Creature* creature) : ScriptedAI(creature)
         {
-            Initialize();
         }
-
-        void Initialize() { }
 
         void Reset() override
         {
-            events.Reset();
-            Initialize();
+            scheduler.CancelAll();
 
             DoCastSelf(SPELL_ARCANE_SHIELD);
 
-            events.ScheduleEvent(1, 5s);
+            scheduler.Schedule(5s, [this](TaskContext context)
+            {
+                int randomPos = irand(0, 3);
+                if (Creature* guardian = me->SummonCreature(RAND(NPC_SUNREAVER_GUARDIAN, NPC_SILVER_COVENENT_GUARDIAN), spawnSilverCovenentGuardian[randomPos], TEMPSUMMON_CORPSE_DESPAWN))
+                {
+                    guardian->SetReactState(REACT_PASSIVE);
+                    guardian->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                    guardian->m_Events.AddEvent(new SilverCovenantGuardian(guardian, me, GetRandomPosition(frand(4.f, 9.f))), guardian->m_Events.CalculateTime(5ms));
+                }
+                context.Repeat(10s, 20s);
+            });
         }
 
         void UpdateAI(uint32 diff) override
         {
-            events.Update(diff);
-
-            while (uint32 eventId = events.ExecuteEvent())
-            {
-                switch (eventId)
-                {
-                    case 1:
-                    {
-                        int randomPos = irand(0, 3);
-                        if (Creature* guardian = me->SummonCreature(RAND(NPC_SUNREAVER_GUARDIAN, NPC_SILVER_COV_GUARDIAN), spawnSilverCovGuardian[randomPos], TEMPSUMMON_CORPSE_DESPAWN))
-                        {
-                            guardian->SetReactState(REACT_PASSIVE);
-                            guardian->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                            guardian->m_Events.AddEvent(new SilverCovenantGuardian(guardian, me, GetRandomPosition(frand(4.f, 9.f))), guardian->m_Events.CalculateTime(5ms));
-                        }
-                        events.Repeat(10s, 20s);
-                        break;
-                    }
-
-                    default:
-                        break;
-                }
-            }
+            scheduler.Update(diff);
         }
 
         private:
-        EventMap events;
+        TaskScheduler scheduler;
 
         Position GetRandomPosition(float dist)
         {
@@ -846,19 +846,13 @@ class npc_enchanter_isian : public CreatureScript
     {
         npc_enchanter_isianAI(Creature* creature) : ScriptedAI(creature)
         {
-            Initialize();
-        }
-
-        void Initialize()
-        {
-
         }
 
         bool OnGossipHello(Player* player) override
         {
             if (player->IsGameMaster() || player->GetQuestStatus(QUEST_NOWHERE_TO_HIDE) == QUEST_STATUS_INCOMPLETE)
             {
-                AddGossipItemFor(player, 57021, 0, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
+                AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Vereesa me demande de faire le ménage dans le sanctuaire des saccage-soleil.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
                 SendGossipMenuFor(player, 100004, me->GetGUID());
                 return true;
             }
@@ -874,78 +868,66 @@ class npc_enchanter_isian : public CreatureScript
             switch (action)
             {
                 case GOSSIP_ACTION_INFO_DEF + 1:
-                    SetData(ACTION_ISIAN_WALL, 1U);
+                {
+                    me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+                    me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_ONESHOT_NONE);
+
+                    scheduler.Schedule(5ms, [this, player](TaskContext context)
+                    {
+                        switch (context.GetRepeatCounter())
+                        {
+                            case 0:
+                                Talk(SAY_ISIAN_1);
+                                context.Repeat(3s);
+                                break;
+                            case 1:
+                                Talk(SAY_ISIAN_2);
+                                context.Repeat(5s);
+                                break;
+                            case 2:
+                                DoCastSelf(SPELL_FROST_CHANNELING);
+                                context.Repeat(3s);
+                                break;
+                            case 3:
+                            {
+                                if (GameObject* icewall = GetClosestGameObjectWithEntry(me, GOB_ICE_WALL, 100.f))
+                                {
+                                    icewall->UseDoorOrButton();
+                                    if (Creature* fx = me->SummonCreature(NPC_INVISIBLE_STALKER, icewall->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 5s))
+                                        fx->CastSpell(fx, 73773);
+                                }
+                                context.Repeat(3s);
+                                break;
+                            }
+                            case 4:
+                                me->RemoveAurasDueToSpell(SPELL_FROST_CHANNELING);
+                                me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+                                me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY2HL);
+                                break;
+                            default:
+                                break;
+                        }
+                    });
                     break;
+                }
             }
 
             CloseGossipMenuFor(player);
             return true;
         }
 
-        void SetData(uint32 id, uint32 value) override
-        {
-            switch (id)
-            {
-                case ACTION_ISIAN_WALL:
-                    me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
-                    me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_ONESHOT_NONE);
-                    icewall = GetClosestGameObjectWithEntry(me, GOB_ICE_WALL, 100.f);
-                    events.ScheduleEvent(EVNT_ISIAN_1, 2s);
-                    break;
-            }
-        }
-
         void Reset() override
         {
-            events.Reset();
-            Initialize();
+            scheduler.CancelAll();
         }
 
         void UpdateAI(uint32 diff) override
         {
-            events.Update(diff);
-
-            while (uint32 eventId = events.ExecuteEvent())
-            {
-                switch (eventId)
-                {
-                    case EVNT_ISIAN_1:
-                        Talk(SAY_ISIAN_1);
-                        events.ScheduleEvent(EVNT_ISIAN_2, 3s);
-                        break;
-
-                    case EVNT_ISIAN_2:
-                        Talk(SAY_ISIAN_2);
-                        events.ScheduleEvent(EVNT_ISIAN_3, 5s);
-                        break;
-
-                    case EVNT_ISIAN_3:
-                        DoCastSelf(SPELL_FROST_CHANNELING);
-                        events.ScheduleEvent(EVNT_ISIAN_4, 3s);
-                        break;
-
-                    case EVNT_ISIAN_4:
-                        if (Creature * fx = me->SummonCreature(NPC_INVISIBLE_STALKER, icewall->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 5s))
-                            fx->CastSpell(fx, 73773);
-                        icewall->UseDoorOrButton();
-                        events.ScheduleEvent(EVNT_ISIAN_5, 3s);
-                        break;
-
-                    case EVNT_ISIAN_5:
-                        me->RemoveAurasDueToSpell(SPELL_FROST_CHANNELING);
-                        me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
-                        me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY2HL);
-                        break;
-
-                    default:
-                        break;
-                }
-            }
+            scheduler.Update(diff);
         }
 
         private:
-        EventMap events;
-        GameObject* icewall;
+        TaskScheduler scheduler;
     };
 
     CreatureAI* GetAI(Creature* creature) const override

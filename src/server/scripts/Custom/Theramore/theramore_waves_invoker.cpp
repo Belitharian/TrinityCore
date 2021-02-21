@@ -408,7 +408,7 @@ class theramore_waves_invoker : public CreatureScript
                         break;
                 }
 
-                if (Creature* temp = DoSummon(entry, pos, 15min, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN))
+                if (Creature* temp = DoSummon(entry, pos, 15min, TEMPSUMMON_CORPSE_TIMED_DESPAWN))
                 {
                     if (waveId == WAVE_DOORS)
                     {

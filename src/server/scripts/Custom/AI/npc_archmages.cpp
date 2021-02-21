@@ -81,7 +81,7 @@ class npc_archmage_fire : public CreatureScript
 			if (spellInfo->Id == SPELL_FIREBALL || spellInfo->Id == SPELL_FIREBLAST || spellInfo->Id == SPELL_PYROBLAST)
 			{
 				Unit* victim = target->ToUnit();
-				if (victim && roll_chance_i(40))
+				if (victim && !victim->HasAura(SPELL_IGNITE) && roll_chance_i(40))
 					DoCast(victim, SPELL_IGNITE, true);
 			}
 		}
@@ -457,7 +457,7 @@ class npc_archmage_frost : public CreatureScript
 			if (spellInfo->Id == SPELL_FROSTBOLT || spellInfo->Id == SPELL_ICE_LANCE)
 			{
 				Unit* victim = target->ToUnit();
-				if (victim && roll_chance_i(60))
+				if (victim && !victim->HasAura(SPELL_FROSTBITE) && roll_chance_i(60))
 					DoCast(victim, SPELL_FROSTBITE, true);
 			}
 

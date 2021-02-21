@@ -330,6 +330,7 @@ class npc_jaina_theramore : public CreatureScript
                     else
                     {
                         me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
+                        PrepareCivils();
                         events.ScheduleEvent(EVENT_EVACUATION_1, 0s, PHASE_PRE_BATTLE);
                         events.ScheduleEvent(EVENT_PRE_BATTLE_6, 5s, 0, PHASE_PRE_BATTLE);
                     }
@@ -366,49 +367,38 @@ class npc_jaina_theramore : public CreatureScript
             scheduler.CancelAll();
         }
 
-        void AttackStart(Unit* /*target*/) override
+        void JustEngagedWith(Unit* who) override
         {
+            if (who->GetEntry() == NPC_INVISIBLE_STALKER)
+                return;
+
             if (roll_chance_i(60))
             {
                 me->AI()->Talk(SAY_AGGRO_01);
             }
-        }
 
-        void JustEngagedWith(Unit* who) override
-        {
             scheduler
                 .Schedule(5ms, [this](TaskContext fireball)
                 {
                     DoCastVictim(SPELL_FIREBALL);
                     fireball.Repeat(2s);
                 })
+                .Schedule(5s, [this](TaskContext text)
+                {
+                    if (roll_chance_i(20))
+                        me->AI()->Talk(RAND(SAY_CASTING_1, SAY_CASTING_2, SAY_CASTING_3));
+                    text.Repeat(10s);
+                })
                 .Schedule(14s, [this](TaskContext blizzard)
                 {
                     if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    {
                         DoCast(target, SPELL_BLIZZARD);
+                        if (roll_chance_i(30))
+                            me->AI()->Talk(RAND(SAY_BLIZZARD_1, SAY_BLIZZARD_2, SAY_BLIZZARD_3));
+                    }
                     blizzard.Repeat(6s, 15s);
                 });
-        }
-
-        void OnSpellCastFinished(SpellInfo const* spell, SpellFinishReason reason) override
-        {
-            if (!me->IsInCombat())
-                return;
-
-            if (reason != SPELL_FINISHED_SUCCESSFUL_CAST)
-                return;
-
-            switch (spell->Id)
-            {
-                case SPELL_BLIZZARD:
-                    me->AI()->Talk(RAND(SAY_BLIZZARD_1, SAY_BLIZZARD_2, SAY_BLIZZARD_3));
-                    return;
-            }
-
-            if (roll_chance_i(30))
-            {
-                me->AI()->Talk(RAND(SAY_CASTING_1, SAY_CASTING_2, SAY_CASTING_3));
-            }
         }
 
         void JustDied(Unit* /*killer*/) override
@@ -420,9 +410,12 @@ class npc_jaina_theramore : public CreatureScript
                 playerForQuest->FailQuest(QUEST_PREPARE_FOR_WAR);
         }
 
-        void KilledUnit(Unit* /*victim*/) override
+        void KilledUnit(Unit* victim) override
         {
-            if (roll_chance_i(60))
+            if (victim->GetEntry() == NPC_INVISIBLE_STALKER)
+                return;
+
+            if (roll_chance_i(10))
             {
                 me->AI()->Talk(RAND(SAY_SLAIN_01, SAY_SLAIN_02));
             }
@@ -439,7 +432,7 @@ class npc_jaina_theramore : public CreatureScript
                     // Event - Convo
                     #pragma region EVENT_CONVO
 
-                    // DÃ©but de la rÃ©union
+                    // Début de la réunion
                     case EVENT_CONVO_1:
                     {
                         playerForQuest->SetWalk(true);
@@ -560,7 +553,7 @@ class npc_jaina_theramore : public CreatureScript
                         tervosh->SetVisible(false);
                         break;
 
-                    // Fin de la rÃ©union
+                    // Fin de la réunion
                     case EVENT_CONVO_23:
                         playerForQuest->GetMotionMaster()->MovePoint(0, -3746.76f, -4445.30f, 30.55f, true, 1.38f);
                         me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
@@ -891,7 +884,7 @@ class npc_jaina_theramore : public CreatureScript
                     // Event - Evacuation
                     case EVENT_EVACUATION_1:
                         kalecgos->SetVisible(true);
-                        kalecgos->NearTeleportTo(-3724.90f, -4547.24f, 25.82f, 0.51f);
+                        kalecgos->NearTeleportTo(-3725.74f, -4547.68f, 25.82f, 0.46f);
                         me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
                         me->NearTeleportTo(-3725.09f, -4545.75f, 25.82f, 0.53f);
                         kinndy->NearTeleportTo(-3726.27f, -4543.99f, 25.82f, 0.47f);
@@ -925,101 +918,7 @@ class npc_jaina_theramore : public CreatureScript
 
                     case EVENT_PRE_BATTLE_1:
                     {
-                        for (int i = 0; i < 35; ++i)
-                        {
-                            me->SummonGameObject(GOB_FIRE_THERAMORE, FireLocation[i][0], FireLocation[i][1], FireLocation[i][2], FireLocation[i][3], QuaternionData(), 0s);
-                            if (Creature* fx = me->SummonCreature(NPC_INVISIBLE_STALKER, FireLocation[i][0], FireLocation[i][1], FireLocation[i][2], 0.f, TEMPSUMMON_TIMED_DESPAWN, 5s))
-                                fx->CastSpell(fx, 70444);
-                        }
-
-                        for (Creature* civil : civils)
-                        {
-                            switch (civil->GetEntry())
-                            {
-                                case 4901:
-                                case 4902:
-                                case 6732:
-                                case 100025:
-                                case 100026:
-                                case 100027:
-                                case 100028:
-                                    civil->SetVisible(false);
-                                    break;
-
-                                case 100012:
-                                    civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY1H);
-                                    if (civil->GetSpawnId() == 1022705 || civil->GetSpawnId() == 1022704)
-                                    {
-                                        civil->SetVisible(false);
-                                        civil->StopMoving();
-                                        civil->GetMotionMaster()->MoveIdle();
-                                    }
-                                    break;
-
-                                case 34776:
-                                    if (civil->GetSpawnId() == 1022775)
-                                    {
-                                        civil->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                                        civil->SetFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_DEAD);
-                                        civil->SetFlag(UNIT_FIELD_FLAGS_2, UNIT_FLAG2_FEIGN_DEATH);
-                                        civil->SetFlag(UNIT_FIELD_FLAGS_2, UNIT_FLAG2_PLAY_DEATH_ANIM);
-                                    }
-                                    break;
-
-                                case 4941:
-                                    civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
-                                    break;
-
-                                case 4899:
-                                    civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
-                                    civil->GetMotionMaster()->MovePoint(0, -3698.03f, -4353.46f, 11.45f, true, 1.78f);
-                                    break;
-
-                                case 4900:
-                                    civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
-                                    civil->GetMotionMaster()->MovePoint(0, -3699.53f, -4356.35f, 11.41f, true, 1.78f);
-                                    break;
-
-                                case 4898:
-                                    civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
-                                    civil->GetMotionMaster()->MovePoint(0, -3700.21f, -4351.08f, 11.41f, true, 1.86f);
-                                    break;
-
-                                case 4897:
-                                    civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
-                                    civil->GetMotionMaster()->MovePoint(0, -3824.76f, -4443.74f, 12.66f, true, 3.24f);
-                                    break;
-
-                                case 11052:
-                                    civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
-                                    civil->GetMotionMaster()->MovePoint(0, -3826.36f, -4441.66f, 12.25f, true, 3.51f);
-                                    break;
-
-                                case 4885:
-                                case 4888:
-                                case 5405:
-                                case 10047:
-                                case 12375:
-                                case 12376:
-                                case 24005:
-                                case 24006:
-                                case 24007:
-                                    civil->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                                    civil->SetFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_DEAD);
-                                    civil->SetFlag(UNIT_FIELD_FLAGS_2, UNIT_FLAG2_FEIGN_DEATH);
-                                    civil->SetFlag(UNIT_FIELD_FLAGS_2, UNIT_FLAG2_PLAY_DEATH_ANIM);
-                                    break;
-
-                                case 4886:
-                                    civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY1H);
-                                    if (Creature* c = civil->FindNearestCreature(4888, 18.f))
-                                    {
-                                        civil->GetMotionMaster()->MoveFollow(c, 1.0f, 0.f);
-                                        civil->SetTarget(c->GetGUID());
-                                    }
-                                    break;
-                            }
-                        }
+                        PrepareCivils();
 
                         me->PlayDirectSound(15003);
                         aden->Dismount();
@@ -1227,7 +1126,7 @@ class npc_jaina_theramore : public CreatureScript
                                 {
                                     case NPC_AMARA_LEESON:
                                     case NPC_THALEN_SONGWEAVER:
-                                        c->CastSpell(c, 39550);
+                                        c->CastSpell(c, SPELL_ARCANE_CANALISATION);
                                         break;
 
                                     default:
@@ -1409,13 +1308,21 @@ class npc_jaina_theramore : public CreatureScript
                         break;
 
                     case EVENT_POST_BATTLE_19:
+                    {
                         Talk(SAY_POST_BATTLE_16);
+
+                        Position kinndyPos[JAINA_PATH_1_SIZE];
+                        for (uint8 i = 0; i < JAINA_PATH_1_SIZE; i++)
+                            kinndyPos[i] = GetRandomPosition(JainaWoundedPath[i], 3.f);
+
                         kinndy->SetWalk(false);
-                        kinndy->GetMotionMaster()->MoveSmoothPath(0, JainaWoundedPath, JAINA_PATH_1_SIZE, false);
+                        kinndy->GetMotionMaster()->MoveSmoothPath(0, kinndyPos, JAINA_PATH_1_SIZE, false);
+
                         me->SetWalk(false);
                         me->GetMotionMaster()->MoveSmoothPath(0, JainaWoundedPath, JAINA_PATH_1_SIZE, false);
                         events.ScheduleEvent(EVENT_POST_BATTLE_20, 23s, 0, PHASE_POST_BATTLE);
                         break;
+                    }
 
                     case EVENT_POST_BATTLE_20:
                         kinndy->GetMotionMaster()->Clear();
@@ -1534,6 +1441,106 @@ class npc_jaina_theramore : public CreatureScript
         TaskScheduler scheduler;
         #pragma endregion
 
+        void PrepareCivils()
+        {
+            for (int i = 0; i < 35; ++i)
+            {
+                me->SummonGameObject(GOB_FIRE_THERAMORE, FireLocation[i][0], FireLocation[i][1], FireLocation[i][2], FireLocation[i][3], QuaternionData(), 0s);
+                if (Creature* fx = me->SummonCreature(NPC_INVISIBLE_STALKER, FireLocation[i][0], FireLocation[i][1], FireLocation[i][2], 0.f, TEMPSUMMON_TIMED_DESPAWN, 5s))
+                    fx->CastSpell(fx, 70444);
+            }
+
+            for (Creature* civil : civils)
+            {
+                switch (civil->GetEntry())
+                {
+                    case 4901:
+                    case 4902:
+                    case 6732:
+                    case 100025:
+                    case 100026:
+                    case 100027:
+                    case 100028:
+                    case 100073:
+                        civil->SetVisible(false);
+                        break;
+
+                    case 100012:
+                        civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY1H);
+                        if (civil->GetSpawnId() == 1022705 || civil->GetSpawnId() == 1022704)
+                        {
+                            civil->SetVisible(false);
+                            civil->StopMoving();
+                            civil->GetMotionMaster()->MoveIdle();
+                        }
+                        break;
+
+                    case 34776:
+                        if (civil->GetSpawnId() == 1022775)
+                        {
+                            civil->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                            civil->SetFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_DEAD);
+                            civil->SetFlag(UNIT_FIELD_FLAGS_2, UNIT_FLAG2_FEIGN_DEATH);
+                            civil->SetFlag(UNIT_FIELD_FLAGS_2, UNIT_FLAG2_PLAY_DEATH_ANIM);
+                        }
+                        break;
+
+                    case 4941:
+                        civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
+                        break;
+
+                    case 4899:
+                        civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
+                        civil->GetMotionMaster()->MovePoint(0, -3698.03f, -4353.46f, 11.45f, true, 1.78f);
+                        break;
+
+                    case 4900:
+                        civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
+                        civil->GetMotionMaster()->MovePoint(0, -3699.53f, -4356.35f, 11.41f, true, 1.78f);
+                        break;
+
+                    case 4898:
+                        civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
+                        civil->GetMotionMaster()->MovePoint(0, -3700.21f, -4351.08f, 11.41f, true, 1.86f);
+                        break;
+
+                    case 4897:
+                        civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
+                        civil->GetMotionMaster()->MovePoint(0, -3824.76f, -4443.74f, 12.66f, true, 3.24f);
+                        break;
+
+                    case 11052:
+                        civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
+                        civil->GetMotionMaster()->MovePoint(0, -3826.36f, -4441.66f, 12.25f, true, 3.51f);
+                        break;
+
+                    case 4885:
+                    case 4888:
+                    case 5405:
+                    case 10047:
+                    case 12375:
+                    case 12376:
+                    case 24005:
+                    case 24006:
+                    case 24007:
+                        civil->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                        civil->SetFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_DEAD);
+                        civil->SetFlag(UNIT_FIELD_FLAGS_2, UNIT_FLAG2_FEIGN_DEATH);
+                        civil->SetFlag(UNIT_FIELD_FLAGS_2, UNIT_FLAG2_PLAY_DEATH_ANIM);
+                        break;
+
+                    case 4886:
+                        civil->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY1H);
+                        if (Creature* c = civil->FindNearestCreature(4888, 18.f))
+                        {
+                            civil->GetMotionMaster()->MoveFollow(c, 1.0f, 0.f);
+                            civil->SetTarget(c->GetGUID());
+                        }
+                        break;
+                }
+            }
+        }
+
         void Relocate(Creature* c, float x, float y, float z, float orientation)
         {
             const Position pos{ x, y, z, orientation };
@@ -1561,6 +1568,15 @@ class npc_jaina_theramore : public CreatureScript
             float perimeter = 2.f * float(M_PI) * radius;
             float time = (perimeter / kalecgos->GetSpeed(MOVE_FLIGHT)) * IN_MILLISECONDS;
             events.RescheduleEvent(EVENT_PRE_BATTLE_22, Milliseconds((uint64)time), 0, PHASE_PRE_BATTLE);
+        }
+
+        Position GetRandomPosition(Position center, float dist)
+        {
+            float alpha = 2 * float(M_PI) * float(rand_norm());
+            float r = dist * sqrtf(float(rand_norm()));
+            float x = r * cosf(alpha) + center.GetPositionX();
+            float y = r * sinf(alpha) + center.GetPositionY();
+            return { x, y, center.GetPositionZ(), 0.f };
         }
     };
 
@@ -1600,7 +1616,7 @@ class npc_civil_of_theramore : public CreatureScript
         {
             if (player->GetQuestStatus(QUEST_EVACUATION) == QUEST_STATUS_INCOMPLETE)
             {
-                AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Je n'ai pas le temps de vous expliquer, mais vous devez Ã©vacuer ! Un bÃ¢teau est prÃªt Ã  partir pour Hurlevent.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
+                AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Je n'ai pas le temps de vous expliquer, mais vous devez évacuer ! Un bâteau est prêt à partir pour Hurlevent.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
             }
 
             SendGossipMenuFor(player, NPC_TEXT_CIVIL_OF_THERAMORE, me->GetGUID());
@@ -1615,6 +1631,7 @@ class npc_civil_of_theramore : public CreatureScript
             {
                 case GOSSIP_ACTION_INFO_DEF + 1:
                 {
+                    me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
                     me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STAND_STATE_NONE);
                     scheduler.Schedule(5ms, [this, player](TaskContext context)
                     {
@@ -1632,7 +1649,7 @@ class npc_civil_of_theramore : public CreatureScript
                             case 2:
                                 if (Creature* stalker = GetClosestCreatureWithEntry(me, NPC_INVISIBLE_STALKER, 30.f))
                                     me->GetMotionMaster()->MovePoint(0, stalker->GetPosition());
-                                context.Repeat(6s);
+                                context.Repeat(1s);
                                 break;
                             case 3:
                                 player->KilledMonsterCredit(100074);

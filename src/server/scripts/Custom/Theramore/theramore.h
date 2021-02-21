@@ -229,7 +229,8 @@ enum Spells
     SPELL_POWER_BALL_VISUAL         = 54139,
     SPELL_VANISH                    = 10389,
     SPELL_CHAINS                    = 68341,
-    SPELL_PORTAL                    = 57687
+    SPELL_PORTAL                    = 57687,
+    SPELL_ARCANE_CANALISATION       = 39550
 };
 
 enum Text
