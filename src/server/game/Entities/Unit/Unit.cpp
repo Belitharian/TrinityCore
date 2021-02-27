@@ -1315,7 +1315,12 @@ void Unit::CalculateMeleeDamage(Unit* victim, CalcDamageInfo* damageInfo, Weapon
         {
             damageInfo->HitInfo     |= HITINFO_GLANCING;
             damageInfo->TargetState  = VICTIMSTATE_HIT;
-            int32 leveldif = int32(victim->GetLevel()) - int32(GetLevel());
+            int32 leveldif = int32(victim->GetLevelForTarget(this)) - int32(GetLevel());
+            if (leveldif < 0)
+            {
+                TC_LOG_DEBUG("entities.unit", "Unit::CalculateMeleeDamage: (Player) %s attacked %s. Glancing should never happen against lower level target", GetGUID().ToString().c_str(), victim->GetGUID().ToString().c_str());
+                break;
+            }
             if (leveldif == 0)
                 leveldif = 1;
             if (leveldif > 3)
@@ -1325,6 +1330,7 @@ void Unit::CalculateMeleeDamage(Unit* victim, CalcDamageInfo* damageInfo, Weapon
             // against level 82 elites - 18% chance of 15% average damage reduction (damage reduction range : 10-20%)
             int32 const reductionMax = leveldif * 10;
             int32 const reductionMin = std::max(1, reductionMax - 10);
+
             float reducePercent = 1.f - irand(reductionMin, reductionMax) / 100.0f;
 
             for (uint8 i = 0; i < MAX_ITEM_PROTO_DAMAGES; ++i)
@@ -2171,7 +2177,7 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(Unit const* victim, WeaponAttackTy
     }
 
     // 4. GLANCING
-    // Max 40% chance to score a glancing blow against mobs that are same or higher level (can do only players and pets and not with ranged weapon)
+    // Max 40% chance to score a glancing blow against mobs of the same or higher level (only players and pets, not for ranged weapons).
     if ((GetTypeId() == TYPEID_PLAYER || IsPet()) &&
         victim->GetTypeId() != TYPEID_PLAYER && !victim->IsPet() &&
         GetLevel() <= victim->GetLevelForTarget(this))
