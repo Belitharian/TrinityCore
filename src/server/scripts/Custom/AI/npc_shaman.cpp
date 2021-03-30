@@ -10,8 +10,10 @@ enum Spells
     SPELL_HEX               = 51514,
     SPELL_HEALING           = 100030,
     SPELL_LIGHTNING_CHAIN   = 100031,
+    SPELL_SEARING_TOTEM     = 100106,
+    SPELL_HEALING_TOTEM     = 100108,
 
-    NPC_HEALING_TOTEM       = 100036
+    NPC_HEALING_TOTEM       = 100087
 };
 
 class npc_shaman : public CreatureScript
@@ -32,12 +34,12 @@ class npc_shaman : public CreatureScript
                 .Schedule(5ms, [this](TaskContext lighting_bolt)
                 {
                     DoCastVictim(SPELL_LIGHTNING_BOLT);
-                    lighting_bolt.Repeat(10s, 15s);
+                    lighting_bolt.Repeat(3s);
                 })
                 .Schedule(12s, [this](TaskContext lightning_chain)
                 {
                     DoCastVictim(SPELL_LIGHTNING_CHAIN);
-                    lightning_chain.Repeat(14s, 25s);
+                    lightning_chain.Repeat(5s, 10s);
                 })
                 .Schedule(3s, [this](TaskContext hex)
                 {
@@ -47,26 +49,33 @@ class npc_shaman : public CreatureScript
                 })
                 .Schedule(3s, [this](TaskContext healing_wave)
                 {
-                    if (Unit * target = DoSelectBelowHpPctFriendly(40.0f, 50, false))
+                    if (Unit * target = DoSelectBelowHpPctFriendly(40.0f, 80, false))
                     {
                         me->InterruptNonMeleeSpells(true);
                         DoCast(target, SPELL_HEALING_WAVE);
-                        healing_wave.Repeat(8s);
+                        healing_wave.Repeat(4s);
                     }
                     else
                     {
                         healing_wave.Repeat(1s);
                     }
                 })
+                .Schedule(3s, [this](TaskContext searing_totem)
+                {
+                    DoCast(SPELL_SEARING_TOTEM);
+                    searing_totem.Repeat(30s, 45s);
+                })
                 .Schedule(6s, [this](TaskContext healing_totem)
                 {
-                    if (Creature* healingTotem = DoSummon(NPC_HEALING_TOTEM, me->GetRandomNearPosition(2.f), 15s, TEMPSUMMON_TIMED_DESPAWN))
+                    Creature* totem = me->FindNearestCreature(NPC_HEALING_TOTEM, 50.f);
+                    if (!totem)
                     {
-                        healingTotem->SetFaction(me->GetFaction());
-                        healingTotem->CastSpell(healingTotem, SPELL_HEALING);
-                        healingTotem->SetReactState(REACT_PASSIVE);
+                        DoCast(SPELL_HEALING_TOTEM);
                     }
-                    healing_totem.Repeat(20s, 30s);
+                    else
+                    {
+                        healing_totem.Repeat(20s, 30s);
+                    }
                 });
         }
     };

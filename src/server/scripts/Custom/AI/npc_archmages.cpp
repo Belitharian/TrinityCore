@@ -5,8 +5,6 @@
 #include "ScriptedCreature.h"
 #include "CustomAI.h"
 
-#include <iostream>
-
 enum Spells
 {
 	SPELL_FIREBALL              = 100003,
@@ -40,7 +38,8 @@ enum Spells
 	SPELL_POLYMORPH             = 61721,
 
 	SPELL_CLONE_ME              = 45204,
-	SPELL_MASTERS_THREAT_LIST   = 58838
+	SPELL_MASTERS_THREAT_LIST   = 58838,
+    SPELL_POWER_BALL_VISUAL     = 54139
 };
 
 enum Misc
@@ -230,9 +229,10 @@ class npc_archmage_arcanes : public CreatureScript
 
 			if (summon->GetEntry() == NPC_MIRROR_IMAGE)
 			{
+                summon->CastSpell(summon, SPELL_POWER_BALL_VISUAL);
 				summon->Attack(me->GetVictim(), false);
 
-                uint32 health = me->GetMaxHealth() / 2;
+                uint32 health = me->GetMaxHealth() / 1.2f;
                 summon->SetHealth(health);
                 summon->SetMaxHealth(health);
 
@@ -794,8 +794,6 @@ class npc_mirror_image : public CreatureScript
 				me->DespawnOrUnsummon();
 				return;
 			}
-
-			ScriptedAI::UpdateAI(diff);
 
 			if (!UpdateVictim())
 				return;

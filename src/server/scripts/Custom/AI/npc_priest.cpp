@@ -8,8 +8,6 @@
 #include "CellImpl.h"
 #include "CustomAI.h"
 
-#include <iostream>
-
 enum Spells
 {
     SPELL_FLASH_HEAL            = 100015,
@@ -51,7 +49,7 @@ class npc_priest : public CreatureScript
 
     struct npc_priestAI : public CustomAI
     {
-        npc_priestAI(Creature* creature) : CustomAI(creature), hasUseDamageReduction(false)
+        npc_priestAI(Creature* creature) : CustomAI(creature), hasUsedDamageReduction(false)
         {
             SetCombatMovement(false);
         }
@@ -60,7 +58,7 @@ class npc_priest : public CreatureScript
         {
             CustomAI::Initialize();
 
-            hasUseDamageReduction = false;
+            hasUsedDamageReduction = false;
         }
 
         void JustEngagedWith(Unit* /*who*/) override
@@ -95,19 +93,19 @@ class npc_priest : public CreatureScript
 
         void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
         {
-            if (!hasUseDamageReduction && !me->HasAura(SPELL_PAIN_SUPPRESSION) && HealthBelowPct(20))
+            if (!hasUsedDamageReduction && !me->HasAura(SPELL_PAIN_SUPPRESSION) && HealthBelowPct(20))
             {
                 scheduler.CancelGroup(PHASE_HEALING);
                 scheduler.CancelGroup(PHASE_COMBAT);
 
                 DoCast(SPELL_PAIN_SUPPRESSION);
 
-                hasUseDamageReduction = true;
+                hasUsedDamageReduction = true;
 
                 scheduler
                     .Schedule(1s, PHASE_ENDANGERED, [this](TaskContext /*context*/)
                     {
-                        me->Say(DAMAGE_TAKEN_01, LANG_COMMON);
+                        me->Say("La lumiÃ¨re me vient en aide !", LANG_COMMON);
 
                         DoCast(SPELL_MANA_POTION);
                         DoCast(SPELL_ETERNAL_AFFECTION);
@@ -118,14 +116,13 @@ class npc_priest : public CreatureScript
                     })
                     .Schedule(1min, PHASE_ENDANGERED, [this](TaskContext /*context*/)
                     {
-                        hasUseDamageReduction = false;
+                        hasUsedDamageReduction = false;
                     });
             }
         }
 
         private:
-        bool hasUseDamageReduction;
-        const char* DAMAGE_TAKEN_01 = "La lumière me vient en aide !";
+        bool hasUsedDamageReduction;
 
         Position GetPositionAround(Unit* target, double angle, float radius)
         {
