@@ -91,8 +91,8 @@ enum Texts
 enum Misc
 {
 	// Gossips
-	GOSSIP_MENU_START           = 57024,
-	GOSSIP_MENU_FINAL           = 57025,
+	GOSSIP_MENU_START           = 100001,
+	GOSSIP_MENU_FINAL           = 100002,
 
 	// Group
 	GROUP_COMBAT                = 1
@@ -657,16 +657,18 @@ class npc_netristrasza : public CreatureScript
 
 		bool OnGossipHello(Player* player) override
 		{
-			// override default gossip
 			if (instance->GetBossState(DATA_NETRISTRASZA) == DONE)
 			{
 				player->PrepareGossipMenu(me, GOSSIP_MENU_FINAL, true);
-				player->SendPreparedGossip(me);
-				return true;
-			}
+            }
+            else
+            {
+                player->PrepareGossipMenu(me, GOSSIP_MENU_START, true);
+            }
 
-			// load default gossip
-			return false;
+            player->SendPreparedGossip(me);
+
+            return true;
 		}
 
 		bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
@@ -685,7 +687,8 @@ class npc_netristrasza : public CreatureScript
 				default:
 					break;
 			}
-			return false;
+
+			return true;
 		}
 
 		private:

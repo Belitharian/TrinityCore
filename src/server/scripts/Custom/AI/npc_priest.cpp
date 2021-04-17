@@ -105,7 +105,7 @@ class npc_priest : public CreatureScript
                 scheduler
                     .Schedule(1s, PHASE_ENDANGERED, [this](TaskContext /*context*/)
                     {
-                        me->Say("La lumiÃ¨re me vient en aide !", LANG_COMMON);
+                        me->Say("La lumière me vient en aide !", LANG_COMMON);
 
                         DoCast(SPELL_MANA_POTION);
                         DoCast(SPELL_ETERNAL_AFFECTION);
@@ -139,19 +139,22 @@ class npc_priest : public CreatureScript
             std::list<Unit*> result;
 
             // First get all friendly creatures
-            std::list<Unit*> friends;
-            Trinity::AllFriendlyInRange check(me, range);
-            Trinity::UnitListSearcher<Trinity::AllFriendlyInRange> searcher(me, friends, check);
+            std::list<WorldObject*> objects;
+            Trinity::AllWorldObjectsInRange check(me, range);
+            Trinity::UnitListSearcher<Trinity::AllWorldObjectsInRange> searcher(me, objects, check);
             Cell::VisitGridObjects(me, searcher, range);
 
-            for (Unit* unit : friends)
+            for (WorldObject* object : objects)
             {
-                DispelChargesList dispelList;
-                unit->GetDispellableAuraList(unit, DISPEL_ALL_MASK, dispelList);
-                if (dispelList.empty())
-                    continue;
+                if (Unit* unit = object->ToUnit())
+                {
+                    DispelChargesList dispelList;
+                    unit->GetDispellableAuraList(unit, DISPEL_ALL_MASK, dispelList);
+                    if (dispelList.empty())
+                        continue;
 
-                result.push_back(unit);
+                    result.push_back(unit);
+                }
             }
 
             return result;
@@ -179,12 +182,9 @@ class npc_priest : public CreatureScript
                     {
                         me->InterruptNonMeleeSpells(true);
                         DoCast(target, SPELL_FLASH_HEAL);
-                        heal.Repeat(4s);
                     }
-                    else
-                    {
-                        heal.Repeat(1s);
-                    }
+
+                    heal.Repeat(1s);
                 })
                 .Schedule(5ms, PHASE_HEALING, [this](TaskContext prayer_of_mending)
                 {
@@ -195,12 +195,9 @@ class npc_priest : public CreatureScript
 
                         me->InterruptNonMeleeSpells(true);
                         DoCast(target, SPELL_PRAYER_OF_MENDING, args);
-                        prayer_of_mending.Repeat(10s, 14s);
                     }
-                    else
-                    {
-                        prayer_of_mending.Repeat(2s);
-                    }
+
+                    prayer_of_mending.Repeat(2s);
                 })
                 .Schedule(5ms, PHASE_HEALING, [this](TaskContext power_word_shield)
                 {
@@ -230,7 +227,7 @@ class npc_priest : public CreatureScript
                 })
                 .Schedule(25s, PHASE_COMBAT, [this](TaskContext power_word_barrier)
                 {
-                    if (Unit* target = DoSelectBelowHpPctFriendly(30.0f, 10, false))
+                    if (Unit* target = DoSelectLowestHpFriendly(40.0f))
                     {
                         me->CastSpell(target->GetPosition(), SPELL_POWER_WORD_BARRIER);
                         power_word_barrier.Repeat(60s, 80s);

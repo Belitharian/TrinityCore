@@ -852,7 +852,7 @@ class npc_enchanter_isian : public CreatureScript
         {
             if (player->IsGameMaster() || player->GetQuestStatus(QUEST_NOWHERE_TO_HIDE) == QUEST_STATUS_INCOMPLETE)
             {
-                AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Vereesa me demande de faire le mÃ©nage dans le sanctuaire des saccage-soleil.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
+                AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Vereesa me demande de faire le ménage dans le sanctuaire des saccage-soleil.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
                 SendGossipMenuFor(player, 100004, me->GetGUID());
                 return true;
             }
@@ -982,7 +982,7 @@ class npc_vereesa_windrunner : public CreatureScript
             if (me->Attack(who, false))
             {
                 AddThreat(who, 50.0f);
-                DoStartMovement(who, 20.0f);
+                DoStartMovement(who, 10.0f);
                 SetCombatMovement(true);
             }
         }
@@ -997,12 +997,12 @@ class npc_vereesa_windrunner : public CreatureScript
                         if (!target->HasAura(SPELL_SCATTER_SHOT))
                             DoCast(target, SPELL_SHOT);
                     }
-                    shot.Repeat(2s);
+                    shot.Repeat(1s);
                 })
                 .Schedule(3s, [this](TaskContext multi_shot)
                 {
                     DoCastAOE(SPELL_MULTI_SHOT);
-                    multi_shot.Repeat(4s, 8s);
+                    multi_shot.Repeat(2s, 4s);
                 })
                 .Schedule(8s, [this](TaskContext arcane_shot)
                 {
@@ -1011,7 +1011,7 @@ class npc_vereesa_windrunner : public CreatureScript
                         if (!target->HasAura(SPELL_SCATTER_SHOT))
                             DoCast(target, SPELL_ARCANE_SHOT);
                     }
-                    arcane_shot.Repeat(2s, 4s);
+                    arcane_shot.Repeat(1s, 2s);
                 })
                 .Schedule(12s, [this](TaskContext scatter_shot)
                 {

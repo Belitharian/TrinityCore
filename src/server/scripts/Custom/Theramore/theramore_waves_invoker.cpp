@@ -8,7 +8,7 @@
 #include "MotionMaster.h"
 #include "theramore.h"
 
-constexpr uint8 NUMBER_OF_WAVES = 10;
+constexpr uint8 NUMBER_OF_MEMBERS = 20;
 
 const Position JainaHomePos = { -3658.39f, -4372.87f, 9.35f, 0.69f };
 
@@ -208,18 +208,6 @@ class theramore_waves_invoker : public CreatureScript
                             gate->UseDoorOrButton();
                         }
 
-                        //double angle = 18;
-                        //for (int i = 0; i < 20; ++i)
-                        //{
-                        //    Position pos = GetPositionAround(jaina, angle, jaina->GetObjectScale() * 3.f);
-                        //    if (Creature* shield = DoSummon(NPC_INVISIBLE_STALKER, pos, 5000, TEMPSUMMON_TIMED_DESPAWN))
-                        //    {
-                        //        shield->AddAura(70573, shield);
-                        //        shield->SetObjectScale(0.3f);
-                        //    }
-                        //    angle += 18;
-                        //}
-
                         amara->RemoveAllAuras();
                         amara->CastSpell(amara, 54899);
                         playerForQuest->CastSpell(playerForQuest, 54899);
@@ -316,7 +304,7 @@ class theramore_waves_invoker : public CreatureScript
                     {
                         uint32 membersCounter = 0;
                         uint32 deadCounter = 0;
-                        for (uint8 i = 0; i < NUMBER_OF_WAVES; ++i)
+                        for (uint8 i = 0; i < NUMBER_OF_MEMBERS; ++i)
                         {
                             ++membersCounter;
                             Creature* temp = ObjectAccessor::GetCreature(*me, horderMembers[i]);
@@ -372,7 +360,7 @@ class theramore_waves_invoker : public CreatureScript
         Creature* amara;
         Creature* kalecgos;
         Player* playerForQuest;
-        ObjectGuid horderMembers[NUMBER_OF_WAVES];
+        ObjectGuid horderMembers[NUMBER_OF_MEMBERS];
         uint32 waves;
         uint32 wavesInvoker;
 
@@ -388,7 +376,7 @@ class theramore_waves_invoker : public CreatureScript
 
         void HordeMembersInvoker(uint32 waveId, ObjectGuid* hordes)
         {
-            for (uint32 i = 0; i < NUMBER_OF_WAVES; ++i)
+            for (uint32 i = 0; i < NUMBER_OF_MEMBERS; ++i)
             {
                 uint32 entry = RAND(NPC_ROK_NAH_GRUNT, NPC_ROK_NAH_SOLDIER, NPC_ROK_NAH_FELCASTER, NPC_ROK_NAH_HAG, NPC_ROK_NAH_LOA_SINGER);
                 Position pos;
@@ -413,11 +401,13 @@ class theramore_waves_invoker : public CreatureScript
                     if (waveId == WAVE_DOORS)
                     {
                         Position dest = GetRandomPosition(JainaHomePos, 5.f);
-                        temp->GetMotionMaster()->MovePoint(0, dest, false);
+                        temp->GetMotionMaster()->MovePoint(0, dest);
                     }
 
-                    temp->SetMaxHealth(temp->GetMaxHealth() * 1.3f);
-                    temp->SetHealth(temp->GetMaxHealth());
+                    float x, y, z;
+                    temp->GetPosition(x, y, z);
+                    temp->UpdateGroundPositionZ(x, y, z);
+                    temp->UpdatePosition(x, y, z, 0);
 
                     hordes[i] = temp->GetGUID();
                 }
@@ -465,6 +455,7 @@ class theramore_waves_invoker : public CreatureScript
                 if (distance > 25.0f)
                 {
                     playerForQuest->NearTeleportTo(playerPos);
+                    playerForQuest->CastSpell(playerForQuest, SPELL_TELEPORT);
                 }
             }
         }

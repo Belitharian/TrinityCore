@@ -9580,7 +9580,7 @@ void ObjectMgr::LoadGossipMenu()
 
         GossipMenus gMenu;
 
-        gMenu.MenuID = fields[0].GetUInt16();
+        gMenu.MenuID = fields[0].GetUInt32();
         gMenu.TextID = fields[1].GetUInt32();
 
         if (!GetGossipText(gMenu.TextID))
@@ -9618,7 +9618,7 @@ void ObjectMgr::LoadGossipMenuItems()
 
         GossipMenuItems gMenuItem;
 
-        gMenuItem.MenuID                = fields[0].GetUInt16();
+        gMenuItem.MenuID                = fields[0].GetUInt32();
         gMenuItem.OptionID              = fields[1].GetUInt16();
         gMenuItem.OptionIcon            = fields[2].GetUInt32();
         gMenuItem.OptionText            = fields[3].GetString();
