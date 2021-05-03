@@ -100,13 +100,6 @@ enum Spells
     SPELL_JAINAS_CALL               = 70525,
 };
 
-enum Casting
-{
-    CASTING_FIREBALL                = 200,
-    CASTING_FROSTBOLT,
-    CASTING_FROST_RUNE,
-};
-
 enum Text
 {
     SAY_RETURN_1                    = 10,

@@ -18,6 +18,7 @@
 #define TERVOSH_PATH_SIZE            9
 #define JAINA_PATH_SIZE             14
 #define JAINA_PATH_1_SIZE           43
+#define KINNDY_PATH_1_SIZE          21
 
 #define KALECGOS_CIRCLE_RADIUS      95.f
 
@@ -121,6 +122,31 @@ Position const JainaWoundedPath[JAINA_PATH_1_SIZE]
     { -3665.60f, -4512.60f, 10.03f, 2.97f },
     { -3663.23f, -4512.82f, 9.977f, 3.07f },
     { -3655.96f, -4513.32f, 9.463f, 3.07f }
+};
+
+Position const KinndyWoundedPath[KINNDY_PATH_1_SIZE]
+{
+    { -3638.61f, -4409.38f,  9.80f, 4.85f },
+    { -3638.47f, -4417.07f,  9.72f, 4.69f },
+    { -3646.66f, -4415.24f, 10.05f, 2.98f },
+    { -3654.98f, -4414.06f, 10.37f, 3.01f },
+    { -3663.34f, -4413.29f, 10.69f, 3.07f },
+    { -3670.61f, -4414.45f, 10.81f, 3.60f },
+    { -3671.06f, -4418.63f, 11.04f, 4.64f },
+    { -3671.46f, -4431.22f, 11.26f, 4.66f },
+    { -3671.94f, -4439.60f, 11.30f, 4.63f },
+    { -3672.79f, -4447.96f, 11.36f, 4.60f },
+    { -3673.87f, -4456.29f, 11.37f, 4.51f },
+    { -3676.22f, -4464.34f, 11.43f, 4.33f },
+    { -3679.93f, -4471.87f, 11.51f, 4.19f },
+    { -3681.81f, -4477.32f, 11.49f, 4.76f },
+    { -3680.18f, -4482.29f, 11.22f, 5.29f },
+    { -3676.65f, -4488.00f, 10.90f, 5.07f },
+    { -3674.23f, -4496.04f, 10.64f, 5.03f },
+    { -3671.02f, -4503.80f, 10.34f, 5.16f },
+    { -3668.65f, -4508.87f, 10.15f, 5.05f },
+    { -3661.69f, -4514.67f, 9.88f, 0.04f },
+    { -3656.59f, -4516.66f, 9.46f, 0.46f }
 };
 
 const Position KalecgosPath[KALECGOS_PATH_SIZE]
@@ -1308,21 +1334,13 @@ class npc_jaina_theramore : public CreatureScript
                         break;
 
                     case EVENT_POST_BATTLE_19:
-                    {
                         Talk(SAY_POST_BATTLE_16);
-
-                        Position kinndyPos[JAINA_PATH_1_SIZE];
-                        for (uint8 i = 0; i < JAINA_PATH_1_SIZE; i++)
-                            kinndyPos[i] = GetRandomPosition(JainaWoundedPath[i], 3.f);
-
                         kinndy->SetWalk(false);
-                        kinndy->GetMotionMaster()->MoveSmoothPath(0, kinndyPos, JAINA_PATH_1_SIZE, false);
-
+                        kinndy->GetMotionMaster()->MoveSmoothPath(0, KinndyWoundedPath, KINNDY_PATH_1_SIZE, false);
                         me->SetWalk(false);
                         me->GetMotionMaster()->MoveSmoothPath(0, JainaWoundedPath, JAINA_PATH_1_SIZE, false);
                         events.ScheduleEvent(EVENT_POST_BATTLE_20, 23s, 0, PHASE_POST_BATTLE);
                         break;
-                    }
 
                     case EVENT_POST_BATTLE_20:
                         kinndy->GetMotionMaster()->Clear();
@@ -1586,6 +1604,12 @@ class npc_jaina_theramore : public CreatureScript
     }
 };
 
+enum Civil
+{
+    GOSSIP_MENU_EVACUATION  = 100003,
+    GOSSIP_MENU_DEFAULT     = 68
+};
+
 class npc_civil_of_theramore : public CreatureScript
 {
     public:
@@ -1616,20 +1640,25 @@ class npc_civil_of_theramore : public CreatureScript
         {
             if (player->GetQuestStatus(QUEST_EVACUATION) == QUEST_STATUS_INCOMPLETE)
             {
-                AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Je n'ai pas le temps de vous expliquer, mais vous devez évacuer ! Un bâteau est prêt à partir pour Hurlevent.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
+                player->PrepareGossipMenu(me, GOSSIP_MENU_EVACUATION, true);
+            }
+            else
+            {
+                player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
             }
 
-            SendGossipMenuFor(player, NPC_TEXT_CIVIL_OF_THERAMORE, me->GetGUID());
+            player->SendPreparedGossip(me);
+
             return true;
         }
 
         bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
         {
-            uint32 const action = player->PlayerTalkClass->GetGossipOptionAction(gossipListId);
             ClearGossipMenuFor(player);
-            switch (action)
+
+            switch (gossipListId)
             {
-                case GOSSIP_ACTION_INFO_DEF + 1:
+                case 0:
                 {
                     me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
                     me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STAND_STATE_NONE);

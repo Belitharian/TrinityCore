@@ -27,10 +27,17 @@ class npc_warrior : public CreatureScript
         void DamageTaken(Unit* attacker, uint32& damage) override
         {
             // Que pour la bataille de Theramore et pour Aden
-            if (me->GetEntry() == NPC_LIEUTENANT_ADEN
-                && me->GetMapId() == 726
-                && (attacker->GetTypeId() == TYPEID_PLAYER && !attacker->ToPlayer()->IsGameMaster()))
+            if (me->GetEntry() == NPC_LIEUTENANT_ADEN && me->GetMapId() == 726)
             {
+                if (attacker->GetTypeId() == TYPEID_PLAYER)
+                {
+                    if (Player* player = attacker->ToPlayer())
+                    {
+                        if (player->IsGameMaster())
+                            return;
+                    }
+                }
+
                 if (damage >= me->GetMaxHealth())
                     damage = 0;
 

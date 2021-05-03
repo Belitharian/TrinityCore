@@ -227,7 +227,7 @@ class theramore_waves_invoker : public CreatureScript
                         thalen->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
                         thalen->SetReactState(REACT_PASSIVE);
                         thalen->SetFaction(85);
-                        thalen->GetMotionMaster()->MovePoint(0, -3609.83f, -4333.48f, 9.29f, false, 3.82f);
+                        thalen->GetMotionMaster()->MovePoint(0, -3609.83f, -4333.48f, 10.29f, false, 3.82f);
                         events.ScheduleEvent(EVENT_BATTLE_4, 6s);
                         break;
 
@@ -235,7 +235,7 @@ class theramore_waves_invoker : public CreatureScript
                         jaina->AI()->Talk(JAINA_SAY_04);
                         if (Creature* fx = DoSummon(NPC_INVISIBLE_STALKER, jaina->GetPosition(), 5s, TEMPSUMMON_TIMED_DESPAWN))
                             fx->CastSpell(fx, SPELL_TELEPORT, true);
-                        jaina->NearTeleportTo(-3612.43f, -4335.63f, 9.29f, 0.72f);
+                        jaina->NearTeleportTo(-3612.43f, -4335.63f, 10.29f, 0.72f);
                         events.ScheduleEvent(EVENT_BATTLE_5, 1s);
                         break;
 
@@ -384,7 +384,7 @@ class theramore_waves_invoker : public CreatureScript
                 switch (waveId)
                 {
                     case WAVE_DOORS:
-                        pos = GetRandomPosition({ -3608.66f, -4332.66f, 11.62f, 3.83f }, 3.f);
+                        pos = GetRandomPosition({ -3608.66f, -4332.66f, 11.62f, 3.83f }, 2.f);
                         break;
 
                     case WAVE_CITADEL:
