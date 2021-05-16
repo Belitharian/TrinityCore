@@ -3,9 +3,7 @@
 #endif
 #define JEMALLOC_INTERNAL_TSD_TLS_H
 
-#define JEMALLOC_TSD_TYPE_ATTR(type) __thread type JEMALLOC_TLS_MODEL
-
-extern JEMALLOC_TSD_TYPE_ATTR(tsd_t) tsd_tls;
+extern __thread tsd_t tsd_tls;
 extern pthread_key_t tsd_tsd;
 extern bool tsd_booted;
 
@@ -42,6 +40,7 @@ tsd_get_allocates(void) {
 /* Get/set. */
 JEMALLOC_ALWAYS_INLINE tsd_t *
 tsd_get(bool init) {
+	assert(tsd_booted);
 	return &tsd_tls;
 }
 

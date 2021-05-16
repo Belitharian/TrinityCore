@@ -83,18 +83,23 @@ class boss_vexallus : public CreatureScript
                 Talk(SAY_KILL);
             }
 
-            void JustEngagedWith(Unit* who) override
+            void JustDied(Unit* /*killer*/) override
+            {
+                _JustDied();
+            }
+
+            void JustEngagedWith(Unit* /*who*/) override
             {
                 Talk(SAY_AGGRO);
-                BossAI::JustEngagedWith(who);
+                _JustEngagedWith();
 
-                events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 8s);
-                events.ScheduleEvent(EVENT_ARCANE_SHOCK, 5s);
+                events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 8000);
+                events.ScheduleEvent(EVENT_ARCANE_SHOCK, 5000);
             }
 
             void JustSummoned(Creature* summoned) override
             {
-                if (Unit* temp = SelectTarget(SelectTargetMethod::Random, 0))
+                if (Unit* temp = SelectTarget(SELECT_TARGET_RANDOM, 0))
                     summoned->GetMotionMaster()->MoveFollow(temp, 0, 0);
 
                 summons.Summon(summoned);
@@ -113,7 +118,7 @@ class boss_vexallus : public CreatureScript
                     {
                         _enraged = true;
                         events.Reset();
-                        events.ScheduleEvent(EVENT_OVERLOAD, 1200ms);
+                        events.ScheduleEvent(EVENT_OVERLOAD, 1200);
                         return;
                     }
                     else
@@ -147,18 +152,18 @@ class boss_vexallus : public CreatureScript
                     switch (eventId)
                     {
                         case EVENT_CHAIN_LIGHTNING:
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.0f, true))
+                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, true))
                                 DoCast(target, SPELL_CHAIN_LIGHTNING);
-                            events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 8s);
+                            events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 8000);
                             break;
                         case EVENT_ARCANE_SHOCK:
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 20.0f, true))
+                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 20.0f, true))
                                 DoCast(target, SPELL_ARCANE_SHOCK);
-                            events.ScheduleEvent(EVENT_ARCANE_SHOCK, 8s);
+                            events.ScheduleEvent(EVENT_ARCANE_SHOCK, 8000);
                             break;
                         case EVENT_OVERLOAD:
                             DoCastVictim(SPELL_OVERLOAD);
-                            events.ScheduleEvent(EVENT_OVERLOAD, 2s);
+                            events.ScheduleEvent(EVENT_OVERLOAD, 2000);
                             break;
                         default:
                             break;
@@ -198,13 +203,12 @@ class npc_pure_energy : public CreatureScript
         {
             npc_pure_energyAI(Creature* creature) : ScriptedAI(creature)
             {
-                me->SetDisplayId(me->GetCreatureTemplate()->Modelid2);
+                me->SetDisplayFromModel(1);
             }
 
             void JustDied(Unit* killer) override
             {
-                if (killer)
-                    killer->CastSpell(killer, SPELL_ENERGY_FEEDBACK, true);
+                killer->CastSpell(killer, SPELL_ENERGY_FEEDBACK, true);
                 me->RemoveAurasDueToSpell(SPELL_PURE_ENERGY_PASSIVE);
             }
         };

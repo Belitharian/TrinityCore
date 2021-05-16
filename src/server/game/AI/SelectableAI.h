@@ -35,4 +35,5 @@ struct SelectableAI : public FactoryHolder<AI, O>, public Permissible<O>, public
     bool IsScriptNameAllowedInDB() const final override { return is_db_allowed; }
 };
 
+
 #endif // SelectableAI_h__

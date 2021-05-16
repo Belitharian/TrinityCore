@@ -70,14 +70,14 @@ class boss_instructor_malicia : public CreatureScript
                 Initialize();
             }
 
-            void JustEngagedWith(Unit* who) override
+            void JustEngagedWith(Unit* /*who*/) override
             {
-                BossAI::JustEngagedWith(who);
-                events.ScheduleEvent(EVENT_CALLOFGRAVES, 4s);
-                events.ScheduleEvent(EVENT_CORRUPTION, 8s);
-                events.ScheduleEvent(EVENT_RENEW, 32s);
-                events.ScheduleEvent(EVENT_FLASHHEAL, 38s);
-                events.ScheduleEvent(EVENT_HEALINGTOUCH, 45s);
+                _JustEngagedWith();
+                events.ScheduleEvent(EVENT_CALLOFGRAVES, 4000);
+                events.ScheduleEvent(EVENT_CORRUPTION, 8000);
+                events.ScheduleEvent(EVENT_RENEW, 32000);
+                events.ScheduleEvent(EVENT_FLASHHEAL, 38000);
+                events.ScheduleEvent(EVENT_HEALINGTOUCH, 45000);
             }
 
             void UpdateAI(uint32 diff) override
@@ -96,28 +96,28 @@ class boss_instructor_malicia : public CreatureScript
                     {
                         case EVENT_CALLOFGRAVES:
                             DoCastVictim(SPELL_CALLOFGRAVES, true);
-                            events.ScheduleEvent(EVENT_CALLOFGRAVES, 65s);
+                            events.ScheduleEvent(EVENT_CALLOFGRAVES, 65000);
                             break;
                         case EVENT_CORRUPTION:
-                            DoCast(SelectTarget(SelectTargetMethod::Random, 0, 100, true), SPELL_CORRUPTION, true);
-                            events.ScheduleEvent(EVENT_CORRUPTION, 24s);
+                            DoCast(SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true), SPELL_CORRUPTION, true);
+                            events.ScheduleEvent(EVENT_CORRUPTION, 24000);
                             break;
                         case EVENT_RENEW:
                             DoCast(me, SPELL_RENEW);
-                            events.ScheduleEvent(EVENT_RENEW, 10s);
+                            events.ScheduleEvent(EVENT_RENEW, 10000);
                             break;
                         case EVENT_FLASHHEAL:
                             //5 Flashheals will be cast
                             DoCast(me, SPELL_FLASHHEAL);
                             if (FlashCounter < 2)
                             {
-                                events.ScheduleEvent(EVENT_FLASHHEAL, 5s);
+                                events.ScheduleEvent(EVENT_FLASHHEAL, 5000);
                                 ++FlashCounter;
                             }
                             else
                             {
                                 FlashCounter=0;
-                                events.ScheduleEvent(EVENT_FLASHHEAL, 30s);
+                                events.ScheduleEvent(EVENT_FLASHHEAL, 30000);
                             }
                             break;
                         case EVENT_HEALINGTOUCH:
@@ -125,13 +125,13 @@ class boss_instructor_malicia : public CreatureScript
                             DoCast(me, SPELL_HEALINGTOUCH);
                             if (TouchCounter < 2)
                             {
-                                events.ScheduleEvent(EVENT_HEALINGTOUCH, 5500ms);
+                                events.ScheduleEvent(EVENT_HEALINGTOUCH, 5500);
                                 ++TouchCounter;
                             }
                             else
                             {
                                 TouchCounter=0;
-                                events.ScheduleEvent(EVENT_HEALINGTOUCH, 30s);
+                                events.ScheduleEvent(EVENT_HEALINGTOUCH, 30000);
                             }
                             break;
                         default:
@@ -150,7 +150,6 @@ class boss_instructor_malicia : public CreatureScript
         {
             return GetScholomanceAI<boss_instructormaliciaAI>(creature);
         }
-
 };
 
 void AddSC_boss_instructormalicia()

@@ -27,7 +27,6 @@
 #include "G3D/platform.h"
 #include <ctype.h>
 #include <float.h>
-#include <algorithm>
 #include <limits>
 #include <stdlib.h>
 #include <stdint.h>

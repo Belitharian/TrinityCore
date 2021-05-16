@@ -21,11 +21,11 @@
 #include "InstanceScript.h"
 #include "Log.h"
 #include "Map.h"
-#include "ObjectAccessor.h"
 #include "Player.h"
 #include "ScriptedCreature.h"
 #include "TemporarySummon.h"
 #include "trial_of_the_crusader.h"
+#include <sstream>
 
  // ToDo: Remove magic numbers of events
 
@@ -119,7 +119,6 @@ class instance_trial_of_the_crusader : public InstanceMapScript
                 MistressOfPainCount = 0;
                 TributeToImmortalityEligible = true;
                 NeedSave = false;
-                CrusadersSpecialState = false;
             }
 
             void OnPlayerEnter(Player* player) override
@@ -184,7 +183,6 @@ class instance_trial_of_the_crusader : public InstanceMapScript
                         {
                             if (Creature* fordring = GetCreature(DATA_FORDRING))
                                 fordring->AI()->DoAction(ACTION_JARAXXUS_WIPE);
-                            MistressOfPainCount = 0;
                         }
                         else if (state == DONE)
                         {
@@ -200,17 +198,20 @@ class instance_trial_of_the_crusader : public InstanceMapScript
                                 ResilienceWillFixItTimer = 0;
                                 break;
                             case FAIL:
-                                CrusadersSpecialState = false;
                                 if (Creature* fordring = GetCreature(DATA_FORDRING))
                                     fordring->AI()->DoAction(ACTION_FACTION_WIPE);
                                 break;
+                            case SPECIAL: //Means the first blood
+                                ResilienceWillFixItTimer = 60*IN_MILLISECONDS;
+                                state = IN_PROGRESS;
+                                break;
                             case DONE:
-                                DoUpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_BE_SPELL_TARGET, SPELL_DEFEAT_FACTION_CHAMPIONS);
+                                DoUpdateCriteria(CRITERIA_TYPE_BE_SPELL_TARGET, SPELL_DEFEAT_FACTION_CHAMPIONS);
                                 if (ResilienceWillFixItTimer > 0)
-                                    DoUpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_BE_SPELL_TARGET, SPELL_CHAMPIONS_KILLED_IN_MINUTE);
-                                DoRespawnGameObject(GetGuidData(DATA_CRUSADERS_CHEST), 7_days);
+                                    DoUpdateCriteria(CRITERIA_TYPE_BE_SPELL_TARGET, SPELL_CHAMPIONS_KILLED_IN_MINUTE);
+                                DoRespawnGameObject(GetGuidData(DATA_CRUSADERS_CHEST), 7 * DAY);
                                 if (GameObject* cache = GetGameObject(DATA_CRUSADERS_CHEST))
-                                    cache->RemoveFlag(GAMEOBJECT_FLAGS, GO_FLAG_NOT_SELECTABLE);
+                                    cache->RemoveFlag(GO_FLAG_NOT_SELECTABLE);
                                 if (Creature* fordring = GetCreature(DATA_FORDRING))
                                     fordring->AI()->DoAction(ACTION_CHAMPIONS_DEFEATED);
                                 EventStage = 3100;
@@ -246,7 +247,7 @@ class instance_trial_of_the_crusader : public InstanceMapScript
                             {
                                 EventStage = 6000;
                                 uint32 tributeChest = 0;
-                                if (instance->GetSpawnMode() == RAID_DIFFICULTY_10MAN_HEROIC)
+                                if (instance->GetDifficultyID() == DIFFICULTY_10_HC)
                                 {
                                     if (TrialCounter >= 50)
                                         tributeChest = GO_TRIBUTE_CHEST_10H_99;
@@ -263,7 +264,7 @@ class instance_trial_of_the_crusader : public InstanceMapScript
                                         }
                                     }
                                 }
-                                else if (instance->GetSpawnMode() == RAID_DIFFICULTY_25MAN_HEROIC)
+                                else if (instance->GetDifficultyID() == DIFFICULTY_25_HC)
                                 {
                                     if (TrialCounter >= 50)
                                         tributeChest = GO_TRIBUTE_CHEST_25H_99;
@@ -282,8 +283,8 @@ class instance_trial_of_the_crusader : public InstanceMapScript
                                 }
 
                                 if (tributeChest)
-                                    if (Creature* tirion =  GetCreature(DATA_FORDRING))
-                                        if (GameObject* chest = tirion->SummonGameObject(tributeChest, 805.62f, 134.87f, 142.16f, 3.27f, QuaternionData(), 7_days))
+                                    if (Creature* tirion = GetCreature(DATA_FORDRING))
+                                        if (GameObject* chest = tirion->SummonGameObject(tributeChest, 805.62f, 134.87f, 142.16f, 3.27f, QuaternionData::fromEulerAnglesZYX(3.27f, 0.0f, 0.0f), WEEK))
                                             chest->SetRespawnTime(chest->GetRespawnDelay());
                                 break;
                             }
@@ -396,7 +397,7 @@ class instance_trial_of_the_crusader : public InstanceMapScript
                                 break;
                             case SNAKES_DONE:
                                 if (NotOneButTwoJormungarsTimer > 0)
-                                    DoUpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_BE_SPELL_TARGET, SPELL_WORMS_KILLED_IN_10_SECONDS);
+                                    DoUpdateCriteria(CRITERIA_TYPE_BE_SPELL_TARGET, SPELL_WORMS_KILLED_IN_10_SECONDS);
                                 if (Creature* tirion = GetCreature(DATA_FORDRING))
                                     tirion->AI()->DoAction(ACTION_START_ICEHOWL);
                                 HandleNorthrendBeastsDone();
@@ -409,7 +410,6 @@ class instance_trial_of_the_crusader : public InstanceMapScript
                                 SetBossState(DATA_NORTHREND_BEASTS, FAIL);
                                 if (Creature* tirion = GetCreature(DATA_FORDRING))
                                     tirion->AI()->DoAction(ACTION_NORTHREND_BEASTS_WIPE);
-                                SnoboldCount = 0;
                                 break;
                             default:
                                 break;
@@ -433,10 +433,6 @@ class instance_trial_of_the_crusader : public InstanceMapScript
                             ++MistressOfPainCount;
                         else if (data == DECREASE)
                             --MistressOfPainCount;
-                        break;
-                    case DATA_FACTION_CRUSADERS: // Achivement Resilience will Fix
-                        ResilienceWillFixItTimer = 60 * IN_MILLISECONDS;
-                        CrusadersSpecialState = true;
                         break;
                     default:
                         break;
@@ -561,7 +557,7 @@ class instance_trial_of_the_crusader : public InstanceMapScript
                         NotOneButTwoJormungarsTimer -= diff;
                 }
 
-                if (CrusadersSpecialState && ResilienceWillFixItTimer)
+                if (GetBossState(DATA_FACTION_CRUSADERS) == IN_PROGRESS && ResilienceWillFixItTimer)
                 {
                     if (ResilienceWillFixItTimer <= diff)
                         ResilienceWillFixItTimer = 0;
@@ -663,7 +659,6 @@ class instance_trial_of_the_crusader : public InstanceMapScript
                 uint32 NorthrendBeasts;
                 uint32 Team;
                 bool NeedSave;
-                bool CrusadersSpecialState;
                 std::string SaveDataBuffer;
                 GuidVector snoboldGUIDS;
 

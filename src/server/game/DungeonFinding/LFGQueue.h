@@ -19,6 +19,7 @@
 #define _LFGQUEUE_H
 
 #include "LFG.h"
+#include <list>
 
 namespace lfg
 {
@@ -99,8 +100,8 @@ class TC_GAME_API LFGQueue
         void UpdateWaitTimeDps(int32 waitTime, uint32 dungeonId);
 
         // Update Queue timers
-        void UpdateQueueTimers(time_t currTime);
-        time_t GetJoinTime(ObjectGuid guid);
+        void UpdateQueueTimers(uint8 queueId, time_t currTime);
+        time_t GetJoinTime(ObjectGuid guid) const;
 
         // Find new group
         uint8 FindGroups();

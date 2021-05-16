@@ -79,16 +79,15 @@ class boss_void_reaver : public CreatureScript
                 _JustDied();
             }
 
-            void JustEngagedWith(Unit* who) override
+            void JustEngagedWith(Unit* /*who*/) override
             {
                 Talk(SAY_AGGRO);
-                BossAI::JustEngagedWith(who);
-                me->CallForHelp(120.0f);
+                _JustEngagedWith();
 
-                events.ScheduleEvent(EVENT_POUNDING, 15s);
-                events.ScheduleEvent(EVENT_ARCANE_ORB, 3s);
-                events.ScheduleEvent(EVENT_KNOCK_AWAY, 30s);
-                events.ScheduleEvent(EVENT_BERSERK, 10min);
+                events.ScheduleEvent(EVENT_POUNDING, 15000);
+                events.ScheduleEvent(EVENT_ARCANE_ORB, 3000);
+                events.ScheduleEvent(EVENT_KNOCK_AWAY, 30000);
+                events.ScheduleEvent(EVENT_BERSERK, 600000);
             }
 
             void UpdateAI(uint32 diff) override
@@ -108,7 +107,7 @@ class boss_void_reaver : public CreatureScript
                         case EVENT_POUNDING:
                             DoCastVictim(SPELL_POUNDING);
                             Talk(SAY_POUNDING);
-                            events.ScheduleEvent(EVENT_POUNDING, 15s);
+                            events.ScheduleEvent(EVENT_POUNDING, 15000);
                             break;
                         case EVENT_ARCANE_ORB:
                         {
@@ -129,7 +128,7 @@ class boss_void_reaver : public CreatureScript
                             if (target)
                                 me->CastSpell(target, SPELL_ARCANE_ORB);
 
-                            events.ScheduleEvent(EVENT_ARCANE_ORB, 3s);
+                            events.ScheduleEvent(EVENT_ARCANE_ORB, 3000);
                             break;
                         }
                         case EVENT_KNOCK_AWAY:
@@ -138,7 +137,7 @@ class boss_void_reaver : public CreatureScript
                             if (GetThreat(me->GetVictim()))
                                 ModifyThreatByPercent(me->GetVictim(), -25);
 
-                            events.ScheduleEvent(EVENT_KNOCK_AWAY, 30s);
+                            events.ScheduleEvent(EVENT_KNOCK_AWAY, 30000);
                             break;
                         case EVENT_BERSERK:
                             if (!Enraged)

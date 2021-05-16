@@ -34,6 +34,7 @@ EndScriptData */
 #include "MotionMaster.h"
 #include "Player.h"
 #include "stratholme.h"
+#include <sstream>
 
 enum InstanceEvents
 {
@@ -170,7 +171,7 @@ class instance_stratholme : public InstanceMapScript
                         break;
                     case NPC_YSIDA:
                         ysidaGUID = creature->GetGUID();
-                        creature->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
+                        creature->RemoveNpcFlag(UNIT_NPC_FLAG_QUESTGIVER);
                         break;
                 }
             }
@@ -198,7 +199,7 @@ class instance_stratholme : public InstanceMapScript
                         break;
                     case GO_GAUNTLET_GATE1:
                         //weird, but unless flag is set, client will not respond as expected. DB bug?
-                        go->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_LOCKED);
+                        go->AddFlag(GO_FLAG_LOCKED);
                         gauntletGate1GUID = go->GetGUID();
                         break;
                     case GO_ZIGGURAT1:
@@ -256,7 +257,7 @@ class instance_stratholme : public InstanceMapScript
                                 if (EncounterState[0] == IN_PROGRESS || EncounterState[0] == FAIL)
                                     break;
                                 EncounterState[0] = data;
-                                events.ScheduleEvent(EVENT_BARON_RUN, 45min);
+                                events.ScheduleEvent(EVENT_BARON_RUN, 2700000);
                                 TC_LOG_DEBUG("scripts", "Instance Stratholme: Baron run in progress.");
                                 break;
                             case FAIL:
@@ -278,7 +279,7 @@ class instance_stratholme : public InstanceMapScript
                                     ysida->CastSpell(nullptr, SPELL_YSIDA_SAVED, true);
                                     ysida->SetWalk(true);
                                     ysida->AI()->Talk(SAY_YSIDA_SAVED);
-                                    ysida->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
+                                    ysida->AddNpcFlag(UNIT_NPC_FLAG_QUESTGIVER);
                                     ysida->GetClosePoint(x, y, z, ysida->GetObjectScale() / 3, 4.0f);
                                     ysida->GetMotionMaster()->MovePoint(1, x, y, z);
 
@@ -346,7 +347,7 @@ class instance_stratholme : public InstanceMapScript
                                 //a bit itchy, it should close the door after 10 secs, but it doesn't. skipping it for now.
                                 //UpdateGoState(ziggurat4GUID, 0, true);
                                 if (Creature* pBaron = instance->GetCreature(baronGUID))
-                                    pBaron->SummonCreature(NPC_RAMSTEIN, 4032.84f, -3390.24f, 119.73f, 4.71f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 30min);
+                                    pBaron->SummonCreature(NPC_RAMSTEIN, 4032.84f, -3390.24f, 119.73f, 4.71f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 1800000);
                                 TC_LOG_DEBUG("scripts", "Instance Stratholme: Ramstein spawned.");
                             }
                             else
@@ -358,7 +359,7 @@ class instance_stratholme : public InstanceMapScript
 
                         if (data == DONE)
                         {
-                            events.ScheduleEvent(EVENT_SLAUGHTER_SQUARE, 1min);
+                            events.ScheduleEvent(EVENT_SLAUGHTER_SQUARE, 60000);
                             TC_LOG_DEBUG("scripts", "Instance Stratholme: Slaugther event will continue in 1 minute.");
                         }
                         EncounterState[4] = data;
@@ -497,7 +498,7 @@ class instance_stratholme : public InstanceMapScript
                             if (Creature* baron = instance->GetCreature(baronGUID))
                             {
                                 for (uint8 i = 0; i < 4; ++i)
-                                    baron->SummonCreature(NPC_BLACK_GUARD, 4032.84f, -3390.24f, 119.73f, 4.71f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 30min);
+                                    baron->SummonCreature(NPC_BLACK_GUARD, 4032.84f, -3390.24f, 119.73f, 4.71f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 1800000);
 
                                 HandleGameObject(ziggurat4GUID, true);
                                 HandleGameObject(ziggurat5GUID, true);

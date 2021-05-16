@@ -27,6 +27,8 @@
 #include "TotemAI.h"
 
 #include "MovementGenerator.h"
+#include "RandomMovementGenerator.h"
+#include "WaypointMovementGenerator.h"
 
 namespace AIRegistry
 {
@@ -52,7 +54,7 @@ namespace AIRegistry
         (new GameObjectAIFactory<SmartGameObjectAI>("SmartGameObjectAI"))->RegisterSelf();
 
         (new IdleMovementFactory())->RegisterSelf();
-        (new RandomMovementFactory())->RegisterSelf();
-        (new WaypointMovementFactory())->RegisterSelf();
+        (new MovementGeneratorFactory<RandomMovementGenerator<Creature>>(RANDOM_MOTION_TYPE))->RegisterSelf();
+        (new MovementGeneratorFactory<WaypointMovementGenerator<Creature>>(WAYPOINT_MOTION_TYPE))->RegisterSelf();
     }
 }

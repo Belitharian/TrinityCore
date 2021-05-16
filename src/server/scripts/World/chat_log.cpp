@@ -22,10 +22,10 @@
 #include "Log.h"
 #include "Player.h"
 
-#define TC_LOG_CHAT(TYPE, ...)                       \
-    if (lang != LANG_ADDON)                          \
-        TC_LOG_DEBUG("chat.log." TYPE, __VA_ARGS__); \
-    else                                             \
+#define TC_LOG_CHAT(TYPE, ...)                           \
+    if (lang != LANG_ADDON && lang != LANG_ADDON_LOGGED) \
+        TC_LOG_DEBUG("chat.log." TYPE, __VA_ARGS__);     \
+    else                                                 \
         TC_LOG_DEBUG("chat.log.addon." TYPE, __VA_ARGS__);
 
 class ChatLogScript : public PlayerScript
@@ -91,13 +91,13 @@ class ChatLogScript : public PlayerScript
                         player->GetName().c_str(), msg.c_str());
                     break;
 
-                case CHAT_MSG_BATTLEGROUND:
-                    TC_LOG_CHAT("bg", "Player %s tells battleground with leader %s: %s",
+                case CHAT_MSG_INSTANCE_CHAT:
+                    TC_LOG_CHAT("bg", "Player %s tells instance with leader %s: %s",
                         player->GetName().c_str(), group ? group->GetLeaderName() : "<unknown>", msg.c_str());
                     break;
 
-                case CHAT_MSG_BATTLEGROUND_LEADER:
-                    TC_LOG_CHAT("bg", "Leader player %s tells battleground: %s",
+                case CHAT_MSG_INSTANCE_CHAT_LEADER:
+                    TC_LOG_CHAT("bg", "Leader player %s tells instance: %s",
                         player->GetName().c_str(), msg.c_str());
                     break;
             }

@@ -4,7 +4,6 @@
 
 #include "jemalloc/internal/assert.h"
 #include "jemalloc/internal/malloc_io.h"
-#include "jemalloc/internal/spin.h"
 
 #ifndef _CRT_SPINCOUNT
 #define _CRT_SPINCOUNT 4000
@@ -46,7 +45,7 @@ JEMALLOC_EXPORT int	_pthread_mutex_init_calloc_cb(pthread_mutex_t *mutex,
 void
 malloc_mutex_lock_slow(malloc_mutex_t *mutex) {
 	mutex_prof_data_t *data = &mutex->prof_data;
-	nstime_t before = NSTIME_ZERO_INITIALIZER;
+	UNUSED nstime_t before = NSTIME_ZERO_INITIALIZER;
 
 	if (ncpus == 1) {
 		goto label_spin_done;
@@ -54,9 +53,8 @@ malloc_mutex_lock_slow(malloc_mutex_t *mutex) {
 
 	int cnt = 0, max_cnt = MALLOC_MUTEX_MAX_SPIN;
 	do {
-		spin_cpu_spinwait();
-		if (!atomic_load_b(&mutex->locked, ATOMIC_RELAXED)
-                    && !malloc_mutex_trylock_final(mutex)) {
+		CPU_SPINWAIT;
+		if (!malloc_mutex_trylock_final(mutex)) {
 			data->n_spin_acquired++;
 			return;
 		}
@@ -145,7 +143,9 @@ malloc_mutex_init(malloc_mutex_t *mutex, const char *name,
 	}
 #  endif
 #elif (defined(JEMALLOC_OS_UNFAIR_LOCK))
-       mutex->lock = OS_UNFAIR_LOCK_INIT;
+	mutex->lock = OS_UNFAIR_LOCK_INIT;
+#elif (defined(JEMALLOC_OSSPIN))
+	mutex->lock = 0;
 #elif (defined(JEMALLOC_MUTEX_INIT_CB))
 	if (postpone_init) {
 		mutex->postponed_next = postponed_mutexes;
@@ -173,7 +173,7 @@ malloc_mutex_init(malloc_mutex_t *mutex, const char *name,
 		mutex->lock_order = lock_order;
 		if (lock_order == malloc_mutex_address_ordered) {
 			witness_init(&mutex->witness, name, rank,
-			    mutex_addr_comp, mutex);
+			    mutex_addr_comp, &mutex);
 		} else {
 			witness_init(&mutex->witness, name, rank, NULL, NULL);
 		}

@@ -16,8 +16,8 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "razorfen_downs.h"
+#include "ScriptedCreature.h"
 
 enum Say
 {
@@ -55,16 +55,16 @@ public:
         void Reset() override
         {
             _Reset();
-            events.ScheduleEvent(EVENT_OOC_1, 10s);
+            events.ScheduleEvent(EVENT_OOC_1, 10000);
         }
 
-        void JustEngagedWith(Unit* who) override
+        void JustEngagedWith(Unit* /*who*/) override
         {
-            BossAI::JustEngagedWith(who);
+            _JustEngagedWith();
             events.Reset();
             Talk(SAY_AGGRO);
-            events.ScheduleEvent(EVENT_FIREBALL, 100ms);
-            events.ScheduleEvent(EVENT_FIRE_NOVA, 8s, 12s);
+            events.ScheduleEvent(EVENT_FIREBALL, 100);
+            events.ScheduleEvent(EVENT_FIRE_NOVA, urand(8000, 12000));
         }
 
         void JustDied(Unit* /*killer*/) override
@@ -84,19 +84,19 @@ public:
                     {
                         case EVENT_OOC_1:
                             Talk(SAY_OOC_1);
-                            events.ScheduleEvent(EVENT_OOC_2, 8s);
+                            events.ScheduleEvent(EVENT_OOC_2, 8000);
                             break;
                         case EVENT_OOC_2:
                             Talk(SAY_OOC_2);
-                            events.ScheduleEvent(EVENT_OOC_3, 3s);
+                            events.ScheduleEvent(EVENT_OOC_3, 3000);
                             break;
                         case EVENT_OOC_3:
                             me->HandleEmoteCommand(EMOTE_ONESHOT_EXCLAMATION);
-                            events.ScheduleEvent(EVENT_OOC_4, 6s);
+                            events.ScheduleEvent(EVENT_OOC_4, 6000);
                             break;
                         case EVENT_OOC_4:
                             Talk(SAY_OOC_3);
-                            events.ScheduleEvent(EVENT_OOC_1, 14s);
+                            events.ScheduleEvent(EVENT_OOC_1, 14000);
                             break;
                     }
                 }
@@ -112,11 +112,11 @@ public:
                 {
                     case EVENT_FIREBALL:
                         DoCastVictim(SPELL_FIREBALL);
-                        events.ScheduleEvent(EVENT_FIREBALL, 2400ms, 3800ms);
+                        events.ScheduleEvent(EVENT_FIREBALL, urand(2400, 3800));
                         break;
                     case EVENT_FIRE_NOVA:
                         DoCast(me, SPELL_FIRE_NOVA);
-                        events.ScheduleEvent(EVENT_FIRE_NOVA, 11s, 16s);
+                        events.ScheduleEvent(EVENT_FIRE_NOVA, urand(11000, 16000));
                         break;
                 }
 

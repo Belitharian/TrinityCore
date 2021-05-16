@@ -39,10 +39,12 @@ void	operator delete(void *ptr, std::size_t size) noexcept;
 void	operator delete[](void *ptr, std::size_t size) noexcept;
 #endif
 
-JEMALLOC_NOINLINE
-static void *
-handleOOM(std::size_t size, bool nothrow) {
-	void *ptr = nullptr;
+template <bool IsNoExcept>
+void *
+newImpl(std::size_t size) noexcept(IsNoExcept) {
+	void *ptr = je_malloc(size);
+	if (likely(ptr != nullptr))
+		return ptr;
 
 	while (ptr == nullptr) {
 		std::new_handler handler;
@@ -66,20 +68,9 @@ handleOOM(std::size_t size, bool nothrow) {
 		ptr = je_malloc(size);
 	}
 
-	if (ptr == nullptr && !nothrow)
+	if (ptr == nullptr && !IsNoExcept)
 		std::__throw_bad_alloc();
 	return ptr;
-}
-
-template <bool IsNoExcept>
-JEMALLOC_ALWAYS_INLINE
-void *
-newImpl(std::size_t size) noexcept(IsNoExcept) {
-	void *ptr = je_malloc(size);
-	if (likely(ptr != nullptr))
-		return ptr;
-
-	return handleOOM(size, IsNoExcept);
 }
 
 void *
@@ -128,14 +119,14 @@ operator delete(void *ptr, std::size_t size) noexcept {
 	if (unlikely(ptr == nullptr)) {
 		return;
 	}
-	je_sdallocx_noflags(ptr, size);
+	je_sdallocx(ptr, size, /*flags=*/0);
 }
 
 void operator delete[](void *ptr, std::size_t size) noexcept {
 	if (unlikely(ptr == nullptr)) {
 		return;
 	}
-	je_sdallocx_noflags(ptr, size);
+	je_sdallocx(ptr, size, /*flags=*/0);
 }
 
 #endif  // __cpp_sized_deallocation

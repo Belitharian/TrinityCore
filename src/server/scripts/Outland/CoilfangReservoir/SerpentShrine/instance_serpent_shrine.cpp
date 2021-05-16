@@ -31,6 +31,7 @@ EndScriptData */
 #include "Player.h"
 #include "serpent_shrine.h"
 #include "TemporarySummon.h"
+#include <sstream>
 
 #define MAX_ENCOUNTER 6
 
@@ -47,6 +48,7 @@ enum Misc
     // Misc
     MIN_KILLS                       = 30
 };
+
 
 //NOTE: there are 6 platforms
 //there should be 3 shatterers and 2 priestess on all platforms, total of 30 elites, else it won't work!
@@ -72,7 +74,7 @@ class go_bridge_console : public GameObjectScript
 
             InstanceScript* instance;
 
-            bool OnGossipHello(Player* /*player*/) override
+            bool GossipHello(Player* /*player*/) override
             {
                 if (instance)
                     instance->SetData(DATA_CONTROL_CONSOLE, DONE);
@@ -151,7 +153,7 @@ class instance_serpent_shrine : public InstanceMapScript
                                     //spawn frenzy
                                     if (DoSpawnFrenzy)
                                     {
-                                        if (Creature* frenzy = player->SummonCreature(NPC_COILFANG_FRENZY, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation(), TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 2s))
+                                        if (Creature* frenzy = player->SummonCreature(NPC_COILFANG_FRENZY, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation(), TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 2000))
                                         {
                                             frenzy->Attack(player, false);
                                             frenzy->SetSwim(true);
@@ -187,22 +189,18 @@ class instance_serpent_shrine : public InstanceMapScript
                     case 184568:
                         ControlConsole = go->GetGUID();
                         go->setActive(true);
-                        go->SetFarVisible(true);
                         break;
                     case 184203:
                         BridgePart[0] = go->GetGUID();
                         go->setActive(true);
-                        go->SetFarVisible(true);
                         break;
                     case 184204:
                         BridgePart[1] = go->GetGUID();
                         go->setActive(true);
-                        go->SetFarVisible(true);
                         break;
                     case 184205:
                         BridgePart[2] = go->GetGUID();
                         go->setActive(true);
-                        go->SetFarVisible(true);
                         break;
                     default:
                         break;

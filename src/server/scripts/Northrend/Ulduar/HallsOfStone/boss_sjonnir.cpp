@@ -103,21 +103,21 @@ class boss_sjonnir : public CreatureScript
                     return;
                 }
 
-                BossAI::JustEngagedWith(who);
+                _JustEngagedWith();
                 Talk(SAY_AGGRO);
 
-                events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 3s, 8s);
-                events.ScheduleEvent(EVENT_LIGHTNING_SHIELD, 20s, 25s);
-                events.ScheduleEvent(EVENT_STATIC_CHARGE, 20s, 25s);
-                events.ScheduleEvent(EVENT_LIGHTNING_RING, 30s, 35s);
-                events.ScheduleEvent(EVENT_SUMMON, 5s);
-                events.ScheduleEvent(EVENT_FRENZY, 5min);
+                events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, urand(3000, 8000));
+                events.ScheduleEvent(EVENT_LIGHTNING_SHIELD, urand(20000, 25000));
+                events.ScheduleEvent(EVENT_STATIC_CHARGE, urand(20000, 25000));
+                events.ScheduleEvent(EVENT_LIGHTNING_RING, urand(30000, 35000));
+                events.ScheduleEvent(EVENT_SUMMON, 5000);
+                events.ScheduleEvent(EVENT_FRENZY, 300000);
             }
 
             void JustSummoned(Creature* summon) override
             {
                 summon->GetMotionMaster()->MovePoint(0, CenterPoint);
-                /*if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100, true))
+                /*if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true))
                     summon->AI()->AttackStart(target);*/
                 summons.Summon(summon);
             }
@@ -163,34 +163,34 @@ class boss_sjonnir : public CreatureScript
                     switch (eventId)
                     {
                         case EVENT_CHAIN_LIGHTNING:
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100, true))
+                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true))
                                 DoCast(target, SPELL_CHAIN_LIGHTING);
-                            events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 10s, 15s);
+                            events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, urand(10000, 15000));
                             break;
                         case EVENT_LIGHTNING_SHIELD:
                             DoCast(me, SPELL_LIGHTING_SHIELD);
                             break;
                         case EVENT_STATIC_CHARGE:
                             DoCastVictim(SPELL_STATIC_CHARGE);
-                            events.ScheduleEvent(EVENT_STATIC_CHARGE, 20s, 25s);
+                            events.ScheduleEvent(EVENT_STATIC_CHARGE, urand(20000, 25000));
                             break;
                         case EVENT_LIGHTNING_RING:
                             DoCast(me, SPELL_LIGHTING_RING);
-                            events.ScheduleEvent(EVENT_LIGHTNING_RING, 30s, 35s);
+                            events.ScheduleEvent(EVENT_LIGHTNING_RING, urand(30000, 35000));
                             break;
                         case EVENT_SUMMON:
                         {
                             uint8 summonPipe = urand(0, 1);
                             if (HealthAbovePct(75))
-                                me->SummonCreature(NPC_FORGED_IRON_DWARF, PipeLocations[summonPipe], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 30s);
+                                me->SummonCreature(NPC_FORGED_IRON_DWARF, PipeLocations[summonPipe], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 30000);
                             else if (HealthAbovePct(50))
-                                me->SummonCreature(NPC_FORGED_IRON_TROGG, PipeLocations[summonPipe], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 30s);
+                                me->SummonCreature(NPC_FORGED_IRON_TROGG, PipeLocations[summonPipe], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 30000);
                             else if (HealthAbovePct(25))
-                                me->SummonCreature(NPC_MALFORMED_OOZE, PipeLocations[summonPipe], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 30s);
+                                me->SummonCreature(NPC_MALFORMED_OOZE, PipeLocations[summonPipe], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 30000);
                             else
-                                me->SummonCreature(NPC_EARTHEN_DWARF, PipeLocations[summonPipe], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 30s);
+                                me->SummonCreature(NPC_EARTHEN_DWARF, PipeLocations[summonPipe], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 30000);
 
-                            events.ScheduleEvent(EVENT_SUMMON, 20s);
+                            events.ScheduleEvent(EVENT_SUMMON, 20000);
                             break;
                         }
                         case EVENT_FRENZY:
@@ -246,7 +246,7 @@ class npc_malformed_ooze : public CreatureScript
                 {
                     if (Creature* temp = me->FindNearestCreature(NPC_MALFORMED_OOZE, 3.0f, true))
                     {
-                        DoSpawnCreature(NPC_IRON_SLUDGE, 0, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 20s);
+                        DoSpawnCreature(NPC_IRON_SLUDGE, 0, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 20000);
                         temp->DisappearAndDie();
                         me->DisappearAndDie();
                     }

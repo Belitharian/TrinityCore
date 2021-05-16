@@ -67,17 +67,16 @@ enum BattlegroundDSSpells
 enum BattlegroundDSData
 {
     // These values are NOT blizzlike... need the correct data!
+    BG_DS_WATERFALL_TIMER_MIN           = 30000,
+    BG_DS_WATERFALL_TIMER_MAX           = 60000,
+    BG_DS_WATERFALL_WARNING_DURATION    = 5000,
+    BG_DS_WATERFALL_DURATION            = 30000,
+    BG_DS_WATERFALL_KNOCKBACK_TIMER     = 1500,
+
     BG_DS_PIPE_KNOCKBACK_FIRST_DELAY    = 5000,
     BG_DS_PIPE_KNOCKBACK_DELAY          = 3000,
     BG_DS_PIPE_KNOCKBACK_TOTAL_COUNT    = 2,
 };
-
-// These values are NOT blizzlike... need the correct data!
-inline constexpr Seconds BG_DS_WATERFALL_TIMER_MIN = 30s;
-inline constexpr Seconds BG_DS_WATERFALL_TIMER_MAX = 60s;
-inline constexpr Seconds BG_DS_WATERFALL_WARNING_DURATION = 5s;
-inline constexpr Seconds BG_DS_WATERFALL_DURATION = 30s;
-inline constexpr Milliseconds BG_DS_WATERFALL_KNOCKBACK_TIMER = 1500ms;
 
 enum BattlegroundDSEvents
 {
@@ -92,13 +91,13 @@ enum BattlegroundDSEvents
 class BattlegroundDS : public Arena
 {
     public:
-        BattlegroundDS();
+        BattlegroundDS(BattlegroundTemplate const* battlegroundTemplate);
 
         /* inherited from BattlegroundClass */
         void StartingEventCloseDoors() override;
         void StartingEventOpenDoors() override;
 
-        void HandleAreaTrigger(Player* Source, uint32 Trigger) override;
+        void HandleAreaTrigger(Player* source, uint32 trigger, bool entered) override;
         bool SetupBattleground() override;
         void FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& packet) override;
 

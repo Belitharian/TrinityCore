@@ -61,16 +61,16 @@ public:
             Initialize();
         }
 
-        void JustEngagedWith(Unit* who) override
+        void JustEngagedWith(Unit* /*who*/) override
         {
-            BossAI::JustEngagedWith(who);
-            events.ScheduleEvent(EVENT_REND, 17s, 20s);
-            events.ScheduleEvent(EVENT_THRASH, 10s, 12s);
+            _JustEngagedWith();
+            events.ScheduleEvent(EVENT_REND, urand(17000,20000));
+            events.ScheduleEvent(EVENT_THRASH, urand(10000,12000));
         }
 
         void JustDied(Unit* /*killer*/) override
         {
-            me->SummonCreature(NPC_GIZRUL_THE_SLAVENER, SummonLocation, TEMPSUMMON_TIMED_DESPAWN, 5min);
+            me->SummonCreature(NPC_GIZRUL_THE_SLAVENER, SummonLocation, TEMPSUMMON_TIMED_DESPAWN, 300000);
             Talk(EMOTE_DEATH);
 
             Summoned = true;
@@ -92,7 +92,7 @@ public:
                 {
                     case EVENT_REND:
                         DoCastVictim(SPELL_REND);
-                        events.ScheduleEvent(EVENT_REND, 8s, 10s);
+                        events.ScheduleEvent(EVENT_REND, urand(8000,10000));
                         break;
                     case EVENT_THRASH:
                         DoCast(me, SPELL_THRASH);

@@ -18,7 +18,6 @@
 /* ScriptData
 SDName: Silithus
 SD%Complete: 100
-SDComment: Quest support: 8348,8352,8361,8519
 SDCategory: Silithus
 EndScriptData */
 
@@ -32,6 +31,7 @@ go_crystalline_tear : GameObject that begins the event and hands out quest
 TO DO: get correct spell IDs and timings for spells cast upon dragon transformations
 TO DO: Dragons should use the HandleEmoteCommand(EMOTE_ONESHOT_LIFTOFF) after transformation,
        but for some unknown reason it doesn't work.
+go_wind_stone
 EndContentData */
 
 #include "ScriptMgr.h"
@@ -262,22 +262,18 @@ Position const SpawnLocation[] =
 
 struct WaveData
 {
-    uint8 SpawnCount;
-    uint8 UsedSpawnPoint;
-    uint32 CreatureId;
-    uint32 SpawnTimer;
-    uint32 YellTimer;
-    Milliseconds DespTimer;
+    uint8 SpawnCount, UsedSpawnPoint;
+    uint32 CreatureId, SpawnTimer, YellTimer, DespTimer;
     int32 WaveTextId;
 };
 
 static WaveData WavesInfo[5] =
 {
-    {30,  0, 15423, 0, 0, 24s, 0},    // Kaldorei Soldier
-    { 3, 35, 15424, 0, 0, 24s, 0},    // Anubisath Conqueror
-    {12, 38, 15414, 0, 0, 24s, 0},    // Qiraji Wasps
-    { 6, 50, 15422, 0, 0, 24s, 0},    // Qiraji Tanks
-    {15, 15, 15423, 0, 0, 24s, 0}     // Kaldorei Soldier
+    {30,  0, 15423, 0, 0, 24000, 0},    // Kaldorei Soldier
+    { 3, 35, 15424, 0, 0, 24000, 0},    // Anubisath Conqueror
+    {12, 38, 15414, 0, 0, 24000, 0},    // Qiraji Wasps
+    { 6, 50, 15422, 0, 0, 24000, 0},    // Qiraji Tanks
+    {15, 15, 15423, 0, 0, 24000, 0}     // Kaldorei Soldier
 
 };
 
@@ -363,7 +359,7 @@ public:
         {
             Initialize();
 
-            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+            me->AddUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
         }
 
         void HandleAnimation()
@@ -513,11 +509,11 @@ public:
                         DoCast(player, SPELL_CALL_PRISMATIC_BARRIER, true);
                         break;
                     case 37:
-                        me->SummonGameObject(GO_GATE_OF_AHN_QIRAJ, Position(-8130.f, 1525.f, 17.5f, 0.f), QuaternionData(), 0s);
+                        me->SummonGameObject(GO_GATE_OF_AHN_QIRAJ, Position(-8130.f, 1525.f, 17.5f, 0.f), QuaternionData(), 0);
                         break;
                     case 38:
                         DoCast(player, SPELL_CALL_GLYPHS_OF_WARDING, true);
-                        me->SummonGameObject(GO_GLYPH_OF_AHN_QIRAJ, Position(-8130.f, 1525.f, 17.5f, 0.f), QuaternionData(), 0s);
+                        me->SummonGameObject(GO_GLYPH_OF_AHN_QIRAJ, Position(-8130.f, 1525.f, 17.5f, 0.f), QuaternionData(), 0);
                         break;
                     case 39:
                         Talk(ANACHRONOS_SAY_5, Fandral);
@@ -526,7 +522,7 @@ public:
                         Fandral->CastSpell(me, SPELL_CALL_ANCIENTS, true);
                         break;
                     case 41:
-                        Fandral->SummonGameObject(GO_ROOTS_OF_AHN_QIRAJ, Position(-8130.f, 1525.f, 17.5f, 0.f), QuaternionData(), 0s);
+                        Fandral->SummonGameObject(GO_ROOTS_OF_AHN_QIRAJ, Position(-8130.f, 1525.f, 17.5f, 0.f), QuaternionData(), 0);
                         Fandral->AI()->Talk(FANDRAL_SAY_3);
                         break;
                     case 42:
@@ -701,7 +697,7 @@ public:
         }
 
         void JustEngagedWith(Unit* /*who*/) override { }
-        void JustDied(Unit* /*killer*/) override;
+        void JustDied(Unit* /*slayer*/) override;
 
         void UpdateAI(uint32 diff) override
         {
@@ -842,12 +838,12 @@ public:
 
             for (uint8 i = locIndex; i <= count; ++i)
             {
-                Milliseconds desptimer = WavesInfo[WaveCount].DespTimer;
+                uint32 desptimer = WavesInfo[WaveCount].DespTimer;
 
                 if (Creature* spawn = me->SummonCreature(WavesInfo[WaveCount].CreatureId, SpawnLocation[i], TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, desptimer))
                 {
                     if (spawn->GetEntry() == NPC_KALDOREI_INFANTRY)
-                        spawn->SetUInt32Value(UNIT_FIELD_DISPLAYID, 15427 + rand32() % 4);
+                        spawn->SetDisplayId(15427 + rand32() % 4);
                     if (i >= 30) WaveCount = 1;
                     if (i >= 33) WaveCount = 2;
                     if (i >= 45) WaveCount = 3;
@@ -937,7 +933,7 @@ public:
 
 };
 
-void npc_qiraj_war_spawn::npc_qiraj_war_spawnAI::JustDied(Unit* /*killer*/)
+void npc_qiraj_war_spawn::npc_qiraj_war_spawnAI::JustDied(Unit* /*slayer*/)
 {
     me->DespawnOrUnsummon();
 
@@ -971,39 +967,39 @@ public:
     {
         go_crystalline_tearAI(GameObject* go) : GameObjectAI(go) { }
 
-        void OnQuestAccept(Player* player, Quest const* quest) override
+        void QuestAccept(Player* player, Quest const* quest) override
         {
             if (quest->GetQuestId() == QUEST_A_PAWN_ON_THE_ETERNAL_BOARD)
             {
                 if (Creature* trigger = me->FindNearestCreature(ANACHRONOS_QUEST_TRIGGER_INVISIBLE, 100))
                 {
-                    Unit* Merithra = trigger->SummonCreature(NPC_MERITHRA_OF_THE_DREAM, -8034.535f, 1535.14f, 2.61f, 0, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 220s);
-                    Unit* Caelestrasz = trigger->SummonCreature(NPC_CAELESTRASZ, -8032.767f, 1533.148f, 2.61f, 1.5f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 220s);
-                    Unit* Arygos = trigger->SummonCreature(NPC_ARYGOS, -8034.52f, 1537.843f, 2.61f, 5.7f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 220s);
-                    /* Unit* Fandral = */ trigger->SummonCreature(NPC_FANDRAL_STAGHELM, -8028.462f, 1535.843f, 2.61f, 3.141592f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 220s);
-                    Creature* Anachronos = trigger->SummonCreature(NPC_ANACHRONOS, -8028.75f, 1538.795f, 2.61f, 4, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 220s);
+                    Unit* Merithra = trigger->SummonCreature(NPC_MERITHRA_OF_THE_DREAM, -8034.535f, 1535.14f, 2.61f, 0, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 220000);
+                    Unit* Caelestrasz = trigger->SummonCreature(NPC_CAELESTRASZ, -8032.767f, 1533.148f, 2.61f, 1.5f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 220000);
+                    Unit* Arygos = trigger->SummonCreature(NPC_ARYGOS, -8034.52f, 1537.843f, 2.61f, 5.7f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 220000);
+                    /* Unit* Fandral = */ trigger->SummonCreature(NPC_FANDRAL_STAGHELM, -8028.462f, 1535.843f, 2.61f, 3.141592f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 220000);
+                    Creature* Anachronos = trigger->SummonCreature(NPC_ANACHRONOS, -8028.75f, 1538.795f, 2.61f, 4, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 220000);
 
                     if (Merithra)
                     {
-                        Merithra->SetUInt32Value(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_NONE);
-                        Merithra->SetUInt32Value(UNIT_FIELD_BYTES_1, 0);
-                        Merithra->SetUInt32Value(UNIT_FIELD_DISPLAYID, MERITHRA_NIGHT_ELF_FORM);
+                        Merithra->SetNpcFlags(UNIT_NPC_FLAG_NONE);
+                        Merithra->SetStandState(UNIT_STAND_STATE_STAND);
+                        Merithra->SetDisplayId(MERITHRA_NIGHT_ELF_FORM);
                         Merithra->SetFaction(FACTION_FRIENDLY);
                     }
 
                     if (Caelestrasz)
                     {
-                        Caelestrasz->SetUInt32Value(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_NONE);
-                        Caelestrasz->SetUInt32Value(UNIT_FIELD_BYTES_1, 0);
-                        Caelestrasz->SetUInt32Value(UNIT_FIELD_DISPLAYID, CAELESTRASZ_NIGHT_ELF_FORM);
+                        Caelestrasz->SetNpcFlags(UNIT_NPC_FLAG_NONE);
+                        Caelestrasz->SetStandState(UNIT_STAND_STATE_STAND);
+                        Caelestrasz->SetDisplayId(CAELESTRASZ_NIGHT_ELF_FORM);
                         Caelestrasz->SetFaction(FACTION_FRIENDLY);
                     }
 
                     if (Arygos)
                     {
-                        Arygos->SetUInt32Value(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_NONE);
-                        Arygos->SetUInt32Value(UNIT_FIELD_BYTES_1, 0);
-                        Arygos->SetUInt32Value(UNIT_FIELD_DISPLAYID, ARYGOS_GNOME_FORM);
+                        Arygos->SetNpcFlags(UNIT_NPC_FLAG_NONE);
+                        Arygos->SetStandState(UNIT_STAND_STATE_STAND);
+                        Arygos->SetDisplayId(ARYGOS_GNOME_FORM);
                         Arygos->SetFaction(FACTION_FRIENDLY);
                     }
 
@@ -1215,36 +1211,36 @@ class go_wind_stone : public GameObjectScript
                 void SummonNPC(GameObject* go, Player* player, uint32 npc, uint32 spell)
                 {
                     go->CastSpell(player, spell);
-                    TempSummon* summons = go->SummonCreature(npc, go->GetPositionX(), go->GetPositionY(), go->GetPositionZ(), player->GetOrientation() - float(M_PI), TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 10min);
+                    TempSummon* summons = go->SummonCreature(npc, go->GetPositionX(), go->GetPositionY(), go->GetPositionZ(), player->GetOrientation() - float(M_PI), TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 10 * 60 * 1000);
                     summons->CastSpell(summons, SPELL_SPAWN_IN, false);
                     switch (summons->GetEntry())
                     {
-                        case NPC_TEMPLAR_FIRE:
-                        case NPC_TEMPLAR_WATER:
-                        case NPC_TEMPLAR_AIR:
-                        case NPC_TEMPLAR_EARTH:
-                            summons->AI()->Talk(SAY_TEMPLAR_AGGRO, player);
-                            break;
+                    case NPC_TEMPLAR_FIRE:
+                    case NPC_TEMPLAR_WATER:
+                    case NPC_TEMPLAR_AIR:
+                    case NPC_TEMPLAR_EARTH:
+                        summons->AI()->Talk(SAY_TEMPLAR_AGGRO, player);
+                    break;
 
-                        case NPC_DUKE_FIRE:
-                        case NPC_DUKE_WATER:
-                        case NPC_DUKE_EARTH:
-                        case NPC_DUKE_AIR:
-                            summons->AI()->Talk(SAY_DUKE_AGGRO, player);
-                            break;
-                        case NPC_ROYAL_FIRE:
-                        case NPC_ROYAL_AIR:
-                        case NPC_ROYAL_EARTH:
-                        case NPC_ROYAL_WATER:
-                            summons->AI()->Talk(YELL_ROYAL_AGGRO, player);
-                            break;
+                    case NPC_DUKE_FIRE:
+                    case NPC_DUKE_WATER:
+                    case NPC_DUKE_EARTH:
+                    case NPC_DUKE_AIR:
+                        summons->AI()->Talk(SAY_DUKE_AGGRO);
+                        break;
+                    case NPC_ROYAL_FIRE:
+                    case NPC_ROYAL_AIR:
+                    case NPC_ROYAL_EARTH:
+                    case NPC_ROYAL_WATER:
+                        summons->AI()->Talk(YELL_ROYAL_AGGRO);
+                        break;
                     }
-                    summons->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                    summons->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
                     summons->EngageWithTarget(player);
                 }
 
             public:
-                bool OnGossipHello(Player* player) override
+                bool GossipHello(Player* player) override
                 {
                     uint8 rank = GetPlayerRank(player);
 
@@ -1322,7 +1318,7 @@ class go_wind_stone : public GameObjectScript
                     return true;
                 }
 
-                bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
+                bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
                 {
                     uint32 const action = player->PlayerTalkClass->GetGossipOptionAction(gossipListId);
                     ClearGossipMenuFor(player);
@@ -1413,7 +1409,7 @@ class spell_silithus_summon_cultist_periodic : public AuraScript
 
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return ValidateSpellInfo({ spellInfo->Effects[EFFECT_0].TriggerSpell });
+        return ValidateSpellInfo({ spellInfo->GetEffect(EFFECT_0)->TriggerSpell });
     }
 
     void PeriodicTick(AuraEffect const* aurEff)
@@ -1423,7 +1419,7 @@ class spell_silithus_summon_cultist_periodic : public AuraScript
         // All these spells trigger a spell that requires reagents; if the
         // triggered spell is cast as "triggered", reagents are not consumed
         if (Unit* caster = GetCaster())
-            caster->CastSpell(nullptr, GetSpellInfo()->Effects[aurEff->GetEffIndex()].TriggerSpell, CastSpellExtraArgs(TriggerCastFlags(TRIGGERED_FULL_MASK & ~TRIGGERED_IGNORE_POWER_AND_REAGENT_COST)).SetTriggeringAura(aurEff));
+            caster->CastSpell(nullptr, GetSpellInfo()->GetEffect(aurEff->GetEffIndex())->TriggerSpell, CastSpellExtraArgs(TriggerCastFlags(TRIGGERED_FULL_MASK & ~TRIGGERED_IGNORE_POWER_AND_REAGENT_COST)).SetTriggeringAura(aurEff));
     }
 
     void Register() override
@@ -1439,5 +1435,5 @@ void AddSC_silithus()
     new npc_anachronos_the_ancient();
     new npc_qiraj_war_spawn();
     new go_wind_stone();
-    RegisterSpellScript(spell_silithus_summon_cultist_periodic);
+    RegisterAuraScript(spell_silithus_summon_cultist_periodic);
 }

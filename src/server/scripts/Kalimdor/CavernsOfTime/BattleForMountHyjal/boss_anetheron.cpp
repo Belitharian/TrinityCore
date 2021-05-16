@@ -145,7 +145,7 @@ public:
 
             if (SwarmTimer <= diff)
             {
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100, true))
+                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true))
                     DoCast(target, SPELL_CARRION_SWARM);
 
                 SwarmTimer = urand(45000, 60000);
@@ -156,7 +156,7 @@ public:
             {
                 for (uint8 i = 0; i < 3; ++i)
                 {
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100, true))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true))
                         target->CastSpell(target, SPELL_SLEEP, true);
                 }
                 SleepTimer = 60000;
@@ -169,7 +169,7 @@ public:
             } else AuraTimer -= diff;
             if (InfernoTimer <= diff)
             {
-                DoCast(SelectTarget(SelectTargetMethod::Random, 0, 100, true), SPELL_INFERNO);
+                DoCast(SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true), SPELL_INFERNO);
                 InfernoTimer = 45000;
                 Talk(SAY_INFERNO);
             } else InfernoTimer -= diff;
@@ -235,7 +235,7 @@ public:
         {
             if (CheckTimer <= diff)
             {
-                if (AnetheronGUID)
+                if (!AnetheronGUID.IsEmpty())
                 {
                     Creature* boss = ObjectAccessor::GetCreature(*me, AnetheronGUID);
                     if (!boss || boss->isDead())
@@ -277,7 +277,7 @@ class spell_anetheron_vampiric_aura : public SpellScriptLoader
                 return ValidateSpellInfo({ SPELL_VAMPIRIC_AURA_HEAL });
             }
 
-            void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
+            void HandleProc(AuraEffect* aurEff, ProcEventInfo& eventInfo)
             {
                 PreventDefaultAction();
                 DamageInfo* damageInfo = eventInfo.GetDamageInfo();
@@ -286,7 +286,7 @@ class spell_anetheron_vampiric_aura : public SpellScriptLoader
 
                 Unit* actor = eventInfo.GetActor();
                 CastSpellExtraArgs args(aurEff);
-                args.AddSpellMod(SPELLVALUE_BASE_POINT0, damageInfo->GetDamage() * 3);
+                args.SpellValueOverrides.AddMod(SPELLVALUE_BASE_POINT0, damageInfo->GetDamage() * 3);
                 actor->CastSpell(actor, SPELL_VAMPIRIC_AURA_HEAL, args);
             }
 

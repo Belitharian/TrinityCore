@@ -50,13 +50,13 @@ class boss_the_ravenian : public CreatureScript
         {
             boss_theravenianAI(Creature* creature) : BossAI(creature, DATA_THERAVENIAN) { }
 
-            void JustEngagedWith(Unit* who) override
+            void JustEngagedWith(Unit* /*who*/) override
             {
-                BossAI::JustEngagedWith(who);
-                events.ScheduleEvent(EVENT_TRAMPLE, 24s);
-                events.ScheduleEvent(EVENT_CLEAVE, 15s);
-                events.ScheduleEvent(EVENT_SUNDERINCLEAVE, 40s);
-                events.ScheduleEvent(EVENT_KNOCKAWAY, 32s);
+                _JustEngagedWith();
+                events.ScheduleEvent(EVENT_TRAMPLE, 24000);
+                events.ScheduleEvent(EVENT_CLEAVE, 15000);
+                events.ScheduleEvent(EVENT_SUNDERINCLEAVE, 40000);
+                events.ScheduleEvent(EVENT_KNOCKAWAY, 32000);
             }
 
             void UpdateAI(uint32 diff) override
@@ -75,19 +75,19 @@ class boss_the_ravenian : public CreatureScript
                     {
                         case EVENT_TRAMPLE:
                             DoCastVictim(SPELL_TRAMPLE, true);
-                            events.ScheduleEvent(EVENT_TRAMPLE, 10s);
+                            events.ScheduleEvent(EVENT_TRAMPLE, 10000);
                             break;
                         case EVENT_CLEAVE:
                             DoCastVictim(SPELL_CLEAVE, true);
-                            events.ScheduleEvent(EVENT_CLEAVE, 7s);
+                            events.ScheduleEvent(EVENT_CLEAVE, 7000);
                             break;
                         case EVENT_SUNDERINCLEAVE:
                             DoCastVictim(SPELL_SUNDERINCLEAVE, true);
-                            events.ScheduleEvent(EVENT_SUNDERINCLEAVE, 20s);
+                            events.ScheduleEvent(EVENT_SUNDERINCLEAVE, 20000);
                             break;
                         case EVENT_KNOCKAWAY:
                             DoCastVictim(SPELL_KNOCKAWAY, true);
-                            events.ScheduleEvent(EVENT_KNOCKAWAY, 12s);
+                            events.ScheduleEvent(EVENT_KNOCKAWAY, 12000);
                             break;
                         default:
                             break;

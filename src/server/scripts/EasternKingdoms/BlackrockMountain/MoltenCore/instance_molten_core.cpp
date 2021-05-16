@@ -133,7 +133,7 @@ class instance_molten_core : public InstanceMapScript
                         SummonMajordomoExecutus();
 
                 if (bossId == BOSS_MAJORDOMO_EXECUTUS && state == DONE)
-                    DoRespawnGameObject(_cacheOfTheFirelordGUID, 7_days);
+                    DoRespawnGameObject(_cacheOfTheFirelordGUID, 7 * DAY);
 
                 return true;
             }
@@ -141,7 +141,7 @@ class instance_molten_core : public InstanceMapScript
             void SummonMajordomoExecutus()
             {
                 _executusSchedule = false;
-                if (_majordomoExecutusGUID)
+                if (!_majordomoExecutusGUID.IsEmpty())
                     return;
 
                 if (GetBossState(BOSS_MAJORDOMO_EXECUTUS) != DONE)

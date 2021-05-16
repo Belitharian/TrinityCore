@@ -17,7 +17,6 @@
 
 #include "ScriptMgr.h"
 #include "InstanceScript.h"
-#include "Map.h"
 #include "ObjectAccessor.h"
 #include "PassiveAI.h"
 #include "pit_of_saron.h"
@@ -47,10 +46,10 @@ bool ScheduledIcicleSummons::Execute(uint64 /*time*/, uint32 /*diff*/)
     if (roll_chance_i(12))
     {
         _trigger->CastSpell(_trigger, SPELL_ICICLE_SUMMON, true);
-        _trigger->m_Events.AddEvent(new ScheduledIcicleSummons(_trigger), _trigger->m_Events.CalculateTime(randtime(20s, 35s)));
+        _trigger->m_Events.AddEvent(new ScheduledIcicleSummons(_trigger), _trigger->m_Events.CalculateTime(urand(20000, 35000)));
     }
     else
-        _trigger->m_Events.AddEvent(new ScheduledIcicleSummons(_trigger), _trigger->m_Events.CalculateTime(randtime(1s, 20s)));
+        _trigger->m_Events.AddEvent(new ScheduledIcicleSummons(_trigger), _trigger->m_Events.CalculateTime(urand(1000, 20000)));
 
     return true;
 }
@@ -73,8 +72,8 @@ class npc_ymirjar_flamebearer : public CreatureScript
 
             void JustEngagedWith(Unit* /*who*/) override
             {
-                _events.ScheduleEvent(EVENT_FIREBALL, 4s);
-                _events.ScheduleEvent(EVENT_TACTICAL_BLINK, 15s);
+                _events.ScheduleEvent(EVENT_FIREBALL, 4000);
+                _events.ScheduleEvent(EVENT_TACTICAL_BLINK, 15000);
             }
 
             void UpdateAI(uint32 diff) override
@@ -92,15 +91,15 @@ class npc_ymirjar_flamebearer : public CreatureScript
                     switch (eventId)
                     {
                         case EVENT_FIREBALL:
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                                 DoCast(target, SPELL_FIREBALL);
-                            _events.RescheduleEvent(EVENT_FIREBALL, 5s);
+                            _events.RescheduleEvent(EVENT_FIREBALL, 5000);
                             break;
                         case EVENT_TACTICAL_BLINK:
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                                 DoCast(target, SPELL_TACTICAL_BLINK);
                             DoCast(me, SPELL_HELLFIRE);
-                            _events.RescheduleEvent(EVENT_TACTICAL_BLINK, 12s);
+                            _events.RescheduleEvent(EVENT_TACTICAL_BLINK, 12000);
                             break;
                         default:
                             break;
@@ -213,7 +212,7 @@ class npc_geist_ambusher : public CreatureScript
 
                 if (_leapingFaceMaulCooldown < diff)
                 {
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 5.0f, true))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 5.0f, true))
                         DoCast(target, SPELL_LEAPING_FACE_MAUL);
                     _leapingFaceMaulCooldown = urand(9000, 14000);
                 }
@@ -242,10 +241,10 @@ class npc_pit_of_saron_icicle : public CreatureScript
         {
             npc_pit_of_saron_icicleAI(Creature* creature) : PassiveAI(creature)
             {
-                me->SetDisplayId(me->GetCreatureTemplate()->Modelid1);
+                me->SetDisplayFromModel(0);
             }
 
-            void IsSummonedBy(WorldObject* summoner) override
+            void IsSummonedBy(Unit* summoner) override
             {
                 _summonerGUID = summoner->GetGUID();
 
@@ -274,6 +273,7 @@ class npc_pit_of_saron_icicle : public CreatureScript
             return GetPitOfSaronAI<npc_pit_of_saron_icicleAI>(creature);
         }
 };
+
 
 class spell_pos_ice_shards : public SpellScriptLoader
 {
@@ -318,8 +318,11 @@ class at_pit_cavern_entrance : public AreaTriggerScript
     public:
         at_pit_cavern_entrance() : AreaTriggerScript("at_pit_cavern_entrance") { }
 
-        bool OnTrigger(Player* player, AreaTriggerEntry const* /*areaTrigger*/) override
+        bool OnTrigger(Player* player, AreaTriggerEntry const* /*areaTrigger*/, bool entered) override
         {
+            if (!entered)
+                return true;
+
             if (InstanceScript* instance = player->GetInstanceScript())
             {
                 if (instance->GetData(DATA_CAVERN_ACTIVE))
@@ -339,14 +342,17 @@ class at_pit_cavern_end : public AreaTriggerScript
 public:
     at_pit_cavern_end() : AreaTriggerScript("at_pit_cavern_end") { }
 
-    bool OnTrigger(Player* player, AreaTriggerEntry const* /*areaTrigger*/) override
+    bool OnTrigger(Player* player, AreaTriggerEntry const* /*areaTrigger*/, bool entered) override
     {
+        if (!entered)
+            return true;
+
         if (InstanceScript* instance = player->GetInstanceScript())
         {
             instance->SetData(DATA_CAVERN_ACTIVE, 0);
 
             if (!instance->GetData(DATA_ICE_SHARDS_HIT))
-                instance->DoUpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_BE_SPELL_TARGET, SPELL_DONT_LOOK_UP_ACHIEV_CREDIT, 0, player);
+                instance->DoUpdateCriteria(CRITERIA_TYPE_BE_SPELL_TARGET, SPELL_DONT_LOOK_UP_ACHIEV_CREDIT, 0, player);
         }
 
         return true;

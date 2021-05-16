@@ -128,7 +128,7 @@ public:
 
         void DamageTaken(Unit* done_by, uint32 &damage) override
         {
-            if (!done_by || (done_by->GetGUID() != victimGUID && done_by->GetGUID() != me->GetGUID()))
+            if (done_by->GetGUID() != victimGUID && done_by->GetGUID() != me->GetGUID())
             {
                 damage = 0;
                 ModifyThreatByPercent(done_by, -100);
@@ -157,7 +157,7 @@ public:
                     AttackStart(owner);
                 } else if (owner && owner->isDead())
                 {
-                    me->KillSelf();
+                    me->DealDamage(me, me->GetHealth(), nullptr, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, nullptr, false);
                     return;
                 }
             }
@@ -217,8 +217,7 @@ public:
             IsFinalForm = false;
             NeedThreatReset = false;
             EnrageUsed = false;
-            for (ObjectGuid& guid : InnderDemon)
-                guid.Clear();
+            memset(InnderDemon, 0, sizeof(InnderDemon));
             InnerDemon_Count = 0;
         }
 
@@ -251,8 +250,8 @@ public:
             me->SetCanDualWield(true);
             me->SetSpeedRate(MOVE_RUN, 2.0f);
             me->SetDisplayId(MODEL_NIGHTELF);
-            me->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID  , 0);
-            me->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID+1, 0);
+            me->SetVirtualItem(0, 0);
+            me->SetVirtualItem(1, 0);
             DoCast(me, SPELL_DUAL_WIELD, true);
             me->SetCorpseDelay(1000*60*60);
             instance->SetData(DATA_LEOTHERASTHEBLINDEVENT, NOT_STARTED);
@@ -271,7 +270,7 @@ public:
                 if (i == 0) {nx += 10; ny -= 5; o=2.5f;}
                 if (i == 1) {nx -= 8; ny -= 7; o=0.9f;}
                 if (i == 2) {nx -= 3; ny += 9; o=5.0f;}
-                Creature* binder = me->SummonCreature(NPC_SPELLBINDER, nx, ny, z, o, TEMPSUMMON_DEAD_DESPAWN);
+                Creature* binder = me->SummonCreature(NPC_SPELLBINDER, nx, ny, z, o, TEMPSUMMON_DEAD_DESPAWN, 0);
                 if (binder)
                     SpellBinderGUID[i] = binder->GetGUID();
             }
@@ -330,7 +329,7 @@ public:
                 // and reseting equipment
                 me->LoadEquipment();
 
-                if (instance->GetGuidData(DATA_LEOTHERAS_EVENT_STARTER))
+                if (!instance->GetGuidData(DATA_LEOTHERAS_EVENT_STARTER).IsEmpty())
                 {
                     if (Unit* victim = ObjectAccessor::GetUnit(*me, instance->GetGuidData(DATA_LEOTHERAS_EVENT_STARTER)))
                         AddThreat(victim, 1);
@@ -348,17 +347,17 @@ public:
                 me->SetDisplayId(MODEL_DEMON);
 
                 // and removing weapons
-                me->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID  , 0);
-                me->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID+1, 0);
+                me->SetVirtualItem(0, 0);
+                me->SetVirtualItem(1, 0);
             }
         }
 
         //Despawn all Inner Demon summoned
         void DespawnDemon()
         {
-            for (uint8 i=0; i<5; ++i)
+            for (uint8 i = 0; i < 5; ++i)
             {
-                if (InnderDemon[i])
+                if (!InnderDemon[i].IsEmpty())
                 {
                     //delete creature
                     Creature* creature = ObjectAccessor::GetCreature((*me), InnderDemon[i]);
@@ -376,7 +375,7 @@ public:
         {
             for (uint8 i = 0; i < 5; ++i)
             {
-                if (InnderDemon[i])
+                if (!InnderDemon[i].IsEmpty())
                 {
                     Creature* unit = ObjectAccessor::GetCreature((*me), InnderDemon[i]);
                     if (unit && unit->IsAlive())
@@ -405,11 +404,10 @@ public:
             Talk(SAY_DEATH);
 
             //despawn copy
-            if (Demon)
-            {
+            if (!Demon.IsEmpty())
                 if (Creature* pDemon = ObjectAccessor::GetCreature(*me, Demon))
                     pDemon->DespawnOrUnsummon();
-            }
+
             instance->SetData(DATA_LEOTHERASTHEBLINDEVENT, DONE);
         }
 
@@ -437,7 +435,7 @@ public:
             {
                 if (Whirlwind_Timer <= diff)
                 {
-                    Unit* newTarget = SelectTarget(SelectTargetMethod::Random, 0);
+                    Unit* newTarget = SelectTarget(SELECT_TARGET_RANDOM, 0);
                     if (newTarget)
                     {
                         ResetThreatList();
@@ -494,8 +492,8 @@ public:
                         me->RemoveAurasDueToSpell(SPELL_WHIRLWIND);
                         me->SetDisplayId(MODEL_DEMON);
                         Talk(SAY_SWITCH_TO_DEMON);
-                        me->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID  , 0);
-                        me->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID+1, 0);
+                        me->SetVirtualItem(0, 0);
+                        me->SetVirtualItem(1, 0);
                         DemonForm = true;
                         NeedThreatReset = true;
                         SwitchToDemon_Timer = 45000;
@@ -525,7 +523,7 @@ public:
                 {
                     ThreatManager const& mgr = me->GetThreatManager();
                     std::list<Unit*> TargetList;
-                    Unit* currentVictim = mgr.GetLastVictim();
+                    Unit* currentVictim = mgr.GetCurrentVictim();
                     for (ThreatReference const* ref : mgr.GetSortedThreatList())
                     {
                         if (Player* tempTarget = ref->GetVictim()->ToPlayer())
@@ -537,7 +535,7 @@ public:
                     {
                         if ((*itr) && (*itr)->IsAlive())
                         {
-                            Creature* demon = me->SummonCreature(INNER_DEMON_ID, (*itr)->GetPositionX()+10, (*itr)->GetPositionY()+10, (*itr)->GetPositionZ(), 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 5s);
+                            Creature* demon = me->SummonCreature(INNER_DEMON_ID, (*itr)->GetPositionX()+10, (*itr)->GetPositionY()+10, (*itr)->GetPositionZ(), 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 5000);
                             if (demon)
                             {
                                 demon->AI()->AttackStart((*itr));
@@ -583,7 +581,7 @@ public:
                 //at this point he divides himself in two parts
                 CastConsumingMadness();
                 DespawnDemon();
-                if (Creature* Copy = DoSpawnCreature(DEMON_FORM, 0, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 6s))
+                if (Creature* Copy = DoSpawnCreature(DEMON_FORM, 0, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 6000))
                 {
                     Demon = Copy->GetGUID();
                     if (me->GetVictim())
@@ -742,7 +740,7 @@ public:
         {
             if (!me->IsInCombat() && !me->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
             {
-                if (leotherasGUID)
+                if (!leotherasGUID.IsEmpty())
                 {
                     Creature* leotheras = ObjectAccessor::GetCreature(*me, leotherasGUID);
                     if (leotheras && leotheras->IsAlive())
@@ -756,7 +754,7 @@ public:
             if (!leotherasGUID)
                 leotherasGUID = instance->GetGuidData(DATA_LEOTHERAS);
 
-            if (!me->IsInCombat() && instance->GetGuidData(DATA_LEOTHERAS_EVENT_STARTER))
+            if (!me->IsInCombat() && !instance->GetGuidData(DATA_LEOTHERAS_EVENT_STARTER).IsEmpty())
             {
                 if (Unit* victim = ObjectAccessor::GetUnit(*me, instance->GetGuidData(DATA_LEOTHERAS_EVENT_STARTER)))
                     AttackStart(victim);
@@ -776,7 +774,7 @@ public:
 
             if (Mindblast_Timer <= diff)
             {
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                     DoCast(target, SPELL_MINDBLAST);
 
                 Mindblast_Timer = urand(10000, 15000);

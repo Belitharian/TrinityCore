@@ -66,7 +66,6 @@ enum BossSpells
     SPELL_HEAD_CRACK            = 66407,
     SPELL_JUMP_TO_HAND          = 66342,
     SPELL_RIDE_PLAYER           = 66245,
-    SPELL_FIRE_BOMB_AURA        = 66318,
 
     // Acidmaw & Dreadscale Generic
     SPELL_SWEEP                 = 66794,
@@ -359,7 +358,7 @@ struct boss_gormok : public boss_northrend_beastsAI
                 // Npc that should keep raid in combat while boss change
                 if (Creature* combatStalker = me->SummonCreature(NPC_BEASTS_COMBAT_STALKER, CombatStalkerPosition))
                 {
-                    DoZoneInCombat(combatStalker);
+                    combatStalker->SetInCombatWithZone();
                     combatStalker->SetCombatPulseDelay(5);
                 }
                 DoZoneInCombat();
@@ -380,7 +379,7 @@ struct boss_gormok : public boss_northrend_beastsAI
                     if (Unit* snobold = me->GetVehicleKit()->GetPassenger(i))
                     {
                         snobold->ExitVehicle();
-                        snobold->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE);
+                        snobold->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
                         snobold->GetAI()->DoAction(ACTION_DISABLE_FIRE_BOMB);
                         snobold->CastSpell(me, SPELL_JUMP_TO_HAND, true);
                         break;
@@ -396,7 +395,7 @@ struct boss_gormok : public boss_northrend_beastsAI
 
 struct npc_snobold_vassal : public ScriptedAI
 {
-    npc_snobold_vassal(Creature* creature) : ScriptedAI(creature), _instance(creature->GetInstanceScript()), _mountedOnPlayer(false), _gormokDead(false)
+    npc_snobold_vassal(Creature* creature) : ScriptedAI(creature), _instance(creature->GetInstanceScript()), _mountedOnPlayer(false)
     {
         _instance->SetData(DATA_SNOBOLD_COUNT, INCREASE);
         SetCombatMovement(false);
@@ -484,19 +483,12 @@ struct npc_snobold_vassal : public ScriptedAI
         }
         else
         {
-            me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE);
+            me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
             _events.CancelEvent(EVENT_CHECK_MOUNT);
-            _events.CancelEvent(EVENT_FIRE_BOMB);
             me->AttackStop();
-            SetCombatMovement(true);
-            _gormokDead = true;
-            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.0f, true))
-            {
+            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, true))
                 AttackStart(target);
-                me->GetMotionMaster()->MoveChase(target);
-                _events.ScheduleEvent(EVENT_BATTER, 5s);
-                _events.ScheduleEvent(EVENT_HEAD_CRACK, 1s);
-            }
+            SetCombatMovement(true);
         }
     }
 
@@ -515,22 +507,18 @@ struct npc_snobold_vassal : public ScriptedAI
             switch (eventId)
             {
                 case EVENT_FIRE_BOMB:
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.0f, true))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, true))
                         me->CastSpell(target, SPELL_FIRE_BOMB);
                     _events.Repeat(20s, 30s);
                     break;
                 case EVENT_HEAD_CRACK:
                     if (Unit* target = me->GetVehicleBase())
                         DoCast(target, SPELL_HEAD_CRACK);
-                    else
-                        DoCastVictim(SPELL_HEAD_CRACK);
                     _events.Repeat(30s);
                     break;
                 case EVENT_BATTER:
                     if (Unit* target = me->GetVehicleBase())
                         DoCast(target, SPELL_BATTER);
-                    else
-                        DoCastVictim(SPELL_BATTER);
                     _events.Repeat(10s, 15s);
                     break;
                 case EVENT_SNOBOLLED:
@@ -549,8 +537,8 @@ struct npc_snobold_vassal : public ScriptedAI
                 return;
         }
 
-        // do melee attack only if is in player back or if gormok is dead.
-        if (_mountedOnPlayer || _gormokDead)
+        // do melee attack only if is in player back.
+        if (_mountedOnPlayer)
             DoMeleeAttackIfReady();
     }
 
@@ -559,17 +547,6 @@ private:
     InstanceScript* _instance;
     ObjectGuid _targetGUID;
     bool _mountedOnPlayer;
-    bool _gormokDead;
-};
-
-struct npc_fire_bomb : public ScriptedAI
-{
-    npc_fire_bomb(Creature* creature) : ScriptedAI(creature) { }
-
-    void Reset() override
-    {
-        DoCastSelf(SPELL_FIRE_BOMB_AURA);
-    }
 };
 
 struct npc_beasts_combat_stalker : public ScriptedAI
@@ -743,7 +720,7 @@ struct boss_jormungarAI : public boss_northrend_beastsAI
             DoCastSelf(SPELL_GROUND_VISUAL_0, true);
             events.SetPhase(PHASE_SUBMERGED);
             events.ScheduleEvent(EVENT_EMERGE, 5s, 0, PHASE_SUBMERGED);
-            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE);
+            me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
         }
         else
         {
@@ -755,7 +732,7 @@ struct boss_jormungarAI : public boss_northrend_beastsAI
             events.SetPhase(PHASE_SUBMERGED);
             me->SetControlled(false, UNIT_STATE_ROOT);
             events.ScheduleEvent(EVENT_EMERGE, 6s, 0, PHASE_SUBMERGED);
-            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE);
+            me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
         }
         me->GetMotionMaster()->MovePoint(0, ToCCommonLoc[1].GetPositionX() + frand(-40.0f, 40.0f), ToCCommonLoc[1].GetPositionY() + frand(-40.0f, 40.0f), ToCCommonLoc[1].GetPositionZ() + me->GetCollisionHeight());
     }
@@ -768,9 +745,9 @@ struct boss_jormungarAI : public boss_northrend_beastsAI
         me->RemoveAurasDueToSpell(SPELL_GROUND_VISUAL_0);
         DoCastSelf(SPELL_EMERGE);
         DoCastAOE(SPELL_HATE_TO_ZERO, true);
-        me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE);
+        me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
         me->SetReactState(REACT_AGGRESSIVE);
-        if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+        if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
             AttackStart(target);
 
         // if the worm was mobile before submerging, make him stationary now
@@ -834,7 +811,7 @@ struct boss_jormungarAI : public boss_northrend_beastsAI
                 me->SummonCreature(NPC_ACIDMAW, ToCCommonLoc[9]);
                 break;
             case EVENT_SPRAY:
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1, 0.0f, true))
+                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 0.0f, true))
                     DoCast(target, spraySpell);
                 events.Repeat(21s);
                 break;
@@ -901,7 +878,7 @@ struct boss_dreadscale : public boss_jormungarAI
     void MovementInform(uint32 type, uint32 pointId) override
     {
         if (type == SPLINE_CHAIN_MOTION_TYPE && pointId == POINT_INITIAL_MOVEMENT)
-            events.ScheduleEvent(EVENT_ENGAGE, 3s);
+            events.ScheduleEvent(EVENT_ENGAGE, Seconds(3));
     }
 };
 
@@ -923,7 +900,7 @@ struct boss_acidmaw : public boss_jormungarAI
         wasMobile = false;
         me->SetControlled(true, UNIT_STATE_ROOT);
         DoCastSelf(SPELL_GROUND_VISUAL_1, true);
-        events.ScheduleEvent(EVENT_ENGAGE, 3s);
+        events.ScheduleEvent(EVENT_ENGAGE, Seconds(3));
     }
 };
 
@@ -933,11 +910,8 @@ struct npc_jormungars_slime_pool : public ScriptedAI
 
     void Reset() override
     {
-        me->m_Events.AddEventAtOffset([this]()
-        {
-            DoCastSelf(SPELL_SLIME_POOL_EFFECT, true);
-            DoCastSelf(SPELL_PACIFY_SELF, true);
-        }, 1s);
+        DoCastSelf(SPELL_SLIME_POOL_EFFECT, true);
+        DoCastSelf(SPELL_PACIFY_SELF, true);
     }
 };
 
@@ -1020,7 +994,7 @@ struct boss_icehowl : public boss_northrend_beastsAI
                 me->GetMotionMaster()->MoveJump(ToCCommonLoc[1], 20.0f, 20.0f, POINT_MIDDLE);
                 break;
             case EVENT_SELECT_CHARGE_TARGET:
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.0f, true))
+                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, true))
                 {
                     DoCast(target, SPELL_FURIOUS_CHARGE_SUMMON, true);
                     me->SetTarget(target->GetGUID());
@@ -1048,7 +1022,7 @@ struct boss_icehowl : public boss_northrend_beastsAI
                 events.Repeat(20s);
                 break;
             case EVENT_ARCTIC_BREATH:
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.0f, true))
+                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, true))
                     DoCast(target, SPELL_ARCTIC_BREATH);
                 events.Repeat(24s);
                 break;
@@ -1079,7 +1053,7 @@ class spell_gormok_jump_to_hand : public AuraScript
             return;
 
         if (Creature* gormok = GetTarget()->ToCreature())
-            if (Unit* target = gormok->AI()->SelectTarget(SelectTargetMethod::Random, 0, SnobolledTargetSelector()))
+            if (Unit* target = gormok->AI()->SelectTarget(SELECT_TARGET_RANDOM, 0, SnobolledTargetSelector()))
             {
                 gormok->AI()->Talk(EMOTE_SNOBOLLED);
                 caster->GetAI()->DoAction(ACTION_ACTIVE_SNOBOLD);
@@ -1105,7 +1079,7 @@ class spell_gormok_ride_player : public AuraScript
             return;
 
         if (Unit *caster = GetCaster())
-            if (caster->IsAIEnabled())
+            if (caster->IsAIEnabled)
                 caster->GetAI()->SetGUID(target->GetGUID(), DATA_NEW_TARGET);
     }
 
@@ -1215,7 +1189,7 @@ class spell_jormungars_slime_pool : public AuraScript
 
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return ValidateSpellInfo({ spellInfo->Effects[EFFECT_0].TriggerSpell });
+        return ValidateSpellInfo({ spellInfo->GetEffect(EFFECT_0)->TriggerSpell });
     }
 
     void PeriodicTick(AuraEffect const* aurEff)
@@ -1224,8 +1198,8 @@ class spell_jormungars_slime_pool : public AuraScript
 
         int32 const radius = static_cast<int32>(((aurEff->GetTickNumber() / 60.f) * 0.9f + 0.1f) * 10000.f * 2.f / 3.f);
         CastSpellExtraArgs args(aurEff);
-        args.AddSpellMod(SPELLVALUE_RADIUS_MOD, radius);
-        GetTarget()->CastSpell(nullptr, GetSpellInfo()->Effects[aurEff->GetEffIndex()].TriggerSpell, args);
+        args.SpellValueOverrides.AddMod(SPELLVALUE_RADIUS_MOD, radius);
+        GetTarget()->CastSpell(nullptr, GetSpellInfo()->GetEffect(aurEff->GetEffIndex())->TriggerSpell, args);
     }
 
     void Register() override
@@ -1303,12 +1277,12 @@ class spell_icehowl_arctic_breath : public SpellScript
 
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return ValidateSpellInfo({ static_cast<uint32>(spellInfo->Effects[EFFECT_0].CalcValue()) });
+        return ValidateSpellInfo({ static_cast<uint32>(spellInfo->GetEffect(EFFECT_0)->CalcValue()) });
     }
 
     void HandleScriptEffect(SpellEffIndex effIndex)
     {
-        uint32 spellId = GetSpellInfo()->Effects[effIndex].CalcValue();
+        uint32 spellId = GetSpellInfo()->GetEffect(effIndex)->CalcValue();
         GetCaster()->CastSpell(GetHitUnit(), spellId, true);
     }
 
@@ -1326,7 +1300,7 @@ class spell_icehowl_trample : public SpellScript
     void CheckTargets(std::list<WorldObject*>& targets)
     {
         Creature* caster = GetCaster()->ToCreature();
-        if (!caster || !caster->IsAIEnabled())
+        if (!caster || !caster->IsAIEnabled)
             return;
 
         if (targets.empty())
@@ -1354,7 +1328,7 @@ class spell_icehowl_massive_crash : public AuraScript
     void HandleSpeed(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
         if (Player* target = GetTarget()->ToPlayer())
-            if (target->GetRaidDifficulty() == RAID_DIFFICULTY_10MAN_HEROIC || target->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_HEROIC)
+            if (target->GetMap()->IsHeroic())
                 target->CastSpell(target, SPELL_SURGE_OF_ADRENALINE, true);
     }
 
@@ -1373,18 +1347,17 @@ void AddSC_boss_northrend_beasts()
     RegisterTrialOfTheCrusaderCreatureAI(boss_dreadscale);
     RegisterTrialOfTheCrusaderCreatureAI(npc_jormungars_slime_pool);
     RegisterTrialOfTheCrusaderCreatureAI(boss_icehowl);
-    RegisterTrialOfTheCrusaderCreatureAI(npc_fire_bomb);
 
-    RegisterSpellScript(spell_gormok_jump_to_hand);
-    RegisterSpellScript(spell_gormok_ride_player);
-    RegisterSpellScript(spell_gormok_snobolled);
-    RegisterSpellScript(spell_jormungars_paralytic_toxin);
+    RegisterAuraScript(spell_gormok_jump_to_hand);
+    RegisterAuraScript(spell_gormok_ride_player);
+    RegisterAuraScript(spell_gormok_snobolled);
+    RegisterAuraScript(spell_jormungars_paralytic_toxin);
     RegisterSpellScript(spell_jormungars_burning_bile);
-    RegisterSpellScript(spell_jormungars_slime_pool);
+    RegisterAuraScript(spell_jormungars_slime_pool);
     new spell_jormungars_snakes_spray("spell_jormungars_burning_spray", SPELL_BURNING_BILE);
     new spell_jormungars_snakes_spray("spell_jormungars_paralytic_spray", SPELL_PARALYTIC_TOXIN);
-    RegisterSpellScript(spell_jormungars_paralysis);
+    RegisterAuraScript(spell_jormungars_paralysis);
     RegisterSpellScript(spell_icehowl_arctic_breath);
     RegisterSpellScript(spell_icehowl_trample);
-    RegisterSpellScript(spell_icehowl_massive_crash);
+    RegisterAuraScript(spell_icehowl_massive_crash);
 }

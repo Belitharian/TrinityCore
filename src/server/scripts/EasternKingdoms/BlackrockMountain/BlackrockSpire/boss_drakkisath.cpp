@@ -49,13 +49,13 @@ public:
             _Reset();
         }
 
-        void JustEngagedWith(Unit* who) override
+        void JustEngagedWith(Unit* /*who*/) override
         {
-            BossAI::JustEngagedWith(who);
-            events.ScheduleEvent(EVENT_FIRE_NOVA, 6s);
-            events.ScheduleEvent(EVENT_CLEAVE, 8s);
-            events.ScheduleEvent(EVENT_CONFLIGURATION, 15s);
-            events.ScheduleEvent(EVENT_THUNDERCLAP, 17s);
+            _JustEngagedWith();
+            events.ScheduleEvent(EVENT_FIRE_NOVA, 6000);
+            events.ScheduleEvent(EVENT_CLEAVE,    8000);
+            events.ScheduleEvent(EVENT_CONFLIGURATION, 15000);
+            events.ScheduleEvent(EVENT_THUNDERCLAP,    17000);
         }
 
         void JustDied(Unit* /*killer*/) override
@@ -79,19 +79,19 @@ public:
                 {
                     case EVENT_FIRE_NOVA:
                         DoCastVictim(SPELL_FIRENOVA);
-                        events.ScheduleEvent(EVENT_FIRE_NOVA, 10s);
+                        events.ScheduleEvent(EVENT_FIRE_NOVA, 10000);
                         break;
                     case EVENT_CLEAVE:
                         DoCastVictim(SPELL_CLEAVE);
-                        events.ScheduleEvent(EVENT_CLEAVE, 8s);
+                        events.ScheduleEvent(EVENT_CLEAVE, 8000);
                         break;
                     case EVENT_CONFLIGURATION:
                         DoCastVictim(SPELL_CONFLIGURATION);
-                        events.ScheduleEvent(EVENT_CONFLIGURATION, 18s);
+                        events.ScheduleEvent(EVENT_CONFLIGURATION, 18000);
                         break;
                     case EVENT_THUNDERCLAP:
                         DoCastVictim(SPELL_THUNDERCLAP);
-                        events.ScheduleEvent(EVENT_THUNDERCLAP, 20s);
+                        events.ScheduleEvent(EVENT_THUNDERCLAP, 20000);
                         break;
                 }
 

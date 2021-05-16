@@ -194,7 +194,7 @@ hyjal_trashAI::hyjal_trashAI(Creature* creature) : EscortAI(creature)
 
 void hyjal_trashAI::DamageTaken(Unit* done_by, uint32 &damage)
 {
-    if (!done_by || done_by->GetTypeId() == TYPEID_PLAYER || done_by->IsPet())
+    if (done_by->GetTypeId() == TYPEID_PLAYER || done_by->IsPet())
     {
         damageTaken += damage;
         instance->SetData(DATA_RAIDDAMAGE, damage);//store raid's damage
@@ -404,7 +404,7 @@ void hyjal_trashAI::JustDied(Unit* /*killer*/)
         instance->SetData(DATA_TRASH, 0);//signal trash is dead
 
     if ((instance->GetData(DATA_RAIDDAMAGE) < MINRAIDDAMAGE && !me->isWorldBoss()) || (damageTaken < me->GetMaxHealth()/4 && me->isWorldBoss()))
-        me->RemoveFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE);//no loot
+        me->RemoveDynamicFlag(UNIT_DYNFLAG_LOOTABLE);//no loot
 }
 
 class npc_giant_infernal : public CreatureScript
@@ -420,18 +420,11 @@ public:
             meteor = false;//call once!
             CanMove = false;
             Delay = rand32() % 30000;
-            me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+            me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+            me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
             me->SetDisplayId(MODEL_INVIS);
             go = false;
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            spawnTimer = 2000;
-            FlameBuffetTimer = 2000;
-            imol = false;
+            Reset();
         }
 
         bool meteor;
@@ -443,7 +436,9 @@ public:
 
         void Reset() override
         {
-            Initialize();
+            spawnTimer = 2000;
+            FlameBuffetTimer= 2000;
+            imol = false;
         }
 
         void JustEngagedWith(Unit* /*who*/) override { }
@@ -474,7 +469,7 @@ public:
             }
             if (!meteor)
             {
-                if (Creature* trigger = me->SummonCreature(NPC_WORLD_TRIGGER_TINY, me->GetPositionWithOffset({ 8.0f, 8.0f, frand(25.0f, 35.0f), 0.0f }), TEMPSUMMON_TIMED_DESPAWN, 1s))
+                if (Creature* trigger = me->SummonCreature(NPC_WORLD_TRIGGER_TINY, me->GetPositionWithOffset({ 8.0f, 8.0f, frand(25.0f, 35.0f), 0.0f }), TEMPSUMMON_TIMED_DESPAWN, 1000))
                 {
                     trigger->SetVisible(false);
                     trigger->SetFaction(me->GetFaction());
@@ -486,9 +481,9 @@ public:
             } else if (!CanMove){
                 if (spawnTimer <= diff)
                 {
-                    me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                    me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                    me->SetDisplayId(me->GetUInt32Value(UNIT_FIELD_NATIVEDISPLAYID));
+                    me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+                    me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                    me->SetDisplayId(me->GetNativeDisplayId());
                     CanMove = true;
                     if (instance->GetData(DATA_ALLIANCE_RETREAT) && !instance->GetData(DATA_HORDE_RETREAT))
                     {
@@ -553,19 +548,14 @@ public:
         {
             instance = creature->GetInstanceScript();
             go = false;
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            KnockDownTimer = 10000;
+            Reset();
         }
 
         bool go;
         uint32 KnockDownTimer;
         void Reset() override
         {
-            Initialize();
+            KnockDownTimer = 10000;
         }
 
         void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
@@ -652,14 +642,7 @@ public:
         {
             instance = creature->GetInstanceScript();
             go = false;
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            FrenzyTimer = 5000 + rand32() % 5000;
-            MoveTimer = 2000;
-            RandomMove = false;
+            Reset();
         }
 
         bool go;
@@ -668,7 +651,9 @@ public:
         bool RandomMove;
         void Reset() override
         {
-            Initialize();
+            FrenzyTimer = 5000 + rand32() % 5000;
+            MoveTimer = 2000;
+            RandomMove = false;
         }
 
         void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
@@ -690,7 +675,7 @@ public:
             }
             if (waypointId == LastOverronPos && IsOverrun)
             {
-                me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_ONESHOT_ATTACK_UNARMED);
+                me->SetEmoteState(EMOTE_ONESHOT_ATTACK_UNARMED);
                 if ((faction == 0 && LastOverronPos == 17) || (faction == 1 && LastOverronPos == 21))
                 {
                     me->DespawnOrUnsummon();
@@ -755,12 +740,7 @@ public:
         {
             instance = creature->GetInstanceScript();
             go = false;
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            ShadowBoltTimer = 1000 + rand32() % 5000;
+            Reset();
         }
 
         SummonList summons;
@@ -769,13 +749,13 @@ public:
 
         void Reset() override
         {
-            Initialize();
+            ShadowBoltTimer = 1000 + rand32() % 5000;
             summons.DespawnAll();
         }
 
         void JustSummoned(Creature* summon) override
         {
-            Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30, true);
+            Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 30, true);
             if (target)
                 summon->Attack(target, false);
             summons.Summon(summon);
@@ -810,15 +790,15 @@ public:
             switch (urand(0, 2))
             {
                 case 0:
-                    DoSpawnCreature(17902, 3, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN, 60s);
-                    DoSpawnCreature(17902, -3, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN, 60s);
+                    DoSpawnCreature(17902, 3, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN, 60000);
+                    DoSpawnCreature(17902, -3, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN, 60000);
                     break;
                 case 1:
-                    DoSpawnCreature(17903, 3, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN, 60s);
-                    DoSpawnCreature(17903, -3, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN, 60s);
+                    DoSpawnCreature(17903, 3, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN, 60000);
+                    DoSpawnCreature(17903, -3, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN, 60000);
                     break;
                 case 2:
-                    DoSpawnCreature(RAND(17902, 17903), 3, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN, 60s);
+                    DoSpawnCreature(RAND(17902, 17903), 3, 0, 0, 0, TEMPSUMMON_TIMED_DESPAWN, 60000);
                     break;
             }
         }
@@ -884,14 +864,7 @@ public:
         {
             instance = creature->GetInstanceScript();
             go = false;
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            CourseTimer = 20000 + rand32() % 5000;
-            WailTimer = 15000 + rand32() % 5000;
-            ShellTimer = 50000 + rand32() % 10000;
+            Reset();
         }
 
         bool go;
@@ -901,7 +874,9 @@ public:
 
         void Reset() override
         {
-            Initialize();
+            CourseTimer = 20000 + rand32() % 5000;
+            WailTimer = 15000 + rand32() % 5000;
+            ShellTimer = 50000 + rand32() % 10000;
         }
 
         void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
@@ -989,12 +964,7 @@ public:
         {
             instance = creature->GetInstanceScript();
             go = false;
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            WebTimer = 20000 + rand32() % 5000;
+            Reset();
         }
 
         bool go;
@@ -1002,7 +972,7 @@ public:
 
         void Reset() override
         {
-            Initialize();
+            WebTimer = 20000 + rand32() % 5000;
         }
 
         void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
@@ -1080,12 +1050,7 @@ public:
         {
             instance = creature->GetInstanceScript();
             go = false;
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            ManaBurnTimer = 9000 + rand32() % 5000;
+            Reset();
         }
 
         bool go;
@@ -1093,7 +1058,7 @@ public:
 
         void Reset() override
         {
-            Initialize();
+            ManaBurnTimer = 9000 + rand32() % 5000;
         }
 
         void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
@@ -1297,15 +1262,7 @@ public:
             go = false;
             for (uint8 i = 0; i < 3; ++i)
                 DummyTarget[i] = 0;
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            forcemove = true;
-            Zpos = 10.0f;
-            StrikeTimer = 2000 + rand32() % 5000;
-            MoveTimer = 0;
+            Reset();
         }
 
         bool go;
@@ -1316,7 +1273,10 @@ public:
 
         void Reset() override
         {
-            Initialize();
+            forcemove = true;
+            Zpos = 10.0f;
+            StrikeTimer = 2000 + rand32() % 5000;
+            MoveTimer = 0;
             me->SetDisableGravity(true);
         }
 
@@ -1393,7 +1353,7 @@ public:
                 if (forcemove)
                 {
                     forcemove = false;
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                         me->Attack(target, false);
                 }
                 if (MoveTimer <= diff)
@@ -1493,7 +1453,7 @@ public:
                     return;
                 }
                 CastSpellExtraArgs args;
-                args.AddSpellMod(SPELLVALUE_BASE_POINT0, 500 + rand32() % 700);
+                args.SpellValueOverrides.AddMod(SPELLVALUE_BASE_POINT0, 500 + rand32() % 700);
                 me->CastSpell(me->GetVictim(), SPELL_EXPLODING_SHOT, args);
                 ExplodeTimer = 5000 + rand32() % 5000;
             } else ExplodeTimer -= diff;

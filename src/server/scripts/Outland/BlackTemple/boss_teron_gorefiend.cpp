@@ -25,6 +25,7 @@
 #include "ScriptedCreature.h"
 #include "SpellAuraEffects.h"
 #include "SpellScript.h"
+#include "TemporarySummon.h"
 
 enum Says
 {
@@ -116,21 +117,21 @@ struct boss_teron_gorefiend : public BossAI
         _Reset();
         if (instance->GetData(DATA_TERON_GOREFIEND_INTRO))
         {
-            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE);
+            me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
             me->SetReactState(REACT_PASSIVE);
         }
     }
 
-    void JustEngagedWith(Unit* who) override
+    void JustEngagedWith(Unit* /*who*/) override
     {
-        BossAI::JustEngagedWith(who);
+        _JustEngagedWith();
         Talk(SAY_AGGRO);
         events.SetPhase(PHASE_COMBAT);
-        events.ScheduleEvent(EVENT_ENRAGE, 10min);
-        events.ScheduleEvent(EVENT_INCINERATE, 12s);
-        events.ScheduleEvent(EVENT_SUMMON_DOOM_BLOSSOM, 8s);
-        events.ScheduleEvent(EVENT_SHADOW_DEATH, 8s);
-        events.ScheduleEvent(EVENT_CRUSHING_SHADOWS, 18s);
+        events.ScheduleEvent(EVENT_ENRAGE, Minutes(10));
+        events.ScheduleEvent(EVENT_INCINERATE, Seconds(12));
+        events.ScheduleEvent(EVENT_SUMMON_DOOM_BLOSSOM, Seconds(8));
+        events.ScheduleEvent(EVENT_SHADOW_DEATH, Seconds(8));
+        events.ScheduleEvent(EVENT_CRUSHING_SHADOWS, Seconds(18));
     }
 
     void EnterEvadeMode(EvadeReason /*why*/) override
@@ -147,7 +148,7 @@ struct boss_teron_gorefiend : public BossAI
             instance->SetData(DATA_TERON_GOREFIEND_INTRO, 0);
             Talk(SAY_INTRO);
             events.SetPhase(PHASE_INTRO);
-            events.ScheduleEvent(EVENT_FINISH_INTRO, 20s);
+            events.ScheduleEvent(EVENT_FINISH_INTRO, Seconds(20));
         }
     }
 
@@ -169,10 +170,10 @@ struct boss_teron_gorefiend : public BossAI
         if (!events.IsInPhase(PHASE_INTRO) && !UpdateVictim())
             return;
 
-        events.Update(diff);
-
         if (me->HasUnitState(UNIT_STATE_CASTING))
             return;
+
+        events.Update(diff);
 
         while (uint32 eventId = events.ExecuteEvent())
         {
@@ -182,7 +183,7 @@ struct boss_teron_gorefiend : public BossAI
                     DoCast(SPELL_BERSERK);
                     break;
                 case EVENT_INCINERATE:
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                         DoCast(target, SPELL_INCINERATE);
                     Talk(SAY_INCINERATE);
                     events.Repeat(Seconds(12), Seconds(20));
@@ -193,7 +194,7 @@ struct boss_teron_gorefiend : public BossAI
                     events.Repeat(Seconds(30), Seconds(40));
                     break;
                 case EVENT_SHADOW_DEATH:
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1, 100.0f, true, true, -SPELL_SPIRITUAL_VENGEANCE))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 100.0f, true, true, -SPELL_SPIRITUAL_VENGEANCE))
                         DoCast(target, SPELL_SHADOW_OF_DEATH);
                     events.Repeat(Seconds(30), Seconds(35));
                     break;
@@ -203,7 +204,7 @@ struct boss_teron_gorefiend : public BossAI
                     events.Repeat(Seconds(18), Seconds(30));
                     break;
                 case EVENT_FINISH_INTRO:
-                    me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE);
+                    me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE));
                     me->SetReactState(REACT_AGGRESSIVE);
                     break;
                 default:
@@ -232,10 +233,10 @@ struct npc_doom_blossom : public NullCreatureAI
 
         DoCast(SPELL_SUMMON_BLOSSOM_MOVE_TARGET);
         _scheduler.CancelAll();
-        DoZoneInCombat();
+        me->SetInCombatWithZone();
         _scheduler.Schedule(Seconds(12), [this](TaskContext shadowBolt)
         {
-            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                 DoCast(target, SPELL_SHADOWBOLT);
 
             shadowBolt.Repeat(Seconds(2));
@@ -257,7 +258,12 @@ private:
 
 struct npc_shadowy_construct : public ScriptedAI
 {
-    npc_shadowy_construct(Creature* creature) : ScriptedAI(creature), _instance(creature->GetInstanceScript()) { }
+    npc_shadowy_construct(Creature* creature) : ScriptedAI(creature), _instance(creature->GetInstanceScript())
+    {
+        //This creature must be immune everything, except spells of Vengeful Spirit.
+        creature->ApplySpellImmune(0, IMMUNITY_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, true);
+        creature->ApplySpellImmune(0, IMMUNITY_SCHOOL, SPELL_SCHOOL_MASK_MAGIC, true);
+    }
 
     void Reset() override
     {
@@ -308,10 +314,10 @@ struct npc_shadowy_construct : public ScriptedAI
     {
         if (Creature* teron = _instance->GetCreature(DATA_TERON_GOREFIEND))
         {
-            Unit* target = teron->AI()->SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true, true, -SPELL_SPIRITUAL_VENGEANCE);
+            Unit* target = teron->AI()->SelectTarget(SELECT_TARGET_RANDOM, 0, 100.0f, true, true, -SPELL_SPIRITUAL_VENGEANCE);
             // He should target Vengeful Spirits only if has no other player available
             if (!target)
-                target = teron->AI()->SelectTarget(SelectTargetMethod::Random, 0);
+                target = teron->AI()->SelectTarget(SELECT_TARGET_RANDOM, 0);
 
             if (target)
             {
@@ -334,7 +340,7 @@ class spell_teron_gorefiend_shadow_of_death : public AuraScript
 {
     PrepareAuraScript(spell_teron_gorefiend_shadow_of_death);
 
-    bool Validate(SpellInfo const* /*spell*/) override
+    bool Validate(SpellInfo const* /*spellInfo*/) override
     {
         return ValidateSpellInfo(
         {
@@ -388,6 +394,7 @@ class spell_teron_gorefiend_spiritual_vengeance : public AuraScript
     void Register() override
     {
         AfterEffectRemove += AuraEffectRemoveFn(spell_teron_gorefiend_spiritual_vengeance::OnRemove, EFFECT_0, SPELL_AURA_MOD_POSSESS, AURA_EFFECT_HANDLE_REAL);
+        AfterEffectRemove += AuraEffectRemoveFn(spell_teron_gorefiend_spiritual_vengeance::OnRemove, EFFECT_2, SPELL_AURA_MOD_PACIFY_SILENCE, AURA_EFFECT_HANDLE_REAL);
     }
 };
 
@@ -396,7 +403,7 @@ class spell_teron_gorefiend_shadow_of_death_remove : public SpellScript
 {
     PrepareSpellScript(spell_teron_gorefiend_shadow_of_death_remove);
 
-    bool Validate(SpellInfo const* /*spell*/) override
+    bool Validate(SpellInfo const* /*spellInfo*/) override
     {
         return ValidateSpellInfo(
         {
@@ -426,7 +433,7 @@ class at_teron_gorefiend_entrance : public OnlyOnceAreaTriggerScript
 public:
     at_teron_gorefiend_entrance() : OnlyOnceAreaTriggerScript("at_teron_gorefiend_entrance") { }
 
-    bool TryHandleOnce(Player* player, AreaTriggerEntry const* /*areaTrigger*/) override
+    bool _OnTrigger(Player* player, AreaTriggerEntry const* /*areaTrigger*/, bool /*entered*/) override
     {
         if (InstanceScript* instance = player->GetInstanceScript())
             if (Creature* teron = instance->GetCreature(DATA_TERON_GOREFIEND))
@@ -441,8 +448,8 @@ void AddSC_boss_teron_gorefiend()
     RegisterBlackTempleCreatureAI(boss_teron_gorefiend);
     RegisterBlackTempleCreatureAI(npc_doom_blossom);
     RegisterBlackTempleCreatureAI(npc_shadowy_construct);
-    RegisterSpellScript(spell_teron_gorefiend_shadow_of_death);
-    RegisterSpellScript(spell_teron_gorefiend_spiritual_vengeance);
+    RegisterAuraScript(spell_teron_gorefiend_shadow_of_death);
+    RegisterAuraScript(spell_teron_gorefiend_spiritual_vengeance);
     RegisterSpellScript(spell_teron_gorefiend_shadow_of_death_remove);
     new at_teron_gorefiend_entrance();
 }

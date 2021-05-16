@@ -19,9 +19,9 @@
 #define TRINITY_GAMEEVENT_MGR_H
 
 #include "Common.h"
-#include "ObjectGuid.h"
 #include "SharedDefines.h"
 #include "Define.h"
+#include "ObjectGuid.h"
 #include <list>
 #include <map>
 #include <set>
@@ -85,24 +85,16 @@ struct ModelEquip
     uint8 equipement_id_prev;
 };
 
-struct NPCVendorEntry
-{
-    uint32 entry;                                           // creature entry
-    uint32 item;                                            // item id
-    int32  maxcount;                                        // 0 for infinite
-    uint32 incrtime;                                        // time for restore items amount if maxcount != 0
-    uint32 ExtendedCost;
-};
-
-class Player;
 class Creature;
+class Player;
 class Quest;
+struct VendorItem;
 
 class TC_GAME_API GameEventMgr
 {
     private:
         GameEventMgr();
-        ~GameEventMgr() { }
+        ~GameEventMgr();
 
     public:
         static GameEventMgr* instance();
@@ -114,7 +106,6 @@ class TC_GAME_API GameEventMgr
         bool CheckOneGameEvent(uint16 entry) const;
         uint32 NextCheck(uint16 entry) const;
         void LoadFromDB();
-        void LoadHolidayDates();
         uint32 Update();
         bool IsActiveEvent(uint16 event_id) { return (m_ActiveEvents.find(event_id) != m_ActiveEvents.end()); }
         uint32 StartSystem();
@@ -124,8 +115,9 @@ class TC_GAME_API GameEventMgr
         bool StartEvent(uint16 event_id, bool overwrite = false);
         void StopEvent(uint16 event_id, bool overwrite = false);
         void HandleQuestComplete(uint32 quest_id);  // called on world event type quest completions
-        uint32 GetNPCFlag(Creature* cr);
-
+        void HandleWorldEventGossip(Player* player, Creature* c);
+        uint64 GetNPCFlag(Creature* cr);
+        uint32 GetNpcTextId(uint32 guid);
     private:
         void SendWorldStateUpdate(Player* player, uint16 event_id);
         void AddActiveEvent(uint16 event_id) { m_ActiveEvents.insert(event_id); }
@@ -159,13 +151,13 @@ class TC_GAME_API GameEventMgr
         typedef std::pair<uint32, uint32> QuestRelation;
         typedef std::list<QuestRelation> QuestRelList;
         typedef std::vector<QuestRelList> GameEventQuestMap;
-        typedef std::list<NPCVendorEntry> NPCVendorList;
-        typedef std::vector<NPCVendorList> GameEventNPCVendorMap;
+        typedef std::unordered_map<uint32, std::vector<VendorItem>> NPCVendorMap;
+        typedef std::vector<NPCVendorMap> GameEventNPCVendorMap;
         typedef std::map<uint32 /*quest id*/, GameEventQuestToEventConditionNum> QuestIdToEventConditionMap;
-        typedef std::pair<ObjectGuid::LowType /*guid*/, uint32 /*npcflag*/> GuidNPCFlagPair;
+        typedef std::pair<ObjectGuid::LowType /*guid*/, uint64 /*npcflag*/> GuidNPCFlagPair;
         typedef std::list<GuidNPCFlagPair> NPCFlagList;
         typedef std::vector<NPCFlagList> GameEventNPCFlagMap;
-        typedef std::vector<uint32> GameEventBattlegroundMap;
+        typedef std::vector<uint32> GameEventBitmask;
         GameEventQuestMap mGameEventCreatureQuests;
         GameEventQuestMap mGameEventGameObjectQuests;
         GameEventNPCVendorMap mGameEventVendors;
@@ -174,21 +166,19 @@ class TC_GAME_API GameEventMgr
         //GameEventGuidMap  mGameEventGameobjectGuids;
         GameEventIdMap    mGameEventPoolIds;
         GameEventDataMap  mGameEvent;
-        GameEventBattlegroundMap mGameEventBattlegroundHolidays;
+        GameEventBitmask  mGameEventBattlegroundHolidays;
         QuestIdToEventConditionMap mQuestToEventConditions;
         GameEventNPCFlagMap mGameEventNPCFlags;
         ActiveEvents m_ActiveEvents;
         bool isSystemInit;
-
     public:
         GameEventGuidMap  mGameEventCreatureGuids;
         GameEventGuidMap  mGameEventGameobjectGuids;
-        std::vector<uint32> modifiedHolidays;
 };
 
 #define sGameEventMgr GameEventMgr::instance()
 
 TC_GAME_API bool IsHolidayActive(HolidayIds id);
-TC_GAME_API bool IsEventActive(uint16 eventId);
+TC_GAME_API bool IsEventActive(uint16 event_id);
 
 #endif

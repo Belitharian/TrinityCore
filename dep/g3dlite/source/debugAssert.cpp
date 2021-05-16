@@ -99,7 +99,7 @@ static void createErrorMessage(
         }
 
         // Make sure the message got translated into something.
-        LPCTSTR realLastErr;
+        LPTSTR realLastErr;
         if (NULL != formatMsg) {
             realLastErr = formatMsg;
         } else {

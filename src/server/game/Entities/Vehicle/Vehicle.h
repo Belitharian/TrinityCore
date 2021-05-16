@@ -31,10 +31,10 @@ class VehicleJoinEvent;
 class TC_GAME_API Vehicle : public TransportBase
 {
     protected:
-        friend bool Unit::CreateVehicleKit(uint32 id, uint32 creatureEntry);
+        friend bool Unit::CreateVehicleKit(uint32 id, uint32 creatureEntry, bool);
         Vehicle(Unit* unit, VehicleEntry const* vehInfo, uint32 creatureEntry);
 
-        friend void Unit::RemoveVehicleKit();
+        friend void Unit::RemoveVehicleKit(bool);
         ~Vehicle();
 
     public:
@@ -52,7 +52,6 @@ class TC_GAME_API Vehicle : public TransportBase
         bool HasEmptySeat(int8 seatId) const;
         Unit* GetPassenger(int8 seatId) const;
         SeatMap::const_iterator GetNextEmptySeat(int8 seatId, bool next) const;
-        VehicleSeatAddon const* GetSeatAddonForSeatOfPassenger(Unit const* passenger) const;
         uint8 GetAvailableSeatCount() const;
 
         bool AddPassenger(Unit* passenger, int8 seatId = -1);
@@ -61,11 +60,11 @@ class TC_GAME_API Vehicle : public TransportBase
         void RelocatePassengers();
         void RemoveAllPassengers();
         bool IsVehicleInUse() const;
-        bool IsControllableVehicle() const;
 
         void SetLastShootPos(Position const& pos) { _lastShootPos.Relocate(pos); }
         Position const& GetLastShootPos() const { return _lastShootPos; }
 
+        SeatMap::iterator GetSeatIteratorForPassenger(Unit* passenger);
         SeatMap Seats;                                      ///< The collection of all seats on the vehicle. Including vacant ones.
 
         VehicleSeatEntry const* GetSeatForPassenger(Unit const* passenger) const;
@@ -86,7 +85,6 @@ class TC_GAME_API Vehicle : public TransportBase
             STATUS_UNINSTALLING,
         };
 
-        SeatMap::iterator GetSeatIteratorForPassenger(Unit* passenger);
         void InitMovementInfoForBase();
 
         /// This method transforms supplied transport offsets into global coordinates
@@ -107,8 +105,6 @@ class TC_GAME_API Vehicle : public TransportBase
 
         void RemovePendingEvent(VehicleJoinEvent* e);
         void RemovePendingEventsForSeat(int8 seatId);
-
-        bool HasPendingEventForSeat(int8 seatId) const;
 
     private:
         Unit* _me;                                          ///< The underlying unit with the vehicle kit. Can be player or creature.

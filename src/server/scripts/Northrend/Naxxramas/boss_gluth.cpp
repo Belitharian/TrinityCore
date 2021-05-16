@@ -113,15 +113,15 @@ public:
             me->SetSpeed(UnitMoveType::MOVE_RUN, 12.0f);
         }
 
-        void JustEngagedWith(Unit* who) override
+        void JustEngagedWith(Unit* /*who*/) override
         {
-            BossAI::JustEngagedWith(who);
-            events.ScheduleEvent(EVENT_WOUND, 10s);
+            _JustEngagedWith();
+            events.ScheduleEvent(EVENT_WOUND, Seconds(10));
             events.ScheduleEvent(EVENT_ENRAGE, randtime(Seconds(16), Seconds(22)));
             events.ScheduleEvent(EVENT_DECIMATE, randtime(Minutes(1)+Seconds(50), Minutes(2)));
-            events.ScheduleEvent(EVENT_BERSERK, 8min);
-            events.ScheduleEvent(EVENT_SUMMON, 15s);
-            events.ScheduleEvent(EVENT_SEARCH_ZOMBIE_SINGLE, 12s);
+            events.ScheduleEvent(EVENT_BERSERK, Minutes(8));
+            events.ScheduleEvent(EVENT_SUMMON, Seconds(15));
+            events.ScheduleEvent(EVENT_SEARCH_ZOMBIE_SINGLE, Seconds(12));
         }
 
         void SummonedCreatureDies(Creature* summoned, Unit* /* who */) override
@@ -272,7 +272,7 @@ public:
         {
             if (id == 1){
                 me->GetMotionMaster()->MoveIdle();
-                events.ScheduleEvent(EVENT_KILL_ZOMBIE_SINGLE, 1s);
+                events.ScheduleEvent(EVENT_KILL_ZOMBIE_SINGLE, Seconds(1));
             }
 
         }
@@ -318,7 +318,7 @@ public:
                 if (damage > 0)
                 {
                     CastSpellExtraArgs args(TRIGGERED_FULL_MASK);
-                    args.AddSpellBP0(damage);
+                    args.SpellValueOverrides.AddBP0(damage);
                     GetCaster()->CastSpell(unit, SPELL_DECIMATE_DMG, args);
                 }
             }

@@ -19,108 +19,200 @@
 #define TRINITY_SPELLDEFINES_H
 
 #include "Define.h"
+#include "EnumFlag.h"
 #include "ObjectGuid.h"
 #include <vector>
 
 class Item;
 class AuraEffect;
+enum Difficulty : uint8;
 
-enum SpellInterruptFlags : uint32
+namespace UF
 {
-    SPELL_INTERRUPT_FLAG_MOVEMENT     = 0x01, // why need this for instant?
-    SPELL_INTERRUPT_FLAG_PUSH_BACK    = 0x02, // push back
-    SPELL_INTERRUPT_FLAG_UNK3         = 0x04, // any info?
-    SPELL_INTERRUPT_FLAG_INTERRUPT    = 0x08, // interrupt
-    SPELL_INTERRUPT_FLAG_ABORT_ON_DMG = 0x10  // _complete_ interrupt on direct damage
-  //SPELL_INTERRUPT_UNK               = 0x20                // unk, 564 of 727 spells having this spell start with "Glyph"
+    struct SpellCastVisual;
+}
+
+namespace WorldPackets
+{
+    namespace Spells
+    {
+        struct SpellCastVisual;
+    }
+}
+
+enum class SpellInterruptFlags : uint32
+{
+    None                        = 0,
+    Movement                    = 0x00000001,
+    DamagePushbackPlayerOnly    = 0x00000002,
+    Stun                        = 0x00000004, // useless, even spells without it get interrupted
+    Combat                      = 0x00000008,
+    DamageCancelsPlayerOnly     = 0x00000010,
+    MeleeCombat                 = 0x00000020, // NYI
+    Immunity                    = 0x00000040, // NYI
+    DamageAbsorb                = 0x00000080,
+    ZeroDamageCancels           = 0x00000100,
+    DamagePushback              = 0x00000200,
+    DamageCancels               = 0x00000400
 };
 
-// See SpellAuraInterruptFlags for other values definitions
-enum SpellChannelInterruptFlags : uint32
+DEFINE_ENUM_FLAG(SpellInterruptFlags);
+
+enum class SpellAuraInterruptFlags : uint32
 {
-    CHANNEL_INTERRUPT_FLAG_INTERRUPT = 0x0008,  // interrupt
-    CHANNEL_FLAG_DELAY               = 0x4000
+    None                        = 0,
+    HostileActionReceived       = 0x00000001,
+    Damage                      = 0x00000002,
+    Action                      = 0x00000004,
+    Moving                      = 0x00000008,
+    Turning                     = 0x00000010,
+    Anim                        = 0x00000020,
+    Dismount                    = 0x00000040,
+    UnderWater                  = 0x00000080, // TODO: disallow casting when swimming (SPELL_FAILED_ONLY_ABOVEWATER)
+    AboveWater                  = 0x00000100, // TODO: disallow casting when not swimming (SPELL_FAILED_ONLY_UNDERWATER)
+    Sheathing                   = 0x00000200,
+    Interacting                 = 0x00000400, // TODO: more than gossip, replace all the feign death removals by aura type
+    Looting                     = 0x00000800,
+    Attacking                   = 0x00001000,
+    ItemUse                     = 0x00002000,
+    DamageChannelDuration       = 0x00004000,
+    Shapeshifting               = 0x00008000,
+    ActionDelayed               = 0x00010000,
+    Mount                       = 0x00020000,
+    Standing                    = 0x00040000,
+    LeaveWorld                  = 0x00080000,
+    StealthOrInvis              = 0x00100000,
+    InvulnerabilityBuff         = 0x00200000,
+    EnterWorld                  = 0x00400000,
+    PvPActive                   = 0x00800000,
+    NonPeriodicDamage           = 0x01000000,
+    LandingOrFlight             = 0x02000000,
+    Release                     = 0x04000000,
+    DamageCancelsScript         = 0x08000000, // NYI dedicated aura script hook
+    EnteringCombat              = 0x10000000,
+    Login                       = 0x20000000,
+    Summon                      = 0x40000000,
+    LeavingCombat               = 0x80000000,
+
+    NOT_VICTIM                  = (HostileActionReceived | Damage | NonPeriodicDamage)
 };
 
-enum SpellAuraInterruptFlags : uint32
-{
-    AURA_INTERRUPT_FLAG_HITBYSPELL                  = 0x00000001,   // 0    removed when getting hit by a negative spell?
-    AURA_INTERRUPT_FLAG_TAKE_DAMAGE                 = 0x00000002,   // 1    removed by any damage
-    AURA_INTERRUPT_FLAG_CAST                        = 0x00000004,   // 2    cast any spells
-    AURA_INTERRUPT_FLAG_MOVE                        = 0x00000008,   // 3    removed by any movement
-    AURA_INTERRUPT_FLAG_TURNING                     = 0x00000010,   // 4    removed by any turning
-    AURA_INTERRUPT_FLAG_JUMP                        = 0x00000020,   // 5    removed by entering combat
-    AURA_INTERRUPT_FLAG_NOT_MOUNTED                 = 0x00000040,   // 6    removed by dismounting
-    AURA_INTERRUPT_FLAG_NOT_ABOVEWATER              = 0x00000080,   // 7    removed by entering water
-    AURA_INTERRUPT_FLAG_NOT_UNDERWATER              = 0x00000100,   // 8    removed by leaving water
-    AURA_INTERRUPT_FLAG_NOT_SHEATHED                = 0x00000200,   // 9    removed by unsheathing
-    AURA_INTERRUPT_FLAG_TALK                        = 0x00000400,   // 10   talk to npc / loot? action on creature
-    AURA_INTERRUPT_FLAG_USE                         = 0x00000800,   // 11   mine/use/open action on gameobject
-    AURA_INTERRUPT_FLAG_MELEE_ATTACK                = 0x00001000,   // 12   removed by attacking
-    AURA_INTERRUPT_FLAG_SPELL_ATTACK                = 0x00002000,   // 13   ???
-    AURA_INTERRUPT_FLAG_UNK14                       = 0x00004000,   // 14
-    AURA_INTERRUPT_FLAG_TRANSFORM                   = 0x00008000,   // 15   removed by transform?
-    AURA_INTERRUPT_FLAG_UNK16                       = 0x00010000,   // 16
-    AURA_INTERRUPT_FLAG_MOUNT                       = 0x00020000,   // 17   misdirect, aspect, swim speed
-    AURA_INTERRUPT_FLAG_NOT_SEATED                  = 0x00040000,   // 18   removed by standing up (used by food and drink mostly and sleep/Fake Death like)
-    AURA_INTERRUPT_FLAG_CHANGE_MAP                  = 0x00080000,   // 19   leaving map/getting teleported
-    AURA_INTERRUPT_FLAG_IMMUNE_OR_LOST_SELECTION    = 0x00100000,   // 20   removed by auras that make you invulnerable, or make other to lose selection on you
-    AURA_INTERRUPT_FLAG_UNK21                       = 0x00200000,   // 21
-    AURA_INTERRUPT_FLAG_TELEPORTED                  = 0x00400000,   // 22
-    AURA_INTERRUPT_FLAG_ENTER_PVP_COMBAT            = 0x00800000,   // 23   removed by entering pvp combat
-    AURA_INTERRUPT_FLAG_DIRECT_DAMAGE               = 0x01000000,   // 24   removed by any direct damage
-    AURA_INTERRUPT_FLAG_LANDING                     = 0x02000000,   // 25   removed by hitting the ground
-    AURA_INTERRUPT_FLAG_LEAVE_COMBAT                = 0x80000000,   // 31   removed by leaving combat
+DEFINE_ENUM_FLAG(SpellAuraInterruptFlags);
 
-    AURA_INTERRUPT_FLAG_NOT_VICTIM = (AURA_INTERRUPT_FLAG_HITBYSPELL | AURA_INTERRUPT_FLAG_TAKE_DAMAGE | AURA_INTERRUPT_FLAG_DIRECT_DAMAGE)
+enum class SpellAuraInterruptFlags2 : uint32
+{
+    None                        = 0,
+    Falling                     = 0x00000001, // NYI
+    Swimming                    = 0x00000002, // NYI
+    NotMoving                   = 0x00000004, // NYI
+    Ground                      = 0x00000008, // NYI
+    Transform                   = 0x00000010, // NYI
+    Jump                        = 0x00000020,
+    ChangeSpec                  = 0x00000040, // NYI
+    AbandonVehicle              = 0x00000080, // NYI
+    StartOfEncounter            = 0x00000100, // NYI
+    EndOfEncounter              = 0x00000200, // NYI
+    Disconnect                  = 0x00000400, // NYI
+    EnteringInstance            = 0x00000800, // NYI
+    DuelEnd                     = 0x00001000, // NYI
+    LeaveArenaOrBattleground    = 0x00002000, // NYI
+    ChangeTalent                = 0x00004000, // NYI
+    ChangeGlyph                 = 0x00008000, // NYI
+    SeamlessTransfer            = 0x00010000, // NYI
+    WarModeLeave                = 0x00020000, // NYI
+    TouchingGround              = 0x00040000, // NYI
+    ChromieTime                 = 0x00080000, // NYI
+    SplineFlightOrFreeFlight    = 0x00100000, // NYI
+    ProcOrPeriodicAttacking     = 0x00200000  // NYI
 };
 
-enum SpellModOp : uint8
-{
-    SPELLMOD_DAMAGE                     =  0,
-    SPELLMOD_DURATION                   =  1,
-    SPELLMOD_THREAT                     =  2,
-    SPELLMOD_EFFECT1                    =  3,
-    SPELLMOD_CHARGES                    =  4,
-    SPELLMOD_RANGE                      =  5,
-    SPELLMOD_RADIUS                     =  6,
-    SPELLMOD_CRITICAL_CHANCE            =  7,
-    SPELLMOD_ALL_EFFECTS                =  8,
-    SPELLMOD_NOT_LOSE_CASTING_TIME      =  9,
-    SPELLMOD_CASTING_TIME               = 10,
-    SPELLMOD_COOLDOWN                   = 11,
-    SPELLMOD_EFFECT2                    = 12,
-    SPELLMOD_IGNORE_ARMOR               = 13,
-    SPELLMOD_COST                       = 14,
-    SPELLMOD_CRIT_DAMAGE_BONUS          = 15,
-    SPELLMOD_RESIST_MISS_CHANCE         = 16,
-    SPELLMOD_JUMP_TARGETS               = 17,
-    SPELLMOD_CHANCE_OF_SUCCESS          = 18,
-    SPELLMOD_ACTIVATION_TIME            = 19,
-    SPELLMOD_DAMAGE_MULTIPLIER          = 20,
-    SPELLMOD_GLOBAL_COOLDOWN            = 21,
-    SPELLMOD_DOT                        = 22,
-    SPELLMOD_EFFECT3                    = 23,
-    SPELLMOD_BONUS_MULTIPLIER           = 24,
-    // spellmod 25
-    SPELLMOD_PROC_PER_MINUTE            = 26,
-    SPELLMOD_VALUE_MULTIPLIER           = 27,
-    SPELLMOD_RESIST_DISPEL_CHANCE       = 28,
-    SPELLMOD_CRIT_DAMAGE_BONUS_2        = 29, //one not used spell
-    SPELLMOD_SPELL_COST_REFUND_ON_FAIL  = 30,
+DEFINE_ENUM_FLAG(SpellAuraInterruptFlags2);
 
-    MAX_SPELLMOD
+enum class SpellModOp : uint8
+{
+    HealingAndDamage            = 0,
+    Duration                    = 1,
+    Hate                        = 2,
+    PointsIndex0                = 3,
+    ProcCharges                 = 4,
+    Range                       = 5,
+    Radius                      = 6,
+    CritChance                  = 7,
+    Points                      = 8,
+    ResistPushback              = 9,
+    ChangeCastTime              = 10,
+    Cooldown                    = 11,
+    PointsIndex1                = 12,
+    TargetResistance            = 13,
+    PowerCost0                  = 14, // Used when SpellPowerEntry::PowerIndex == 0
+    CritDamageAndHealing        = 15,
+    HitChance                   = 16,
+    ChainTargets                = 17,
+    ProcChance                  = 18,
+    Period                      = 19,
+    ChainAmplitude              = 20,
+    StartCooldown               = 21,
+    PeriodicHealingAndDamage    = 22,
+    PointsIndex2                = 23,
+    BonusCoefficient            = 24,
+    TriggerDamage               = 25, // NYI
+    ProcFrequency               = 26,
+    Amplitude                   = 27,
+    DispelResistance            = 28,
+    CrowdDamage                 = 29, // NYI
+    PowerCostOnMiss             = 30,
+    Doses                       = 31,
+    PointsIndex3                = 32,
+    PointsIndex4                = 33,
+    PowerCost1                  = 34, // Used when SpellPowerEntry::PowerIndex == 1
+    ChainJumpDistance           = 35,
+    AreaTriggerMaxSummons       = 36, // NYI
+    MaxAuraStacks               = 37,
+    ProcCooldown                = 38,
+    PowerCost2                  = 39, // Used when SpellPowerEntry::PowerIndex == 2
 };
+
+#define MAX_SPELLMOD 40
 
 enum SpellValueMod : uint8
 {
     SPELLVALUE_BASE_POINT0,
     SPELLVALUE_BASE_POINT1,
     SPELLVALUE_BASE_POINT2,
+    SPELLVALUE_BASE_POINT3,
+    SPELLVALUE_BASE_POINT4,
+    SPELLVALUE_BASE_POINT5,
+    SPELLVALUE_BASE_POINT6,
+    SPELLVALUE_BASE_POINT7,
+    SPELLVALUE_BASE_POINT8,
+    SPELLVALUE_BASE_POINT9,
+    SPELLVALUE_BASE_POINT10,
+    SPELLVALUE_BASE_POINT11,
+    SPELLVALUE_BASE_POINT12,
+    SPELLVALUE_BASE_POINT13,
+    SPELLVALUE_BASE_POINT14,
+    SPELLVALUE_BASE_POINT15,
+    SPELLVALUE_BASE_POINT16,
+    SPELLVALUE_BASE_POINT17,
+    SPELLVALUE_BASE_POINT18,
+    SPELLVALUE_BASE_POINT19,
+    SPELLVALUE_BASE_POINT20,
+    SPELLVALUE_BASE_POINT21,
+    SPELLVALUE_BASE_POINT22,
+    SPELLVALUE_BASE_POINT23,
+    SPELLVALUE_BASE_POINT24,
+    SPELLVALUE_BASE_POINT25,
+    SPELLVALUE_BASE_POINT26,
+    SPELLVALUE_BASE_POINT27,
+    SPELLVALUE_BASE_POINT28,
+    SPELLVALUE_BASE_POINT29,
+    SPELLVALUE_BASE_POINT30,
+    SPELLVALUE_BASE_POINT31,
+    SPELLVALUE_BASE_POINT_END,
     SPELLVALUE_RADIUS_MOD,
     SPELLVALUE_MAX_TARGETS,
     SPELLVALUE_AURA_STACK,
-    SPELLVALUE_CRIT_CHANCE
+    SPELLVALUE_DURATION_PCT
 };
 
 enum SpellFacingFlags
@@ -154,44 +246,58 @@ enum TriggerCastFlags : uint32
 
     // debug flags (used with .cast triggered commands)
     TRIGGERED_IGNORE_EQUIPPED_ITEM_REQUIREMENT      = 0x00080000,   //! Will ignore equipped item requirements
+    TRIGGERED_IGNORE_TARGET_CHECK                   = 0x00100000,   //! Will ignore most target checks (mostly DBC target checks)
     TRIGGERED_FULL_DEBUG_MASK                       = 0xFFFFFFFF
 };
 
 struct TC_GAME_API CastSpellExtraArgs
 {
-    CastSpellExtraArgs() {}
+    CastSpellExtraArgs() = default;
     CastSpellExtraArgs(bool triggered) : TriggerFlags(triggered ? TRIGGERED_FULL_MASK : TRIGGERED_NONE) {}
     CastSpellExtraArgs(TriggerCastFlags trigger) : TriggerFlags(trigger) {}
     CastSpellExtraArgs(Item* item) : TriggerFlags(TRIGGERED_FULL_MASK), CastItem(item) {}
     CastSpellExtraArgs(AuraEffect const* eff) : TriggerFlags(TRIGGERED_FULL_MASK), TriggeringAura(eff) {}
     CastSpellExtraArgs(ObjectGuid const& origCaster) : TriggerFlags(TRIGGERED_FULL_MASK), OriginalCaster(origCaster) {}
     CastSpellExtraArgs(AuraEffect const* eff, ObjectGuid const& origCaster) : TriggerFlags(TRIGGERED_FULL_MASK), TriggeringAura(eff), OriginalCaster(origCaster) {}
+    CastSpellExtraArgs(Difficulty castDifficulty) : CastDifficulty(castDifficulty) {}
     CastSpellExtraArgs(SpellValueMod mod, int32 val) { SpellValueOverrides.AddMod(mod, val); }
 
     CastSpellExtraArgs& SetTriggerFlags(TriggerCastFlags flag) { TriggerFlags = flag; return *this; }
     CastSpellExtraArgs& SetCastItem(Item* item) { CastItem = item; return *this; }
     CastSpellExtraArgs& SetTriggeringAura(AuraEffect const* triggeringAura) { TriggeringAura = triggeringAura; return *this; }
     CastSpellExtraArgs& SetOriginalCaster(ObjectGuid const& guid) { OriginalCaster = guid; return *this; }
+    CastSpellExtraArgs& SetCastDifficulty(Difficulty castDifficulty) { CastDifficulty = castDifficulty; return *this; }
     CastSpellExtraArgs& AddSpellMod(SpellValueMod mod, int32 val) { SpellValueOverrides.AddMod(mod, val); return *this; }
-    CastSpellExtraArgs& AddSpellBP0(int32 val) { return AddSpellMod(SPELLVALUE_BASE_POINT0, val); } // because i don't want to type SPELLVALUE_BASE_POINT0 300 times
+    CastSpellExtraArgs& AddSpellBP0(int32 val) { SpellValueOverrides.AddBP0(val); return *this; }
 
     TriggerCastFlags TriggerFlags = TRIGGERED_NONE;
     Item* CastItem = nullptr;
     AuraEffect const* TriggeringAura = nullptr;
     ObjectGuid OriginalCaster = ObjectGuid::Empty;
+    Difficulty CastDifficulty = Difficulty(0);
     struct
     {
-        friend struct CastSpellExtraArgs;
-        friend class WorldObject;
+        public:
+        void AddMod(SpellValueMod mod, int32 val) { data.emplace_back(mod, val); }
+        void AddBP0(int32 bp0) { AddMod(SPELLVALUE_BASE_POINT0, bp0); } // because i don't want to type SPELLVALUE_BASE_POINT0 300 times
 
         private:
-            void AddMod(SpellValueMod mod, int32 val) { data.push_back({ mod, val }); }
+        auto begin() const { return data.cbegin(); }
+        auto end() const { return data.cend(); }
 
-            auto begin() const { return data.cbegin(); }
-            auto end() const { return data.cend(); }
+        std::vector<std::pair<SpellValueMod, int32>> data;
 
-            std::vector<std::pair<SpellValueMod, int32>> data;
+        friend class Unit;
     } SpellValueOverrides;
+};
+
+struct SpellCastVisual
+{
+    uint32 SpellXSpellVisualID = 0;
+    uint32 ScriptVisualID = 0;
+
+    operator UF::SpellCastVisual() const;
+    operator WorldPackets::Spells::SpellCastVisual() const;
 };
 
 #endif

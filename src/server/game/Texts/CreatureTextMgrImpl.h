@@ -20,8 +20,9 @@
 
 #include "CreatureTextMgr.h"
 #include "CellImpl.h"
-#include "Group.h"
+#include "ChatTextBuilder.h"
 #include "GridNotifiers.h"
+#include "Group.h"
 #include "World.h"
 #include "WorldSession.h"
 
@@ -29,62 +30,49 @@ template<class Builder>
 class CreatureTextLocalizer
 {
 public:
-    CreatureTextLocalizer(Builder const& builder, ChatMsg msgType) : _builder(builder), _msgType(msgType)
+    CreatureTextLocalizer(Builder const& builder, ChatMsg msgType) : _cache(), _builder(builder), _msgType(msgType)
     {
-        _packetCache.resize(TOTAL_LOCALES, nullptr);
-    }
-
-    ~CreatureTextLocalizer()
-    {
-        for (size_t i = 0; i < _packetCache.size(); ++i)
-        {
-            if (_packetCache[i])
-                delete _packetCache[i]->first;
-            delete _packetCache[i];
-        }
     }
 
     void operator()(Player const* player) const
     {
         LocaleConstant loc_idx = player->GetSession()->GetSessionDbLocaleIndex();
-        WorldPacket* messageTemplate;
-        size_t whisperGUIDpos;
+        Trinity::ChatPacketSender* sender;
 
         // create if not cached yet
-        if (!_packetCache[loc_idx])
+        if (!_cache[loc_idx])
         {
-            messageTemplate = new WorldPacket();
-            whisperGUIDpos = _builder(messageTemplate, loc_idx);
-            _packetCache[loc_idx] = new std::pair<WorldPacket*, size_t>(messageTemplate, whisperGUIDpos);
+            sender = _builder(loc_idx);
+            _cache[loc_idx].reset(sender);
         }
         else
-        {
-            messageTemplate = _packetCache[loc_idx]->first;
-            whisperGUIDpos = _packetCache[loc_idx]->second;
-        }
+            sender = _cache[loc_idx].get();
 
-        WorldPacket data(*messageTemplate);
         switch (_msgType)
         {
             case CHAT_MSG_MONSTER_WHISPER:
             case CHAT_MSG_RAID_BOSS_WHISPER:
-                data.put<uint64>(whisperGUIDpos, player->GetGUID().GetRawValue());
-                break;
+            {
+                WorldPackets::Chat::Chat message(sender->UntranslatedPacket);
+                message.SetReceiver(player, loc_idx);
+                player->SendDirectMessage(message.Write());
+                return;
+            }
             default:
                 break;
         }
 
-        player->SendDirectMessage(&data);
+        (*sender)(player);
     }
 
 private:
-    mutable std::vector<std::pair<WorldPacket*, size_t>*> _packetCache;
+    mutable std::array<std::unique_ptr<Trinity::ChatPacketSender>, TOTAL_LOCALES> _cache;
     Builder const& _builder;
     ChatMsg _msgType;
 };
 
 template<class Builder>
-void CreatureTextMgr::SendChatPacket(WorldObject* source, Builder const& builder, ChatMsg msgType, WorldObject const* whisperTarget /*= nullptr*/, CreatureTextRange range /*= TEXT_RANGE_NORMAL*/, Team team /*= TEAM_OTHER*/, bool gmOnly /*= false*/) const
+void CreatureTextMgr::SendChatPacket(WorldObject* source, Builder const& builder, ChatMsg msgType, WorldObject const* whisperTarget /*= nullptr*/, CreatureTextRange range /*= TEXT_RANGE_NORMAL*/, Team team /*= TEAM_OTHER*/, bool gmOnly /*= false*/)
 {
     if (!source)
         return;

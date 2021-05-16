@@ -190,8 +190,8 @@ Position const ToCCommonLoc[] =
     { 550.955933f, 195.338888f, 395.14000f, 0.0f },     //  4 - Left
     { 563.833008f, 195.244995f, 394.585561f, 0.0f }, //  5 - Center
     { 573.500000f, 180.500000f, 395.14f, 0.0f },               //  6 Move 0 Right
-    { 553.5f, 180.5f, 400.5521f, 0 },               //  7 Move 0 Left
-    { 573.0f, 170.0f, 400.5521f, 0 },               //  8 Move 1 Right
+    { 553.5f, 180.5f, 395.14f, 0 },               //  7 Move 0 Left
+    { 573.0f, 170.0f, 395.14f, 0 },               //  8 Move 1 Right
     { 549.5139f, 170.1389f, 394.7965f, 5.009095f }, //  9 Move 1 Left
     { 563.8f, 216.1f, 395.1f, 0 },                // 10 Behind the door
 
@@ -233,11 +233,11 @@ struct npc_barrett_toc : public ScriptedAI
     {
         if (Creature* fordring = _instance->GetCreature(DATA_FORDRING))
             fordring->AI()->DoAction(action);
-        me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+        me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
         me->GetMotionMaster()->MoveAlongSplineChain(POINT_BARRETT_DESPAWN, SPLINE_INITIAL_MOVEMENT, false);
     }
 
-    bool OnGossipSelect(Player* player, uint32 menuId, uint32 gossipListId) override
+    bool GossipSelect(Player* player, uint32 menuId, uint32 gossipListId) override
     {
         switch (menuId)
         {
@@ -337,7 +337,7 @@ struct boss_lich_king_toc : public ScriptedAI
                     _instance->SetBossState(DATA_LICH_KING, DONE);
                     break;
                 case EVENT_EMOTE_TALK:
-                    me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_TALK);
+                    me->SetEmoteState(EMOTE_STATE_TALK);
                     me->GetMap()->SetZoneWeather(AREA_TRIAL_OF_THE_CRUSADER, WEATHER_STATE_FOG, 0.0f);
                     _events.ScheduleEvent(EVENT_EMOTE_EXCLAMATION, 10s);
                     break;
@@ -390,11 +390,7 @@ struct npc_tirion_toc : public ScriptedAI
         else if (_instance->GetBossState(DATA_NORTHREND_BEASTS) != DONE)
             me->SummonCreature(NPC_BARRETT_BEASTS, BarretSpawnPosition);
         else if (_instance->GetBossState(DATA_JARAXXUS) != DONE)
-        {
             me->SummonCreature(NPC_BARRETT_JARAXXUS, BarretSpawnPosition);
-            if (_instance->GetBossState(DATA_JARAXXUS) == FAIL)
-                DoAction(ACTION_SUMMON_JARAXXUS);
-        }
         else if (_instance->GetBossState(DATA_FACTION_CRUSADERS) != DONE)
             me->SummonCreature(NPC_BARRETT_FACTION, BarretSpawnPosition);
         else if (_instance->GetBossState(DATA_TWIN_VALKIRIES) != DONE)
@@ -597,7 +593,7 @@ struct npc_tirion_toc : public ScriptedAI
                 case EVENT_LICH_KING_SAY_CHALLENGE:
                     if (Creature* lkVoice = _instance->GetCreature(DATA_LICH_KING_VOICE))
                         lkVoice->AI()->Talk(LK_VOICE_SAY_CHALLENGE);
-                    if (Creature* arthasPortal = me->SummonCreature(NPC_ARTHAS_PORTAL, ArthasPortalSpawnPosition, TEMPSUMMON_TIMED_DESPAWN, 34s))
+                    if (Creature* arthasPortal = me->SummonCreature(NPC_ARTHAS_PORTAL, ArthasPortalSpawnPosition, TEMPSUMMON_TIMED_DESPAWN, Seconds(34)))
                         arthasPortal->m_Events.AddEventAtOffset(new ArthasPortalEvent(arthasPortal), 3s);
                     _events.ScheduleEvent(EVENT_SUMMON_LICH_KING, 5s);
                     break;
@@ -643,7 +639,7 @@ struct npc_open_portal_target_toc : public ScriptedAI
         me->SetDisableGravity(true);
     }
 
-    void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
+    void SpellHit(Unit* /*caster*/, SpellInfo const* spellInfo) override
     {
         if (spellInfo->Id == SPELL_OPEN_PORTAL)
         {
@@ -672,7 +668,7 @@ struct npc_fizzlebang_toc : public ScriptedAI
     {
         me->SetReactState(REACT_PASSIVE);
         _events.Reset();
-        _events.ScheduleEvent(EVENT_START_MOVE, 1s);
+        _events.ScheduleEvent(EVENT_START_MOVE, Seconds(1));
     }
 
     void MovementInform(uint32 type, uint32 pointId) override
@@ -728,10 +724,10 @@ struct npc_fizzlebang_toc : public ScriptedAI
                         fordring->AI()->DoAction(ACTION_KILL_JARAXXUS);
                     break;
                 case EVENT_EMOTE_TALK:
-                    me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_TALK);
+                    me->SetEmoteState(EMOTE_STATE_TALK);
                     break;
                 case EVENT_REMOVE_EMOTE_TALK:
-                    me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_ONESHOT_NONE);
+                    me->SetEmoteState(EMOTE_ONESHOT_NONE);
                     break;
                 default:
                     break;

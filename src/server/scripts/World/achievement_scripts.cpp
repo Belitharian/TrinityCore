@@ -18,9 +18,8 @@
 #include "ScriptMgr.h"
 #include "BattlegroundSA.h"
 #include "BattlegroundIC.h"
-#include "Vehicle.h"
-#include "Player.h"
 #include "Creature.h"
+#include "Player.h"
 
 class achievement_resilient_victory : public AchievementCriteriaScript
 {
@@ -237,7 +236,7 @@ class achievement_tilted : public AchievementCriteriaScript
                                 player->GetAreaId() == AREA_RING_OF_HORDE_VALIANTS ||
                                 player->GetAreaId() == AREA_RING_OF_CHAMPIONS;
 
-            return checkArea && player->duel && player->duel->IsMounted;
+            return checkArea && player->duel && player->duel->isMounted;
         }
 };
 

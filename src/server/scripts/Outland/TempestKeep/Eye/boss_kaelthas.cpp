@@ -28,7 +28,6 @@ EndScriptData */
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
 #include "ScriptedCreature.h"
-#include "Spell.h"
 #include "SpellInfo.h"
 #include "SpellScript.h"
 #include "the_eye.h"
@@ -333,8 +332,8 @@ struct advisorbase_ai : public ScriptedAI
         Initialize();
 
         me->SetStandState(UNIT_STAND_STATE_STAND);
-        me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-        me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_STUNNED);
+        me->AddUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+        me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_STUNNED));
 
         //reset encounter
         if (instance->GetBossState(DATA_KAELTHAS) == IN_PROGRESS)
@@ -344,7 +343,7 @@ struct advisorbase_ai : public ScriptedAI
 
     void MoveInLineOfSight(Unit* who) override
     {
-        if (!who || _inFakeDeath || me->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE))
+        if (!who || _inFakeDeath || me->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE))
             return;
 
         ScriptedAI::MoveInLineOfSight(who);
@@ -352,20 +351,20 @@ struct advisorbase_ai : public ScriptedAI
 
     void AttackStart(Unit* who) override
     {
-        if (!who || _inFakeDeath || me->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE))
+        if (!who || _inFakeDeath || me->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE))
             return;
 
         ScriptedAI::AttackStart(who);
     }
 
-    void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
+    void SpellHit(Unit* /*caster*/, SpellInfo const* spell) override
     {
-        if (spellInfo->Id == SPELL_RESSURECTION)
+        if (spell->Id == SPELL_RESSURECTION)
         {
             _hasRessurrected = true;
-            me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_STUNNED);
+            me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_STUNNED));
             me->SetStandState(UNIT_STAND_STATE_STAND);
-            events.ScheduleEvent(EVENT_DELAYED_RESSURECTION, 2s);
+            events.ScheduleEvent(EVENT_DELAYED_RESSURECTION, 2000);
         }
     }
 
@@ -379,11 +378,12 @@ struct advisorbase_ai : public ScriptedAI
 
             me->InterruptNonMeleeSpells(false);
             me->SetHealth(0);
-            me->ClearComboPointHolders();
             me->RemoveAllAurasOnDeath();
-            me->ModifyAuraState(AURA_STATE_HEALTHLESS_20_PERCENT, false);
-            me->ModifyAuraState(AURA_STATE_HEALTHLESS_35_PERCENT, false);
-            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_STUNNED);
+            me->ModifyAuraState(AURA_STATE_WOUNDED_20_PERCENT, false);
+            me->ModifyAuraState(AURA_STATE_WOUNDED_25_PERCENT, false);
+            me->ModifyAuraState(AURA_STATE_WOUNDED_35_PERCENT, false);
+            me->ModifyAuraState(AURA_STATE_WOUND_HEALTH_20_80, false);
+            me->AddUnitFlag(UnitFlags(UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_STUNNED));
             me->SetTarget(ObjectGuid::Empty);
             me->SetStandState(UNIT_STAND_STATE_DEAD);
             me->GetMotionMaster()->Clear();
@@ -455,8 +455,8 @@ class boss_kaelthas : public CreatureScript
             {
                 Initialize();
                 DoAction(ACTION_PREPARE_ADVISORS);
-                me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_ONESHOT_NONE);
+                me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                me->SetEmoteState(EMOTE_ONESHOT_NONE);
                 me->SetDisableGravity(false);
                 me->SetTarget(ObjectGuid::Empty);
                 me->SetObjectScale(1.0f);
@@ -484,16 +484,16 @@ class boss_kaelthas : public CreatureScript
                 {
                     case ACTION_START_ENCOUNTER:
                         Talk(SAY_INTRO);
-                        me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                        me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
 
-                        _advisorGuid[ADVISOR_THALADRED] = instance->GetGuidData(DATA_THALADRED);
-                        _advisorGuid[ADVISOR_SANGUINAR] = instance->GetGuidData(DATA_SANGUINAR);
-                        _advisorGuid[ADVISOR_CAPERNIAN] = instance->GetGuidData(DATA_CAPERNIAN);
-                        _advisorGuid[ADVISOR_TELONICUS] = instance->GetGuidData(DATA_TELONICUS);
+                        _advisorGuid[ADVISOR_THALADRED] = instance->GetGuidData(DATA_THALADREDTHEDARKENER);
+                        _advisorGuid[ADVISOR_SANGUINAR] = instance->GetGuidData(DATA_LORDSANGUINAR);
+                        _advisorGuid[ADVISOR_CAPERNIAN] = instance->GetGuidData(DATA_GRANDASTROMANCERCAPERNIAN);
+                        _advisorGuid[ADVISOR_TELONICUS] = instance->GetGuidData(DATA_MASTERENGINEERTELONICUS);
 
                         _phase = PHASE_INTRO;
                         instance->SetBossState(DATA_KAELTHAS, IN_PROGRESS);
-                        events.ScheduleEvent(EVENT_START_ENCOUNTER, 23s);
+                        events.ScheduleEvent(EVENT_START_ENCOUNTER, 23000);
                         break;
                     case ACTION_PREPARE_ADVISORS:
                         for (uint8 i = 0; i < MAX_ADVISORS; ++i)
@@ -501,7 +501,7 @@ class boss_kaelthas : public CreatureScript
                             if (Creature* creature = ObjectAccessor::GetCreature(*me, _advisorGuid[i]))
                             {
                                 creature->Respawn(true);
-                                creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                                creature->AddUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
                                 creature->AI()->EnterEvadeMode();
                             }
                         }
@@ -515,28 +515,28 @@ class boss_kaelthas : public CreatureScript
                         {
                             case ADVISOR_THALADRED:
                                 Talk(SAY_INTRO_THALADRED);
-                                events.ScheduleEvent(EVENT_ACTIVE_ADVISOR, 7s);
+                                events.ScheduleEvent(EVENT_ACTIVE_ADVISOR, 7000);
                                 break;
                             case ADVISOR_SANGUINAR:
                                 Talk(SAY_INTRO_SANGUINAR);
-                                events.ScheduleEvent(EVENT_ACTIVE_ADVISOR, 12500ms);
+                                events.ScheduleEvent(EVENT_ACTIVE_ADVISOR, 12500);
                                 break;
                             case ADVISOR_CAPERNIAN:
                                 Talk(SAY_INTRO_CAPERNIAN);
-                                events.ScheduleEvent(EVENT_ACTIVE_ADVISOR, 7s);
+                                events.ScheduleEvent(EVENT_ACTIVE_ADVISOR, 7000);
                                 break;
                             case ADVISOR_TELONICUS:
                                 Talk(SAY_INTRO_TELONICUS);
-                                events.ScheduleEvent(EVENT_ACTIVE_ADVISOR, 8400ms);
+                                events.ScheduleEvent(EVENT_ACTIVE_ADVISOR, 8400);
                                 break;
                             case MAX_DEFEATED_ADVISORS:
                                 // Every advisor defeated - Phase 2 starts.
                                 Talk(SAY_PHASE2_WEAPON);
-                                events.ScheduleEvent(EVENT_SUMMON_WEAPONS, 3500ms);
+                                events.ScheduleEvent(EVENT_SUMMON_WEAPONS, 3500);
                                 break;
                             case MAX_KILLED_ADVISORS:
                                 // Every advisor killed - Phase 3 starts.
-                                events.ScheduleEvent(EVENT_ENGAGE_COMBAT, 5s);
+                                events.ScheduleEvent(EVENT_ENGAGE_COMBAT, 5000);
                                 break;
                             default:
                                 break;
@@ -545,11 +545,11 @@ class boss_kaelthas : public CreatureScript
                     case ACTION_SCHEDULE_COMBAT_EVENTS:
                         _phase = PHASE_COMBAT;
                         events.SetPhase(PHASE_COMBAT);
-                        events.ScheduleEvent(EVENT_FIREBALL, 1s, EVENT_GROUP_COMBAT, PHASE_COMBAT);
-                        events.ScheduleEvent(EVENT_ARCANE_DISRUPTION, 45s, EVENT_GROUP_COMBAT, PHASE_COMBAT);
-                        events.ScheduleEvent(EVENT_FLAMESTRIKE, 30s, EVENT_GROUP_COMBAT, PHASE_COMBAT);
-                        events.ScheduleEvent(EVENT_MIND_CONTROL, 40s, EVENT_GROUP_COMBAT, PHASE_COMBAT);
-                        events.ScheduleEvent(EVENT_SUMMON_PHOENIX, 50s, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                        events.ScheduleEvent(EVENT_FIREBALL, 1000, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                        events.ScheduleEvent(EVENT_ARCANE_DISRUPTION, 45000, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                        events.ScheduleEvent(EVENT_FLAMESTRIKE, 30000, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                        events.ScheduleEvent(EVENT_MIND_CONTROL, 40000, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                        events.ScheduleEvent(EVENT_SUMMON_PHOENIX, 50000, EVENT_GROUP_COMBAT, PHASE_COMBAT);
                         break;
                     default:
                         break;
@@ -572,9 +572,7 @@ class boss_kaelthas : public CreatureScript
                 if (_phase == PHASE_NONE)
                 {
                     DoAction(ACTION_START_ENCOUNTER);
-
-                    if (attacker)
-                        me->SetTarget(attacker->GetGUID());
+                    me->SetTarget(attacker->GetGUID());
                 }
 
                 if (!_hasFullPower && me->HealthBelowPctDamaged(50, damage))
@@ -598,38 +596,38 @@ class boss_kaelthas : public CreatureScript
                 switch (point)
                 {
                     case POINT_START_TRANSITION:
-                        events.ScheduleEvent(EVENT_TRANSITION_1, 1s);
+                        events.ScheduleEvent(EVENT_TRANSITION_1, 1000);
                         break;
                     case POINT_TRANSITION_CENTER_ASCENDING:
                         me->SetFacingTo(float(M_PI));
                         Talk(SAY_PHASE5_NUTS);
-                        me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                        me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
                         me->SetDisableGravity(true);
                         //me->SetHover(true); -- Set in sniffs, but breaks his visual.
-                        events.ScheduleEvent(EVENT_TRANSITION_2, 2s);
-                        events.ScheduleEvent(EVENT_SIZE_INCREASE, 5s);
+                        events.ScheduleEvent(EVENT_TRANSITION_2, 2000);
+                        events.ScheduleEvent(EVENT_SIZE_INCREASE, 5000);
                         break;
                     case POINT_TRANSITION_HALFWAY_ASCENDING:
                         DoCast(me, SPELL_NETHER_BEAM_VISUAL3, true);
-                        events.ScheduleEvent(EVENT_TRANSITION_3, 1s);
+                        events.ScheduleEvent(EVENT_TRANSITION_3, 1000);
                         break;
                     case POINT_TRANSITION_TOP:
-                        events.ScheduleEvent(EVENT_EXPLODE, 10s);
+                        events.ScheduleEvent(EVENT_EXPLODE, 10000);
                         break;
                     case POINT_TRANSITION_HALFWAY_DESCENDING:
-                        events.ScheduleEvent(EVENT_TRANSITION_5, 2s);
+                        events.ScheduleEvent(EVENT_TRANSITION_5, 2000);
                         break;
                     case POINT_END_TRANSITION:
                         me->SetReactState(REACT_AGGRESSIVE);
                         me->InterruptNonMeleeSpells(false);
-                        me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                        me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
                         me->RemoveAurasDueToSpell(SPELL_FULLPOWER);
 
-                        if (Unit* target = SelectTarget(SelectTargetMethod::MaxThreat, 0))
+                        if (Unit* target = SelectTarget(SELECT_TARGET_MAXTHREAT, 0))
                             AttackStart(target);
 
                         DoAction(ACTION_SCHEDULE_COMBAT_EVENTS);
-                        events.ScheduleEvent(EVENT_GRAVITY_LAPSE, 10s, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                        events.ScheduleEvent(EVENT_GRAVITY_LAPSE, 10000, EVENT_GROUP_COMBAT, PHASE_COMBAT);
                         break;
                     default:
                         break;
@@ -646,17 +644,17 @@ class boss_kaelthas : public CreatureScript
                 // if not phoenix, then it's one of the 7 weapons
                 if (summoned->GetEntry() != NPC_PHOENIX)
                 {
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                         summoned->AI()->AttackStart(target);
 
                     summons.Summon(summoned);
                 }
             }
 
-            void JustDied(Unit* /*killer*/) override
+            void JustDied(Unit* killer) override
             {
                 Talk(SAY_DEATH);
-                _JustDied();
+                BossAI::JustDied(killer);
             }
 
             void UpdateAI(uint32 diff) override
@@ -676,15 +674,15 @@ class boss_kaelthas : public CreatureScript
                     switch (eventId)
                     {
                         case EVENT_START_ENCOUNTER:
-                            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PACIFIED);
+                            me->AddUnitFlag(UNIT_FLAG_PACIFIED);
                             DoAction(ACTION_ACTIVE_ADVISOR);
                             break;
                         case EVENT_ACTIVE_ADVISOR:
                             if (Creature* advisor = ObjectAccessor::GetCreature(*me, _advisorGuid[_advisorCounter]))
                             {
-                                advisor->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                                advisor->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
 
-                                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                                     advisor->AI()->AttackStart(target);
                             }
                             ++_advisorCounter;
@@ -698,7 +696,7 @@ class boss_kaelthas : public CreatureScript
                             for (uint32 i = 0; i < uiMaxWeapon; ++i)
                                 DoCast(me, m_auiSpellSummonWeapon[i], true);
 
-                            events.ScheduleEvent(EVENT_REVIVE_ADVISORS, 120s);
+                            events.ScheduleEvent(EVENT_REVIVE_ADVISORS, 120000);
                             break;
                         }
                         case EVENT_REVIVE_ADVISORS:
@@ -712,77 +710,77 @@ class boss_kaelthas : public CreatureScript
                             // Sometimes people can collect Aggro in Phase 1-3. Reset threat before releasing Kael.
                             ResetThreatList();
 
-                            me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_PACIFIED);
+                            me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_PACIFIED));
 
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                                 AttackStart(target);
 
                             DoAction(ACTION_SCHEDULE_COMBAT_EVENTS);
-                            events.ScheduleEvent(EVENT_PYROBLAST, 60s, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                            events.ScheduleEvent(EVENT_PYROBLAST, 60000, EVENT_GROUP_COMBAT, PHASE_COMBAT);
                             break;
                         case EVENT_FIREBALL:
                             DoCastVictim(SPELL_FIREBALL);
-                            events.ScheduleEvent(EVENT_FIREBALL, 2500ms, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                            events.ScheduleEvent(EVENT_FIREBALL, 2500, EVENT_GROUP_COMBAT, PHASE_COMBAT);
                             break;
                         case EVENT_ARCANE_DISRUPTION:
                             DoCastVictim(SPELL_ARCANE_DISRUPTION, true);
-                            events.ScheduleEvent(EVENT_ARCANE_DISRUPTION, 60s, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                            events.ScheduleEvent(EVENT_ARCANE_DISRUPTION, 60000, EVENT_GROUP_COMBAT, PHASE_COMBAT);
                             break;
                         case EVENT_FLAMESTRIKE:
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                                 DoCast(target, SPELL_FLAME_STRIKE);
 
-                            events.ScheduleEvent(EVENT_FLAMESTRIKE, 30s, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                            events.ScheduleEvent(EVENT_FLAMESTRIKE, 30000, EVENT_GROUP_COMBAT, PHASE_COMBAT);
                             break;
                         case EVENT_MIND_CONTROL:
                             Talk(SAY_MIND_CONTROL);
-                            DoCastAOE(SPELL_MIND_CONTROL, { SPELLVALUE_MAX_TARGETS, 3 });
-                            events.ScheduleEvent(EVENT_MIND_CONTROL, 60s, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                            DoCastAOE(SPELL_MIND_CONTROL, true);
+                            events.ScheduleEvent(EVENT_MIND_CONTROL, 60000, EVENT_GROUP_COMBAT, PHASE_COMBAT);
                             break;
                         case EVENT_SUMMON_PHOENIX:
                             DoCast(me, SPELL_PHOENIX_ANIMATION);
                             Talk(SAY_SUMMON_PHOENIX);
-                            events.ScheduleEvent(EVENT_SUMMON_PHOENIX, 45s, 60s, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                            events.ScheduleEvent(EVENT_SUMMON_PHOENIX, urand(45000, 60000), EVENT_GROUP_COMBAT, PHASE_COMBAT);
                             break;
                         case EVENT_END_TRANSITION:
-                            me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_ONESHOT_NONE);
+                            me->SetEmoteState(EMOTE_ONESHOT_NONE);
                             DoCast(SPELL_FULLPOWER);
-                            events.ScheduleEvent(EVENT_TRANSITION_4, 2s);
+                            events.ScheduleEvent(EVENT_TRANSITION_4, 2000);
                             break;
                         case EVENT_PYROBLAST:
                             _pyrosCast = 0;
                             Talk(EMOTE_PYROBLAST);
                             DoCast(me, SPELL_SHOCK_BARRIER);
-                            events.DelayEvents(10s, EVENT_GROUP_COMBAT);
-                            events.ScheduleEvent(EVENT_PYROBLAST_CAST, 1s, EVENT_GROUP_SPECIAL, PHASE_COMBAT);
+                            events.DelayEvents(10000, EVENT_GROUP_COMBAT);
+                            events.ScheduleEvent(EVENT_PYROBLAST_CAST, 1000, EVENT_GROUP_SPECIAL, PHASE_COMBAT);
                             break;
                         case EVENT_PYROBLAST_CAST:
                             if (_pyrosCast < 3)
                             {
                                 DoCastVictim(SPELL_PYROBLAST);
-                                events.ScheduleEvent(EVENT_PYROBLAST_CAST, 3s);
+                                events.ScheduleEvent(EVENT_PYROBLAST_CAST, 3000);
                                 _pyrosCast++;
                             }
                             else
-                                events.ScheduleEvent(EVENT_PYROBLAST, 60s, EVENT_GROUP_COMBAT, PHASE_COMBAT);
+                                events.ScheduleEvent(EVENT_PYROBLAST, 60000, EVENT_GROUP_COMBAT, PHASE_COMBAT);
                             break;
                         case EVENT_GRAVITY_LAPSE:
                             Talk(SAY_GRAVITY_LAPSE);
                             DoCastAOE(SPELL_GRAVITY_LAPSE);
                             DoCast(me, SPELL_NETHER_VAPOR);
-                            events.DelayEvents(24s, EVENT_GROUP_COMBAT);
-                            events.ScheduleEvent(EVENT_NETHER_BEAM, 3s, EVENT_GROUP_SPECIAL, PHASE_COMBAT);
-                            events.ScheduleEvent(EVENT_SHOCK_BARRIER, 1s, EVENT_GROUP_SPECIAL, PHASE_COMBAT);
-                            events.ScheduleEvent(EVENT_GRAVITY_LAPSE, 30s, EVENT_GROUP_SPECIAL, PHASE_COMBAT);
+                            events.DelayEvents(24000, EVENT_GROUP_COMBAT);
+                            events.ScheduleEvent(EVENT_NETHER_BEAM, 3000, EVENT_GROUP_SPECIAL, PHASE_COMBAT);
+                            events.ScheduleEvent(EVENT_SHOCK_BARRIER, 1000, EVENT_GROUP_SPECIAL, PHASE_COMBAT);
+                            events.ScheduleEvent(EVENT_GRAVITY_LAPSE, 30000, EVENT_GROUP_SPECIAL, PHASE_COMBAT);
                             break;
                         case EVENT_NETHER_BEAM:
                             if (_netherbeamsCast <= 8)
                             {
-                                if (Unit* unit = SelectTarget(SelectTargetMethod::Random, 0))
+                                if (Unit* unit = SelectTarget(SELECT_TARGET_RANDOM, 0))
                                     DoCast(unit, SPELL_NETHER_BEAM);
 
                                 _netherbeamsCast++;
-                                events.ScheduleEvent(EVENT_NETHER_BEAM, 3s);
+                                events.ScheduleEvent(EVENT_NETHER_BEAM, 3000);
                             }
                             else
                                 _netherbeamsCast = 0;
@@ -810,7 +808,7 @@ class boss_kaelthas : public CreatureScript
                             me->RemoveAurasDueToSpell(SPELL_NETHER_BEAM_VISUAL3);
                             DoCast(me, SPELL_KAEL_EXPLODES3, true);
                             DoCast(me, SPELL_KAEL_STUNNED); // Core doesn't handle the emote properly while flying.
-                            me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_DROWNED);
+                            me->SetEmoteState(EMOTE_STATE_DROWNED);
 
                             // Destroy the surrounding environment.
                             if (GameObject* statue = instance->GetGameObject(DATA_KAEL_STATUE_LEFT))
@@ -822,22 +820,22 @@ class boss_kaelthas : public CreatureScript
                             if (GameObject* window = instance->GetGameObject(DATA_TEMPEST_BRIDGE_WINDOW))
                                 window->UseDoorOrButton();
 
-                            events.ScheduleEvent(EVENT_END_TRANSITION, 10s);
+                            events.ScheduleEvent(EVENT_END_TRANSITION, 10000);
                             break;
                         case EVENT_SIZE_INCREASE:
                             switch (_scaleStage)
                             {
                                 case 0:
                                     me->SetObjectScale(1.4f);
-                                    events.ScheduleEvent(EVENT_SIZE_INCREASE, 5s);
+                                    events.ScheduleEvent(EVENT_SIZE_INCREASE, 5000);
                                     break;
                                 case 1:
                                     me->SetObjectScale(1.8f);
-                                    events.ScheduleEvent(EVENT_SIZE_INCREASE, 3s);
+                                    events.ScheduleEvent(EVENT_SIZE_INCREASE, 3000);
                                     break;
                                 case 2:
                                     me->SetObjectScale(2.0f);
-                                    events.ScheduleEvent(EVENT_SIZE_INCREASE, 1s);
+                                    events.ScheduleEvent(EVENT_SIZE_INCREASE, 1000);
                                     break;
                                 case 3:
                                     me->SetObjectScale(2.2f);
@@ -931,7 +929,7 @@ class boss_thaladred_the_darkener : public CreatureScript
                 //Gaze_Timer
                 if (Gaze_Timer <= diff)
                 {
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                     {
                         ResetThreatList();
                         AddThreat(target, 5000000.0f);
@@ -1088,7 +1086,7 @@ class boss_grand_astromancer_capernian : public CreatureScript
 
             void AttackStart(Unit* who) override
             {
-                if (!who || me->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE))
+                if (!who || me->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE))
                     return;
 
                 if (me->Attack(who, true))
@@ -1125,7 +1123,7 @@ class boss_grand_astromancer_capernian : public CreatureScript
                 //Conflagration_Timer
                 if (Conflagration_Timer <= diff)
                 {
-                    Unit* target = SelectTarget(SelectTargetMethod::Random, 0);
+                    Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0);
 
                     if (target && me->IsWithinDistInMap(target, 30))
                         DoCast(target, SPELL_CONFLAGRATION);
@@ -1232,7 +1230,7 @@ class boss_master_engineer_telonicus : public CreatureScript
                 //RemoteToy_Timer
                 if (RemoteToy_Timer <= diff)
                 {
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                         DoCast(target, SPELL_REMOTE_TOY);
 
                     RemoteToy_Timer = 10000 + rand32() % 5000;
@@ -1278,6 +1276,9 @@ class npc_kael_flamestrike : public CreatureScript
             void Reset() override
             {
                 Initialize();
+
+                me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                me->SetFaction(FACTION_MONSTER);
             }
 
             void MoveInLineOfSight(Unit* /*who*/) override { }
@@ -1347,7 +1348,7 @@ class npc_phoenix_tk : public CreatureScript
             {
                 //is this spell in use anylonger?
                 //DoCast(me, SPELL_EMBER_BLAST, true);
-                me->SummonCreature(NPC_PHOENIX_EGG, me->GetPositionX(), me->GetPositionY(), me->GetPositionZ(), me->GetOrientation(), TEMPSUMMON_TIMED_DESPAWN, 16s);
+                me->SummonCreature(NPC_PHOENIX_EGG, me->GetPositionX(), me->GetPositionY(), me->GetPositionZ(), me->GetOrientation(), TEMPSUMMON_TIMED_DESPAWN, 16000);
             }
 
             void UpdateAI(uint32 diff) override
@@ -1428,7 +1429,7 @@ class npc_phoenix_egg_tk : public CreatureScript
 
                 if (Rebirth_Timer <= diff)
                 {
-                    me->SummonCreature(NPC_PHOENIX, me->GetPositionX(), me->GetPositionY(), me->GetPositionZ(), me->GetOrientation(), TEMPSUMMON_CORPSE_DESPAWN, 5s);
+                    me->SummonCreature(NPC_PHOENIX, me->GetPositionX(), me->GetPositionY(), me->GetPositionZ(), me->GetOrientation(), TEMPSUMMON_CORPSE_DESPAWN, 5000);
                     Rebirth_Timer = 0;
                 }
                 else

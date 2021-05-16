@@ -16,8 +16,8 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "mana_tombs.h"
+#include "ScriptedCreature.h"
 
 enum Texts
 {
@@ -38,8 +38,6 @@ enum Events
     EVENT_VOID_BLAST = 1,
     EVENT_DARK_SHELL
 };
-
-uint32 constexpr DARK_SHELL_EVENT_GROUP = 1;
 
 class boss_pandemonius : public CreatureScript
 {
@@ -69,12 +67,12 @@ public:
             Talk(SAY_KILL);
         }
 
-        void JustEngagedWith(Unit* who) override
+        void JustEngagedWith(Unit* /*who*/) override
         {
-            BossAI::JustEngagedWith(who);
+            _JustEngagedWith();
             Talk(SAY_AGGRO);
-            events.ScheduleEvent(EVENT_DARK_SHELL, 20s, DARK_SHELL_EVENT_GROUP);
-            events.ScheduleEvent(EVENT_VOID_BLAST, 8s, 23s);
+            events.ScheduleEvent(EVENT_DARK_SHELL, 20000);
+            events.ScheduleEvent(EVENT_VOID_BLAST, urand(8000, 23000));
         }
 
         void ExecuteEvent(uint32 eventId) override
@@ -82,7 +80,7 @@ public:
             switch (eventId)
             {
                 case EVENT_VOID_BLAST:
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100.0f, true))
                     {
                         DoCast(target, SPELL_VOID_BLAST);
                         ++VoidBlastCounter;
@@ -91,12 +89,12 @@ public:
                     if (VoidBlastCounter == 5)
                     {
                         VoidBlastCounter = 0;
-                        events.ScheduleEvent(EVENT_VOID_BLAST, 15s, 25s);
+                        events.ScheduleEvent(EVENT_VOID_BLAST, urand(15000, 25000));
                     }
                     else
                     {
-                        events.ScheduleEvent(EVENT_VOID_BLAST, 500ms);
-                        events.DelayEvents(500ms, DARK_SHELL_EVENT_GROUP);
+                        events.ScheduleEvent(EVENT_VOID_BLAST, 500);
+                        events.DelayEvents(EVENT_DARK_SHELL, 500);
                     }
                     break;
                 case EVENT_DARK_SHELL:
@@ -104,7 +102,7 @@ public:
                         me->InterruptNonMeleeSpells(true);
                     Talk(EMOTE_DARK_SHELL);
                     DoCast(me, SPELL_DARK_SHELL);
-                    events.ScheduleEvent(EVENT_DARK_SHELL, 20s, DARK_SHELL_EVENT_GROUP);
+                    events.ScheduleEvent(EVENT_DARK_SHELL, 20000);
                     break;
                 default:
                     break;

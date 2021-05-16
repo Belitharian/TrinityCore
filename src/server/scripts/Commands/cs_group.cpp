@@ -17,24 +17,20 @@
 
 #include "ScriptMgr.h"
 #include "CharacterCache.h"
-#include "ChatCommandTags.h"
 #include "Chat.h"
 #include "DatabaseEnv.h"
-#include "DBCStores.h"
+#include "DB2Stores.h"
 #include "GroupMgr.h"
 #include "Language.h"
 #include "LFG.h"
 #include "Map.h"
+#include "MotionMaster.h"
 #include "ObjectAccessor.h"
+#include "ObjectMgr.h"
+#include "PhasingHandler.h"
 #include "Player.h"
 #include "RBAC.h"
 #include "WorldSession.h"
-
-#if TRINITY_COMPILER == TRINITY_COMPILER_GNU
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
-
-using namespace Trinity::ChatCommands;
 
 class group_commandscript : public CommandScript
 {
@@ -48,20 +44,18 @@ public:
             { "leader",     rbac::RBAC_PERM_COMMAND_GROUP_LEADER,     false, &HandleGroupLeaderCommand,     "" },
             { "assistant",  rbac::RBAC_PERM_COMMAND_GROUP_ASSISTANT,  false, &HandleGroupAssistantCommand,  "" },
             { "maintank",   rbac::RBAC_PERM_COMMAND_GROUP_MAINTANK,   false, &HandleGroupMainTankCommand,   "" },
-            { "mainassist", rbac::RBAC_PERM_COMMAND_GROUP_MAINASSIST, false, &HandleGroupMainAssistCommand, "" }
+            { "mainassist", rbac::RBAC_PERM_COMMAND_GROUP_MAINASSIST, false, &HandleGroupMainAssistCommand, "" },
         };
 
         static std::vector<ChatCommand> groupCommandTable =
         {
-            { "set",     rbac::RBAC_PERM_COMMAND_GROUP_SET,       false, nullptr,                    "", groupSetCommandTable },
-            { "leader",  rbac::RBAC_PERM_COMMAND_GROUP_LEADER,    false, &HandleGroupLeaderCommand,  "" },
-            { "disband", rbac::RBAC_PERM_COMMAND_GROUP_DISBAND,   false, &HandleGroupDisbandCommand, "" },
-            { "remove",  rbac::RBAC_PERM_COMMAND_GROUP_REMOVE,    false, &HandleGroupRemoveCommand,  "" },
-            { "join",    rbac::RBAC_PERM_COMMAND_GROUP_JOIN,      false, &HandleGroupJoinCommand,    "" },
-            { "list",    rbac::RBAC_PERM_COMMAND_GROUP_LIST,      false, &HandleGroupListCommand,    "" },
-            { "summon",  rbac::RBAC_PERM_COMMAND_GROUP_SUMMON,    false, &HandleGroupSummonCommand,  "" },
-            { "revive",  rbac::RBAC_PERM_COMMAND_REVIVE,          true,  &HandleGroupReviveCommand,  "" },
-            { "level",   rbac::RBAC_PERM_COMMAND_CHARACTER_LEVEL, true,  &HandleGroupLevelCommand,   "" }
+            { "set",     rbac::RBAC_PERM_COMMAND_GROUP_SET,     false, nullptr,                    "", groupSetCommandTable },
+            { "leader",  rbac::RBAC_PERM_COMMAND_GROUP_LEADER,  false, &HandleGroupLeaderCommand,  "" },
+            { "disband", rbac::RBAC_PERM_COMMAND_GROUP_DISBAND, false, &HandleGroupDisbandCommand, "" },
+            { "remove",  rbac::RBAC_PERM_COMMAND_GROUP_REMOVE,  false, &HandleGroupRemoveCommand,  "" },
+            { "join",    rbac::RBAC_PERM_COMMAND_GROUP_JOIN,    false, &HandleGroupJoinCommand,    "" },
+            { "list",    rbac::RBAC_PERM_COMMAND_GROUP_LIST,    false, &HandleGroupListCommand,    "" },
+            { "summon",  rbac::RBAC_PERM_COMMAND_GROUP_SUMMON,  false, &HandleGroupSummonCommand,  "" },
         };
 
         static std::vector<ChatCommand> commandTable =
@@ -69,74 +63,6 @@ public:
             { "group", rbac::RBAC_PERM_COMMAND_GROUP, false, nullptr, "", groupCommandTable },
         };
         return commandTable;
-    }
-
-    static bool HandleGroupLevelCommand(ChatHandler* handler, Optional<PlayerIdentifier> player, int16 level)
-    {
-        if (level < 1)
-            return false;
-        if (!player)
-            player = PlayerIdentifier::FromTargetOrSelf(handler);
-        if (!player)
-            return false;
-
-        Player* target = player->GetConnectedPlayer();
-        if (!target)
-            return false;
-
-        Group* groupTarget = target->GetGroup();
-        if (!groupTarget)
-            return false;
-
-        for (GroupReference* it = groupTarget->GetFirstMember(); it != nullptr; it = it->next())
-        {
-            target = it->GetSource();
-            if (target)
-            {
-                uint8 oldlevel = static_cast<uint8>(target->GetLevel());
-
-                if (level != oldlevel)
-                {
-                    target->SetLevel(static_cast<uint8>(level));
-                    target->InitTalentForLevel();
-                    target->SetXP(0);
-                }
-
-                if (handler->needReportToTarget(target))
-                {
-                    if (oldlevel < static_cast<uint8>(level))
-                        ChatHandler(target->GetSession()).PSendSysMessage(LANG_YOURS_LEVEL_UP, handler->GetNameLink().c_str(), level);
-                    else                                                // if (oldlevel > newlevel)
-                        ChatHandler(target->GetSession()).PSendSysMessage(LANG_YOURS_LEVEL_DOWN, handler->GetNameLink().c_str(), level);
-                }
-            }
-        }
-        return true;
-    }
-
-    static bool HandleGroupReviveCommand(ChatHandler* handler, char const* args)
-    {
-        Player* playerTarget;
-        ObjectGuid playerTargetGuid;
-        if (!handler->extractPlayerTarget((char*)args, &playerTarget, &playerTargetGuid))
-            return false;
-
-        Group* groupTarget = playerTarget->GetGroup();
-        if (!groupTarget)
-            return false;
-
-        for (GroupReference* it = groupTarget->GetFirstMember(); it != nullptr; it = it->next())
-        {
-            Player* target = it->GetSource();
-            if (target)
-            {
-                target->ResurrectPlayer(target->GetSession()->HasPermission(rbac::RBAC_PERM_RESURRECT_WITH_FULL_HPS) ? 1.0f : 0.5f);
-                target->SpawnCorpseBones();
-                target->SaveToDB();
-            }
-        }
-
-        return true;
     }
 
     // Summon group of player
@@ -218,9 +144,13 @@ public:
 
             // stop flight if need
             if (player->IsInFlight())
-                player->FinishTaxiFlight();
+            {
+                player->GetMotionMaster()->MovementExpired();
+                player->CleanupAfterTaxiFlight();
+            }
+            // save only in non-flight case
             else
-                player->SaveRecallPosition(); // save only in non-flight case
+                player->SaveRecallPosition();
 
             // before GM
             float x, y, z;
@@ -257,7 +187,7 @@ public:
         return true;
     }
 
-    static bool GroupFlagCommand(ChatHandler* handler, char const* args, GroupMemberFlags flag, char const* what)
+    static bool GroupFlagCommand(ChatHandler* handler, char const* args, GroupMemberFlags flag, const char* what)
     {
         Player* player = nullptr;
         Group* group = nullptr;
@@ -409,14 +339,13 @@ public:
     {
         // Get ALL the variables!
         Player* playerTarget;
-        uint32 phase = 0;
         ObjectGuid guidTarget;
         std::string nameTarget;
         std::string zoneName;
         char const* onlineState = "";
 
         // Parse the guid to uint32...
-        ObjectGuid parseGUID(HighGuid::Player, uint32(atoul(args)));
+        ObjectGuid parseGUID = ObjectGuid::Create<HighGuid::Player>(strtoull(args, nullptr, 10));
 
         // ... and try to extract a player out of it.
         if (sCharacterCache->GetCharacterNameByGuid(parseGUID, nameTarget))
@@ -439,7 +368,7 @@ public:
         if (!groupTarget)
         {
             CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_GROUP_MEMBER);
-            stmt->setUInt32(0, guidTarget.GetCounter());
+            stmt->setUInt64(0, guidTarget.GetCounter());
             PreparedQueryResult resultGroup = CharacterDatabase.Query(stmt);
             if (resultGroup)
                 groupTarget = sGroupMgr->GetGroupByDbStoreId((*resultGroup)[0].GetUInt32());
@@ -457,7 +386,7 @@ public:
         Group::MemberSlotList const& members = groupTarget->GetMemberSlots();
 
         // To avoid a cluster fuck, namely trying multiple queries to simply get a group member count...
-        handler->PSendSysMessage(LANG_GROUP_TYPE, (groupTarget->isRaidGroup() ? "raid" : "party"), members.size());
+        handler->PSendSysMessage(LANG_GROUP_TYPE, (groupTarget->isRaidGroup() ? "raid" : "party"), std::to_string(members.size()).c_str());
         // ... we simply move the group type and member count print after retrieving the slots and simply output it's size.
 
         // While rather dirty codestyle-wise, it saves space (if only a little). For each member, we look several informations up.
@@ -490,19 +419,19 @@ public:
 
             // Check if iterator is online. If is...
             Player* p = ObjectAccessor::FindPlayer((*itr).guid);
+            std::string phases;
             if (p)
             {
                 // ... than, it prints information like "is online", where he is, etc...
                 onlineState = "online";
-                phase = (!p->IsGameMaster() ? p->GetPhaseMask() : -1);
-                uint32 locale = handler->GetSessionDbcLocale();
+                phases = PhasingHandler::FormatPhases(p->GetPhaseShift());
 
                 AreaTableEntry const* area = sAreaTableStore.LookupEntry(p->GetAreaId());
                 if (area)
                 {
                     AreaTableEntry const* zone = sAreaTableStore.LookupEntry(area->ParentAreaID);
                     if (zone)
-                        zoneName = zone->AreaName[locale];
+                        zoneName = zone->AreaName[handler->GetSessionDbcLocale()];
                 }
             }
             else
@@ -510,12 +439,11 @@ public:
                 // ... else, everything is set to offline or neutral values.
                 zoneName    = "<ERROR>";
                 onlineState = "Offline";
-                phase       = 0;
             }
 
             // Now we can print those informations for every single member of each group!
             handler->PSendSysMessage(LANG_GROUP_PLAYER_NAME_GUID, slot.name.c_str(), onlineState,
-                zoneName.c_str(), phase, slot.guid.GetCounter(), flags.c_str(),
+                zoneName.c_str(), phases.c_str(), slot.guid.ToString().c_str(), flags.c_str(),
                 lfg::GetRolesString(slot.roles).c_str());
         }
 

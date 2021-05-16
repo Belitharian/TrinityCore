@@ -84,6 +84,10 @@ WaypointMgr* WaypointMgr::instance()
 
 void WaypointMgr::ReloadPath(uint32 id)
 {
+    auto itr = _waypointStore.find(id);
+    if (itr != _waypointStore.end())
+        _waypointStore.erase(itr);
+
     WorldDatabasePreparedStatement* stmt = WorldDatabase.GetPreparedStatement(WORLD_SEL_WAYPOINT_DATA_BY_ID);
 
     stmt->setUInt32(0, id);
@@ -127,9 +131,7 @@ void WaypointMgr::ReloadPath(uint32 id)
     }
     while (result->NextRow());
 
-    WaypointPath& path = _waypointStore[id];
-    path.id = id;
-    path.nodes = std::move(values);
+    _waypointStore[id] = WaypointPath(id, std::move(values));
 }
 
 WaypointPath const* WaypointMgr::GetPath(uint32 id) const

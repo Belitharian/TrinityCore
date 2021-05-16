@@ -56,22 +56,21 @@ void GuardAI::EnterEvadeMode(EvadeReason /*why*/)
     {
         me->GetMotionMaster()->MoveIdle();
         me->CombatStop(true);
-        EngagementOver();
+        me->GetThreatManager().ClearAllThreat();
         return;
     }
 
-    TC_LOG_TRACE("scripts.ai", "GuardAI::EnterEvadeMode: %s enters evade mode.", me->GetGUID().ToString().c_str());
+    TC_LOG_DEBUG("entities.unit", "Guard entry: %u enters evade mode.", me->GetEntry());
 
     me->RemoveAllAuras();
+    me->GetThreatManager().ClearAllThreat();
     me->CombatStop(true);
-    EngagementOver();
 
     me->GetMotionMaster()->MoveTargetedHome();
 }
 
 void GuardAI::JustDied(Unit* killer)
 {
-    if (killer)
-        if (Player* player = killer->GetCharmerOrOwnerPlayerOrPlayerItself())
-            me->SendZoneUnderAttackMessage(player);
+    if (Player* player = killer->GetCharmerOrOwnerPlayerOrPlayerItself())
+        me->SendZoneUnderAttackMessage(player);
 }

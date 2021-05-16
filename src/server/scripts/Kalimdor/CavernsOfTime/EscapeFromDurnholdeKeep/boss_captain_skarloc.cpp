@@ -24,8 +24,8 @@ EndScriptData */
 
 #include "ScriptMgr.h"
 #include "InstanceScript.h"
-#include "ScriptedCreature.h"
 #include "old_hillsbrad.h"
+#include "ScriptedCreature.h"
 
 /*######################
 # boss_captain_skarloc #

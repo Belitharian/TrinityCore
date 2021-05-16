@@ -16,28 +16,55 @@
  */
 
 #include "ChatTextBuilder.h"
-#include "Chat.h"
+#include "CreatureTextMgr.h"
+#include "DB2Stores.h"
+#include "LanguageMgr.h"
 #include "ObjectMgr.h"
+#include "Player.h"
+#include "WorldSession.h"
 #include <cstdarg>
 
-void Trinity::BroadcastTextBuilder::operator()(WorldPacket& data, LocaleConstant locale) const
+namespace Trinity
 {
-    BroadcastText const* bct = sObjectMgr->GetBroadcastText(_textId);
-    ChatHandler::BuildChatPacket(data, _msgType, bct ? Language(bct->LanguageID) : LANG_UNIVERSAL, _source, _target, bct ? bct->GetText(locale, _gender) : "", _achievementId, "", locale);
+ChatPacketSender::ChatPacketSender(ChatMsg chatType, ::Language language, WorldObject const* sender, WorldObject const* receiver,
+    std::string message, uint32 achievementId /*= 0*/, LocaleConstant locale /*= LOCALE_enUS*/)
+    : Type(chatType), Language(language), Sender(sender), Receiver(receiver), Text(std::move(message)), AchievementId(achievementId), Locale(locale)
+{
+    UntranslatedPacket.Initialize(Type, Language, Sender, Receiver, Text, AchievementId, "", Locale);
+    UntranslatedPacket.Write();
 }
 
-size_t Trinity::BroadcastTextBuilder::operator()(WorldPacket* data, LocaleConstant locale) const
+void ChatPacketSender::operator()(Player const* player) const
 {
-    BroadcastText const* bct = sObjectMgr->GetBroadcastText(_textId);
-    return ChatHandler::BuildChatPacket(*data, _msgType, bct ? Language(bct->LanguageID) : LANG_UNIVERSAL, _source, _target, bct ? bct->GetText(locale, _gender) : "", _achievementId, "", locale);
+    if (Language == LANG_UNIVERSAL || Language == LANG_ADDON || Language == LANG_ADDON_LOGGED || player->CanUnderstandLanguage(Language))
+    {
+        player->SendDirectMessage(UntranslatedPacket.GetRawPacket());
+        return;
+    }
+
+    if (!TranslatedPacket)
+    {
+        TranslatedPacket.emplace();
+        TranslatedPacket->Initialize(Type, Language, Sender, Receiver, sLanguageMgr->Translate(Text, Language, player->GetSession()->GetSessionDbcLocale()),
+            AchievementId, "", Locale);
+        TranslatedPacket->Write();
+    }
+
+    player->SendDirectMessage(TranslatedPacket->GetRawPacket());
 }
 
-void Trinity::CustomChatTextBuilder::operator()(WorldPacket& data, LocaleConstant locale) const
+ChatPacketSender* BroadcastTextBuilder::operator()(LocaleConstant locale) const
 {
-    ChatHandler::BuildChatPacket(data, _msgType, _language, _source, _target, _text, 0, "", locale);
+    BroadcastTextEntry const* bct = sBroadcastTextStore.LookupEntry(_textId);
+    return new ChatPacketSender(_msgType, bct ? Language(bct->LanguageID) : LANG_UNIVERSAL, _source, _target, bct ? DB2Manager::GetBroadcastTextValue(bct, locale, _gender) : "", _achievementId, locale);
 }
 
-void Trinity::TrinityStringChatBuilder::operator()(WorldPacket& data, LocaleConstant locale) const
+ChatPacketSender* CustomChatTextBuilder::operator()(LocaleConstant locale) const
+{
+    return new ChatPacketSender(_msgType, _language, _source, _target, _text, 0, locale);
+}
+
+ChatPacketSender* TrinityStringChatBuilder::operator()(LocaleConstant locale) const
 {
     char const* text = sObjectMgr->GetTrinityString(_textId, locale);
 
@@ -52,8 +79,14 @@ void Trinity::TrinityStringChatBuilder::operator()(WorldPacket& data, LocaleCons
         vsnprintf(strBuffer, BufferSize, text, ap);
         va_end(ap);
 
-        ChatHandler::BuildChatPacket(data, _msgType, LANG_UNIVERSAL, _source, _target, strBuffer, 0, "", locale);
+        return new ChatPacketSender(_msgType, LANG_UNIVERSAL, _source, _target, strBuffer, 0, locale);
     }
-    else
-        ChatHandler::BuildChatPacket(data, _msgType, LANG_UNIVERSAL, _source, _target, text, 0, "", locale);
+
+    return new ChatPacketSender(_msgType, LANG_UNIVERSAL, _source, _target, text, 0, locale);
+}
+
+ChatPacketSender* CreatureTextTextBuilder::operator()(LocaleConstant locale) const
+{
+    return new ChatPacketSender(_msgType, _language, _talker, _target, sCreatureTextMgr->GetLocalizedChatString(_source->GetEntry(), _gender, _textGroup, _textId, locale), 0, locale);
+}
 }

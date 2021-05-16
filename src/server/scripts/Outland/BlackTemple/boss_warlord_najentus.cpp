@@ -19,6 +19,7 @@
 #include "black_temple.h"
 #include "GameObjectAI.h"
 #include "GridNotifiers.h"
+#include "GameObject.h"
 #include "InstanceScript.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
@@ -91,9 +92,9 @@ struct boss_najentus : public BossAI
         Talk(SAY_DEATH);
     }
 
-    void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
+    void SpellHit(Unit* /*caster*/, SpellInfo const* spell) override
     {
-        if (spellInfo->Id == SPELL_HURL_SPINE && me->HasAura(SPELL_TIDAL_SHIELD))
+        if (spell->Id == SPELL_HURL_SPINE && me->HasAura(SPELL_TIDAL_SHIELD))
         {
             me->RemoveAurasDueToSpell(SPELL_TIDAL_SHIELD);
             DoCastSelf(SPELL_TIDAL_BURST, true);
@@ -101,15 +102,15 @@ struct boss_najentus : public BossAI
         }
     }
 
-    void JustEngagedWith(Unit* who) override
+    void JustEngagedWith(Unit* /*who*/) override
     {
-        BossAI::JustEngagedWith(who);
+        _JustEngagedWith();
         Talk(SAY_AGGRO);
-        events.ScheduleEvent(EVENT_NEEDLE, 2s);
-        events.ScheduleEvent(EVENT_SHIELD, 1min);
-        events.ScheduleEvent(EVENT_SPINE, 30s);
-        events.ScheduleEvent(EVENT_BERSERK, 480s);
-        events.ScheduleEvent(EVENT_YELL, 45s, 100s);
+        events.ScheduleEvent(EVENT_NEEDLE, Seconds(2));
+        events.ScheduleEvent(EVENT_SHIELD, Seconds(60));
+        events.ScheduleEvent(EVENT_SPINE, Seconds(30));
+        events.ScheduleEvent(EVENT_BERSERK, Seconds(480));
+        events.ScheduleEvent(EVENT_YELL, Seconds(45), Seconds(100));
     }
 
     uint32 GetData(uint32 data) const override
@@ -150,12 +151,12 @@ struct boss_najentus : public BossAI
                 DoCastSelf(SPELL_BERSERK, true);
                 break;
             case EVENT_SPINE:
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1, 200.0f, true))
+                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 200.0f, true))
                 {
                     DoCast(target, SPELL_IMPALING_SPINE, true);
                     _spineTargetGUID = target->GetGUID();
                     //must let target summon, otherwise you cannot click the spine
-                    target->SummonGameObject(GO_NAJENTUS_SPINE, *target, QuaternionData(), 30s);
+                    target->SummonGameObject(GO_NAJENTUS_SPINE, *target, QuaternionData(), 30);
                     Talk(SAY_NEEDLE);
                 }
                 events.Repeat(Seconds(20), Seconds(25));
@@ -181,7 +182,7 @@ struct go_najentus_spine : public GameObjectAI
 {
     go_najentus_spine(GameObject* go) : GameObjectAI(go), _instance(go->GetInstanceScript()) { }
 
-    bool OnGossipHello(Player* player) override
+    bool GossipHello(Player* player) override
     {
         if (!_instance)
             return false;

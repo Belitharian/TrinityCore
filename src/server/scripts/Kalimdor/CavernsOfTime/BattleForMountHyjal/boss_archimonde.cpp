@@ -27,7 +27,6 @@ EndScriptData */
 #include "InstanceScript.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
-#include "Player.h"
 #include "ScriptedCreature.h"
 #include "SpellScript.h"
 
@@ -128,7 +127,7 @@ public:
 
             ArchimondeGUID = instance->GetGuidData(DATA_ARCHIMONDE);
 
-            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+            me->AddUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
         }
 
         void JustEngagedWith(Unit* /*who*/) override { }
@@ -299,18 +298,18 @@ public:
             me->RemoveAllAuras();                              // Reset Soul Charge auras.
         }
 
-        void JustEngagedWith(Unit* who) override
+        void JustEngagedWith(Unit* /*who*/) override
         {
             Talk(SAY_AGGRO);
-            BossAI::JustEngagedWith(who);
-            events.ScheduleEvent(EVENT_FEAR, 42s);
-            events.ScheduleEvent(EVENT_AIR_BURST, 30s);
-            events.ScheduleEvent(EVENT_GRIP_OF_THE_LEGION, 5s, 25s);
-            events.ScheduleEvent(EVENT_DOOMFIRE, 20s);
-            events.ScheduleEvent(EVENT_UNLEASH_SOUL_CHARGE, 2s, 30s);
-            events.ScheduleEvent(EVENT_FINGER_OF_DEATH, 15s);
-            events.ScheduleEvent(EVENT_HAND_OF_DEATH, 10min);
-            events.ScheduleEvent(EVENT_DISTANCE_CHECK, 30s);
+            _JustEngagedWith();
+            events.ScheduleEvent(EVENT_FEAR, 42000);
+            events.ScheduleEvent(EVENT_AIR_BURST, 30000);
+            events.ScheduleEvent(EVENT_GRIP_OF_THE_LEGION, urand(5000, 25000));
+            events.ScheduleEvent(EVENT_DOOMFIRE, 20000);
+            events.ScheduleEvent(EVENT_UNLEASH_SOUL_CHARGE, urand(2000, 30000));
+            events.ScheduleEvent(EVENT_FINGER_OF_DEATH, 15000);
+            events.ScheduleEvent(EVENT_HAND_OF_DEATH, 600000);
+            events.ScheduleEvent(EVENT_DISTANCE_CHECK, 30000);
         }
 
         void ExecuteEvent(uint32 eventId) override
@@ -319,7 +318,7 @@ public:
             {
                 case EVENT_HAND_OF_DEATH:
                     DoCastAOE(SPELL_HAND_OF_DEATH);
-                    events.ScheduleEvent(EVENT_HAND_OF_DEATH, 2s);
+                    events.ScheduleEvent(EVENT_HAND_OF_DEATH, 2000);
                     break;
                 case EVENT_UNLEASH_SOUL_CHARGE:
                     _chargeSpell = 0;
@@ -346,53 +345,53 @@ public:
                         me->RemoveAuraFromStack(_chargeSpell);
                         DoCastVictim(_unleashSpell);
                         SoulChargeCount--;
-                        events.ScheduleEvent(EVENT_UNLEASH_SOUL_CHARGE, 2s, 30s);
+                        events.ScheduleEvent(EVENT_UNLEASH_SOUL_CHARGE, urand(2000, 30000));
                     }
                     break;
                 case EVENT_FINGER_OF_DEATH:
-                    if (!SelectTarget(SelectTargetMethod::Random, 0, 5.0f)) // Checks if there are no targets in melee range
+                    if (!SelectTarget(SELECT_TARGET_RANDOM, 0, 5.0f)) // Checks if there are no targets in melee range
                     {
-                        DoCast(SelectTarget(SelectTargetMethod::Random, 0), SPELL_FINGER_OF_DEATH);
-                        events.ScheduleEvent(EVENT_FINGER_OF_DEATH, 1s);
+                        DoCast(SelectTarget(SELECT_TARGET_RANDOM, 0), SPELL_FINGER_OF_DEATH);
+                        events.ScheduleEvent(EVENT_FINGER_OF_DEATH, 1000);
                     }
                     else
-                        events.ScheduleEvent(EVENT_FINGER_OF_DEATH, 5s);
+                        events.ScheduleEvent(EVENT_FINGER_OF_DEATH, 5000);
                     break;
                 case EVENT_GRIP_OF_THE_LEGION:
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                         DoCast(target, SPELL_GRIP_OF_THE_LEGION);
-                    events.ScheduleEvent(EVENT_GRIP_OF_THE_LEGION, 5s, 25s);
+                    events.ScheduleEvent(EVENT_GRIP_OF_THE_LEGION, urand(5000, 25000));
                     break;
                 case EVENT_AIR_BURST:
                     Talk(SAY_AIR_BURST);
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1))
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1))
                         DoCast(target, SPELL_AIR_BURST); //not on tank
-                    events.ScheduleEvent(EVENT_AIR_BURST, 25s, 40s);
+                    events.ScheduleEvent(EVENT_AIR_BURST, urand(25000, 40000));
                     break;
                 case EVENT_FEAR:
                     DoCastAOE(SPELL_FEAR);
-                    events.ScheduleEvent(EVENT_FEAR, 42s);
+                    events.ScheduleEvent(EVENT_FEAR, 42000);
                     break;
                 case EVENT_DOOMFIRE:
                     Talk(SAY_DOOMFIRE);
-                    if (Unit* temp = SelectTarget(SelectTargetMethod::Random, 1))
+                    if (Unit* temp = SelectTarget(SELECT_TARGET_RANDOM, 1))
                         SummonDoomfire(temp);
                     else
                         SummonDoomfire(me->GetVictim());
-                    events.ScheduleEvent(EVENT_DOOMFIRE, 20s);
+                    events.ScheduleEvent(EVENT_DOOMFIRE, 20000);
                     break;
                 case EVENT_DISTANCE_CHECK:
                     if (Creature* channelTrigger = instance->GetCreature(DATA_CHANNEL_TARGET))
                         if (me->IsWithinDistInMap(channelTrigger, 75.0f))
                             DoAction(ACTION_ENRAGE);
-                    events.ScheduleEvent(EVENT_DISTANCE_CHECK, 5s);
+                    events.ScheduleEvent(EVENT_DISTANCE_CHECK, 5000);
                     break;
                 case EVENT_SUMMON_WHISP:
-                    DoSpawnCreature(NPC_ANCIENT_WISP, float(rand32() % 40), float(rand32() % 40), 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 15s);
+                    DoSpawnCreature(NPC_ANCIENT_WISP, float(rand32() % 40), float(rand32() % 40), 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 15000);
                     ++WispCount;
                     if (WispCount >= 30)
-                        me->KillSelf();
-                    events.ScheduleEvent(EVENT_SUMMON_WHISP, 1500ms);
+                        me->DealDamage(me, me->GetHealth(), nullptr, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, nullptr, false);
+                    events.ScheduleEvent(EVENT_SUMMON_WHISP, 1500);
                     break;
                 default:
                     break;
@@ -408,13 +407,13 @@ public:
 
                 if (!HasProtected)
                 {
-                    me->GetMotionMaster()->Clear();
+                    me->GetMotionMaster()->Clear(false);
                     me->GetMotionMaster()->MoveIdle();
 
                     // All members of raid must get this buff
                     DoCastAOE(SPELL_PROTECTION_OF_ELUNE, true);
                     HasProtected = true;
-                    events.ScheduleEvent(EVENT_SUMMON_WHISP, 1500ms);
+                    events.ScheduleEvent(EVENT_SUMMON_WHISP, 1500);
                 }
             }
         }
@@ -425,7 +424,7 @@ public:
 
             if (victim->GetTypeId() == TYPEID_PLAYER)
             {
-                switch (victim->GetClass())
+                switch (victim->getClass())
                 {
                     case CLASS_PRIEST:
                     case CLASS_PALADIN:
@@ -444,7 +443,7 @@ public:
                         break;
                 }
 
-                events.ScheduleEvent(EVENT_UNLEASH_SOUL_CHARGE, 2s, 30s);
+                events.ScheduleEvent(EVENT_UNLEASH_SOUL_CHARGE, urand(2000, 30000));
                 ++SoulChargeCount;
             }
         }
@@ -495,7 +494,7 @@ public:
             switch (actionId)
             {
                 case ACTION_ENRAGE:
-                    me->GetMotionMaster()->Clear();
+                    me->GetMotionMaster()->Clear(false);
                     me->GetMotionMaster()->MoveIdle();
                     Enraged = true;
                     Talk(SAY_ENRAGE);
@@ -516,11 +515,11 @@ public:
 
             me->SummonCreature(NPC_DOOMFIRE_SPIRIT,
                 target->GetPositionX()+15.0f, target->GetPositionY()+15.0f, target->GetPositionZ(), 0,
-                TEMPSUMMON_TIMED_DESPAWN, 27s);
+                TEMPSUMMON_TIMED_DESPAWN, 27000);
 
             me->SummonCreature(NPC_DOOMFIRE,
                 target->GetPositionX()-15.0f, target->GetPositionY()-15.0f, target->GetPositionZ(), 0,
-                TEMPSUMMON_TIMED_DESPAWN, 27s);
+                TEMPSUMMON_TIMED_DESPAWN, 27000);
         }
 
     private:

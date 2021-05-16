@@ -6,7 +6,6 @@
 #include "jemalloc/internal/pages.h"
 #include "jemalloc/internal/prng.h"
 #include "jemalloc/internal/ql.h"
-#include "jemalloc/internal/sc.h"
 #include "jemalloc/internal/sz.h"
 
 static inline void
@@ -35,19 +34,18 @@ extent_unlock2(tsdn_t *tsdn, extent_t *extent1, extent_t *extent2) {
 	    (uintptr_t)extent2);
 }
 
-static inline unsigned
-extent_arena_ind_get(const extent_t *extent) {
-	unsigned arena_ind = (unsigned)((extent->e_bits &
-	    EXTENT_BITS_ARENA_MASK) >> EXTENT_BITS_ARENA_SHIFT);
-	assert(arena_ind < MALLOCX_ARENA_LIMIT);
-
-	return arena_ind;
-}
-
 static inline arena_t *
 extent_arena_get(const extent_t *extent) {
-	unsigned arena_ind = extent_arena_ind_get(extent);
-
+	unsigned arena_ind = (unsigned)((extent->e_bits &
+	    EXTENT_BITS_ARENA_MASK) >> EXTENT_BITS_ARENA_SHIFT);
+	/*
+	 * The following check is omitted because we should never actually read
+	 * a NULL arena pointer.
+	 */
+	if (false && arena_ind >= MALLOCX_ARENA_LIMIT) {
+		return NULL;
+	}
+	assert(arena_ind < MALLOCX_ARENA_LIMIT);
 	return (arena_t *)atomic_load_p(&arenas[arena_ind], ATOMIC_ACQUIRE);
 }
 
@@ -55,28 +53,20 @@ static inline szind_t
 extent_szind_get_maybe_invalid(const extent_t *extent) {
 	szind_t szind = (szind_t)((extent->e_bits & EXTENT_BITS_SZIND_MASK) >>
 	    EXTENT_BITS_SZIND_SHIFT);
-	assert(szind <= SC_NSIZES);
+	assert(szind <= NSIZES);
 	return szind;
 }
 
 static inline szind_t
 extent_szind_get(const extent_t *extent) {
 	szind_t szind = extent_szind_get_maybe_invalid(extent);
-	assert(szind < SC_NSIZES); /* Never call when "invalid". */
+	assert(szind < NSIZES); /* Never call when "invalid". */
 	return szind;
 }
 
 static inline size_t
 extent_usize_get(const extent_t *extent) {
 	return sz_index2size(extent_szind_get(extent));
-}
-
-static inline unsigned
-extent_binshard_get(const extent_t *extent) {
-	unsigned binshard = (unsigned)((extent->e_bits &
-	    EXTENT_BITS_BINSHARD_MASK) >> EXTENT_BITS_BINSHARD_SHIFT);
-	assert(binshard < bin_infos[extent_szind_get(extent)].n_shards);
-	return binshard;
 }
 
 static inline size_t
@@ -101,12 +91,6 @@ static inline bool
 extent_committed_get(const extent_t *extent) {
 	return (bool)((extent->e_bits & EXTENT_BITS_COMMITTED_MASK) >>
 	    EXTENT_BITS_COMMITTED_SHIFT);
-}
-
-static inline bool
-extent_dumpable_get(const extent_t *extent) {
-	return (bool)((extent->e_bits & EXTENT_BITS_DUMPABLE_MASK) >>
-	    EXTENT_BITS_DUMPABLE_SHIFT);
 }
 
 static inline bool
@@ -186,25 +170,12 @@ extent_prof_tctx_get(const extent_t *extent) {
 	    ATOMIC_ACQUIRE);
 }
 
-static inline nstime_t
-extent_prof_alloc_time_get(const extent_t *extent) {
-	return extent->e_alloc_time;
-}
-
 static inline void
 extent_arena_set(extent_t *extent, arena_t *arena) {
 	unsigned arena_ind = (arena != NULL) ? arena_ind_get(arena) : ((1U <<
 	    MALLOCX_ARENA_BITS) - 1);
 	extent->e_bits = (extent->e_bits & ~EXTENT_BITS_ARENA_MASK) |
 	    ((uint64_t)arena_ind << EXTENT_BITS_ARENA_SHIFT);
-}
-
-static inline void
-extent_binshard_set(extent_t *extent, unsigned binshard) {
-	/* The assertion assumes szind is set already. */
-	assert(binshard < bin_infos[extent_szind_get(extent)].n_shards);
-	extent->e_bits = (extent->e_bits & ~EXTENT_BITS_BINSHARD_MASK) |
-	    ((uint64_t)binshard << EXTENT_BITS_BINSHARD_SHIFT);
 }
 
 static inline void
@@ -219,16 +190,9 @@ extent_addr_randomize(tsdn_t *tsdn, extent_t *extent, size_t alignment) {
 	if (alignment < PAGE) {
 		unsigned lg_range = LG_PAGE -
 		    lg_floor(CACHELINE_CEILING(alignment));
-		size_t r;
-		if (!tsdn_null(tsdn)) {
-			tsd_t *tsd = tsdn_tsd(tsdn);
-			r = (size_t)prng_lg_range_u64(
-			    tsd_offset_statep_get(tsd), lg_range);
-		} else {
-			r = prng_lg_range_zu(
-			    &extent_arena_get(extent)->offset_state,
-			    lg_range, true);
-		}
+		size_t r =
+		    prng_lg_range_zu(&extent_arena_get(extent)->offset_state,
+		    lg_range, true);
 		uintptr_t random_offset = ((uintptr_t)r) << (LG_PAGE -
 		    lg_range);
 		extent->e_addr = (void *)((uintptr_t)extent->e_addr +
@@ -257,7 +221,7 @@ extent_bsize_set(extent_t *extent, size_t bsize) {
 
 static inline void
 extent_szind_set(extent_t *extent, szind_t szind) {
-	assert(szind <= SC_NSIZES); /* SC_NSIZES means "invalid". */
+	assert(szind <= NSIZES); /* NSIZES means "invalid". */
 	extent->e_bits = (extent->e_bits & ~EXTENT_BITS_SZIND_MASK) |
 	    ((uint64_t)szind << EXTENT_BITS_SZIND_SHIFT);
 }
@@ -266,16 +230,6 @@ static inline void
 extent_nfree_set(extent_t *extent, unsigned nfree) {
 	assert(extent_slab_get(extent));
 	extent->e_bits = (extent->e_bits & ~EXTENT_BITS_NFREE_MASK) |
-	    ((uint64_t)nfree << EXTENT_BITS_NFREE_SHIFT);
-}
-
-static inline void
-extent_nfree_binshard_set(extent_t *extent, unsigned nfree, unsigned binshard) {
-	/* The assertion assumes szind is set already. */
-	assert(binshard < bin_infos[extent_szind_get(extent)].n_shards);
-	extent->e_bits = (extent->e_bits &
-	    (~EXTENT_BITS_NFREE_MASK & ~EXTENT_BITS_BINSHARD_MASK)) |
-	    ((uint64_t)binshard << EXTENT_BITS_BINSHARD_SHIFT) |
 	    ((uint64_t)nfree << EXTENT_BITS_NFREE_SHIFT);
 }
 
@@ -289,12 +243,6 @@ static inline void
 extent_nfree_dec(extent_t *extent) {
 	assert(extent_slab_get(extent));
 	extent->e_bits -= ((uint64_t)1U << EXTENT_BITS_NFREE_SHIFT);
-}
-
-static inline void
-extent_nfree_sub(extent_t *extent, uint64_t n) {
-	assert(extent_slab_get(extent));
-	extent->e_bits -= (n << EXTENT_BITS_NFREE_SHIFT);
 }
 
 static inline void
@@ -322,12 +270,6 @@ extent_committed_set(extent_t *extent, bool committed) {
 }
 
 static inline void
-extent_dumpable_set(extent_t *extent, bool dumpable) {
-	extent->e_bits = (extent->e_bits & ~EXTENT_BITS_DUMPABLE_MASK) |
-	    ((uint64_t)dumpable << EXTENT_BITS_DUMPABLE_SHIFT);
-}
-
-static inline void
 extent_slab_set(extent_t *extent, bool slab) {
 	extent->e_bits = (extent->e_bits & ~EXTENT_BITS_SLAB_MASK) |
 	    ((uint64_t)slab << EXTENT_BITS_SLAB_SHIFT);
@@ -339,34 +281,9 @@ extent_prof_tctx_set(extent_t *extent, prof_tctx_t *tctx) {
 }
 
 static inline void
-extent_prof_alloc_time_set(extent_t *extent, nstime_t t) {
-	nstime_copy(&extent->e_alloc_time, &t);
-}
-
-static inline bool
-extent_is_head_get(extent_t *extent) {
-	if (maps_coalesce) {
-		not_reached();
-	}
-
-	return (bool)((extent->e_bits & EXTENT_BITS_IS_HEAD_MASK) >>
-	    EXTENT_BITS_IS_HEAD_SHIFT);
-}
-
-static inline void
-extent_is_head_set(extent_t *extent, bool is_head) {
-	if (maps_coalesce) {
-		not_reached();
-	}
-
-	extent->e_bits = (extent->e_bits & ~EXTENT_BITS_IS_HEAD_MASK) |
-	    ((uint64_t)is_head << EXTENT_BITS_IS_HEAD_SHIFT);
-}
-
-static inline void
 extent_init(extent_t *extent, arena_t *arena, void *addr, size_t size,
     bool slab, szind_t szind, size_t sn, extent_state_t state, bool zeroed,
-    bool committed, bool dumpable, extent_head_state_t is_head) {
+    bool committed) {
 	assert(addr == PAGE_ADDR2BASE(addr) || !slab);
 
 	extent_arena_set(extent, arena);
@@ -378,12 +295,7 @@ extent_init(extent_t *extent, arena_t *arena, void *addr, size_t size,
 	extent_state_set(extent, state);
 	extent_zeroed_set(extent, zeroed);
 	extent_committed_set(extent, committed);
-	extent_dumpable_set(extent, dumpable);
 	ql_elm_new(extent, ql_link);
-	if (!maps_coalesce) {
-		extent_is_head_set(extent, (is_head == EXTENT_IS_HEAD) ? true :
-		    false);
-	}
 	if (config_prof) {
 		extent_prof_tctx_set(extent, NULL);
 	}
@@ -395,12 +307,11 @@ extent_binit(extent_t *extent, void *addr, size_t bsize, size_t sn) {
 	extent_addr_set(extent, addr);
 	extent_bsize_set(extent, bsize);
 	extent_slab_set(extent, false);
-	extent_szind_set(extent, SC_NSIZES);
+	extent_szind_set(extent, NSIZES);
 	extent_sn_set(extent, sn);
 	extent_state_set(extent, extent_state_active);
 	extent_zeroed_set(extent, true);
 	extent_committed_set(extent, true);
-	extent_dumpable_set(extent, true);
 }
 
 static inline void
@@ -421,11 +332,6 @@ extent_list_last(const extent_list_t *list) {
 static inline void
 extent_list_append(extent_list_t *list, extent_t *extent) {
 	ql_tail_insert(list, extent, ql_link);
-}
-
-static inline void
-extent_list_prepend(extent_list_t *list, extent_t *extent) {
-	ql_head_insert(list, extent, ql_link);
 }
 
 static inline void

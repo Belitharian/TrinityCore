@@ -26,6 +26,7 @@
 #include "CreatureAIImpl.h"
 #include "GridNotifiersImpl.h"
 #include "Player.h"
+#include "ScriptedCreature.h"
 #include "SpellAuraEffects.h"
 #include "SpellScript.h"
 #include "Vehicle.h"
@@ -42,75 +43,75 @@ enum SpellsPicnic
     SPELL_ROMANTIC_PICNIC_ACHIEV    = 45123, // Romantic Picnic periodic = 5000
 };
 
-class spell_love_is_in_the_air_romantic_picnic : public AuraScript
+class spell_love_is_in_the_air_romantic_picnic : public SpellScriptLoader
 {
-    PrepareAuraScript(spell_love_is_in_the_air_romantic_picnic);
+    public:
+        spell_love_is_in_the_air_romantic_picnic() : SpellScriptLoader("spell_love_is_in_the_air_romantic_picnic") { }
 
-    bool Validate(SpellInfo const* /*spellInfo*/) override
-    {
-        return ValidateSpellInfo(
+        class spell_love_is_in_the_air_romantic_picnic_AuraScript : public AuraScript
         {
-            SPELL_BASKET_CHECK,
-            SPELL_MEAL_PERIODIC,
-            SPELL_MEAL_EAT_VISUAL,
-            SPELL_DRINK_VISUAL,
-            SPELL_ROMANTIC_PICNIC_ACHIEV
-        });
-    }
+            PrepareAuraScript(spell_love_is_in_the_air_romantic_picnic_AuraScript);
 
-    void OnApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
-    {
-        Unit* target = GetTarget();
-        target->SetStandState(UNIT_STAND_STATE_SIT);
-        target->CastSpell(target, SPELL_MEAL_PERIODIC);
-    }
-
-    void OnPeriodic(AuraEffect const* /*aurEff*/)
-    {
-        // Every 5 seconds
-        Unit* target = GetTarget();
-
-        // If our player is no longer sit, remove all auras
-        if (target->GetStandState() != UNIT_STAND_STATE_SIT)
-        {
-            target->RemoveAurasDueToSpell(SPELL_ROMANTIC_PICNIC_ACHIEV);
-            target->RemoveAura(GetAura());
-            return;
-        }
-
-        target->CastSpell(target, SPELL_BASKET_CHECK); // unknown use, it targets Romantic Basket
-        target->CastSpell(target, RAND(SPELL_MEAL_EAT_VISUAL, SPELL_DRINK_VISUAL));
-
-        bool foundSomeone = false;
-        // For nearby players, check if they have the same aura. If so, cast Romantic Picnic (45123)
-        // required by achievement and "hearts" visual
-        std::list<Player*> playerList;
-        Trinity::AnyPlayerInObjectRangeCheck checker(target, INTERACTION_DISTANCE*2);
-        Trinity::PlayerListSearcher<Trinity::AnyPlayerInObjectRangeCheck> searcher(target, playerList, checker);
-        Cell::VisitWorldObjects(target, searcher, INTERACTION_DISTANCE * 2);
-        for (std::list<Player*>::const_iterator itr = playerList.begin(); itr != playerList.end(); ++itr)
-        {
-            if (Player* playerFound = (*itr))
+            void OnApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
             {
-                if (target != playerFound && playerFound->HasAura(GetId()))
-                {
-                    playerFound->CastSpell(playerFound, SPELL_ROMANTIC_PICNIC_ACHIEV, true);
-                    target->CastSpell(target, SPELL_ROMANTIC_PICNIC_ACHIEV, true);
-                    foundSomeone = true;
-                    break;
-                }
+                Unit* target = GetTarget();
+                target->SetStandState(UNIT_STAND_STATE_SIT);
+                target->CastSpell(target, SPELL_MEAL_PERIODIC, false);
             }
+
+            void OnPeriodic(AuraEffect const* /*aurEff*/)
+            {
+                // Every 5 seconds
+                Unit* target = GetTarget();
+                Unit* caster = GetCaster();
+
+                // If our player is no longer sit, remove all auras
+                if (target->GetStandState() != UNIT_STAND_STATE_SIT)
+                {
+                    target->RemoveAura(SPELL_ROMANTIC_PICNIC_ACHIEV);
+                    target->RemoveAura(GetAura());
+                    return;
+                }
+
+                target->CastSpell(target, SPELL_BASKET_CHECK, false); // unknown use, it targets Romantic Basket
+                target->CastSpell(target, RAND(SPELL_MEAL_EAT_VISUAL, SPELL_DRINK_VISUAL), false);
+
+                bool foundSomeone = false;
+                // For nearby players, check if they have the same aura. If so, cast Romantic Picnic (45123)
+                // required by achievement and "hearts" visual
+                std::list<Player*> playerList;
+                Trinity::AnyPlayerInObjectRangeCheck checker(target, INTERACTION_DISTANCE*2);
+                Trinity::PlayerListSearcher<Trinity::AnyPlayerInObjectRangeCheck> searcher(target, playerList, checker);
+                Cell::VisitWorldObjects(target, searcher, INTERACTION_DISTANCE * 2);
+                for (std::list<Player*>::const_iterator itr = playerList.begin(); itr != playerList.end(); ++itr)
+                {
+                    if ((*itr) != target && (*itr)->HasAura(GetId())) // && (*itr)->GetStandState() == UNIT_STAND_STATE_SIT)
+                    {
+                        if (caster)
+                        {
+                            caster->CastSpell(*itr, SPELL_ROMANTIC_PICNIC_ACHIEV, true);
+                            caster->CastSpell(target, SPELL_ROMANTIC_PICNIC_ACHIEV, true);
+                        }
+                        foundSomeone = true;
+                        // break;
+                    }
+                }
+
+                if (!foundSomeone && target->HasAura(SPELL_ROMANTIC_PICNIC_ACHIEV))
+                    target->RemoveAura(SPELL_ROMANTIC_PICNIC_ACHIEV);
+            }
+
+            void Register() override
+            {
+                AfterEffectApply += AuraEffectApplyFn(spell_love_is_in_the_air_romantic_picnic_AuraScript::OnApply, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY, AURA_EFFECT_HANDLE_REAL);
+                OnEffectPeriodic += AuraEffectPeriodicFn(spell_love_is_in_the_air_romantic_picnic_AuraScript::OnPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
+            }
+        };
+
+        AuraScript* GetAuraScript() const override
+        {
+            return new spell_love_is_in_the_air_romantic_picnic_AuraScript();
         }
-
-        if (!foundSomeone && target->HasAura(SPELL_ROMANTIC_PICNIC_ACHIEV))
-            target->RemoveAurasDueToSpell(SPELL_ROMANTIC_PICNIC_ACHIEV);
-    }
-
-    void Register() override
-    {
-        AfterEffectApply += AuraEffectApplyFn(spell_love_is_in_the_air_romantic_picnic::OnApply, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY, AURA_EFFECT_HANDLE_REAL);
-        OnEffectPeriodic += AuraEffectPeriodicFn(spell_love_is_in_the_air_romantic_picnic::OnPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
-    }
 };
 
 enum HallowEndCandysSpells
@@ -187,13 +188,13 @@ class spell_hallow_end_candy_pirate : public SpellScriptLoader
 
             void HandleApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
             {
-                uint32 spell = GetTarget()->GetNativeGender() == GENDER_FEMALE ? SPELL_HALLOWS_END_CANDY_FEMALE_DEFIAS_PIRATE : SPELL_HALLOWS_END_CANDY_MALE_DEFIAS_PIRATE;
+                uint32 spell = GetTarget()->getGender() == GENDER_FEMALE ? SPELL_HALLOWS_END_CANDY_FEMALE_DEFIAS_PIRATE : SPELL_HALLOWS_END_CANDY_MALE_DEFIAS_PIRATE;
                 GetTarget()->CastSpell(GetTarget(), spell, true);
             }
 
             void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
             {
-                uint32 spell = GetTarget()->GetNativeGender() == GENDER_FEMALE ? SPELL_HALLOWS_END_CANDY_FEMALE_DEFIAS_PIRATE : SPELL_HALLOWS_END_CANDY_MALE_DEFIAS_PIRATE;
+                uint32 spell = GetTarget()->getGender() == GENDER_FEMALE ? SPELL_HALLOWS_END_CANDY_FEMALE_DEFIAS_PIRATE : SPELL_HALLOWS_END_CANDY_MALE_DEFIAS_PIRATE;
                 GetTarget()->RemoveAurasDueToSpell(spell);
             }
 
@@ -256,21 +257,21 @@ class spell_hallow_end_trick : public SpellScriptLoader
                 Unit* caster = GetCaster();
                 if (Player* target = GetHitPlayer())
                 {
-                    uint8 gender = target->GetNativeGender();
+                    uint8 gender = target->getGender();
                     uint32 spellId = SPELL_TRICK_BUFF;
                     switch (urand(0, 5))
                     {
                         case 1:
-                            spellId = gender ? SPELL_LEPER_GNOME_COSTUME_FEMALE : SPELL_LEPER_GNOME_COSTUME_MALE;
+                            spellId = gender == GENDER_FEMALE ? SPELL_LEPER_GNOME_COSTUME_FEMALE : SPELL_LEPER_GNOME_COSTUME_MALE;
                             break;
                         case 2:
-                            spellId = gender ? SPELL_PIRATE_COSTUME_FEMALE : SPELL_PIRATE_COSTUME_MALE;
+                            spellId = gender == GENDER_FEMALE ? SPELL_PIRATE_COSTUME_FEMALE : SPELL_PIRATE_COSTUME_MALE;
                             break;
                         case 3:
-                            spellId = gender ? SPELL_GHOST_COSTUME_FEMALE : SPELL_GHOST_COSTUME_MALE;
+                            spellId = gender == GENDER_FEMALE ? SPELL_GHOST_COSTUME_FEMALE : SPELL_GHOST_COSTUME_MALE;
                             break;
                         case 4:
-                            spellId = gender ? SPELL_NINJA_COSTUME_FEMALE : SPELL_NINJA_COSTUME_MALE;
+                            spellId = gender == GENDER_FEMALE ? SPELL_NINJA_COSTUME_FEMALE : SPELL_NINJA_COSTUME_MALE;
                             break;
                         case 5:
                             spellId = SPELL_SKELETON_COSTUME;
@@ -424,7 +425,7 @@ public:
             Unit* target = GetHitUnit();
 
             uint32 spellId = 0;
-            uint8 gender = target->GetNativeGender();
+            uint8 gender = target->getGender();
 
             switch (GetSpellInfo()->Id)
             {
@@ -575,7 +576,8 @@ class spell_pilgrims_bounty_feast_on : public SpellScriptLoader
                 if (Aura* aura = caster->GetAura(GetEffectValue()))
                 {
                     if (aura->GetStackAmount() == 1)
-                        caster->RemoveAurasDueToSpell(aura->GetSpellInfo()->Effects[EFFECT_0].CalcValue());
+                        if (SpellEffectInfo const* effect = aura->GetSpellInfo()->GetEffect(EFFECT_0))
+                            caster->RemoveAurasDueToSpell(effect->CalcValue());
                     aura->ModStackAmount(-1);
                 }
             }
@@ -1185,7 +1187,7 @@ class spell_brewfest_ram : public SpellScriptLoader
                     case SPELL_RAM_CANTER:
                     {
                         CastSpellExtraArgs args(TRIGGERED_FULL_MASK);
-                        args.AddSpellMod(SPELLVALUE_AURA_STACK, 1);
+                        args.SpellValueOverrides.AddMod(SPELLVALUE_AURA_STACK, 1);
                         target->CastSpell(target, SPELL_RAM_FATIGUE, args);
                         if (aurEff->GetTickNumber() == 8)
                             target->CastSpell(target, SPELL_BREWFEST_QUEST_SPEED_BUNNY_YELLOW, true);
@@ -1194,7 +1196,7 @@ class spell_brewfest_ram : public SpellScriptLoader
                     case SPELL_RAM_GALLOP:
                     {
                         CastSpellExtraArgs args(TRIGGERED_FULL_MASK);
-                        args.AddSpellMod(SPELLVALUE_AURA_STACK, target->HasAura(SPELL_RAM_FATIGUE) ? 4 : 5 /*Hack*/);
+                        args.SpellValueOverrides.AddMod(SPELLVALUE_AURA_STACK, target->HasAura(SPELL_RAM_FATIGUE) ? 4 : 5 /*Hack*/);
                         target->CastSpell(target, SPELL_RAM_FATIGUE, args);
                         if (aurEff->GetTickNumber() == 8)
                             target->CastSpell(target, SPELL_BREWFEST_QUEST_SPEED_BUNNY_RED, true);
@@ -1326,7 +1328,7 @@ class spell_brewfest_relay_race_intro_force_player_to_throw : public SpellScript
                 PreventHitDefaultEffect(effIndex);
                 // All this spells trigger a spell that requires reagents; if the
                 // triggered spell is cast as "triggered", reagents are not consumed
-                GetHitUnit()->CastSpell(nullptr, GetSpellInfo()->Effects[effIndex].TriggerSpell, TriggerCastFlags(TRIGGERED_FULL_MASK & ~TRIGGERED_IGNORE_POWER_AND_REAGENT_COST));
+                GetHitUnit()->CastSpell(nullptr, GetEffectInfo()->TriggerSpell, TriggerCastFlags(TRIGGERED_FULL_MASK & ~TRIGGERED_IGNORE_POWER_AND_REAGENT_COST));
             }
 
             void Register() override
@@ -1668,257 +1670,10 @@ class spell_midsummer_ribbon_pole_periodic_visual : public AuraScript
     }
 };
 
-enum JugglingTorch
-{
-    SPELL_JUGGLE_TORCH_SLOW          = 45792,
-    SPELL_JUGGLE_TORCH_MEDIUM        = 45806,
-    SPELL_JUGGLE_TORCH_FAST          = 45816,
-    SPELL_JUGGLE_TORCH_SELF          = 45638,
-
-    SPELL_JUGGLE_TORCH_SHADOW_SLOW   = 46120,
-    SPELL_JUGGLE_TORCH_SHADOW_MEDIUM = 46118,
-    SPELL_JUGGLE_TORCH_SHADOW_FAST   = 46117,
-    SPELL_JUGGLE_TORCH_SHADOW_SELF   = 46121,
-
-    SPELL_GIVE_TORCH                 = 45280,
-    QUEST_TORCH_CATCHING_A           = 11657,
-    QUEST_TORCH_CATCHING_H           = 11923,
-    QUEST_MORE_TORCH_CATCHING_A      = 11924,
-    QUEST_MORE_TORCH_CATCHING_H      = 11925
-};
-
-// 45819 - Throw Torch
-class spell_midsummer_juggle_torch : public SpellScript
-{
-    PrepareSpellScript(spell_midsummer_juggle_torch);
-
-    bool Validate(SpellInfo const* /*spellInfo*/) override
-    {
-        return ValidateSpellInfo({
-            SPELL_JUGGLE_TORCH_SLOW, SPELL_JUGGLE_TORCH_MEDIUM, SPELL_JUGGLE_TORCH_FAST,
-            SPELL_JUGGLE_TORCH_SELF, SPELL_JUGGLE_TORCH_SHADOW_SLOW, SPELL_JUGGLE_TORCH_SHADOW_MEDIUM,
-            SPELL_JUGGLE_TORCH_SHADOW_FAST, SPELL_JUGGLE_TORCH_SHADOW_SELF
-        });
-    }
-
-    void HandleDummy(SpellEffIndex /*effIndex*/)
-    {
-        if (!GetExplTargetDest())
-            return;
-
-        Position spellDest = *GetExplTargetDest();
-        float distance = GetCaster()->GetExactDist2d(spellDest.GetPositionX(), spellDest.GetPositionY());
-
-        uint32 torchSpellID = 0;
-        uint32 torchShadowSpellID = 0;
-
-        if (distance <= 1.5f)
-        {
-            torchSpellID = SPELL_JUGGLE_TORCH_SELF;
-            torchShadowSpellID = SPELL_JUGGLE_TORCH_SHADOW_SELF;
-            spellDest = GetCaster()->GetPosition();
-        }
-        else if (distance <= 10.0f)
-        {
-            torchSpellID = SPELL_JUGGLE_TORCH_SLOW;
-            torchShadowSpellID = SPELL_JUGGLE_TORCH_SHADOW_SLOW;
-        }
-        else if (distance <= 20.0f)
-        {
-            torchSpellID = SPELL_JUGGLE_TORCH_MEDIUM;
-            torchShadowSpellID = SPELL_JUGGLE_TORCH_SHADOW_MEDIUM;
-        }
-        else
-        {
-            torchSpellID = SPELL_JUGGLE_TORCH_FAST;
-            torchShadowSpellID = SPELL_JUGGLE_TORCH_SHADOW_FAST;
-        }
-
-        GetCaster()->CastSpell(spellDest, torchSpellID);
-        GetCaster()->CastSpell(spellDest, torchShadowSpellID);
-    }
-
-    void Register() override
-    {
-        OnEffectHit += SpellEffectFn(spell_midsummer_juggle_torch::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
-    }
-};
-
-// 45644 - Juggle Torch (Catch)
-class spell_midsummer_torch_catch : public SpellScript
-{
-    PrepareSpellScript(spell_midsummer_torch_catch);
-
-    bool Validate(SpellInfo const* /*spellInfo*/) override
-    {
-        return ValidateSpellInfo({ SPELL_GIVE_TORCH });
-    }
-
-    void HandleDummy(SpellEffIndex /*effIndex*/)
-    {
-        Player* player = GetHitPlayer();
-        if (!player)
-            return;
-
-        if (player->GetQuestStatus(QUEST_TORCH_CATCHING_A) == QUEST_STATUS_REWARDED || player->GetQuestStatus(QUEST_TORCH_CATCHING_H) == QUEST_STATUS_REWARDED)
-            player->CastSpell(player, SPELL_GIVE_TORCH);
-    }
-
-    void Register() override
-    {
-        OnEffectHitTarget += SpellEffectFn(spell_midsummer_torch_catch::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
-    }
-};
-
-enum FlingTorch
-{
-    SPELL_FLING_TORCH_TRIGGERED           = 45669,
-    SPELL_FLING_TORCH_SHADOW              = 46105,
-    SPELL_JUGGLE_TORCH_MISSED             = 45676,
-    SPELL_TORCHES_CAUGHT                  = 45693,
-    SPELL_TORCH_CATCHING_SUCCESS_ALLIANCE = 46081,
-    SPELL_TORCH_CATCHING_SUCCESS_HORDE    = 46654,
-    SPELL_TORCH_CATCHING_REMOVE_TORCHES   = 46084
-};
-
-// 46747 - Fling torch
-class spell_midsummer_fling_torch : public SpellScript
-{
-    PrepareSpellScript(spell_midsummer_fling_torch);
-
-    bool Validate(SpellInfo const* /*spellInfo*/) override
-    {
-        return ValidateSpellInfo({ SPELL_FLING_TORCH_TRIGGERED, SPELL_FLING_TORCH_SHADOW });
-    }
-
-    void HandleDummy(SpellEffIndex /*effIndex*/)
-    {
-        Position dest = GetCaster()->GetFirstCollisionPosition(30.0f, (float)rand_norm() * static_cast<float>(2 * M_PI));
-        GetCaster()->CastSpell(dest, SPELL_FLING_TORCH_TRIGGERED, true);
-        GetCaster()->CastSpell(dest, SPELL_FLING_TORCH_SHADOW);
-    }
-
-    void Register() override
-    {
-        OnEffectHit += SpellEffectFn(spell_midsummer_fling_torch::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
-    }
-};
-
-// 45669 - Fling Torch
-class spell_midsummer_fling_torch_triggered : public SpellScript
-{
-    PrepareSpellScript(spell_midsummer_fling_torch_triggered);
-
-    bool Validate(SpellInfo const* /*spellInfo*/) override
-    {
-        return ValidateSpellInfo({ SPELL_JUGGLE_TORCH_MISSED });
-    }
-
-    void HandleTriggerMissile(SpellEffIndex effIndex)
-    {
-        if (Position const* pos = GetHitDest())
-        {
-            if (GetCaster()->GetExactDist2d(pos) > 3.0f)
-            {
-                PreventHitEffect(effIndex);
-                GetCaster()->CastSpell(*GetExplTargetDest(), SPELL_JUGGLE_TORCH_MISSED);
-                GetCaster()->RemoveAura(SPELL_TORCHES_CAUGHT);
-            }
-        }
-    }
-
-    void Register() override
-    {
-        OnEffectHit += SpellEffectFn(spell_midsummer_fling_torch_triggered::HandleTriggerMissile, EFFECT_0, SPELL_EFFECT_TRIGGER_MISSILE);
-    }
-};
-
-// 45671 - Juggle Torch (Catch, Quest)
-class spell_midsummer_fling_torch_catch : public SpellScript
-{
-    PrepareSpellScript(spell_midsummer_fling_torch_catch);
-
-    bool Validate(SpellInfo const* /*spellInfo*/) override
-    {
-        return ValidateSpellInfo({
-            SPELL_FLING_TORCH_TRIGGERED,
-            SPELL_TORCH_CATCHING_SUCCESS_ALLIANCE,
-            SPELL_TORCH_CATCHING_SUCCESS_HORDE,
-            SPELL_TORCH_CATCHING_REMOVE_TORCHES,
-            SPELL_FLING_TORCH_SHADOW
-        });
-    }
-
-    void HandleScriptEffect(SpellEffIndex /*effIndex*/)
-    {
-        Player* player = GetHitPlayer();
-        if (!player)
-            return;
-
-        if (!GetExplTargetDest())
-            return;
-
-        // Only the caster can catch the torch
-        if (player->GetGUID() != GetCaster()->GetGUID())
-            return;
-
-        uint8 requiredCatches = 0;
-        // Number of required catches depends on quest - 4 for the normal quest, 10 for the daily version
-        if (player->GetQuestStatus(QUEST_TORCH_CATCHING_A) == QUEST_STATUS_INCOMPLETE || player->GetQuestStatus(QUEST_TORCH_CATCHING_H) == QUEST_STATUS_INCOMPLETE)
-            requiredCatches = 3;
-        else if (player->GetQuestStatus(QUEST_MORE_TORCH_CATCHING_A) == QUEST_STATUS_INCOMPLETE || player->GetQuestStatus(QUEST_MORE_TORCH_CATCHING_H) == QUEST_STATUS_INCOMPLETE)
-            requiredCatches = 9;
-
-        // Used quest item without being on quest - do nothing
-        if (requiredCatches == 0)
-            return;
-
-        if (player->GetAuraCount(SPELL_TORCHES_CAUGHT) >= requiredCatches)
-        {
-            player->CastSpell(player, (player->GetTeam() == ALLIANCE) ? SPELL_TORCH_CATCHING_SUCCESS_ALLIANCE : SPELL_TORCH_CATCHING_SUCCESS_HORDE);
-            player->CastSpell(player, SPELL_TORCH_CATCHING_REMOVE_TORCHES);
-            player->RemoveAura(SPELL_TORCHES_CAUGHT);
-        }
-        else
-        {
-            Position dest = player->GetFirstCollisionPosition(15.0f, (float)rand_norm() * static_cast<float>(2 * M_PI));
-            player->CastSpell(player, SPELL_TORCHES_CAUGHT);
-            player->CastSpell(dest, SPELL_FLING_TORCH_TRIGGERED, true);
-            player->CastSpell(dest, SPELL_FLING_TORCH_SHADOW);
-        }
-    }
-
-    void Register() override
-    {
-        OnEffectHitTarget += SpellEffectFn(spell_midsummer_fling_torch_catch::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
-    }
-};
-
-// 45676 - Juggle Torch (Quest, Missed)
-class spell_midsummer_fling_torch_missed : public SpellScript
-{
-    PrepareSpellScript(spell_midsummer_fling_torch_missed);
-
-    void FilterTargets(std::list<WorldObject*>& targets)
-    {
-        // This spell only hits the caster
-        targets.remove_if([this](WorldObject* obj)
-            {
-                return obj->GetGUID() != GetCaster()->GetGUID();
-            });
-    }
-
-    void Register() override
-    {
-        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_midsummer_fling_torch_missed::FilterTargets, EFFECT_0, TARGET_UNIT_DEST_AREA_ENTRY);
-        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_midsummer_fling_torch_missed::FilterTargets, EFFECT_2, TARGET_UNIT_DEST_AREA_ENTRY);
-    }
-};
-
 void AddSC_holiday_spell_scripts()
 {
     // Love is in the Air
-    RegisterSpellScript(spell_love_is_in_the_air_romantic_picnic);
+    new spell_love_is_in_the_air_romantic_picnic();
     // Hallow's End
     new spell_hallow_end_candy();
     new spell_hallow_end_candy_pirate();
@@ -1963,15 +1718,9 @@ void AddSC_holiday_spell_scripts()
     new spell_brewfest_dismount_ram();
     new spell_brewfest_barker_bunny();
     // Midsummer Fire Festival
-    RegisterSpellScript(spell_midsummer_braziers_hit);
+    RegisterAuraScript(spell_midsummer_braziers_hit);
     RegisterSpellScript(spell_midsummer_torch_target_picker);
     RegisterSpellScript(spell_midsummer_torch_toss_land);
-    RegisterSpellScript(spell_midsummer_test_ribbon_pole_channel);
-    RegisterSpellScript(spell_midsummer_ribbon_pole_periodic_visual);
-    RegisterSpellScript(spell_midsummer_juggle_torch);
-    RegisterSpellScript(spell_midsummer_torch_catch);
-    RegisterSpellScript(spell_midsummer_fling_torch);
-    RegisterSpellScript(spell_midsummer_fling_torch_triggered);
-    RegisterSpellScript(spell_midsummer_fling_torch_catch);
-    RegisterSpellScript(spell_midsummer_fling_torch_missed);
+    RegisterAuraScript(spell_midsummer_test_ribbon_pole_channel);
+    RegisterAuraScript(spell_midsummer_ribbon_pole_periodic_visual);
 }

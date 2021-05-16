@@ -16,8 +16,8 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "razorfen_downs.h"
+#include "ScriptedCreature.h"
 
 enum Say
 {
@@ -68,12 +68,12 @@ public:
             Initialize();
         }
 
-        void JustEngagedWith(Unit* who) override
+        void JustEngagedWith(Unit* /*who*/) override
         {
-            BossAI::JustEngagedWith(who);
-            events.ScheduleEvent(EVENT_AMNENNARSWRATH, 8s);
-            events.ScheduleEvent(EVENT_FROSTBOLT, 1s);
-            events.ScheduleEvent(EVENT_FROST_NOVA, 10s, 15s);
+            _JustEngagedWith();
+            events.ScheduleEvent(EVENT_AMNENNARSWRATH, 8000);
+            events.ScheduleEvent(EVENT_FROSTBOLT, 1000);
+            events.ScheduleEvent(EVENT_FROST_NOVA, urand(10000, 15000));
             Talk(SAY_AGGRO);
         }
 
@@ -104,15 +104,15 @@ public:
                 {
                     case EVENT_AMNENNARSWRATH:
                         DoCastVictim(SPELL_AMNENNARSWRATH);
-                        events.ScheduleEvent(EVENT_AMNENNARSWRATH, 12s);
+                        events.ScheduleEvent(EVENT_AMNENNARSWRATH, 12000);
                         break;
                     case EVENT_FROSTBOLT:
                         DoCastVictim(SPELL_FROSTBOLT);
-                        events.ScheduleEvent(EVENT_FROSTBOLT, 8s);
+                        events.ScheduleEvent(EVENT_FROSTBOLT, 8000);
                         break;
                     case EVENT_FROST_NOVA:
                         DoCast(me, SPELL_FROST_NOVA);
-                        events.ScheduleEvent(EVENT_FROST_NOVA, 15s);
+                        events.ScheduleEvent(EVENT_FROST_NOVA, 15000);
                         break;
                 }
 

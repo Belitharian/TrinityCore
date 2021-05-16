@@ -21,7 +21,6 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "SpellMgr.h"
-#include <map>
 
 // some type definitions
 // no use putting them in the header file, they're only used in this .cpp
@@ -72,14 +71,14 @@ void LoadSkillPerfectItemTable()
 
         uint32 spellId = fields[0].GetUInt32();
 
-        if (!sSpellMgr->GetSpellInfo(spellId))
+        if (!sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
         {
             TC_LOG_ERROR("sql.sql", "Skill perfection data for spell %u has a non-existing spell id in the `skill_perfect_item_template`!", spellId);
             continue;
         }
 
         uint32 requiredSpecialization = fields[1].GetUInt32();
-        if (!sSpellMgr->GetSpellInfo(requiredSpecialization))
+        if (!sSpellMgr->GetSpellInfo(requiredSpecialization, DIFFICULTY_NONE))
         {
             TC_LOG_ERROR("sql.sql", "Skill perfection data for spell %u has a non-existing required specialization spell id %u in the `skill_perfect_item_template`!", spellId, requiredSpecialization);
             continue;
@@ -159,14 +158,14 @@ void LoadSkillExtraItemTable()
 
         uint32 spellId = fields[0].GetUInt32();
 
-        if (!sSpellMgr->GetSpellInfo(spellId))
+        if (!sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
         {
             TC_LOG_ERROR("sql.sql", "Skill specialization %u has a non-existing spell id in the `skill_extra_item_template`!", spellId);
             continue;
         }
 
         uint32 requiredSpecialization = fields[1].GetUInt32();
-        if (!sSpellMgr->GetSpellInfo(requiredSpecialization))
+        if (!sSpellMgr->GetSpellInfo(requiredSpecialization, DIFFICULTY_NONE))
         {
             TC_LOG_ERROR("sql.sql", "Skill specialization %u has a non-existing required specialization spell id %u in the `skill_extra_item_template`!", spellId, requiredSpecialization);
             continue;

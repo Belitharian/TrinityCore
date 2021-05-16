@@ -67,9 +67,9 @@ public:
 
         void JustEngagedWith(Unit* /*who*/) override
         {
-            events.ScheduleEvent(EVENT_SHADOWBOLT_VOLLEY, 10s);
-            events.ScheduleEvent(EVENT_BONE_SHIELD, 2s);
-            events.ScheduleEvent(EVENT_SUMMON_MINIONS, 15s);
+            events.ScheduleEvent(EVENT_SHADOWBOLT_VOLLEY, 10000);
+            events.ScheduleEvent(EVENT_BONE_SHIELD, 2000);
+            events.ScheduleEvent(EVENT_SUMMON_MINIONS, 15000);
         }
 
         void JustSummoned(Creature* summoned) override
@@ -102,15 +102,15 @@ public:
                 {
                     case EVENT_SHADOWBOLT_VOLLEY:
                         DoCastVictim(SPELL_SHADOWBOLT_VOLLEY);
-                        events.ScheduleEvent(EVENT_SHADOWBOLT_VOLLEY, 15s);
+                        events.ScheduleEvent(EVENT_SHADOWBOLT_VOLLEY, 15000);
                         break;
                     case EVENT_BONE_SHIELD:
                         DoCastVictim(SPELL_BONE_SHIELD);
-                        events.ScheduleEvent(EVENT_BONE_SHIELD, 45s);
+                        events.ScheduleEvent(EVENT_BONE_SHIELD, 45000);
                         break;
                     case EVENT_SUMMON_MINIONS:
                         DoCast(SPELL_SUMMON_BONE_MINIONS);
-                        events.ScheduleEvent(EVENT_SUMMON_MINIONS, 12s);
+                        events.ScheduleEvent(EVENT_SUMMON_MINIONS, 12000);
                         break;
                     default:
                         break;
@@ -197,7 +197,7 @@ class spell_kormok_summon_bone_minions : SpellScriptLoader
 
             // Possible spells to handle this not found.
             for (uint32 i = 0; i < 4; ++i)
-                GetCaster()->SummonCreature(NPC_BONE_MINION, GetCaster()->GetPositionX() + float(irand(-7, 7)), GetCaster()->GetPositionY() + float(irand(-7, 7)), GetCaster()->GetPositionZ(), 0, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 2min);
+                GetCaster()->SummonCreature(NPC_BONE_MINION, GetCaster()->GetPositionX() + float(irand(-7, 7)), GetCaster()->GetPositionY() + float(irand(-7, 7)), GetCaster()->GetPositionZ(), 0, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 120000);
         }
 
         void Register() override

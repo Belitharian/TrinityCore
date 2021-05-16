@@ -73,16 +73,16 @@ class boss_drakos : public CreatureScript
             {
                 _Reset();
 
-                events.ScheduleEvent(EVENT_MAGIC_PULL, 15s);
-                events.ScheduleEvent(EVENT_STOMP, 15s);
-                events.ScheduleEvent(EVENT_BOMB_SUMMON, 2s);
+                events.ScheduleEvent(EVENT_MAGIC_PULL, 15000);
+                events.ScheduleEvent(EVENT_STOMP, 17000);
+                events.ScheduleEvent(EVENT_BOMB_SUMMON, 2000);
 
                 Initialize();
             }
 
-            void JustEngagedWith(Unit* who) override
+            void JustEngagedWith(Unit* /*who*/) override
             {
-                BossAI::JustEngagedWith(who);
+                _JustEngagedWith();
                 Talk(SAY_AGGRO);
             }
 
@@ -108,17 +108,17 @@ class boss_drakos : public CreatureScript
                                     me->SummonCreature(NPC_UNSTABLE_SPHERE, position);
                                 }
                             }
-                            events.ScheduleEvent(EVENT_BOMB_SUMMON, 2s);
+                            events.ScheduleEvent(EVENT_BOMB_SUMMON, 2000);
                             break;
                         case EVENT_MAGIC_PULL:
                             DoCast(SPELL_MAGIC_PULL);
                             postPull = true;
-                            events.ScheduleEvent(EVENT_MAGIC_PULL, 15s);
+                            events.ScheduleEvent(EVENT_MAGIC_PULL, 15000);
                             break;
                         case EVENT_STOMP:
                             Talk(SAY_STOMP);
                             DoCast(SPELL_THUNDERING_STOMP);
-                            events.ScheduleEvent(EVENT_STOMP, 15s);
+                            events.ScheduleEvent(EVENT_STOMP, 17000);
                             break;
                         default:
                             break;
@@ -138,7 +138,7 @@ class boss_drakos : public CreatureScript
                 Talk(SAY_DEATH);
 
                 // start achievement timer (kill Eregos within 20 min)
-                instance->DoStartTimedAchievement(ACHIEVEMENT_TIMED_TYPE_EVENT, ACHIEV_TIMED_START_EVENT);
+                instance->DoStartCriteriaTimer(CRITERIA_TIMED_TYPE_EVENT, ACHIEV_TIMED_START_EVENT);
             }
 
             void KilledUnit(Unit* /*victim*/) override
@@ -183,7 +183,7 @@ class npc_unstable_sphere : public CreatureScript
 
                 Initialize();
 
-                me->DespawnOrUnsummon(19s);
+                me->DespawnOrUnsummon(19000);
             }
 
             void UpdateAI(uint32 diff) override

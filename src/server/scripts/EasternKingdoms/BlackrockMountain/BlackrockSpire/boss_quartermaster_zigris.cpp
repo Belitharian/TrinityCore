@@ -47,11 +47,11 @@ public:
             _Reset();
         }
 
-        void JustEngagedWith(Unit* who) override
+        void JustEngagedWith(Unit* /*who*/) override
         {
-            BossAI::JustEngagedWith(who);
-            events.ScheduleEvent(EVENT_SHOOT, 1s);
-            events.ScheduleEvent(EVENT_STUN_BOMB, 16s);
+            _JustEngagedWith();
+            events.ScheduleEvent(EVENT_SHOOT,      1000);
+            events.ScheduleEvent(EVENT_STUN_BOMB, 16000);
         }
 
         void JustDied(Unit* /*killer*/) override
@@ -75,11 +75,11 @@ public:
                 {
                     case EVENT_SHOOT:
                         DoCastVictim(SPELL_SHOOT);
-                        events.ScheduleEvent(EVENT_SHOOT, 500ms);
+                        events.ScheduleEvent(EVENT_SHOOT, 500);
                         break;
                     case EVENT_STUN_BOMB:
                         DoCastVictim(SPELL_STUNBOMB);
-                        events.ScheduleEvent(EVENT_STUN_BOMB, 14s);
+                        events.ScheduleEvent(EVENT_STUN_BOMB, 14000);
                         break;
                 }
 

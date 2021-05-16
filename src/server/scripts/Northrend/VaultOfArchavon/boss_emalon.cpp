@@ -87,7 +87,7 @@ class boss_emalon : public CreatureScript
                 _Reset();
 
                 for (uint8 i = 0; i < MAX_TEMPEST_MINIONS; ++i)
-                    me->SummonCreature(NPC_TEMPEST_MINION, TempestMinions[i], TEMPSUMMON_CORPSE_DESPAWN);
+                    me->SummonCreature(NPC_TEMPEST_MINION, TempestMinions[i], TEMPSUMMON_CORPSE_DESPAWN, 0);
             }
 
             void JustSummoned(Creature* summoned) override
@@ -111,12 +111,12 @@ class boss_emalon : public CreatureScript
                     }
                 }
 
-                events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 5s);
-                events.ScheduleEvent(EVENT_LIGHTNING_NOVA, 40s);
-                events.ScheduleEvent(EVENT_BERSERK, 6min);
-                events.ScheduleEvent(EVENT_OVERCHARGE, 45s);
+                events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 5000);
+                events.ScheduleEvent(EVENT_LIGHTNING_NOVA, 40000);
+                events.ScheduleEvent(EVENT_BERSERK, 360000);
+                events.ScheduleEvent(EVENT_OVERCHARGE, 45000);
 
-                BossAI::JustEngagedWith(who);
+                _JustEngagedWith();
             }
 
             void UpdateAI(uint32 diff) override
@@ -134,13 +134,13 @@ class boss_emalon : public CreatureScript
                     switch (eventId)
                     {
                         case EVENT_CHAIN_LIGHTNING:
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                                 DoCast(target, SPELL_CHAIN_LIGHTNING);
-                            events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 25s);
+                            events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 25000);
                             break;
                         case EVENT_LIGHTNING_NOVA:
                             DoCastAOE(SPELL_LIGHTNING_NOVA);
-                            events.ScheduleEvent(EVENT_LIGHTNING_NOVA, 40s);
+                            events.ScheduleEvent(EVENT_LIGHTNING_NOVA, 40000);
                             break;
                         case EVENT_OVERCHARGE:
                             if (!summons.empty())
@@ -151,7 +151,7 @@ class boss_emalon : public CreatureScript
                                     minion->CastSpell(me, SPELL_OVERCHARGED, true);
                                     minion->SetFullHealth();
                                     Talk(EMOTE_OVERCHARGE);
-                                    events.ScheduleEvent(EVENT_OVERCHARGE, 45s);
+                                    events.ScheduleEvent(EVENT_OVERCHARGE, 45000);
                                 }
                             }
                             break;
@@ -210,7 +210,7 @@ class npc_tempest_minion : public CreatureScript
                 {
                     if (emalon->IsAlive())
                     {
-                        emalon->SummonCreature(NPC_TEMPEST_MINION, 0, 0, 0, 0, TEMPSUMMON_CORPSE_DESPAWN);
+                        emalon->SummonCreature(NPC_TEMPEST_MINION, 0, 0, 0, 0, TEMPSUMMON_CORPSE_DESPAWN, 0);
                         Talk(EMOTE_MINION_RESPAWN);
                     }
                 }
@@ -219,7 +219,7 @@ class npc_tempest_minion : public CreatureScript
             void JustEngagedWith(Unit* who) override
             {
                 DoZoneInCombat();
-                events.ScheduleEvent(EVENT_SHOCK, 20s);
+                events.ScheduleEvent(EVENT_SHOCK, 20000);
 
                 if (Creature* pEmalon = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_EMALON)))
                 {
@@ -246,7 +246,7 @@ class npc_tempest_minion : public CreatureScript
                         if (OverchargedTimer <= diff)
                         {
                             DoCast(me, SPELL_OVERCHARGED);
-                            OverchargedTimer = 2000; // ms
+                            OverchargedTimer = 2000;
                         }
                         else
                             OverchargedTimer -= diff;
@@ -265,7 +265,7 @@ class npc_tempest_minion : public CreatureScript
                 if (events.ExecuteEvent() == EVENT_SHOCK)
                 {
                     DoCastVictim(SPELL_SHOCK);
-                    events.ScheduleEvent(EVENT_SHOCK, 20s);
+                    events.ScheduleEvent(EVENT_SHOCK, 20000);
                 }
 
                 DoMeleeAttackIfReady();
