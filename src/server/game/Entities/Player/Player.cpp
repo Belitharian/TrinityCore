@@ -568,6 +568,8 @@ bool Player::Create(ObjectGuid::LowType guidlow, WorldPackets::Character::Charac
         SetPrimarySpecialization(defaultSpec->ID);
     }
 
+    GetThreatManager().Initialize();
+
     return true;
 }
 
@@ -946,7 +948,7 @@ void Player::Update(uint32 p_time)
 
     UpdateAfkReport(now);
 
-    if (GetCombatTimer()) // Only set when in pvp combat
+    if (GetCombatManager().HasPvPCombat())
         if (Aura* aura = GetAura(SPELL_PVP_RULES_ENABLED))
             if (!aura->IsPermanent())
                 aura->SetDuration(aura->GetSpellInfo()->GetMaxDuration());
@@ -1220,7 +1222,7 @@ void Player::Update(uint32 p_time)
         {
             m_hostileReferenceCheckTimer = 15 * IN_MILLISECONDS;
             if (!GetMap()->IsDungeon())
-                getHostileRefManager().deleteReferencesOutOfRange(GetVisibilityRange());
+                GetCombatManager().EndCombatBeyondRange(GetVisibilityRange(), true);
         }
         else
             m_hostileReferenceCheckTimer -= p_time;
@@ -2060,9 +2062,6 @@ void Player::SetInWater(bool inWater)
 
     // Call base
     Unit::SetInWater(inWater);
-
-    // Update threat tables
-    getHostileRefManager().updateThreatTables();
 }
 
 bool Player::IsInAreaTriggerRadius(AreaTriggerEntry const* trigger) const
@@ -2104,15 +2103,11 @@ void Player::SetGameMaster(bool on)
         AddUnitFlag2(UNIT_FLAG2_ALLOW_CHEAT_SPELLS);
 
         if (Pet* pet = GetPet())
-        {
             pet->SetFaction(FACTION_FRIENDLY);
-            pet->getHostileRefManager().setOnlineOfflineState(false);
-        }
 
         RemovePvpFlag(UNIT_BYTE2_FLAG_FFA_PVP);
         ResetContestedPvP();
 
-        getHostileRefManager().setOnlineOfflineState(false);
         CombatStopWithPets();
 
         PhasingHandler::SetAlwaysVisible(this, true, false);
@@ -2130,7 +2125,7 @@ void Player::SetGameMaster(bool on)
         if (Pet* pet = GetPet())
         {
             pet->SetFaction(GetFaction());
-            pet->getHostileRefManager().setOnlineOfflineState(true);
+            pet->GetThreatManager().UpdateOnlineStates();
         }
 
         // restore FFA PvP Server state
@@ -2140,7 +2135,6 @@ void Player::SetGameMaster(bool on)
         // restore FFA PvP area state, remove not allowed for GM mounts
         UpdateArea(m_areaUpdateId);
 
-        getHostileRefManager().setOnlineOfflineState(true);
         m_serverSideVisibilityDetect.SetValue(SERVERSIDE_VISIBILITY_GM, SEC_PLAYER);
     }
 
@@ -12696,7 +12690,7 @@ void Player::DestroyItem(uint8 bag, uint8 slot, bool update)
         pItem->SetSlot(NULL_SLOT);
         pItem->SetState(ITEM_REMOVED, this);
 
-        if (pItem->GetTemplate()->GetInventoryType() != INVTYPE_NON_EQUIP)
+        if (pProto->GetInventoryType() != INVTYPE_NON_EQUIP)
             UpdateAverageItemLevelTotal();
         if (bag == INVENTORY_SLOT_BAG_0)
             UpdateAverageItemLevelEquipped();
@@ -13669,7 +13663,7 @@ void Player::RemoveItemFromBuyBackSlot(uint32 slot, bool del)
     }
 }
 
-void Player::SendEquipError(InventoryResult msg, Item* item1 /*= nullptr*/, Item* item2 /*= nullptr*/, uint32 itemId /*= 0*/) const
+void Player::SendEquipError(InventoryResult msg, Item const* item1 /*= nullptr*/, Item const* item2 /*= nullptr*/, uint32 itemId /*= 0*/) const
 {
     WorldPackets::Item::InventoryChangeFailure failure;
     failure.BagResult = msg;
@@ -18687,7 +18681,7 @@ void Player::_LoadAuras(PreparedQueryResult auraResult, PreparedQueryResult effe
             }
 
             // negative effects should continue counting down after logout
-            if (remainTime != -1 && !spellInfo->IsPositive())
+            if (remainTime != -1 && (!spellInfo->IsPositive() || spellInfo->HasAttribute(SPELL_ATTR4_AURA_EXPIRES_OFFLINE)))
             {
                 if (remainTime/IN_MILLISECONDS <= int32(timediff))
                     continue;
@@ -22666,7 +22660,6 @@ void Player::CleanupAfterTaxiFlight()
     m_taxi.ClearTaxiDestinations();        // not destinations, clear source node
     Dismount();
     RemoveUnitFlag(UnitFlags(UNIT_FLAG_REMOVE_CLIENT_CONTROL | UNIT_FLAG_TAXI_FLIGHT));
-    getHostileRefManager().setOnlineOfflineState(true);
 }
 
 void Player::ContinueTaxiFlight() const
@@ -25837,6 +25830,20 @@ void Player::ProcessTerrainStatusUpdate(ZLiquidStatus status, Optional<LiquidDat
         m_MirrorTimerFlags &= ~(UNDERWATER_INWATER | UNDERWATER_INLAVA | UNDERWATER_INSLIME | UNDERWATER_INDARKWATER);
 }
 
+void Player::AtEnterCombat()
+{
+    Unit::AtEnterCombat();
+    if (GetCombatManager().HasPvPCombat())
+        EnablePvpRules(true);
+}
+
+void Player::AtExitCombat()
+{
+    Unit::AtExitCombat();
+    UpdatePotionCooldown();
+    m_combatExitTime = getMSTime();
+}
+
 float Player::GetBlockPercent(uint8 attackerLevel) const
 {
     float blockArmor = float(*m_activePlayerData->ShieldBlock);
@@ -26812,7 +26819,7 @@ void Player::DisablePvpRules()
     if (IsInAreaThatActivatesPvpTalents())
         return;
 
-    if (!GetCombatTimer())
+    if (!GetCombatManager().HasPvPCombat())
     {
         RemoveAurasDueToSpell(SPELL_PVP_RULES_ENABLED);
         UpdateItemLevelAreaBasedScaling();
@@ -27981,14 +27988,6 @@ VoidStorageItem* Player::GetVoidStorageItem(uint64 id, uint8& slot) const
     }
 
     return nullptr;
-}
-
-void Player::OnCombatExit()
-{
-    Unit::OnCombatExit();
-
-    UpdatePotionCooldown();
-    m_combatExitTime = getMSTime();
 }
 
 void Player::CreateGarrison(uint32 garrSiteId)

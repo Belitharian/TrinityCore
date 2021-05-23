@@ -1578,7 +1578,7 @@ void ObjectMgr::LoadLinkedRespawn()
         bool error = false;
         switch (linkType)
         {
-            case CREATURE_TO_CREATURE:
+            case LINKED_RESPAWN_CREATURE_TO_CREATURE:
             {
                 CreatureData const* slave = GetCreatureData(guidLow);
                 if (!slave)
@@ -1616,7 +1616,7 @@ void ObjectMgr::LoadLinkedRespawn()
                 linkedGuid = ObjectGuid::Create<HighGuid::Creature>(master->spawnPoint.GetMapId(), master->id, linkedGuidLow);
                 break;
             }
-            case CREATURE_TO_GO:
+            case LINKED_RESPAWN_CREATURE_TO_GO:
             {
                 CreatureData const* slave = GetCreatureData(guidLow);
                 if (!slave)
@@ -1654,7 +1654,7 @@ void ObjectMgr::LoadLinkedRespawn()
                 linkedGuid = ObjectGuid::Create<HighGuid::GameObject>(master->spawnPoint.GetMapId(), master->id, linkedGuidLow);
                 break;
             }
-            case GO_TO_GO:
+            case LINKED_RESPAWN_GO_TO_GO:
             {
                 GameObjectData const* slave = GetGameObjectData(guidLow);
                 if (!slave)
@@ -1692,7 +1692,7 @@ void ObjectMgr::LoadLinkedRespawn()
                 linkedGuid = ObjectGuid::Create<HighGuid::GameObject>(master->spawnPoint.GetMapId(), master->id, linkedGuidLow);
                 break;
             }
-            case GO_TO_CREATURE:
+            case LINKED_RESPAWN_GO_TO_CREATURE:
             {
                 GameObjectData const* slave = GetGameObjectData(guidLow);
                 if (!slave)
@@ -1752,8 +1752,9 @@ bool ObjectMgr::SetCreatureLinkedRespawn(ObjectGuid::LowType guidLow, ObjectGuid
     if (!linkedGuidLow) // we're removing the linking
     {
         _linkedRespawnStore.erase(guid);
-        WorldDatabasePreparedStatement* stmt = WorldDatabase.GetPreparedStatement(WORLD_DEL_CRELINKED_RESPAWN);
+        WorldDatabasePreparedStatement* stmt = WorldDatabase.GetPreparedStatement(WORLD_DEL_LINKED_RESPAWN);
         stmt->setUInt64(0, guidLow);
+        stmt->setUInt32(1, LINKED_RESPAWN_CREATURE_TO_CREATURE);
         WorldDatabase.Execute(stmt);
         return true;
     }
@@ -1782,9 +1783,10 @@ bool ObjectMgr::SetCreatureLinkedRespawn(ObjectGuid::LowType guidLow, ObjectGuid
     ObjectGuid linkedGuid = ObjectGuid::Create<HighGuid::Creature>(slave->spawnPoint.GetMapId(), slave->id, linkedGuidLow);
 
     _linkedRespawnStore[guid] = linkedGuid;
-    WorldDatabasePreparedStatement* stmt = WorldDatabase.GetPreparedStatement(WORLD_REP_CREATURE_LINKED_RESPAWN);
+    WorldDatabasePreparedStatement* stmt = WorldDatabase.GetPreparedStatement(WORLD_REP_LINKED_RESPAWN);
     stmt->setUInt64(0, guidLow);
     stmt->setUInt64(1, linkedGuidLow);
+    stmt->setUInt32(2, LINKED_RESPAWN_CREATURE_TO_CREATURE);
     WorldDatabase.Execute(stmt);
     return true;
 }
@@ -3837,10 +3839,10 @@ void ObjectMgr::LoadPlayerInfo()
     {
         struct RaceStats
         {
-            int16 StatModifier[MAX_STATS];
+            std::array<int16, MAX_STATS> StatModifier = { };
         };
 
-        std::array<RaceStats, MAX_RACES> raceStatModifiers;
+        std::array<RaceStats, MAX_RACES> raceStatModifiers = { };
 
         uint32 oldMSTime = getMSTime();
 
@@ -10469,7 +10471,7 @@ void ObjectMgr::LoadPlayerChoices()
 
             PlayerChoiceResponse& response = choice->Responses.back();
             response.ResponseId         = responseId;
-            response.ResponseId         = fields[2].GetUInt16();
+            response.ResponseIdentifier = fields[2].GetUInt16();
             response.ChoiceArtFileId    = fields[3].GetInt32();
             response.Flags              = fields[4].GetInt32();
             response.WidgetSetID        = fields[5].GetUInt32();

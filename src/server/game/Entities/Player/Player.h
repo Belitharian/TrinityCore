@@ -94,7 +94,6 @@ enum GroupCategory : uint8;
 enum InventoryType : uint8;
 enum ItemClass : uint8;
 enum LootError : uint8;
-enum class LootItemType : uint8;
 enum LootType : uint8;
 enum PlayerRestState : uint8;
 enum RestTypes : uint8;
@@ -1383,7 +1382,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void SetBuybackTimestamp(uint32 slot, uint32 timestamp) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::BuybackTimestamp, slot), timestamp); }
         Item* GetItemFromBuyBackSlot(uint32 slot);
         void RemoveItemFromBuyBackSlot(uint32 slot, bool del);
-        void SendEquipError(InventoryResult msg, Item* item1 = nullptr, Item* item2 = nullptr, uint32 itemId = 0) const;
+        void SendEquipError(InventoryResult msg, Item const* item1 = nullptr, Item const* item2 = nullptr, uint32 itemId = 0) const;
         void SendBuyError(BuyResult msg, Creature* creature, uint32 item, uint32 param) const;
         void SendSellError(SellResult msg, Creature* creature, ObjectGuid guid) const;
         void AddWeaponProficiency(uint32 newflag) { m_WeaponProficiency |= newflag; }
@@ -2012,6 +2011,8 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         bool UpdatePosition(float x, float y, float z, float orientation, bool teleport = false) override;
         bool UpdatePosition(Position const& pos, bool teleport = false) override { return UpdatePosition(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), pos.GetOrientation(), teleport); }
         void ProcessTerrainStatusUpdate(ZLiquidStatus status, Optional<LiquidData> const& liquidData) override;
+        void AtEnterCombat() override;
+        void AtExitCombat() override;
 
         void SendMessageToSet(WorldPacket const* data, bool self) const override { SendMessageToSetInRange(data, GetVisibilityRange(), self); }
         void SendMessageToSetInRange(WorldPacket const* data, float dist, bool self) const override;
@@ -2527,8 +2528,6 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         bool SwapVoidStorageItem(uint8 oldSlot, uint8 newSlot);
         VoidStorageItem* GetVoidStorageItem(uint8 slot) const;
         VoidStorageItem* GetVoidStorageItem(uint64 id, uint8& slot) const;
-
-        void OnCombatExit() override;
 
         void CreateGarrison(uint32 garrSiteId);
         void DeleteGarrison();
