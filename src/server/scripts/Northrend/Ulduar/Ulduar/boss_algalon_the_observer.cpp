@@ -786,7 +786,7 @@ class npc_living_constellation : public CreatureScript
 
                 me->DespawnOrUnsummon(1);
                 if (InstanceScript* instance = me->GetInstanceScript())
-                    instance->DoStartCriteriaTimer(CRITERIA_TIMED_TYPE_EVENT, EVENT_ID_SUPERMASSIVE_START);
+                    instance->DoStartCriteriaTimer(CriteriaStartEvent::SendEvent, EVENT_ID_SUPERMASSIVE_START);
                 caster->CastSpell(nullptr, SPELL_BLACK_HOLE_CREDIT, TRIGGERED_FULL_MASK);
                 caster->ToCreature()->DespawnOrUnsummon(1);
             }
@@ -1358,7 +1358,7 @@ class spell_algalon_supermassive_fail : public SpellScriptLoader
                 if (!GetHitPlayer())
                     return;
 
-                GetHitPlayer()->ResetCriteria(CRITERIA_CONDITION_NO_SPELL_HIT, GetSpellInfo()->Id, true);
+                GetHitPlayer()->ResetCriteria(CriteriaFailEvent::BeSpellTarget, GetSpellInfo()->Id, true);
             }
 
             void Register() override

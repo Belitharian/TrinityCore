@@ -244,24 +244,6 @@ enum class CorruptionEffectsFlag
 
 DEFINE_ENUM_FLAG(CorruptionEffectsFlag);
 
-enum CriteriaCondition
-{
-    CRITERIA_CONDITION_NONE            = 0,
-    CRITERIA_CONDITION_NO_DEATH        = 1,     // reset progress on death
-    CRITERIA_CONDITION_UNK2            = 2,     // only used in "Complete a daily quest every day for five consecutive days"
-    CRITERIA_CONDITION_BG_MAP          = 3,     // requires you to be on specific map, reset at change
-    CRITERIA_CONDITION_NO_LOSE         = 4,     // only used in "Win 10 arenas without losing"
-    CRITERIA_CONDITION_REMOVE_AURA     = 5,     // reset when this aura is removed
-    CRITERIA_CONDITION_CAST_SPELL      = 8,     // reset when casting this spell
-    CRITERIA_CONDITION_NO_SPELL_HIT    = 9,     // requires the player not to be hit by specific spell
-    CRITERIA_CONDITION_NOT_IN_GROUP    = 10,    // requires the player not to be in group
-    CRITERIA_CONDITION_LOSE_PET_BATTLE = 11,    // reset when losing pet battle
-    CRITERIA_CONDITION_UNK13           = 13,    // unk
-    CRITERIA_CONDITION_EVENT           = 14,
-
-    CRITERIA_CONDITION_MAX
-};
-
 enum CriteriaAdditionalCondition
 {
     CRITERIA_ADDITIONAL_CONDITION_SOURCE_DRUNK_VALUE            = 1,
@@ -577,30 +559,59 @@ enum CriteriaAdditionalCondition
     CRITERIA_ADDITIONAL_CONDITION_SOURCE_FLYING                 = 311,
 };
 
-enum CriteriaFlags
+enum class CriteriaFailEvent : uint8
 {
-    CRITERIA_FLAG_SHOW_PROGRESS_BAR = 0x00000001,   // Show progress as bar
-    CRITERIA_FLAG_HIDDEN            = 0x00000002,   // Not show criteria in client
-    CRITERIA_FLAG_FAIL_ACHIEVEMENT  = 0x00000004,   // BG related??
-    CRITERIA_FLAG_RESET_ON_START    = 0x00000008,   //
-    CRITERIA_FLAG_IS_DATE           = 0x00000010,   // not used
-    CRITERIA_FLAG_MONEY_COUNTER     = 0x00000020    // Displays counter as money
+    None                                = 0,
+    Death                               = 1,    // Death
+    Hours24WithoutCompletingDailyQuest  = 2,    // 24 hours without completing a daily quest
+    LeaveBattleground                   = 3,    // Leave a battleground
+    LoseRankedArenaMatchWithTeamSize    = 4,    // Lose a ranked arena match with team size {#Team Size}
+    LoseAura                            = 5,    // Lose aura "{Spell}"
+    GainAura                            = 6,    // Gain aura "{Spell}"
+    GainAuraEffect                      = 7,    // Gain aura effect "{SpellAuraNames.EnumID}"
+    CastSpell                           = 8,    // Cast spell "{Spell}"
+    BeSpellTarget                       = 9,    // Have spell "{Spell}" cast on you
+    ModifyPartyStatus                   = 10,   // Modify your party status
+    LosePetBattle                       = 11,   // Lose a pet battle
+    BattlePetDies                       = 12,   // Battle pet dies
+    DailyQuestsCleared                  = 13,   // Daily quests cleared
+    SendEvent                           = 14,   // Send event "{GameEvents}" (player-sent/instance only)
+
+    Count
 };
 
-enum CriteriaTimedTypes : uint8
+enum class CriteriaStartEvent : uint8
 {
-    CRITERIA_TIMED_TYPE_EVENT           = 1,    // Timer is started by internal event with id in timerStartEvent
-    CRITERIA_TIMED_TYPE_QUEST           = 2,    // Timer is started by accepting quest with entry in timerStartEvent
-    CRITERIA_TIMED_TYPE_SPELL_CASTER    = 5,    // Timer is started by casting a spell with entry in timerStartEvent
-    CRITERIA_TIMED_TYPE_SPELL_TARGET    = 6,    // Timer is started by being target of spell with entry in timerStartEvent
-    CRITERIA_TIMED_TYPE_CREATURE        = 7,    // Timer is started by killing creature with entry in timerStartEvent
-    CRITERIA_TIMED_TYPE_ITEM            = 9,    // Timer is started by using item with entry in timerStartEvent
-    CRITERIA_TIMED_TYPE_UNK             = 10,   // Unknown
-    CRITERIA_TIMED_TYPE_UNK_2           = 13,   // Unknown
-    CRITERIA_TIMED_TYPE_SCENARIO_STAGE  = 14,   // Timer is started by changing stages in a scenario
+    None                            = 0, // - NONE -
+    ReachLevel                      = 1, // Reach level {#Level}
+    CompleteDailyQuest              = 2, // Complete daily quest "{QuestV2}"
+    StartBattleground               = 3, // Start battleground "{Map}"
+    WinRankedArenaMatchWithTeamSize = 4, // Win a ranked arena match with team size {#Team Size}
+    GainAura                        = 5, // Gain aura "{Spell}"
+    GainAuraEffect                  = 6, // Gain aura effect "{SpellAuraNames.EnumID}"
+    CastSpell                       = 7, // Cast spell "{Spell}"
+    BeSpellTarget                   = 8, // Have spell "{Spell}" cast on you
+    AcceptQuest                     = 9, // Accept quest "{QuestV2}"
+    KillNPC                         = 10, // Kill NPC "{Creature}"
+    KillPlayer                      = 11, // Kill player
+    UseItem                         = 12, // Use item "{Item}"
+    SendEvent                       = 13, // Send event "{GameEvents}" (player-sent/instance only)
+    BeginScenarioStep               = 14, // Begin scenario step "{#Step}" (for use with "Player on Scenario" modifier only)
 
-    CRITERIA_TIMED_TYPE_MAX
+    Count
 };
+
+enum class CriteriaFlags : uint8
+{
+    FailAchievement         = 0x01, // Fail Achievement
+    ResetOnStart            = 0x02, // Reset on Start
+    ServerOnly              = 0x04, // Server Only
+    AlwaysSaveToDB          = 0x08, // Always Save to DB (Use with Caution)
+    AllowCriteriaDecrement  = 0x10, // Allow criteria to be decremented
+    IsForQuest              = 0x20  // Is For Quest
+};
+
+DEFINE_ENUM_FLAG(CriteriaFlags);
 
 enum CriteriaTypes : uint8
 {
@@ -832,26 +843,35 @@ enum CriteriaTypes : uint8
 
 #define CRITERIA_TYPE_TOTAL 230
 
-enum CriteriaTreeFlags : uint16
+enum class CriteriaTreeFlags : uint16
 {
-    CRITERIA_TREE_FLAG_PROGRESS_BAR         = 0x0001,
-    CRITERIA_TREE_FLAG_PROGRESS_IS_DATE     = 0x0004,
-    CRITERIA_TREE_FLAG_SHOW_CURRENCY_ICON   = 0x0008,
-    CRITERIA_TREE_FLAG_ALLIANCE_ONLY        = 0x0200,
-    CRITERIA_TREE_FLAG_HORDE_ONLY           = 0x0400,
-    CRITERIA_TREE_FLAG_SHOW_REQUIRED_COUNT  = 0x0800
+    ProgressBar                 = 0x0001, // Progress Bar
+    DoNotDisplay                = 0x0002, // Do Not Display
+    IsDate                      = 0x0004, // Is a Date
+    IsMoney                     = 0x0008, // Is Money
+    ToastOnComplete             = 0x0010, // Toast on Complete
+    UseObjectsDescription       = 0x0020, // Use Object's Description
+    ShowFactionSpecificChild    = 0x0040, // Show faction specific child
+    DisplayAllChildren          = 0x0080, // Display all children
+    AwardBonusRep               = 0x0100, // Award Bonus Rep (Hack!!)
+    AllianceOnly                = 0x0200, // Treat this criteria or block as Alliance
+    HordeOnly                   = 0x0400, // Treat this criteria or block as Horde
+    DisplayAsFraction           = 0x0800, // Display as Fraction
+    IsForQuest                  = 0x1000  // Is For Quest
 };
 
-enum CriteriaTreeOperator : uint8
+DEFINE_ENUM_FLAG(CriteriaTreeFlags);
+
+enum class CriteriaTreeOperator : uint8
 {
-    CRITERIA_TREE_OPERATOR_SINGLE                   = 0,
-    CRITERIA_TREE_OPERATOR_SINGLE_NOT_COMPLETED     = 1,
-    CRITERIA_TREE_OPERATOR_ALL                      = 4,
-    CRITERIA_TREE_OPERAROR_SUM_CHILDREN             = 5,
-    CRITERIA_TREE_OPERATOR_MAX_CHILD                = 6,
-    CRITERIA_TREE_OPERATOR_COUNT_DIRECT_CHILDREN    = 7,
-    CRITERIA_TREE_OPERATOR_ANY                      = 8,
-    CRITERIA_TREE_OPERATOR_SUM_CHILDREN_WEIGHT      = 9
+    Complete        = 0, // Complete
+    NotComplete     = 1, // Not Complete
+    CompleteAll     = 4, // Complete All
+    Sum             = 5, // Sum Of Criteria Is
+    Highest         = 6, // Highest Criteria Is
+    StartedAtLeast  = 7, // Started At Least
+    CompleteAtLeast = 8, // Complete At Least
+    ProgressBar     = 9  // Progress Bar
 };
 
 enum class ChrCustomizationOptionFlag : int32
@@ -976,6 +996,17 @@ enum FactionMasks
     FACTION_MASK_MONSTER  = 8                               // aggressive creature from monster team
     // if none flags set then non-aggressive creature
 };
+
+enum class FriendshipReputationFlags : int32
+{
+    NoFXOnReactionChange                            = 0x01,
+    NoLogTextOnRepGain                              = 0x02,
+    NoLogTextOnReactionChange                       = 0x04,
+    ShowRepGainandReactionChangeForHiddenFaction    = 0x08,
+    NoRepGainModifiers                              = 0x10
+};
+
+DEFINE_ENUM_FLAG(FriendshipReputationFlags);
 
 enum class GlobalCurve : int32
 {

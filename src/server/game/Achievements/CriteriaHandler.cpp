@@ -855,9 +855,9 @@ void CriteriaHandler::UpdateTimedCriteria(uint32 timeDiff)
     }
 }
 
-void CriteriaHandler::StartCriteriaTimer(CriteriaTimedTypes type, uint32 entry, uint32 timeLost /* = 0 */)
+void CriteriaHandler::StartCriteriaTimer(CriteriaStartEvent startEvent, uint32 entry, uint32 timeLost /* = 0 */)
 {
-    CriteriaList const& criteriaList = sCriteriaMgr->GetTimedCriteriaByType(type);
+    CriteriaList const& criteriaList = sCriteriaMgr->GetTimedCriteriaByType(startEvent);
     for (Criteria const* criteria : criteriaList)
     {
         if (criteria->Entry->StartAsset != int32(entry))
@@ -886,9 +886,9 @@ void CriteriaHandler::StartCriteriaTimer(CriteriaTimedTypes type, uint32 entry, 
     }
 }
 
-void CriteriaHandler::RemoveCriteriaTimer(CriteriaTimedTypes type, uint32 entry)
+void CriteriaHandler::RemoveCriteriaTimer(CriteriaStartEvent startEvent, uint32 entry)
 {
-    CriteriaList const& criteriaList = sCriteriaMgr->GetTimedCriteriaByType(type);
+    CriteriaList const& criteriaList = sCriteriaMgr->GetTimedCriteriaByType(startEvent);
     for (Criteria const* criteria : criteriaList)
     {
         if (criteria->Entry->StartAsset != int32(entry))
@@ -1026,18 +1026,18 @@ bool CriteriaHandler::IsCompletedCriteriaTree(CriteriaTree const* tree)
         return false;
 
     uint64 requiredCount = tree->Entry->Amount;
-    switch (tree->Entry->Operator)
+    switch (CriteriaTreeOperator(tree->Entry->Operator))
     {
-        case CRITERIA_TREE_OPERATOR_SINGLE:
+        case CriteriaTreeOperator::Complete:
             return tree->Criteria && IsCompletedCriteria(tree->Criteria, requiredCount);
-        case CRITERIA_TREE_OPERATOR_SINGLE_NOT_COMPLETED:
+        case CriteriaTreeOperator::NotComplete:
             return !tree->Criteria || !IsCompletedCriteria(tree->Criteria, requiredCount);
-        case CRITERIA_TREE_OPERATOR_ALL:
+        case CriteriaTreeOperator::CompleteAll:
             for (CriteriaTree const* node : tree->Children)
                 if (!IsCompletedCriteriaTree(node))
                     return false;
             return true;
-        case CRITERIA_TREE_OPERAROR_SUM_CHILDREN:
+        case CriteriaTreeOperator::Sum:
         {
             uint64 progress = 0;
             CriteriaMgr::WalkCriteriaTree(tree, [this, &progress](CriteriaTree const* criteriaTree)
@@ -1048,7 +1048,7 @@ bool CriteriaHandler::IsCompletedCriteriaTree(CriteriaTree const* tree)
             });
             return progress >= requiredCount;
         }
-        case CRITERIA_TREE_OPERATOR_MAX_CHILD:
+        case CriteriaTreeOperator::Highest:
         {
             uint64 progress = 0;
             CriteriaMgr::WalkCriteriaTree(tree, [this, &progress](CriteriaTree const* criteriaTree)
@@ -1060,7 +1060,7 @@ bool CriteriaHandler::IsCompletedCriteriaTree(CriteriaTree const* tree)
             });
             return progress >= requiredCount;
         }
-        case CRITERIA_TREE_OPERATOR_COUNT_DIRECT_CHILDREN:
+        case CriteriaTreeOperator::StartedAtLeast:
         {
             uint64 progress = 0;
             for (CriteriaTree const* node : tree->Children)
@@ -1072,7 +1072,7 @@ bool CriteriaHandler::IsCompletedCriteriaTree(CriteriaTree const* tree)
 
             return false;
         }
-        case CRITERIA_TREE_OPERATOR_ANY:
+        case CriteriaTreeOperator::CompleteAtLeast:
         {
             uint64 progress = 0;
             for (CriteriaTree const* node : tree->Children)
@@ -1082,7 +1082,7 @@ bool CriteriaHandler::IsCompletedCriteriaTree(CriteriaTree const* tree)
 
             return false;
         }
-        case CRITERIA_TREE_OPERATOR_SUM_CHILDREN_WEIGHT:
+        case CriteriaTreeOperator::ProgressBar:
         {
             uint64 progress = 0;
             CriteriaMgr::WalkCriteriaTree(tree, [this, &progress](CriteriaTree const* criteriaTree)
@@ -1102,8 +1102,8 @@ bool CriteriaHandler::IsCompletedCriteriaTree(CriteriaTree const* tree)
 
 bool CriteriaHandler::CanUpdateCriteriaTree(Criteria const* criteria, CriteriaTree const* tree, Player* referencePlayer) const
 {
-    if ((tree->Entry->Flags & CRITERIA_TREE_FLAG_HORDE_ONLY && referencePlayer->GetTeam() != HORDE) ||
-        (tree->Entry->Flags & CRITERIA_TREE_FLAG_ALLIANCE_ONLY && referencePlayer->GetTeam() != ALLIANCE))
+    if ((tree->Entry->GetFlags().HasFlag(CriteriaTreeFlags::HordeOnly) && referencePlayer->GetTeam() != HORDE) ||
+        (tree->Entry->GetFlags().HasFlag(CriteriaTreeFlags::AllianceOnly) && referencePlayer->GetTeam() != ALLIANCE))
     {
         TC_LOG_TRACE("criteria", "CriteriaHandler::CanUpdateCriteriaTree: (Id: %u Type %s CriteriaTree %u) Wrong faction",
             criteria->ID, CriteriaMgr::GetCriteriaTypeString(criteria->Entry->Type), tree->Entry->ID);
@@ -1292,13 +1292,13 @@ bool CriteriaHandler::ConditionsSatisfied(Criteria const* criteria, Player* refe
     if (!criteria->Entry->FailEvent)
         return true;
 
-    switch (criteria->Entry->FailEvent)
+    switch (CriteriaFailEvent(criteria->Entry->FailEvent))
     {
-        case CRITERIA_CONDITION_BG_MAP:
+        case CriteriaFailEvent::LeaveBattleground:
             if (!referencePlayer->InBattleground())
                 return false;
             break;
-        case CRITERIA_CONDITION_NOT_IN_GROUP:
+        case CriteriaFailEvent::ModifyPartyStatus:
             if (referencePlayer->GetGroup())
                 return false;
             break;
@@ -1536,7 +1536,7 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
             if (!miscValue1)
                 return false;
 
-            if (criteria->Entry->FailEvent == CRITERIA_CONDITION_BG_MAP)
+            if (CriteriaFailEvent(criteria->Entry->FailEvent) == CriteriaFailEvent::LeaveBattleground)
             {
                 if (!referencePlayer->InBattleground())
                     return false;
@@ -3446,10 +3446,10 @@ void CriteriaMgr::LoadCriteriaList()
     {
         ASSERT(criteriaEntry->Type < CRITERIA_TYPE_TOTAL, "CRITERIA_TYPE_TOTAL must be greater than or equal to %u but is currently equal to %u",
             criteriaEntry->Type + 1, CRITERIA_TYPE_TOTAL);
-        ASSERT(criteriaEntry->StartEvent < CRITERIA_TIMED_TYPE_MAX, "CRITERIA_TYPE_TOTAL must be greater than or equal to %u but is currently equal to %u",
-            criteriaEntry->StartEvent + 1, CRITERIA_TIMED_TYPE_MAX);
-        ASSERT(criteriaEntry->FailEvent < CRITERIA_CONDITION_MAX, "CRITERIA_CONDITION_MAX must be greater than or equal to %u but is currently equal to %u",
-            criteriaEntry->FailEvent + 1, CRITERIA_CONDITION_MAX);
+        ASSERT(criteriaEntry->StartEvent < uint8(CriteriaStartEvent::Count), "CriteriaStartEvent::Count must be greater than or equal to %u but is currently equal to %u",
+            criteriaEntry->StartEvent + 1, uint32(CriteriaStartEvent::Count));
+        ASSERT(criteriaEntry->FailEvent < uint8(CriteriaFailEvent::Count), "CriteriaFailEvent::Count must be greater than or equal to %u but is currently equal to %u",
+            criteriaEntry->FailEvent + 1, uint32(CriteriaFailEvent::Count));
 
         auto treeItr = _criteriaTreeByCriteria.find(criteriaEntry->ID);
         if (treeItr == _criteriaTreeByCriteria.end())

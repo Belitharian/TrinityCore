@@ -53,6 +53,22 @@ struct AchievementLoadInfo
     }
 };
 
+struct AchievementCategoryLoadInfo
+{
+    static DB2LoadInfo const* Instance()
+    {
+        static DB2FieldMeta const fields[] =
+        {
+            { false, FT_STRING, "Name" },
+            { false, FT_INT, "ID" },
+            { true, FT_SHORT, "Parent" },
+            { true, FT_BYTE, "UiOrder" },
+        };
+        static DB2LoadInfo const loadInfo(&fields[0], std::extent<decltype(fields)>::value, Achievement_CategoryMeta::Instance(), HOTFIX_SEL_ACHIEVEMENT_CATEGORY);
+        return &loadInfo;
+    }
+};
+
 struct AdventureJournalLoadInfo
 {
     static DB2LoadInfo const* Instance()
@@ -1978,6 +1994,41 @@ struct FactionTemplateLoadInfo
             { false, FT_SHORT, "Friend4" },
         };
         static DB2LoadInfo const loadInfo(&fields[0], std::extent<decltype(fields)>::value, FactionTemplateMeta::Instance(), HOTFIX_SEL_FACTION_TEMPLATE);
+        return &loadInfo;
+    }
+};
+
+struct FriendshipRepReactionLoadInfo
+{
+    static DB2LoadInfo const* Instance()
+    {
+        static DB2FieldMeta const fields[] =
+        {
+            { false, FT_INT, "ID" },
+            { false, FT_STRING, "Reaction" },
+            { false, FT_INT, "FriendshipRepID" },
+            { false, FT_SHORT, "ReactionThreshold" },
+        };
+        static DB2LoadInfo const loadInfo(&fields[0], std::extent<decltype(fields)>::value, FriendshipRepReactionMeta::Instance(), HOTFIX_SEL_FRIENDSHIP_REP_REACTION);
+        return &loadInfo;
+    }
+};
+
+struct FriendshipReputationLoadInfo
+{
+    static DB2LoadInfo const* Instance()
+    {
+        static DB2FieldMeta const fields[] =
+        {
+            { false, FT_STRING, "Description" },
+            { false, FT_STRING, "StandingModified" },
+            { false, FT_STRING, "StandingChanged" },
+            { false, FT_INT, "ID" },
+            { true, FT_INT, "FactionID" },
+            { true, FT_INT, "TextureFileID" },
+            { true, FT_INT, "Flags" },
+        };
+        static DB2LoadInfo const loadInfo(&fields[0], std::extent<decltype(fields)>::value, FriendshipReputationMeta::Instance(), HOTFIX_SEL_FRIENDSHIP_REPUTATION);
         return &loadInfo;
     }
 };
