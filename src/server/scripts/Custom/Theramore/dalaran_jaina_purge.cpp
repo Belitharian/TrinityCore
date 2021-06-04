@@ -166,6 +166,7 @@ class npc_displaced_sunreaver : public CreatureScript
             DoCastSelf(SPELL_TELEPORT);
 
             me->SetFaction(35);
+            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
             me->SetControlled(true, UNIT_STATE_ROOT);
             me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_ONESHOT_NONE);
             me->GetMotionMaster()->Clear();
@@ -349,6 +350,13 @@ class dalaran_jaina_purge : public CreatureScript
         {
             events.ScheduleEvent(CASTING_FIREBALL, 0s);
             events.ScheduleEvent(CASTING_BLIZZARD, 5s);
+        }
+
+        bool CanAIAttack(Unit const* who) const override
+        {
+            return who->IsAlive() && me->IsValidAttackTarget(who)
+                && !who->HasBreakableByDamageCrowdControlAura()
+                && ScriptedAI::CanAIAttack(who);
         }
 
         void UpdateAI(uint32 diff) override
@@ -1063,6 +1071,13 @@ class npc_vereesa_windrunner : public CreatureScript
             Initialize();
 
             scheduler.CancelAll();
+        }
+
+        bool CanAIAttack(Unit const* who) const override
+        {
+            return who->IsAlive() && me->IsValidAttackTarget(who)
+                && !who->HasBreakableByDamageCrowdControlAura()
+                && ScriptedAI::CanAIAttack(who);
         }
 
         void UpdateAI(uint32 diff) override

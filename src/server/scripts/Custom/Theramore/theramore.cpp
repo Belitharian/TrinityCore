@@ -1152,6 +1152,8 @@ class npc_jaina_theramore : public CreatureScript
                                 {
                                     case NPC_AMARA_LEESON:
                                     case NPC_THALEN_SONGWEAVER:
+                                    case NPC_TARI_COGG:
+                                    case NPC_THODER_WINDERMERE:
                                         c->CastSpell(c, SPELL_ARCANE_CANALISATION);
                                         break;
 
@@ -1162,6 +1164,12 @@ class npc_jaina_theramore : public CreatureScript
                         }
 
                         if (Creature* c = me->SummonCreature(NPC_INVISIBLE_STALKER, -3646.48f, -4362.23f, 9.57f, 0.70f, TEMPSUMMON_MANUAL_DESPAWN))
+                        {
+                            c->AddAura(70573, c);
+                            c->SetObjectScale(3.0f);
+                        }
+
+                        if (Creature* c = me->SummonCreature(NPC_INVISIBLE_STALKER, -3782.96f, -4252.81f, 6.25f, 1.52f, TEMPSUMMON_MANUAL_DESPAWN))
                         {
                             c->AddAura(70573, c);
                             c->SetObjectScale(3.0f);

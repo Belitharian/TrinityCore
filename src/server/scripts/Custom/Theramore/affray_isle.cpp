@@ -8,245 +8,28 @@
 #include "MotionMaster.h"
 #include "Weather.h"
 #include "GameObject.h"
+#include "GridNotifiersImpl.h"
+#include "affray_isle.h"
 
-#define PLAYER_TELEPORT_PATH_SIZE   15
-#define JAINA_PATH_01_SIZE          13
-#define JAINA_PATH_02_SIZE          14
-#define KLANNOC_PATH_01_SIZE         5
-#define SPECTATORS_MAX_NUMBER        8
-#define FIRES_MAX_NUMBER            12
+#include <iostream>
 
-enum Talks
+enum Phases
 {
-    TALK_SPECTATOR_FLEE         =  0,
-
-    TALK_JAINA_01               =  8,
-    TALK_JAINA_02               =  9,
-    TALK_KLANNOC_03             =  0,
-    TALK_JAINA_04               = 10,
-    TALK_JAINA_05               = 11,
-    TALK_JAINA_06               = 12,
-};
-
-enum Misc
-{
-    // Event
-    START_AFFRAY_ISLE           = 1,
-
-    // Map ID
-    MAPID_KALIMDOR              = 1,
-
-    // Phasemask
-    PHASEMASK_AFFRAY            = 16,
-
-    // NPCs
-    NPC_JAINA_PROUDMOORE        = 100066,
-    NPC_KALECGOS                = 100001,
-    NPC_THRALL                  = 100068,
-    NPC_KLANNOC_MACLEOD         = 100067,
-    NPC_AFFRAY_SPECTATOR        = 100068,
-    NPC_INVISIBLE_STALKER       = 32780,
-    NPC_FOCUSING_IRIS           = 100069,
-
-    // Morph
-    MORPH_INVISIBLE_PLAYER      = 15880,
-
-    // Game objects
-    GOB_FIRE                    = 182592,
-    GOB_ANTONIDAS_BOOK          = 500018,
-};
-
-enum Spells
-{
-    SPELL_ARCANE_BARRAGE        = 100009,
-    SPELL_WAVE_VISUAL           = 100060,
-    SPELL_TELEPORT_PATH         = 100061,
-    SPELL_SIMPLE_TELEPORT       = 100032,
-    SPELL_VISUAL_TELEPORT       = 51347,
-    SPELL_SMOKE_REVEAL          = 10389,
-    SPELL_PYROBLAST             = 100005,
-    SPELL_IMMOLATE              = 48150,
-    SPELL_ICE_NOVA              = 56935,
-    SPELL_ARCANE_CANALISATION   = 100064,
-    SPELL_CANALISATION          = 100062,
-    SPELL_ARCANE_CLOUD          = 39952,
-    SPELL_STUNNED               = 100066,
-};
-
-const Position FocusingIrisPos      = { -1643.60f, -4244.23f, 10.42f, 6.25f };
-const Position FocusingIrisFxPos    = { -1644.40f, -4244.29f,  8.48f, 6.25f };
-
-const Position PlayerTeleportPath[PLAYER_TELEPORT_PATH_SIZE] =
-{
-    { -1634.20f, -3967.94f,  0.41f, 4.66f },
-    { -1624.72f, -4020.75f,  4.56f, 4.90f },
-    { -1617.92f, -4046.26f,  5.97f, 4.94f },
-    { -1608.27f, -4087.12f,  6.96f, 4.94f },
-    { -1600.31f, -4131.10f,  7.71f, 4.72f },
-    { -1602.98f, -4182.66f,  8.36f, 4.50f },
-    { -1611.30f, -4244.69f, 12.43f, 4.81f },
-    { -1602.44f, -4285.64f, 13.83f, 5.02f },
-    { -1582.44f, -4355.22f, 13.10f, 4.81f },
-    { -1590.16f, -4410.66f, 12.66f, 3.97f },
-    { -1628.92f, -4422.50f, 13.46f, 2.97f },
-    { -1648.09f, -4423.28f, 10.99f, 3.20f },
-    { -1710.89f, -4422.42f,  6.85f, 2.79f },
-    { -1719.90f, -4408.28f,  3.39f, 1.20f },
-    { -1710.83f, -4390.23f,  4.37f, 1.28f }
-};
-
-const Position JainaPath01[JAINA_PATH_01_SIZE] =
-{
-    { -1710.29f, -4377.18f, 4.55f, 5.02f },
-    { -1710.29f, -4377.18f, 4.55f, 5.01f },
-    { -1708.13f, -4382.60f, 4.60f, 5.44f },
-    { -1704.00f, -4383.90f, 4.69f, 0.24f },
-    { -1699.90f, -4381.63f, 4.91f, 0.79f },
-    { -1697.59f, -4378.65f, 4.90f, 1.00f },
-    { -1693.75f, -4372.47f, 4.88f, 0.93f },
-    { -1691.10f, -4369.22f, 4.90f, 0.84f },
-    { -1686.12f, -4364.10f, 4.95f, 0.87f },
-    { -1681.42f, -4357.16f, 5.02f, 1.06f },
-    { -1679.39f, -4353.49f, 4.90f, 1.09f },
-    { -1676.57f, -4346.48f, 4.23f, 1.22f },
-    { -1674.08f, -4341.96f, 3.67f, 0.91f }
-};
-
-const Position JainaPath02[JAINA_PATH_02_SIZE] =
-{
-    { -1674.14f, -4342.04f, 3.67f, 0.34f },
-    { -1666.01f, -4337.26f, 3.80f, 1.00f },
-    { -1664.60f, -4330.80f, 3.63f, 1.64f },
-    { -1665.77f, -4324.19f, 3.43f, 1.84f },
-    { -1670.08f, -4313.56f, 3.68f, 1.98f },
-    { -1673.96f, -4306.12f, 3.75f, 2.13f },
-    { -1677.87f, -4299.82f, 3.61f, 2.03f },
-    { -1680.33f, -4291.97f, 3.30f, 1.72f },
-    { -1680.23f, -4283.77f, 2.88f, 1.31f },
-    { -1675.98f, -4275.16f, 2.74f, 0.89f },
-    { -1670.29f, -4269.01f, 2.90f, 0.75f },
-    { -1667.21f, -4266.14f, 2.99f, 0.75f },
-    { -1660.96f, -4257.84f, 3.08f, 1.15f },
-    { -1658.20f, -4249.91f, 2.01f, 1.30f }
-};
-
-const Position KlannocPath01[KLANNOC_PATH_01_SIZE] =
-{
-    { -1642.59f, -4347.65f, 6.50f, 2.42f },
-    { -1644.83f, -4345.66f, 6.52f, 2.41f },
-    { -1648.16f, -4342.63f, 4.88f, 2.40f },
-    { -1652.18f, -4339.98f, 4.88f, 2.73f },
-    { -1657.90f, -4338.15f, 4.45f, 2.85f }
-};
-
-const Position BuildingMeteorPos[FIRES_MAX_NUMBER] =
-{
-    { -1666.98f, -4368.48f, 15.09f, 0.09f },
-    { -1654.66f, -4356.94f, 15.66f, 2.67f },
-    { -1649.54f, -4363.14f, 18.56f, 5.10f },
-    { -1645.32f, -4342.68f,  4.88f, 4.94f },
-    { -1646.60f, -4353.18f, 16.78f, 0.91f },
-    { -1656.34f, -4372.14f, 18.35f, 6.24f },
-    { -1653.69f, -4363.88f, 17.80f, 0.02f },
-    { -1632.16f, -4348.17f, 17.78f, 4.12f },
-    { -1638.41f, -4354.31f, 28.32f, 4.35f },
-    { -1642.21f, -4360.63f, 28.96f, 4.21f },
-    { -1661.48f, -4360.98f,  4.88f, 5.34f },
-    { -1667.19f, -4367.37f,  4.88f, 5.63f }
-};
-
-class KlannocBurning : public BasicEvent
-{
-    public:
-    KlannocBurning(Creature* owner, Creature* jaina) : owner(owner), jaina(jaina), stage(0) { }
-
-    bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
-    {
-        switch (stage)
-        {
-            case 0:
-                owner->SetWalk(false);
-                owner->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                return NextEvent(Milliseconds(eventTime), 500ms);
-            case 1:
-                jaina->CastSpell(owner, SPELL_PYROBLAST);
-                return NextEvent(Milliseconds(eventTime), 1890ms);
-            case 2:
-                owner->RemoveAllAuras();
-                owner->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                owner->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
-                owner->AddAura(SPELL_IMMOLATE, owner);
-                owner->GetMotionMaster()->MoveConfused();
-                return NextEvent(Milliseconds(eventTime), 6s);
-            case 3:
-                owner->KillSelf();
-                return true;
-            default:
-                break;
-        }
-        return true;
-    }
-
-    private:
-    Creature* owner;
-    Creature* jaina;
-    uint8 stage;
-    Position posToLift;
-
-    bool NextEvent(Milliseconds eventTime, Milliseconds time)
-    {
-        stage++;
-        owner->m_Events.AddEvent(this, eventTime + time);
-        return false;
-    }
-};
-
-class SpectatorDeath : public BasicEvent
-{
-    public:
-    SpectatorDeath(Creature* owner) : owner(owner) { }
-
-    bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
-    {
-        owner->KillSelf();
-        return true;
-    }
-
-    private:
-    Creature* owner;
-};
-
-class WaveGrowing : public BasicEvent
-{
-    public:
-    WaveGrowing(Creature* owner) : owner(owner) { }
-
-    bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
-    {
-        if (!owner->HasAura(SPELL_WAVE_VISUAL))
-            owner->AddAura(SPELL_WAVE_VISUAL, owner);
-
-        float currentScale = owner->GetObjectScale();
-        if (currentScale >= 4.f)
-            return true;
-
-        owner->SetObjectScale(currentScale + 0.3f);
-        owner->m_Events.AddEvent(this, Milliseconds(eventTime) + 2s);
-        return false;
-    }
-
-    private:
-    Creature* owner;
+    PHASE_NONE,
+    PHASE_COMBAT,
+    PHASE_BLINK,
+    PHASE_ICE_FALL,
 };
 
 class jaina_affray_isle : public CreatureScript
 {
     public:
-    jaina_affray_isle() : CreatureScript("jaina_affray_isle") {}
+    jaina_affray_isle() : CreatureScript("jaina_affray_isle") { }
 
     struct jaina_affray_isleAI : public ScriptedAI
     {
-        jaina_affray_isleAI(Creature* creature) : ScriptedAI(creature), debug(false)
+        jaina_affray_isleAI(Creature* creature) : ScriptedAI(creature), debug(false),
+            blinkIndex(0), wallsIndex(0)
         {
             Initialize();
         }
@@ -254,217 +37,676 @@ class jaina_affray_isle : public CreatureScript
         void Initialize()
         {
             player = nullptr;
+            blinkIndex= 0;
+            wallsIndex = 0;
+        }
+
+        void OnSpellCastFinished(SpellInfo const* spell, SpellFinishReason reason) override
+        {
+            if (spell->Id == SPELL_BLINK && reason == SPELL_FINISHED_SUCCESSFUL_CAST)
+            {
+                if (events.IsInPhase(PHASE_BLINK))
+                {
+                    DoCastSelf(SPELL_ARCANE_EXPLOSION);
+                    if (Creature* thrall = me->GetVictim()->ToCreature())
+                    {
+                        thrall->StopMoving();
+                        thrall->CastStop();
+                        thrall->GetMotionMaster()->Clear();
+
+                        const Position pos = me->GetPosition();
+                        thrall->GetMotionMaster()->MoveKnockbackFrom(pos.GetPositionX(), pos.GetPositionY(), 10.f, 5.f);
+                    }
+                }
+                else if (events.IsInPhase(PHASE_ICE_FALL))
+                {
+                    DoCastVictim(SPELL_ICE_FALL);
+                    if (Creature* thrall = me->GetVictim()->ToCreature())
+                    {
+                        thrall->CastStop();
+                        thrall->StopMoving();
+                        thrall->GetMotionMaster()->Clear();
+                        thrall->GetMotionMaster()->MoveFleeing(me, 12 * IN_MILLISECONDS);
+                    }
+                }
+            }
+
+            if (spell->Id == SPELL_ICE_FALL && events.IsInPhase(PHASE_ICE_FALL))
+            {
+                me->SetControlled(false, UNIT_STATE_ROOT);
+                events.SetPhase(PHASE_COMBAT);
+                events.ScheduleEvent(EVENT_FROST_BOLT, 3s, 0, PHASE_COMBAT);
+            }
         }
 
         void SetData(uint32 id, uint32 value) override
         {
+            player = me->SelectNearestPlayer(25.f);
+
+            if (value == 255 && !debug)
+            {
+                debug = true;
+
+                me->NearTeleportTo(JainaFinalPos);
+                player->NearTeleportTo(JainaFinalPos);
+
+                const Position pos = GetPositionAround(me, 45.f, 5.f);
+                thrall = me->SummonCreature(NPC_THRALL, pos);
+
+                switch (id)
+                {
+                    case 1000:
+                        events.ScheduleEvent(EVENT_INTRO_15, 2s);
+                        events.ScheduleEvent(EVENT_BATTLE_01, 5s);
+                        break;
+                }
+            }
+
+            if (debug)
+                return;
+
             switch (id)
             {
                 case START_AFFRAY_ISLE:
-                {
-                    player = me->SelectNearestPlayer(25.f);
                     me->GetMap()->SetZoneWeather(17, WEATHER_STATE_FOG, 1.f);
-                    DoAction(START_AFFRAY_ISLE);
+                    events.ScheduleEvent(EVENT_INTRO_01, 2s);
                     break;
-                }
-
+                case START_SUMMON_THRALL:
+                    thrall = me->SummonCreature(NPC_THRALL, JainaPath02[0]);
+                    thrall->Mount(MOUNT_WHITE_WOLF_WOUNDED);
+                    thrall->SetSpeedRate(MOVE_RUN, 2.f);
+                    thrall->GetMotionMaster()->MoveSmoothPath(1, JainaPath02, JAINA_PATH_02_SIZE, false);
+                    break;
+                case START_THRALL_ARRIVES:
+                    thrall->SetSpeedRate(MOVE_RUN, 1.f);
+                    thrall->Dismount();
+                    thrall->SetFacingToObject(me);
+                    thrall->AI()->Talk(TALK_THRALL_07);
+                    me->RemoveAllAuras();
+                    me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_NONE);
+                    me->SetFacingToObject(thrall);
+                    events.ScheduleEvent(EVENT_THRALL_01, 2s);
+                    break;
+                case START_BATTLE:
+                    events.ScheduleEvent(EVENT_BATTLE_01, 5s);
+                    break;
                 default:
                     break;
             }
         }
 
-        void DoAction(int32 param) override
+        void JustEngagedWith(Unit* who) override
         {
-            if (param != START_AFFRAY_ISLE)
-                return;
+            events.SetPhase(PHASE_COMBAT);
+            events.ScheduleEvent(EVENT_FROST_BOLT, 5ms, 0, PHASE_COMBAT);
+            events.ScheduleEvent(EVENT_SCHEDULE_PHASE_BLINK, 10s, 15s, 0, PHASE_COMBAT);
+            events.ScheduleEvent(EVENT_SCHEDULE_PHASE_ICE_FALL, 35s, 45s, 0, PHASE_COMBAT);
+        }
 
-            Talk(TALK_JAINA_01);
-            scheduler.Schedule(3s, [this](TaskContext context)
+        void Reset() override
+        {
+            Initialize();
+
+            events.Reset();
+            events.SetPhase(PHASE_NONE);
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            events.Update(diff);
+
+            if (!UpdateVictim())
             {
-                switch (context.GetRepeatCounter())
+                while (uint32 eventId = events.ExecuteEvent())
                 {
-                    case 0:
-                        DoCast(SPELL_SIMPLE_TELEPORT);
-                        context.Repeat(1s);
-                        break;
-
-                    case 1:
-                        me->NearTeleportTo(-1710.29f, -4377.18f, 4.56f, 4.83f);
-                        me->SetVisible(false);
-                        SetPlayerTeleportMode(player, true);
-                        player->GetMotionMaster()->MoveSmoothPath(0, PlayerTeleportPath, PLAYER_TELEPORT_PATH_SIZE, false);
-                        context.Repeat(11s);
-                        break;
-
-                    case 2:
-                        player->GetMotionMaster()->Clear();
-                        SetPlayerTeleportMode(player, false);
-                        me->SetVisible(true);
-                        DoCast(SPELL_VISUAL_TELEPORT);
-                        context.Repeat(2s);
-                        break;
-
-                    case 3:
-                        Talk(TALK_JAINA_02);
-                        context.Repeat(3s);
-                        break;
-
-                    case 4:
-                        me->GetMotionMaster()->MoveSmoothPath(0, JainaPath01, JAINA_PATH_01_SIZE, false);
-                        context.Repeat(9s);
-                        break;
-
-                    case 5:
+                    switch (eventId)
                     {
-                        if (klannoc = me->SummonCreature(NPC_KLANNOC_MACLEOD, KlannocPath01[0], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10min))
+                        // Introduction
+                        #pragma region INTRODUCTION
+
+                        case EVENT_INTRO_01:
+                            Talk(TALK_JAINA_01);
+                            events.ScheduleEvent(EVENT_INTRO_02, 3s);
+                            break;
+                        case EVENT_INTRO_02:
+                            DoCast(SPELL_SIMPLE_TELEPORT);
+                            events.ScheduleEvent(EVENT_INTRO_03, 2s);
+                            break;
+                        case EVENT_INTRO_03:
+                            me->NearTeleportTo(-1710.29f, -4377.18f, 4.56f, 4.83f);
+                            me->SetVisible(false);
+                            player->NearTeleportTo(PlayerEntrancePos);
+                            events.ScheduleEvent(EVENT_INTRO_04, 1s);
+                            break;
+                        case EVENT_INTRO_04:
+                            me->SetVisible(true);
+                            DoCast(SPELL_VISUAL_TELEPORT);
+                            events.ScheduleEvent(EVENT_INTRO_05, 2s);
+                            break;
+                        case EVENT_INTRO_05:
+                            Talk(TALK_JAINA_02);
+                            events.ScheduleEvent(EVENT_INTRO_06, 3s);
+                            break;
+                        case EVENT_INTRO_06:
+                            me->GetMotionMaster()->MoveSmoothPath(0, JainaPath01, JAINA_PATH_01_SIZE, false);
+                            events.ScheduleEvent(EVENT_INTRO_07, 9s);
+                            break;
+                        case EVENT_INTRO_07:
                         {
-                            me->SetFacingTo(0.32f);
-
-                            klannoc->GetMotionMaster()->MoveSmoothPath(0, KlannocPath01, KLANNOC_PATH_01_SIZE, true);
-                            klannoc->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                            klannoc->SetReactState(REACT_PASSIVE);
-                            klannoc->SetFaction(14);
-                        }
-
-                        if (playerSpectator = me->SummonCreature(NPC_AFFRAY_SPECTATOR, player->GetRandomNearPosition(1.f), TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10min))
-                        {
-                            playerSpectator->CastSpell(player, SPELL_STUNNED);
-                            player->Lock(true);
-
-                            playerSpectator->SetFacingToObject(player);
-                            playerSpectator->CastSpell(playerSpectator, SPELL_SMOKE_REVEAL);
-                            playerSpectator->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                            playerSpectator->SetReactState(REACT_PASSIVE);
-                            playerSpectator->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY_THROWN);
-                            playerSpectator->SetFaction(14);
-                        }
-
-                        float angle = 45.f;
-                        for (uint8 i = 0; i < SPECTATORS_MAX_NUMBER; i++)
-                        {
-                            Position pos = GetPositionAroundMe(angle, 6.5f);
-                            if (Creature* spectator = me->SummonCreature(NPC_AFFRAY_SPECTATOR, pos, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10min))
+                            if (klannoc = me->SummonCreature(NPC_KLANNOC_MACLEOD, KlannocPath01[0], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10min))
                             {
-                                spectator->UpdateGroundPositionZ(pos.GetPositionX(), pos.GetPositionY(), pos.m_positionZ);
-                                spectator->NearTeleportTo(pos);
+                                me->SetFacingTo(0.32f);
 
-                                spectator->SetFacingToObject(me);
-                                spectator->CastSpell(spectator, SPELL_SMOKE_REVEAL);
-                                spectator->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                                spectator->SetReactState(REACT_PASSIVE);
-                                spectator->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY_UNARMED);
-                                spectator->SetFaction(14);
-
-                                spectators.push_back(spectator);
+                                klannoc->GetMotionMaster()->MoveSmoothPath(0, KlannocPath01, KLANNOC_PATH_01_SIZE, true);
+                                klannoc->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                                klannoc->SetReactState(REACT_PASSIVE);
+                                klannoc->SetFaction(14);
                             }
 
-                            angle += 45.f;
+                            Position pos = GetPositionAround(player, 180.f, 1.3f);
+                            if (playerSpectator = me->SummonCreature(NPC_AFFRAY_SPECTATOR, pos, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10min))
+                            {
+                                playerSpectator->CastSpell(player, SPELL_STUNNED);
+                                player->Lock(true);
+
+                                playerSpectator->UpdateGroundPositionZ(pos.GetPositionX(), pos.GetPositionY(), pos.m_positionZ);
+                                playerSpectator->NearTeleportTo(pos);
+                                playerSpectator->SetFacingToObject(player);
+                                playerSpectator->CastSpell(playerSpectator, SPELL_SMOKE_REVEAL);
+                                playerSpectator->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                                playerSpectator->SetReactState(REACT_PASSIVE);
+                                playerSpectator->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY_THROWN);
+                                playerSpectator->SetFaction(14);
+                            }
+
+                            float angle = 45.f;
+                            for (uint8 i = 0; i < SPECTATORS_MAX_NUMBER; i++)
+                            {
+                                Position pos = GetPositionAround(me, angle, 6.5f);
+                                if (Creature* spectator = me->SummonCreature(NPC_AFFRAY_SPECTATOR, pos, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10min))
+                                {
+                                    spectator->UpdateGroundPositionZ(pos.GetPositionX(), pos.GetPositionY(), pos.m_positionZ);
+                                    spectator->NearTeleportTo(pos);
+
+                                    spectator->SetFacingToObject(me);
+                                    spectator->CastSpell(spectator, SPELL_SMOKE_REVEAL);
+                                    spectator->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                                    spectator->SetReactState(REACT_PASSIVE);
+                                    spectator->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY_UNARMED);
+                                    spectator->SetFaction(14);
+
+                                    spectators.push_back(spectator);
+                                }
+
+                                angle += 45.f;
+                            }
+
+                            events.ScheduleEvent(EVENT_INTRO_08, 8s);
+                            break;
                         }
-
-                        context.Repeat(8s);
-                        break;
-                    }
-
-                    case 6:
-                        me->SetFacingToObject(klannoc);
-                        klannoc->SetFacingToObject(me);
-                        klannoc->AI()->Talk(TALK_KLANNOC_03);
-                        context.Repeat(3s);
-                        break;
-
-                    case 7:
-                        Talk(TALK_JAINA_04);
-                        context.Repeat(3s);
-                        break;
-
-                    case 8:
-                        klannoc->m_Events.AddEvent(new KlannocBurning(klannoc, me), klannoc->m_Events.CalculateTime(1ms));
-                        context.Repeat(3s);
-                        break;
-
-                    case 9:
-                    {
-                        for (Creature* spectator : spectators)
+                        case EVENT_INTRO_08:
+                            me->SetFacingToObject(klannoc);
+                            klannoc->SetFacingToObject(me);
+                            klannoc->AI()->Talk(TALK_KLANNOC_03);
+                            events.ScheduleEvent(EVENT_INTRO_09, 3s);
+                            break;
+                        case EVENT_INTRO_09:
+                            Talk(TALK_JAINA_04);
+                            events.ScheduleEvent(EVENT_INTRO_10, 3s);
+                            break;
+                        case EVENT_INTRO_10:
+                            klannoc->m_Events.AddEvent(new KlannocBurning(klannoc, me), klannoc->m_Events.CalculateTime(1ms));
+                            events.ScheduleEvent(EVENT_INTRO_11, 3s);
+                            break;
+                        case EVENT_INTRO_11:
                         {
-                            if (roll_chance_i(30))
-                                spectator->AI()->Talk(TALK_SPECTATOR_FLEE);
+                            for (Creature* spectator : spectators)
+                            {
+                                if (roll_chance_i(30))
+                                    spectator->AI()->Talk(TALK_SPECTATOR_FLEE);
 
-                            spectator->GetMotionMaster()->MoveFleeing(me);
-                            spectator->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
+                                spectator->GetMotionMaster()->MoveFleeing(me);
+                                spectator->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
+                            }
+
+                            playerSpectator->GetMotionMaster()->MoveFleeing(me);
+                            playerSpectator->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
+
+                            uint8 randomSpectator = urand(0, SPECTATORS_MAX_NUMBER - 1);
+                            if (Creature* victim = spectators[randomSpectator])
+                            {
+                                victim->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+
+                                CastSpellExtraArgs args;
+                                args.AddSpellBP0(99999999);
+                                args.SetTriggerFlags(TRIGGERED_CAST_DIRECTLY);
+
+                                DoCast(victim, SPELL_ARCANE_BARRAGE, args);
+                                me->SetTarget(victim->GetGUID());
+                            }
+
+                            events.ScheduleEvent(EVENT_INTRO_12, 5s);
+                            break;
                         }
-
-                        playerSpectator->GetMotionMaster()->MoveFleeing(me);
-                        playerSpectator->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
-
-                        uint8 randomSpectator = urand(0, SPECTATORS_MAX_NUMBER - 1);
-                        if (Creature* victim = spectators[randomSpectator])
+                        case EVENT_INTRO_12:
                         {
-                            victim->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                            Talk(TALK_JAINA_05);
+                            for (Creature* spectator : spectators)
+                            {
+                                spectator->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                                spectator->m_Events.AddEvent(new SpectatorDeath(spectator), spectator->m_Events.CalculateTime(2s));
+                            }
+
+                            playerSpectator->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                            playerSpectator->m_Events.AddEvent(new SpectatorDeath(playerSpectator), playerSpectator->m_Events.CalculateTime(2s));
+
+                            player->Lock(false);
 
                             CastSpellExtraArgs args;
-                            args.AddSpellBP0(99999999);
                             args.SetTriggerFlags(TRIGGERED_CAST_DIRECTLY);
 
-                            DoCast(victim, SPELL_ARCANE_BARRAGE, args);
+                            me->SetTarget(ObjectGuid::Empty);
+                            DoCastAOE(SPELL_ICE_NOVA, args);
+
+                            events.ScheduleEvent(EVENT_INTRO_13, 5s);
+                            break;
                         }
-
-                        context.Repeat(5s);
-                        break;
-                    }
-
-                    case 10:
-                    {
-                        Talk(TALK_JAINA_05);
-                        for (Creature* spectator : spectators)
+                        case EVENT_INTRO_13:
+                            Talk(TALK_JAINA_06);
+                            me->GetMotionMaster()->Clear();
+                            me->GetMotionMaster()->MoveSmoothPath(0, JainaPath02, JAINA_PATH_02_SIZE, false);
+                            events.ScheduleEvent(EVENT_INTRO_14, 13s);
+                            break;
+                        case EVENT_INTRO_14:
+                            me->SetWalk(true);
+                            me->GetMotionMaster()->MovePoint(0, JainaFinalPos, true, JainaFinalPos.GetOrientation());
+                            events.ScheduleEvent(EVENT_INTRO_15, Milliseconds((int)me->GetMotionMaster()->GetTime()));
+                            break;
+                        case EVENT_INTRO_15:
                         {
-                            spectator->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                            spectator->m_Events.AddEvent(new SpectatorDeath(spectator), spectator->m_Events.CalculateTime(2s));
+                            if (focusingIrisFx = me->SummonCreature(NPC_FOCUSING_IRIS, -1654.17f, -4246.51f, 3.51f, 3.08f))
+                            {
+                                waveFx = me->SummonCreature(NPC_INVISIBLE_STALKER, -1553.19f, -4251.73f, -1.91f, 4.48f);
+                                waveFx->AddAura(SPELL_WAVE_VISUAL, waveFx);
+
+                                focusingIrisFx->CastSpell(waveFx, SPELL_WAVE_CANALISATION);
+
+                                DoCast(SPELL_ARCANE_CANALISATION);
+
+                                me->SetFacingToObject(focusingIrisFx);
+                                me->SummonGameObject(GOB_ANTONIDAS_BOOK, -1653.03f, -4243.82f, 3.11f, 3.99f, QuaternionData(0.f, 0.f, -0.9101f, 0.4143f), 0s);
+                            }
+                            events.ScheduleEvent(EVENT_INTRO_16, 10s);
+                            break;
                         }
+                        case EVENT_INTRO_16:
+                            SetData(START_SUMMON_THRALL, 1U);
+                            break;
 
-                        playerSpectator->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                        playerSpectator->m_Events.AddEvent(new SpectatorDeath(playerSpectator), playerSpectator->m_Events.CalculateTime(2s));
+                        #pragma endregion
 
-                        player->Lock(false);
+                        // Thrall
+                        #pragma region THRALL
 
-                        CastSpellExtraArgs args;
-                        args.SetTriggerFlags(TRIGGERED_CAST_DIRECTLY);
-
-                        DoCastAOE(SPELL_ICE_NOVA, args);
-
-                        context.Repeat(5s);
-                        break;
-                    }
-
-                    case 11:
-                        Talk(TALK_JAINA_06);
-                        me->GetMotionMaster()->Clear();
-                        me->GetMotionMaster()->MoveSmoothPath(0, JainaPath02, JAINA_PATH_02_SIZE, false);
-                        context.Repeat(13s);
-                        break;
-
-                    case 12:
-                        me->SetWalk(true);
-                        me->GetMotionMaster()->MovePoint(0, -1655.44f, -4246.56f, 1.77f, true, 6.13f);
-                        context.Repeat(Milliseconds((int)me->GetMotionMaster()->GetTime()));
-                        break;
-
-                    case 13:
-                    {
-                        if (focusingIrisFx = me->SummonCreature(NPC_FOCUSING_IRIS, -1654.17f, -4246.51f, 3.51f, 3.08f, TEMPSUMMON_MANUAL_DESPAWN))
-                        {
-                            waveFx = me->SummonCreature(NPC_INVISIBLE_STALKER, -1553.19f, -4251.73f, -1.91f, 6.27f);
-                            waveFx->m_Events.AddEvent(new WaveGrowing(waveFx), waveFx->m_Events.CalculateTime(3s));
-
-                            DoCast(SPELL_ARCANE_CANALISATION);
-
+                        case EVENT_THRALL_01:
+                            Talk(TALK_JAINA_08);
+                            events.ScheduleEvent(EVENT_THRALL_02, 1s);
+                            break;
+                        case EVENT_THRALL_02:
+                            thrall->AI()->Talk(TALK_THRALL_09);
+                            events.ScheduleEvent(EVENT_THRALL_03, 7s);
+                            break;
+                        case EVENT_THRALL_03:
+                            thrall->AI()->Talk(TALK_THRALL_10);
+                            events.ScheduleEvent(EVENT_THRALL_04, 9s);
+                            break;
+                        case EVENT_THRALL_04:
+                            thrall->AI()->Talk(TALK_THRALL_11);
+                            events.ScheduleEvent(EVENT_THRALL_05, 14s);
+                            break;
+                        case EVENT_THRALL_05:
+                            Talk(TALK_JAINA_12);
+                            events.ScheduleEvent(EVENT_THRALL_06, 5s);
+                            break;
+                        case EVENT_THRALL_06:
+                            thrall->AI()->Talk(TALK_THRALL_13);
+                            events.ScheduleEvent(EVENT_THRALL_07, 15s);
+                            break;
+                        case EVENT_THRALL_07:
+                            Talk(TALK_JAINA_14);
+                            events.ScheduleEvent(EVENT_THRALL_08, 14s);
+                            break;
+                        case EVENT_THRALL_08:
+                            Talk(TALK_JAINA_15);
+                            events.ScheduleEvent(EVENT_THRALL_09, 12s);
+                            break;
+                        case EVENT_THRALL_09:
+                            thrall->AI()->Talk(TALK_THRALL_16);
+                            events.ScheduleEvent(EVENT_THRALL_10, 15s);
+                            break;
+                        case EVENT_THRALL_10:
+                            Talk(TALK_JAINA_17);
+                            events.ScheduleEvent(EVENT_THRALL_11, 18s);
+                            break;
+                        case EVENT_THRALL_11:
+                            thrall->AI()->Talk(TALK_THRALL_18);
+                            events.ScheduleEvent(EVENT_THRALL_12, 2s);
+                            break;
+                        case EVENT_THRALL_12:
                             me->SetFacingToObject(focusingIrisFx);
-                            me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_SPELL_CHANNEL_DIRECTED);
-                            me->SummonGameObject(GOB_ANTONIDAS_BOOK, -1653.03f, -4243.82f, 3.11f, 3.99f, QuaternionData(0.f, 0.f, -0.9101f, 0.4143f), 0s);
+                            thrall->SetFacingToObject(waveFx);
+                            events.ScheduleEvent(EVENT_THRALL_13, 1s);
+                            break;
+                        case EVENT_THRALL_13:
+                            DoCast(SPELL_ARCANE_CANALISATION);
+                            events.ScheduleEvent(EVENT_THRALL_14, 3s);
+                            break;
+                        case EVENT_THRALL_14:
+                            thrall->AI()->Talk(TALK_THRALL_19);
+                            thrall->AI()->DoCast(SPELL_WIND_ELEMENTAL_TOTEM);
+                            thrall->CastSpell(thrall, SPELL_NATURE_CANALISATION, true);
+                            if (windElemental = me->FindNearestCreature(NPC_WIND_ELEMENTAL, 15.f))
+                                windElemental->GetMotionMaster()->MovePoint(0, -1521.15f, -4250.68f, 0.f, false, 3.13f);
+                            events.ScheduleEvent(EVENT_THRALL_15, 12s);
+                            break;
+                        case EVENT_THRALL_15:
+                            thrall->AI()->Talk(TALK_THRALL_20);
+                            events.ScheduleEvent(EVENT_THRALL_16, 10s);
+                            break;
+                        case EVENT_THRALL_16:
+                            Talk(TALK_JAINA_21);
+                            break;
+
+                        #pragma endregion
+
+                        // Battle
+                        #pragma region BATTLE
+
+                        case EVENT_BATTLE_01:
+                            me->RemoveAllAuras();
+                            me->GetMap()->SetZoneWeather(17, WEATHER_STATE_HEAVY_SNOW, 1.f);
+                            me->NearTeleportTo(JainaBattlePos);
+                            me->SetHomePosition(JainaBattlePos);
+                            me->SetRegenerateHealth(false);
+                            me->SetFaction(150);
+                            thrall->SetRegenerateHealth(false);
+                            thrall->SetImmuneToPC(true);
+                            player->NearTeleportTo(JainaBattlePos);
+                            events.ScheduleEvent(EVENT_BATTLE_02, 3s);
+                            break;
+                        case EVENT_BATTLE_02:
+                            DoCast(SPELL_FROST_CANALISATION);
+                            for (uint8 i = 0; i < ICE_WALLS_MAX_NUMBER; i++)
+                            {
+                                const Position pos = { IceWallsPos[i][0], IceWallsPos[i][1], IceWallsPos[i][2], IceWallsPos[i][3] };
+                                if (Creature* iceFx = me->SummonCreature(NPC_INVISIBLE_STALKER, pos))
+                                {
+                                    iceFx->SetObjectScale(3.f);
+                                    iceWallsFx.push_back(iceFx);
+                                }
+                            }
+                            events.ScheduleEvent(EVENT_BATTLE_03, 2s);
+                            break;
+                        case EVENT_BATTLE_03:
+                        {
+                            if (wallsIndex >= ICE_WALLS_MAX_NUMBER)
+                            {
+                                me->RemoveAurasDueToSpell(SPELL_FROST_CANALISATION);
+                                events.CancelEvent(EVENT_BATTLE_03);
+                                events.ScheduleEvent(EVENT_BATTLE_04, 1s);
+                            }
+                            else
+                            {
+                                const Position pos = { IceWallsPos[wallsIndex][0], IceWallsPos[wallsIndex][1], IceWallsPos[wallsIndex][2], IceWallsPos[wallsIndex][3] };
+                                const QuaternionData rot = { IceWallsPos[wallsIndex][4], IceWallsPos[wallsIndex][5], IceWallsPos[wallsIndex][6], IceWallsPos[wallsIndex][7] };
+
+                                if (GameObject* icewall = me->SummonGameObject(GOB_ICE_WALL, pos, rot, 0s))
+                                {
+                                    iceWallsFx[wallsIndex]->CastSpell(iceWallsFx[wallsIndex], SPELL_FROST_EXPLOSION, true);
+                                    iceWalls.push_back(icewall);
+                                }
+
+                                wallsIndex++;
+
+                                events.RescheduleEvent(EVENT_BATTLE_03, 200ms, 500ms);
+                            }
+                            break;
                         }
-                        break;
+                        case EVENT_BATTLE_04:
+                        {
+                            const Position pos = me->GetRandomNearPosition(8.f);
+                            thrall->NearTeleportTo(pos);
+                            thrall->SetHomePosition(pos);
+                            thrall->AddAura(SPELL_FORCED_TELEPORT, thrall);
+                            thrall->SetFaction(89);
+                            events.ScheduleEvent(EVENT_BATTLE_05, 2s);
+                            break;
+                        }
+                        case EVENT_BATTLE_05:
+                            me->Attack(thrall, true);
+                            thrall->Attack(me, true);
+                            break;
+
+                        #pragma endregion
                     }
                 }
+            }
+            else
+            {
+                if (me->HasUnitState(UNIT_STATE_CASTING))
+                    return;
+
+                while (uint32 eventId = events.ExecuteEvent())
+                {
+                    switch (eventId)
+                    {
+                        case EVENT_FROST_BOLT:
+                            DoCastVictim(SPELL_FROST_BOTL);
+                            events.RescheduleEvent(EVENT_FROST_BOLT, 2s, 0, PHASE_COMBAT);
+                            break;
+                        case EVENT_SCHEDULE_PHASE_BLINK:
+                            me->CastStop();
+                            me->StopMoving();
+                            me->SetControlled(true, UNIT_STATE_ROOT);
+                            events.SetPhase(PHASE_BLINK);
+                            events.ScheduleEvent(EVENT_BLINK, 100ms, 0, PHASE_BLINK);
+                            events.RescheduleEvent(EVENT_SCHEDULE_PHASE_BLINK, 1min, 0, PHASE_COMBAT);
+                            break;
+                        case EVENT_BLINK:
+                            if (blinkIndex > 3)
+                            {
+                                blinkIndex = 0;
+                                me->SetControlled(false, UNIT_STATE_ROOT);
+                                events.SetPhase(PHASE_COMBAT);
+                                events.ScheduleEvent(EVENT_FROST_BOLT, 3s, 0, PHASE_COMBAT);
+                            }
+                            else
+                            {
+                                blinkIndex++;
+                                const Position pos = me->GetVictim()->GetRandomNearPosition(15.f);
+                                me->CastSpell(pos, SPELL_BLINK, true);
+                                events.RescheduleEvent(EVENT_BLINK, 1s, 0, PHASE_BLINK);
+                            }
+                            break;
+                        case EVENT_SCHEDULE_PHASE_ICE_FALL:
+                            me->CastStop();
+                            me->StopMoving();
+                            me->SetControlled(true, UNIT_STATE_ROOT);
+                            events.SetPhase(PHASE_ICE_FALL);
+                            events.ScheduleEvent(EVENT_ICE_FALL, 100ms, 0, PHASE_ICE_FALL);
+                            events.RescheduleEvent(EVENT_SCHEDULE_PHASE_ICE_FALL, 35s, 45s, 0, PHASE_COMBAT);
+                            break;
+                        case EVENT_ICE_FALL:
+                            me->CastSpell(JainaBattlePos, SPELL_BLINK, true);
+                            break;
+                    }
+
+                    if (me->HasUnitState(UNIT_STATE_CASTING))
+                        return;
+                }
+
+                if (events.IsInPhase(PHASE_COMBAT))
+                    DoMeleeAttackIfReady();
+            }
+        }
+
+        private:
+        EventMap events;
+        Player* player;
+        Creature* klannoc;
+        Creature* playerSpectator;
+        Creature* kalecgos;
+        Creature* thrall;
+        Creature* windElemental;
+        Creature* focusingIrisFx;
+        Creature* waveFx;
+        std::vector<Creature*> spectators;
+        std::vector<Creature*> iceWallsFx;
+        std::vector<GameObject*> iceWalls;
+        uint8 blinkIndex;
+        uint8 wallsIndex;
+
+        bool debug;
+        std::string reasons[3] = { "SPELL_FINISHED_SUCCESSFUL_CAST", "SPELL_FINISHED_CANCELED", "SPELL_FINISHED_CHANNELING_COMPLETE" };
+        std::string phases[4] = { "PHASE_NONE", "PHASE_COMBAT", "PHASE_BLINK", "PHASE_ICE_FALL" };
+
+        const Position GetPositionAround(Unit* unit, float angle, float radius)
+        {
+            float ang = float(angle * (M_PI / 180.f));
+            Position pos;
+            pos.m_positionX = unit->GetPositionX() + radius * sinf(ang);
+            pos.m_positionY = unit->GetPositionY() + radius * cosf(ang);
+            pos.m_positionZ = 4.38f;
+            return pos;
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new jaina_affray_isleAI(creature);
+    }
+};
+
+class npc_thrall_affray : public CreatureScript
+{
+    public:
+    npc_thrall_affray() : CreatureScript("npc_thrall_affray")
+    {
+    }
+
+    struct npc_thrall_affrayAI : public ScriptedAI
+    {
+        npc_thrall_affrayAI(Creature* creature) : ScriptedAI(creature)
+        {
+            Initialize();
+        }
+
+        void Initialize()
+        {
+            scheduler.SetValidator([this]
+            {
+                return !me->HasUnitState(UNIT_STATE_CASTING);
             });
+        }
+
+        void MovementInform(uint32 type, uint32 id) override
+        {
+            if (type == EFFECT_MOTION_TYPE && id == 1)
+            {
+                if (Creature* jaina = me->FindNearestCreature(NPC_JAINA_PROUDMOORE, 35.f))
+                {
+                    jaina->AI()->SetData(START_THRALL_ARRIVES, 1U);
+                }
+            }
+        }
+
+        void EnterEvadeMode(EvadeReason why) override
+        {
+            ScriptedAI::EnterEvadeMode(why);
+
+            scheduler.CancelAll();
+        }
+
+        void JustEngagedWith(Unit* who) override
+        {
+            scheduler.Schedule(5ms, [this](TaskContext fireball)
+            {
+                DoCastVictim(SPELL_LIGHTNING_BOLT);
+                fireball.Repeat(8s);
+            });
+        }
+
+        void Reset() override
+        {
+            scheduler.CancelAll();
+            Initialize();
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            // Combat
+            if (!UpdateVictim())
+                return;
+
+            if (me->HasUnitState(UNIT_STATE_FLEEING)
+                || me->HasUnitState(UNIT_STATE_FLEEING_MOVE))
+            {
+                return;
+            }
+
+            scheduler.Update(diff, [this]
+            {
+                DoMeleeAttackIfReady();
+            });
+        }
+
+        private:
+        TaskScheduler scheduler;
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_thrall_affrayAI(creature);
+    }
+};
+
+class npc_wind_elemental_affray : public CreatureScript
+{
+    public:
+    npc_wind_elemental_affray() : CreatureScript("npc_wind_elemental_affray")
+    {
+    }
+
+    struct npc_wind_elemental_affrayAI : public ScriptedAI
+    {
+        npc_wind_elemental_affrayAI(Creature* creature) : ScriptedAI(creature)
+        {
+            Initialize();
+        }
+
+        void Initialize()
+        {
+        }
+
+        void MovementInform(uint32 type, uint32 id) override
+        {
+            if (type == POINT_MOTION_TYPE && id == 0)
+            {
+                scheduler
+                    .Schedule(2s, [this](TaskContext /*context*/)
+                    {
+                        DoCast(SPELL_TORNADO);
+                        me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_SPELL_CHANNEL_DIRECTED);
+                        me->SetObjectScale(10.f);
+                    })
+                    .Schedule(5s, [this](TaskContext /*context*/)
+                    {
+                        if (Creature* jaina = me->FindNearestCreature(NPC_JAINA_PROUDMOORE, 1500.f))
+                        {
+                            jaina->AI()->SetData(START_BATTLE, 1U);
+                        }
+                    });
+            }
         }
 
         void Reset() override
@@ -480,74 +722,17 @@ class jaina_affray_isle : public CreatureScript
 
         private:
         TaskScheduler scheduler;
-        Player* player;
-        Creature* klannoc;
-        Creature* playerSpectator;
-        Creature* kalecgos;
-        Creature* thrall;
-        Creature* arcaneCloud;
-        Creature* focusingIrisFx;
-        Creature* waveFx;
-        std::vector<Creature*> spectators;
-
-        bool debug;
-
-        void SetPlayerTeleportMode(Player* player, bool value)
-        {
-            player->Lock(value);
-            player->SetSheath(SHEATH_STATE_UNARMED);
-
-            float speed = value ? 20.f : 1.f;
-            player->SetSpeedRate(MOVE_WALK, speed);
-            player->SetSpeedRate(MOVE_RUN, speed);
-            player->SetSpeedRate(MOVE_SWIM, speed);
-            player->SetSpeedRate(MOVE_FLIGHT, speed);
-
-            if (value)
-            {
-                player->SetDisplayId(MORPH_INVISIBLE_PLAYER);
-                player->AddAura(SPELL_TELEPORT_PATH, player);
-            }
-            else
-            {
-                player->SetDisplayId(player->GetNativeDisplayId());
-                player->RemoveAurasDueToSpell(SPELL_TELEPORT_PATH);
-            }
-
-            SetPlayerCanFly(player, value);
-        }
-
-        void SetPlayerCanFly(Player* player, bool value)
-        {
-            WorldPacket data(12);
-            if (value)
-                data.SetOpcode(SMSG_MOVE_SET_CAN_FLY);
-            else
-                data.SetOpcode(SMSG_MOVE_UNSET_CAN_FLY);
-
-            data << player->GetPackGUID();
-            data << uint32(0);
-            player->SendMessageToSet(&data, true);
-        }
-
-        const Position GetPositionAroundMe(float angle, float radius)
-        {
-            float ang = float(angle * (M_PI / 180.f));
-            Position pos;
-            pos.m_positionX = me->GetPositionX() + radius * sinf(ang);
-            pos.m_positionY = me->GetPositionY() + radius * cosf(ang);
-            pos.m_positionZ = 4.38f;
-            return pos;
-        }
     };
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return new jaina_affray_isleAI(creature);
+        return new npc_wind_elemental_affrayAI(creature);
     }
 };
 
 void AddSC_jaina_affray_isle()
 {
     new jaina_affray_isle();
+    new npc_thrall_affray();
+    new npc_wind_elemental_affray();
 }

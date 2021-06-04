@@ -34,6 +34,7 @@ void AddSC_npcs_sunreaver();
 void AddSC_action_update_phase();
 void AddSC_jaina_affray_isle();
 void AddSC_stormwind_final_event();
+void AddSC_npc_water_elemental();
 
 // Tristam Catacombs
 void AddSC_instance_tristam_catacombs();
@@ -62,6 +63,7 @@ void AddCustomScripts()
     AddSC_action_update_phase();
     AddSC_jaina_affray_isle();
     AddSC_stormwind_final_event();
+    AddSC_npc_water_elemental();
 
     // Tristam Catacombs
     AddSC_instance_tristam_catacombs();

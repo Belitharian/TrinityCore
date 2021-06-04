@@ -2,11 +2,14 @@
 #include "Map.h"
 #include "GameObject.h"
 #include "ObjectAccessor.h"
+#include "CreatureData.h"
 #include "Player.h"
 #include "ScriptedCreature.h"
 #include "CreatureAIImpl.h"
 #include "MotionMaster.h"
 #include "theramore.h"
+
+#include <iostream>
 
 constexpr uint8 NUMBER_OF_MEMBERS = 20;
 
@@ -27,12 +30,15 @@ enum Invoker
     EVENT_BATTLE_9,
 
     // NPCs
+    NPC_WARLORD_ROK_NAH         = 100039,
     NPC_ROK_NAH_GRUNT           = 100034,
     NPC_ROK_NAH_SOLDIER         = 100029,
     NPC_ROK_NAH_HAG             = 100030,
     NPC_ROK_NAH_FELCASTER       = 100031,
     NPC_ROK_NAH_LOA_SINGER      = 100032,
     NPC_THERAMORE_WAVES         = 100035,
+    NPC_GATECRUSHER             = 100040,
+    NPC_IRONWORK_CANNON         = 33264,
 
     // Textes
     JAINA_SAY_01                = 32,
@@ -124,6 +130,37 @@ class CannonDoorsEvent : public BasicEvent
     Player* playerForQuest;
 };
 
+class HordeDoorsEvent : public BasicEvent
+{
+    public:
+    HordeDoorsEvent(Creature* owner) : owner(owner)
+    {
+    }
+
+    bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
+    {
+        Position pos;
+        pos.m_positionX = minPosX + (rand() % static_cast<int>(maxPosX - minPosX + 1));
+        pos.m_positionY = -4252.81f;
+        pos.m_positionZ = minPosZ + (rand() % static_cast<int>(maxPosZ - minPosZ + 1));
+
+        float ori = owner->GetPosition().GetAbsoluteAngle(pos);
+        owner->SetFacingTo(ori);
+
+        owner->CastSpell(pos, 100111, true);
+        owner->m_Events.AddEvent(this, Milliseconds(eventTime + urand(1500, 2300)));
+
+        return false;
+    }
+
+    private:
+    Creature* owner;
+    const float minPosX = -3790.04f;
+    const float maxPosX = -3776.74f;
+    const float minPosZ = 10.f;
+    const float maxPosZ = 20.f;
+};
+
 class theramore_waves_invoker : public CreatureScript
 {
     public:
@@ -208,6 +245,49 @@ class theramore_waves_invoker : public CreatureScript
                             gate->UseDoorOrButton();
                         }
 
+                        if (gatecrusher = me->SummonCreature(NPC_GATECRUSHER, -3790.50f, -4165.00f, 7.57f, 4.78f, TEMPSUMMON_MANUAL_DESPAWN))
+                        {
+                            gatecrusher->SetImmuneToNPC(true);
+                            gatecrusher->SetImmuneToPC(true);
+
+                            if (cannon = me->SummonCreature(NPC_IRONWORK_CANNON, -3783.45f, -4190.19f, 7.87f, 4.67f, TEMPSUMMON_MANUAL_DESPAWN))
+                            {
+                                cannon->SetDisplayId(25723);
+                                cannon->SetImmuneToNPC(true);
+                                cannon->SetImmuneToPC(true);
+                                cannon->m_Events.AddEvent(new HordeDoorsEvent(cannon), cannon->m_Events.CalculateTime(5s));
+                            }
+
+                            if (warlord = me->SummonCreature(NPC_WARLORD_ROK_NAH, -3777.98f, -4178.72f, 7.86f, 4.65f, TEMPSUMMON_MANUAL_DESPAWN))
+                            {
+                                warlord->SetImmuneToNPC(true);
+                                warlord->SetImmuneToPC(true);
+                            }
+
+                            for (uint8 i = 0; i < 10; i++)
+                            {
+                                uint32 entry = RAND(NPC_ROK_NAH_GRUNT, NPC_ROK_NAH_SOLDIER, NPC_ROK_NAH_FELCASTER, NPC_ROK_NAH_HAG, NPC_ROK_NAH_LOA_SINGER);
+                                if (Creature* hordeMember = me->SummonCreature(entry, SoldiersLocation[i].position, TEMPSUMMON_MANUAL_DESPAWN))
+                                {
+                                    hordeMember->SetImmuneToNPC(true);
+                                    hordeMember->SetImmuneToPC(true);
+
+                                    switch (entry)
+                                    {
+                                        case NPC_ROK_NAH_FELCASTER:
+                                        case NPC_ROK_NAH_HAG:
+                                            hordeMember->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY2HL);
+                                            break;
+                                        default:
+                                            hordeMember->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY1H);
+                                            break;
+                                    }
+
+                                    tempMembers.push_back(hordeMember);
+                                }
+                            }
+                        }
+
                         amara->RemoveAllAuras();
                         amara->CastSpell(amara, 54899);
                         playerForQuest->CastSpell(playerForQuest, 54899);
@@ -286,7 +366,7 @@ class theramore_waves_invoker : public CreatureScript
                     case WAVE_08:
                     case WAVE_09:
                     case WAVE_10:
-                        HordeMembersInvoker(waves, horderMembers);
+                        HordeMembersInvoker(waves, hordeMembers);
                         waves = RAND(WAVE_DOORS, WAVE_CITADEL, WAVE_DOCKS);
                         events.ScheduleEvent(++wavesInvoker, 1s);
                         break;
@@ -307,7 +387,7 @@ class theramore_waves_invoker : public CreatureScript
                         for (uint8 i = 0; i < NUMBER_OF_MEMBERS; ++i)
                         {
                             ++membersCounter;
-                            Creature* temp = ObjectAccessor::GetCreature(*me, horderMembers[i]);
+                            Creature* temp = ObjectAccessor::GetCreature(*me, hordeMembers[i]);
                             if (!temp || temp->isDead())
                                 ++deadCounter;
                         }
@@ -331,6 +411,16 @@ class theramore_waves_invoker : public CreatureScript
                         jaina->AI()->SetData(EVENT_STOP_KALECGOS, 1U);
                         jaina->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
                         kalecgos->DespawnOrUnsummon();
+
+                        if (gatecrusher) gatecrusher->DespawnOrUnsummon();
+                        if (warlord) warlord->DespawnOrUnsummon();
+                        if (cannon) cannon->DespawnOrUnsummon();
+
+                        if (!tempMembers.empty())
+                        {
+                            for (Creature* member : tempMembers)
+                                member->DespawnOrUnsummon();
+                        }
 
                         if (playerForQuest && playerForQuest->IsWithinDist(jaina, 25.f))
                         {
@@ -359,8 +449,12 @@ class theramore_waves_invoker : public CreatureScript
         Creature* thalen;
         Creature* amara;
         Creature* kalecgos;
+        Creature* gatecrusher;
+        Creature* warlord;
+        Creature* cannon;
+        std::vector<Creature*> tempMembers;
         Player* playerForQuest;
-        ObjectGuid horderMembers[NUMBER_OF_MEMBERS];
+        ObjectGuid hordeMembers[NUMBER_OF_MEMBERS];
         uint32 waves;
         uint32 wavesInvoker;
 
