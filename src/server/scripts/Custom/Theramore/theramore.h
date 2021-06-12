@@ -23,6 +23,7 @@ enum NPCs
     NPC_WATER_ELEMENTAL             = 100011,
 
     // Misc
+    NPC_TARGET_ICE_WALL             = 37014,
     NPC_INVISIBLE_STALKER           = 32780,
     NPC_ZEALOUS_THERAMORE_GUARD     = 100024,
     NPC_THERAMORE_GUARD             = 100012,

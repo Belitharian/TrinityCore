@@ -13,6 +13,7 @@ enum Spells
 	SPELL_LIVING_BOMB           = 100080,
 	SPELL_IGNITE                = 100092,
 	SPELL_DRAGON_BREATH         = 37289,
+    SPELL_BLAZING_BARRIER       = 100130,
 
 	SPELL_FROSTBOLT             = 100006,
 	SPELL_ICE_LANCE             = 100007,
@@ -65,7 +66,6 @@ class npc_archmage_fire : public CreatureScript
 	{
 		npc_archmage_fireAI(Creature* creature) : CustomAI(creature), closeTarget(false)
 		{
-			SetCombatMovement(false);
 		}
 
 		void Reset() override
@@ -87,7 +87,21 @@ class npc_archmage_fire : public CreatureScript
 
 		void JustEngagedWith(Unit* /*who*/) override
 		{
-			scheduler
+            DoCast(SPELL_BLAZING_BARRIER);
+
+            scheduler
+                .Schedule(30s, PHASE_COMBAT,[this](TaskContext blazing_barrier)
+				{
+					if (!me->HasAura(SPELL_BLAZING_BARRIER))
+					{
+						DoCast(SPELL_BLAZING_BARRIER);
+                        blazing_barrier.Repeat(30s);
+					}
+					else
+					{
+                        blazing_barrier.Repeat(1s);
+					}
+				})
 				.Schedule(5ms, PHASE_COMBAT, [this](TaskContext fireball)
 				{
 					DoCastVictim(SPELL_FIREBALL);
@@ -219,7 +233,6 @@ class npc_archmage_arcanes : public CreatureScript
 	{
 		npc_archmage_arcanesAI(Creature* creature) : CustomAI(creature), closeTarget(false), summons(me)
 		{
-			SetCombatMovement(false);
 		}
 
 		void JustSummoned(Creature* summon) override
@@ -297,7 +310,7 @@ class npc_archmage_arcanes : public CreatureScript
 				})
 				.Schedule(1s, 5s, PHASE_COMBAT, [this](TaskContext evocation)
 				{
-					float manaPct = me->GetPower(POWER_MANA) * 100 / me->GetMaxPower(POWER_MANA);
+					float manaPct = me->GetPower(POWER_MANA) * 100.f / me->GetMaxPower(POWER_MANA);
 					if (manaPct <= 20)
 					{
 						me->InterruptNonMeleeSpells(true);
@@ -326,7 +339,7 @@ class npc_archmage_arcanes : public CreatureScript
 					{
 						me->InterruptNonMeleeSpells(true);
 						DoCast(target, SPELL_COUNTERSPELL);
-						counterspell.Repeat(25s, 40s);
+						counterspell.Repeat(8s, 15s);
 					}
 					else
 					{
@@ -449,7 +462,6 @@ class npc_archmage_frost : public CreatureScript
 	{
 		npc_archmage_frostAI(Creature* creature) : CustomAI(creature), closeTarget(false), polymorphedGUID(ObjectGuid::Empty), polymorphTarget(false)
 		{
-			SetCombatMovement(false);
 		}
 
 		void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override

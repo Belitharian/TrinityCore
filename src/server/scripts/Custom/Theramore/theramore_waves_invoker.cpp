@@ -7,11 +7,12 @@
 #include "ScriptedCreature.h"
 #include "CreatureAIImpl.h"
 #include "MotionMaster.h"
+#include "Group.h"
 #include "theramore.h"
 
 #include <iostream>
 
-constexpr uint8 NUMBER_OF_MEMBERS = 20;
+#define NUMBER_OF_MEMBERS 20
 
 const Position JainaHomePos = { -3658.39f, -4372.87f, 9.35f, 0.69f };
 
@@ -36,6 +37,7 @@ enum Invoker
     NPC_ROK_NAH_HAG             = 100030,
     NPC_ROK_NAH_FELCASTER       = 100031,
     NPC_ROK_NAH_LOA_SINGER      = 100032,
+    NPC_ZANCHULI_COUNCIL_DRUID  = 100036,
     NPC_THERAMORE_WAVES         = 100035,
     NPC_GATECRUSHER             = 100040,
     NPC_IRONWORK_CANNON         = 33264,
@@ -112,14 +114,17 @@ class KalecgosFlightEvent : public BasicEvent
 class CannonDoorsEvent : public BasicEvent
 {
     public:
-    CannonDoorsEvent(Creature* owner, Player* playerForQuest) : owner(owner), playerForQuest(playerForQuest)
+    CannonDoorsEvent(Creature* owner, std::vector<Player*> players) : owner(owner), players(players)
     {
     }
 
     bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
     {
-        playerForQuest->PlayDirectSound(RAND(11564, 11565, 11566, 11567));
-        playerForQuest->CastSpell(playerForQuest, 12816);
+        for (Player* player : players)
+        {
+            player->PlayDirectSound(RAND(11564, 11565, 11566, 11567));
+            player->CastSpell(player, 12816);
+        }
         owner->CastSpell(owner, 71495);
         owner->m_Events.AddEvent(this, Milliseconds(eventTime + urand(300, 800)));
         return false;
@@ -127,7 +132,7 @@ class CannonDoorsEvent : public BasicEvent
 
     private:
     Creature* owner;
-    Player* playerForQuest;
+    std::vector<Player*> players;
 };
 
 class HordeDoorsEvent : public BasicEvent
@@ -179,14 +184,24 @@ class theramore_waves_invoker : public CreatureScript
             wavesInvoker = WAVE_01;
         }
 
-        void SetGUID(ObjectGuid const& guid, int32 id = 0) override
-        {
-            if (id == TYPEID_PLAYER)
-                playerForQuest = ObjectAccessor::GetPlayer(*me, guid);
-        }
-
         void SetData(uint32 id, uint32 value) override
         {
+            if (Player* player = me->SelectNearestPlayer(2000.f))
+            {
+                players.clear();
+
+                if (Group* group = player->GetGroup())
+                {
+                    for (GroupReference* groupRef = group->GetFirstMember(); groupRef != nullptr; groupRef = groupRef->next())
+                    {
+                        if (Player* member = groupRef->GetSource())
+                            players.push_back(member);
+                    }
+                }
+                else
+                    players.push_back(player);
+            }
+
             if (id == EVENT_START_WAR)
             {
                 wavesInvoker = value == 2 ? WAVE_10 : WAVE_01;
@@ -223,14 +238,15 @@ class theramore_waves_invoker : public CreatureScript
                         {
                             jaina->AI()->Talk(JAINA_SAY_02);
                             jaina->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY2HL);
-                            cannon->m_Events.AddEvent(new CannonDoorsEvent(cannon, playerForQuest), cannon->m_Events.CalculateTime(5ms));
+                            cannon->m_Events.AddEvent(new CannonDoorsEvent(cannon, players), cannon->m_Events.CalculateTime(5ms));
                         }
                         events.ScheduleEvent(EVENT_BATTLE_2, 8s);
                         break;
 
                     case EVENT_BATTLE_2:
                     {
-                        playerForQuest->PlayDirectSound(11563);
+                        for (Player* player : players)
+                            player->PlayDirectSound(11563);
 
                         if (Creature* barrier = GetClosestCreatureWithEntry(me, NPC_INVISIBLE_STALKER, 20.f))
                         {
@@ -266,7 +282,7 @@ class theramore_waves_invoker : public CreatureScript
 
                             for (uint8 i = 0; i < 10; i++)
                             {
-                                uint32 entry = RAND(NPC_ROK_NAH_GRUNT, NPC_ROK_NAH_SOLDIER, NPC_ROK_NAH_FELCASTER, NPC_ROK_NAH_HAG, NPC_ROK_NAH_LOA_SINGER);
+                                uint32 entry = RAND(NPC_ROK_NAH_GRUNT, NPC_ROK_NAH_SOLDIER, NPC_ROK_NAH_FELCASTER, NPC_ROK_NAH_HAG, NPC_ROK_NAH_LOA_SINGER, NPC_ZANCHULI_COUNCIL_DRUID);
                                 if (Creature* hordeMember = me->SummonCreature(entry, SoldiersLocation[i].position, TEMPSUMMON_MANUAL_DESPAWN))
                                 {
                                     hordeMember->SetImmuneToNPC(true);
@@ -290,7 +306,8 @@ class theramore_waves_invoker : public CreatureScript
 
                         amara->RemoveAllAuras();
                         amara->CastSpell(amara, 54899);
-                        playerForQuest->CastSpell(playerForQuest, 54899);
+                        for (Player* player : players)
+                            player->CastSpell(player, 54899);
                         thalen->SetWalk(false);
                         thalen->RemoveAllAuras();
                         thalen->CastSpell(thalen, 32404);
@@ -395,7 +412,8 @@ class theramore_waves_invoker : public CreatureScript
                         // Quand le nombre de membres vivants est inférieur ou égal au nom de membres morts
                         if (membersCounter <= deadCounter)
                         {
-                            playerForQuest->KilledMonsterCredit(NPC_THERAMORE_WAVES);
+                            for (Player* player : players)
+                                player->KilledMonsterCredit(NPC_THERAMORE_WAVES);
                             events.ScheduleEvent(++wavesInvoker, 2s);
                         }
                         else
@@ -405,7 +423,8 @@ class theramore_waves_invoker : public CreatureScript
 
                     case WAVE_EXIT:
                     {
-                        playerForQuest->CompleteQuest(QUEST_PREPARE_FOR_WAR);
+                        for (Player* player : players)
+                            player->CompleteQuest(QUEST_PREPARE_FOR_WAR);
                         jaina->NearTeleportTo(JainaHomePos);
                         jaina->SetHomePosition(JainaHomePos);
                         jaina->AI()->SetData(EVENT_STOP_KALECGOS, 1U);
@@ -422,15 +441,18 @@ class theramore_waves_invoker : public CreatureScript
                                 member->DespawnOrUnsummon();
                         }
 
-                        if (playerForQuest && playerForQuest->IsWithinDist(jaina, 25.f))
+                        for (Player* player : players)
                         {
-                            Position playerPos = GetRandomPosition(JainaHomePos, 3.f);
-
-                            // Si le joueur est à plus de 25 mètre de la destination d'attaque
-                            float distance = playerPos.GetExactDist2d(playerForQuest->GetPosition());
-                            if (distance > 25.0f)
+                            if (player->IsWithinDist(jaina, 25.f))
                             {
-                                playerForQuest->NearTeleportTo(playerPos);
+                                Position playerPos = GetRandomPosition(JainaHomePos, 3.f);
+
+                                // Si le joueur est à plus de 25 mètre de la destination d'attaque
+                                float distance = playerPos.GetExactDist2d(player->GetPosition());
+                                if (distance > 25.0f)
+                                {
+                                    player->NearTeleportTo(playerPos);
+                                }
                             }
                         }
 
@@ -453,32 +475,34 @@ class theramore_waves_invoker : public CreatureScript
         Creature* warlord;
         Creature* cannon;
         std::vector<Creature*> tempMembers;
-        Player* playerForQuest;
+        std::vector<Player*> players;
         ObjectGuid hordeMembers[NUMBER_OF_MEMBERS];
         uint32 waves;
         uint32 wavesInvoker;
 
-        Position GetPositionAround(Unit* target, double angle, float radius)
-        {
-            double ang = angle * (M_PI / 180);
-            Position pos;
-            pos.m_positionX = target->GetPositionX() + radius * sin(ang);
-            pos.m_positionY = target->GetPositionY() + radius * cos(ang);
-            pos.m_positionZ = target->GetPositionZ();
-            return pos;
-        }
-
         void HordeMembersInvoker(uint32 waveId, ObjectGuid* hordes)
         {
+            uint8 healers = 0;
             for (uint32 i = 0; i < NUMBER_OF_MEMBERS; ++i)
             {
-                uint32 entry = RAND(NPC_ROK_NAH_GRUNT, NPC_ROK_NAH_SOLDIER, NPC_ROK_NAH_FELCASTER, NPC_ROK_NAH_HAG, NPC_ROK_NAH_LOA_SINGER);
+                uint32 entry = NPC_ROK_NAH_GRUNT;
+                if (roll_chance_i(40))
+                    entry = NPC_ROK_NAH_SOLDIER;
+                else if (roll_chance_i(60))
+                    entry = RAND(NPC_ROK_NAH_FELCASTER, NPC_ROK_NAH_HAG);
+
+                if (healers < 2)
+                {
+                    entry = RAND(NPC_ROK_NAH_LOA_SINGER, NPC_ZANCHULI_COUNCIL_DRUID);
+                    healers++;
+                }
+
                 Position pos;
 
                 switch (waveId)
                 {
                     case WAVE_DOORS:
-                        pos = GetRandomPosition({ -3608.66f, -4332.66f, 11.62f, 3.83f }, 2.f);
+                        pos = GetRandomPosition(JainaHomePos, 13.f);
                         break;
 
                     case WAVE_CITADEL:
@@ -492,17 +516,7 @@ class theramore_waves_invoker : public CreatureScript
 
                 if (Creature* temp = DoSummon(entry, pos, 15min, TEMPSUMMON_CORPSE_TIMED_DESPAWN))
                 {
-                    if (waveId == WAVE_DOORS)
-                    {
-                        Position dest = GetRandomPosition(JainaHomePos, 5.f);
-                        temp->GetMotionMaster()->MovePoint(0, dest);
-                    }
-
-                    float x, y, z;
-                    temp->GetPosition(x, y, z);
-                    temp->UpdateGroundPositionZ(x, y, z);
-                    temp->UpdatePosition(x, y, z, 0);
-
+                    temp->CastSpell(temp, SPELL_TELEPORT, true);
                     hordes[i] = temp->GetGUID();
                 }
             }
@@ -540,16 +554,19 @@ class theramore_waves_invoker : public CreatureScript
             jaina->AI()->Talk(JAINA_SAY_WAVE_ALERT);
             jaina->AI()->Talk(groupId);
 
-            if (playerForQuest && playerForQuest->IsWithinDist(jaina, 25.f))
+            for (Player* player : players)
             {
-                Position playerPos = GetRandomPosition(position, 3.f);
-
-                // Si le joueur est à plus de 25 mètre de la destination d'attaque
-                float distance = playerPos.GetExactDist2d(playerForQuest->GetPosition());
-                if (distance > 25.0f)
+                if (player->IsWithinDist(jaina, 25.f))
                 {
-                    playerForQuest->NearTeleportTo(playerPos);
-                    playerForQuest->CastSpell(playerForQuest, SPELL_TELEPORT);
+                    Position playerPos = GetRandomPosition(position, 3.f);
+
+                    // Si le joueur est à plus de 25 mètre de la destination d'attaque
+                    float distance = playerPos.GetExactDist2d(player->GetPosition());
+                    if (distance > 25.0f)
+                    {
+                        player->NearTeleportTo(playerPos);
+                        player->CastSpell(player, SPELL_TELEPORT);
+                    }
                 }
             }
         }

@@ -26,7 +26,7 @@ class npc_paladin : public CreatureScript
 
     struct npc_paladinAI : public CustomAI
     {
-        npc_paladinAI(Creature* creature) : CustomAI(creature), healOnCooldown(false)
+        npc_paladinAI(Creature* creature) : CustomAI(creature, AI_Type::Melee), healOnCooldown(false)
         {
             scheduler.SetValidator([this]
             {
@@ -42,17 +42,17 @@ class npc_paladin : public CreatureScript
                     DoCast(SPELL_DIVINE_STORM);
                     divine_storm.Repeat(18s, 25s);
                 })
-                .Schedule(5ms, GROUP_FIGHT, [this](TaskContext rejuvenation)
+                .Schedule(5ms, GROUP_FIGHT, [this](TaskContext sacred_light)
                 {
                     if (Unit* target = DoSelectBelowHpPctFriendly(30.0f, 30, true))
                     {
                         me->InterruptNonMeleeSpells(true);
                         DoCast(target, SPELL_SACRED_LIGHT);
-                        rejuvenation.Repeat(24s);
+                        sacred_light.Repeat(24s);
                     }
                     else
                     {
-                        rejuvenation.Repeat(1ms);
+                        sacred_light.Repeat(1ms);
                     }
                 })
                 .Schedule(8s, GROUP_FIGHT, [this](TaskContext divine_storm)

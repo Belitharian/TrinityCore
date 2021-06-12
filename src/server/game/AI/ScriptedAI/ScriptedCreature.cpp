@@ -501,6 +501,16 @@ std::list<Creature*> ScriptedAI::DoFindFriendlyMissingBuff(float range, uint32 u
     return list;
 }
 
+Unit* ScriptedAI::DoFindFriendlyMissingHot(float range, uint32 uiSpellid)
+{
+    Unit* unit = nullptr;
+    Trinity::FriendlyMissingBuffInRange u_check(me, range, uiSpellid);
+    Trinity::UnitLastSearcher<Trinity::FriendlyMissingBuffInRange> searcher(me, unit, u_check);
+    Cell::VisitAllObjects(me, searcher, range);
+
+    return unit;
+}
+
 Unit* ScriptedAI::DoFindEnemyMissingDot(float range, SpellInfo const* spellInfo)
 {
     Unit* unit = nullptr;

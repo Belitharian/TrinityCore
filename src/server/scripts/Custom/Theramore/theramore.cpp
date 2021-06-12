@@ -1,5 +1,6 @@
 #include "ScriptMgr.h"
 #include "Map.h"
+#include "ObjectMgr.h"
 #include "ObjectAccessor.h"
 #include "GameObject.h"
 #include "theramore.h"
@@ -11,6 +12,7 @@
 #include "Weather.h"
 #include "GridNotifiersImpl.h"
 #include "Log.h"
+#include "Group.h"
 
 #define KINNDY_PATH_SIZE             6
 #define ADEN_PATH_SIZE               7
@@ -173,8 +175,9 @@ class npc_jaina_theramore : public CreatureScript
         npc_jaina_theramoreAI(Creature* creature) : ScriptedAI(creature),
             kalecgos(nullptr), tervosh(nullptr), kinndy(nullptr), aden(nullptr),
             thalen(nullptr), rhonin(nullptr), vereesa(nullptr), pained(nullptr),
-            perith(nullptr), zealous(nullptr), guard(nullptr), amara(nullptr), playerForQuest(nullptr),
-            playerShaker(false), firesCount(0), npcCount(0), canBeginEnd(false), debug(false)
+            perith(nullptr), zealous(nullptr), guard(nullptr), amara(nullptr),
+            playerShaker(false), firesCount(0), npcCount(0), canBeginEnd(false),
+            debug(false)
         {
             Initialize();
         }
@@ -191,8 +194,6 @@ class npc_jaina_theramore : public CreatureScript
 
         void OnQuestAccept(Player* player, Quest const* quest) override
         {
-            playerForQuest = player;
-
             switch (quest->GetQuestId())
             {
                 case QUEST_LOOKING_FOR_THE_ARTEFACT:
@@ -216,8 +217,6 @@ class npc_jaina_theramore : public CreatureScript
 
         void OnQuestReward(Player* player, Quest const* quest, uint32 /*opt*/) override
         {
-            playerForQuest = player;
-
             switch (quest->GetQuestId())
             {
                 case QUEST_LOOKING_FOR_THE_ARTEFACT:
@@ -251,8 +250,23 @@ class npc_jaina_theramore : public CreatureScript
 
         void SetData(uint32 id, uint32 value) override
         {
-            if (!playerForQuest)
-                playerForQuest = me->SelectNearestPlayer(2000.f);
+            if (Player* player = me->SelectNearestPlayer(2000.f))
+            {
+                players.clear();
+
+                if (Group* group = player->GetGroup())
+                {
+                    for (GroupReference* groupRef = group->GetFirstMember(); groupRef != nullptr; groupRef = groupRef->next())
+                    {
+                        if (Player* member = groupRef->GetSource())
+                        {
+                            players.push_back(member);
+                        }
+                    }
+                }
+                else
+                    players.push_back(player);
+            }
 
             me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
             me->SetSheath(SHEATH_STATE_UNARMED);
@@ -261,8 +275,6 @@ class npc_jaina_theramore : public CreatureScript
             {
                 case EVENT_START_CONVO:
                 {
-                    playerForQuest->Lock(true);
-
                     kalecgos = GetClosestCreatureWithEntry(me, NPC_KALECGOS, 2000.f);
                     tervosh = GetClosestCreatureWithEntry(me, NPC_ARCHMAGE_TERVOSH, 2000.f);
                     kinndy = GetClosestCreatureWithEntry(me, NPC_KINNDY_SPARKSHINE, 2000.f);
@@ -277,12 +289,22 @@ class npc_jaina_theramore : public CreatureScript
                 }
 
                 case EVENT_END_CONVO:
+                {
+                    Quest const* lookingForTheArtefact = sObjectMgr->GetQuestTemplate(QUEST_LOOKING_FOR_THE_ARTEFACT);
+                    for (Player* player : players)
+                        player->RewardQuest(lookingForTheArtefact, 0, me);
                     events.ScheduleEvent(EVENT_CONVO_23, 2s, 0, PHASE_CONVO);
                     break;
+                }
 
                 case EVENT_START_POST_BATTLE:
                 {
-                    playerForQuest->SetPhaseMask(3, true);
+                    Quest const* prepareForWar = sObjectMgr->GetQuestTemplate(QUEST_PREPARE_FOR_WAR);
+                    for (Player* player : players)
+                    {
+                        player->RewardQuest(prepareForWar, 0, me);
+                        player->SetPhaseMask(3, true);
+                    }
 
                     kalecgos = GetClosestCreatureWithEntry(me, NPC_KALECGOS, 2000.f);
                     tervosh = GetClosestCreatureWithEntry(me, NPC_ARCHMAGE_TERVOSH, 2000.f);
@@ -432,8 +454,8 @@ class npc_jaina_theramore : public CreatureScript
             scheduler.CancelAll();
             events.Reset();
 
-            if (playerForQuest)
-                playerForQuest->FailQuest(QUEST_PREPARE_FOR_WAR);
+            for (Player* player : players)
+                player->FailQuest(QUEST_PREPARE_FOR_WAR);
         }
 
         void KilledUnit(Unit* victim) override
@@ -460,14 +482,9 @@ class npc_jaina_theramore : public CreatureScript
 
                     // Début de la réunion
                     case EVENT_CONVO_1:
-                    {
-                        playerForQuest->SetWalk(true);
-                        playerForQuest->GetMotionMaster()->MovePoint(0, -3750.90f, -4441.33f, 30.55f, true, 0.49f);
-
                         Talk(SAY_CONVO_1);
                         events.ScheduleEvent(EVENT_CONVO_2, 11s, 0, PHASE_CONVO);
                         break;
-                    }
 
                     case EVENT_CONVO_2:
                         kinndy->AI()->Talk(SAY_CONVO_2);
@@ -571,17 +588,19 @@ class npc_jaina_theramore : public CreatureScript
                         break;
 
                     case EVENT_CONVO_22:
-                        playerForQuest->AreaExploredOrEventHappens(QUEST_LOOKING_FOR_THE_ARTEFACT);
+                        for (Player* player : players)
+                        {
+                            player->AreaExploredOrEventHappens(QUEST_LOOKING_FOR_THE_ARTEFACT);
+                            player->SetFacingToObject(me);
+                        }
                         kinndy->SetFacingTo(0.62f);
                         me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
-                        me->SetFacingToObject(playerForQuest);
-                        playerForQuest->SetFacingToObject(me);
+                        me->SetFacingToObject(players[0]);
                         tervosh->SetVisible(false);
                         break;
 
                     // Fin de la réunion
                     case EVENT_CONVO_23:
-                        playerForQuest->GetMotionMaster()->MovePoint(0, -3746.76f, -4445.30f, 30.55f, true, 1.38f);
                         me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
                         me->SetWalk(true);
                         me->GetMotionMaster()->MovePoint(0, -3759.73f, -4446.66f, 30.55f, true, 0.38f);
@@ -640,7 +659,6 @@ class npc_jaina_theramore : public CreatureScript
                     }
 
                     case EVENT_WARN_2:
-                        playerForQuest->SetFacingToObject(pained);
                         pained->AI()->Talk(SAY_WARN_1);
                         pained->SetFacingTo(3.64f);
                         events.ScheduleEvent(EVENT_WARN_3, 1s, 0, PHASE_WARN);
@@ -720,7 +738,6 @@ class npc_jaina_theramore : public CreatureScript
                         break;
 
                     case EVENT_WARN_16:
-                        playerForQuest->SetFacingToObject(perith);
                         me->SetFacingToObject(zealous);
                         perith->SetFacingToObject(me);
                         zealous->AI()->Talk(0);
@@ -899,7 +916,6 @@ class npc_jaina_theramore : public CreatureScript
                         break;
 
                     case EVENT_WARN_46:
-                        playerForQuest->Lock(false);
                         me->SetFacingTo(6.25f);
                         tervosh->SetFacingTo(2.73f);
                         kinndy->SetFacingTo(4.75f);
@@ -924,7 +940,8 @@ class npc_jaina_theramore : public CreatureScript
                     {
                         if (!playerShaker)
                         {
-                            playerForQuest->CastSpell(playerForQuest, 42910);
+                            for (Player* player : players)
+                                player->CastSpell(player, 42910);
 
                             aden->AI()->Talk(SAY_EVENT_SHAKER);
 
@@ -1093,7 +1110,7 @@ class npc_jaina_theramore : public CreatureScript
                         vereesa->CastSpell(vereesa, SPELL_VANISH);
                         vereesa->SetStandState(UNIT_STAND_STATE_KNEEL);
                         Talk(SAY_PRE_BATTLE_14);
-                        me->SetFacingToObject(playerForQuest);
+                        me->SetFacingToObject(players[0]);
                         events.ScheduleEvent(EVENT_PRE_BATTLE_17, 2s, 0, PHASE_PRE_BATTLE);
                         break;
 
@@ -1119,7 +1136,8 @@ class npc_jaina_theramore : public CreatureScript
                                 c->CastSpell(c, SPELL_TELEPORT);
                         }
 
-                        playerForQuest->CastSpell(playerForQuest, SPELL_TELEPORT);
+                        for (Player* player : players)
+                            player->CastSpell(player, SPELL_TELEPORT);
 
                         events.ScheduleEvent(EVENT_PRE_BATTLE_19, 1500ms, 0, PHASE_PRE_BATTLE);
                         break;
@@ -1175,57 +1193,79 @@ class npc_jaina_theramore : public CreatureScript
                             c->SetObjectScale(3.0f);
                         }
 
-                        float angle = float(rand_norm() * 2 * M_PI);
-                        float dist = frand(1, 4);
-                        playerForQuest->NearTeleportTo(-3661.96f + cos(angle) * dist, -4374.06f + sin(angle) * dist, 9.35f, 0.72f);
+                        for (Player* player : players)
+                        {
+                            float dist = frand(1, 4);
+
+                            Position pos = { -3658.39f, -4372.87f, 9.35f, 0.69f };
+                            me->MovePosition(pos, dist * (float)rand_norm(), (float)rand_norm() * static_cast<float>(2 * M_PI));
+
+                            player->NearTeleportTo(pos);
+                        }
 
                         events.ScheduleEvent(EVENT_PRE_BATTLE_20, 4s, 0, PHASE_PRE_BATTLE);
                         break;
                     }
 
                     case EVENT_PRE_BATTLE_20:
+                    {
                         me->GetGameObjectListWithEntryInGrid(fires, GOB_FIRE_THERAMORE, 18.f);
-                        firesCount = fires.size();
-                        events.ScheduleEvent(EVENT_PRE_BATTLE_21, 1s, 0, PHASE_PRE_BATTLE);
+
+                        const Position start = { fires[0]->GetPositionX(), fires[0]->GetPositionY(), 13.46f };
+                        if (frostTarget = me->SummonCreature(NPC_TARGET_ICE_WALL, start, TEMPSUMMON_TIMED_DESPAWN, 2min))
+                        {
+                            me->SetTarget(frostTarget->GetGUID());
+
+                            frostTarget->SetSpeedRate(MOVE_WALK, 1.4f);
+                        }
+
+                        events.ScheduleEvent(EVENT_PRE_BATTLE_21, 2s, 0, PHASE_PRE_BATTLE);
                         break;
+                    }
 
                     case EVENT_PRE_BATTLE_21:
                     {
-                        me->SetFacingTo(0.70f);
-
-                        if (fires.empty() || firesCount <= 0)
+                        if (!me->HasUnitState(UNIT_STATE_CASTING))
                         {
+                            uint8 count = fires.size();
+
+                            Position* pos = new Position[count];
+                            for (uint8 i = 0; i < count; i++)
+                                pos[i] = { fires[i]->GetPositionX(), fires[i]->GetPositionY(), 13.46f };
+
+                            frostTarget->GetMotionMaster()->MoveSmoothPath(0, pos, count, false);
+                            DoCast(frostTarget, 100127, true);
+                        }
+
+                        if (firesCount >= fires.size())
+                        {
+                            if (frostTarget) frostTarget->RemoveAllAuras();
+
+                            me->CastStop();
+                            me->SetFacingTo(0.70f);
+                            me->SetTarget(ObjectGuid::Empty);
+
                             events.SetPhase(PHASE_BATTLE);
                             if (Creature* waves = me->SummonCreature(NPC_WAVES_INVOKER, me->GetPosition(), TEMPSUMMON_MANUAL_DESPAWN))
                             {
-                                waves->AI()->SetGUID(playerForQuest->GetGUID(), TYPEID_PLAYER);
-
                                 if (debug)
                                 {
-                                    me->Talk("Need to launch waves manually in debug mode with SetData command.", CHAT_MSG_MONSTER_SAY, LANG_UNIVERSAL, 5.f, playerForQuest);
+                                    me->Talk("Need to launch waves manually in debug mode with SetData command.", CHAT_MSG_MONSTER_SAY, LANG_UNIVERSAL, 5.f, players[0]);
                                 }
                                 else
                                 {
                                     waves->AI()->SetData(1, 1);
                                 }
                             }
+
                             break;
                         }
 
-                        if (GameObject* fire = fires.at(firesCount - 1))
+                        if (GameObject* fire = fires[firesCount])
                         {
-                            if (Creature* c = me->SummonCreature(NPC_INVISIBLE_STALKER, *fire, TEMPSUMMON_DEAD_DESPAWN))
-                            {
-                                c->SetFaction(14);
-                                c->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                                c->SetReactState(REACT_PASSIVE);
-                                c->CastSpell(c, 62849);
-                                me->SetFacingToObject(c);
-                                DoCast(c, 54261);
-                                fire->Delete();
-                                firesCount--;
-                                events.RescheduleEvent(EVENT_PRE_BATTLE_21, 2s, 0, PHASE_PRE_BATTLE);
-                            }
+                            fire->Delete();
+                            firesCount++;
+                            events.RescheduleEvent(EVENT_PRE_BATTLE_21, 2s, 0, PHASE_PRE_BATTLE);
                         }
 
                         break;
@@ -1410,26 +1450,38 @@ class npc_jaina_theramore : public CreatureScript
 
                     case EVENT_END_9:
                         Talk(SAY_END_10);
-                        playerForQuest->CastSpell(playerForQuest, 100093);
+                        for (Player* player : players)
+                            player->CastSpell(player, 100093);
                         events.ScheduleEvent(EVENT_END_10, 6s, 0, PHASE_END);
                         break;
 
                     case EVENT_END_10:
                         rhonin->AI()->Talk(SAY_END_11);
-                        playerForQuest->PlayDirectSound(11563);
+                        for (Player* player : players)
+                            player->PlayDirectSound(11563);
                         events.ScheduleEvent(EVENT_END_11, 9s, 0, PHASE_END);
                         break;
 
                     case EVENT_END_11:
-                        playerForQuest->PlayDirectSound(11571);
-                        playerForQuest->CastSpell(playerForQuest, SPELL_TELEPORT);
-                        playerForQuest->CompleteQuest(QUEST_LIMIT_THE_NUKE);
+                        for (Player* player : players)
+                        {
+                            player->PlayDirectSound(11571);
+                            player->CastSpell(player, SPELL_TELEPORT);
+                            player->CompleteQuest(QUEST_LIMIT_THE_NUKE);
+                        }
                         events.ScheduleEvent(EVENT_END_12, 1s, 0, PHASE_END);
                         break;
 
                     case EVENT_END_12:
-                        playerForQuest->SetPhaseMask(4, true);
-                        playerForQuest->TeleportTo(1, -2701.89f, -4702.44f, 7.86f, 4.95f);
+                        for (Player* player : players)
+                        {
+                            player->SetPhaseMask(4, true);
+
+                            const Position center = { -2701.89f, -4702.44f, 7.86f, 4.95f };
+                            const Position pos = GetRandomPosition(center, 10.f);
+                            const WorldLocation dest = { 1, pos };
+                            player->TeleportTo(dest);
+                        }
                         break;
 
                     #pragma endregion
@@ -1459,8 +1511,8 @@ class npc_jaina_theramore : public CreatureScript
         Creature *kalecgos, *tervosh, *kinndy;
         Creature *aden, *thalen, *rhonin;
         Creature *vereesa, *pained, *perith;
-        Creature *zealous, *guard, *amara;
-        Player* playerForQuest;
+        Creature *zealous, *guard, *amara, *frostTarget;
+        std::vector<Player*> players;
         ObjectGuid archmagesGUID[6];
         std::vector<GameObject*> fires;
         std::list<Creature*> civils;
@@ -1689,7 +1741,7 @@ class npc_civil_of_theramore : public CreatureScript
                                 context.Repeat(1s);
                                 break;
                             case 3:
-                                player->KilledMonsterCredit(100074);
+                                AddKillMonsterCredit();
                                 break;
                             default:
                                 break;
@@ -1716,6 +1768,25 @@ class npc_civil_of_theramore : public CreatureScript
         private:
         ObjectGuid* stalker;
         TaskScheduler scheduler;
+
+        void AddKillMonsterCredit()
+        {
+            if (Player* player = me->SelectNearestPlayer(2000.f))
+            {
+                if (Group* group = player->GetGroup())
+                {
+                    for (GroupReference* groupRef = group->GetFirstMember(); groupRef != nullptr; groupRef = groupRef->next())
+                    {
+                        if (Player* member = groupRef->GetSource())
+                        {
+                            member->KilledMonsterCredit(100074);
+                        }
+                    }
+                }
+                else
+                    player->KilledMonsterCredit(100074);
+            }
+        }
     };
 
     CreatureAI* GetAI(Creature* creature) const override

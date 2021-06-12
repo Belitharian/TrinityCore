@@ -17,6 +17,20 @@ void CustomAI::Initialize()
     }
 }
 
+void CustomAI::AttackStart(Unit* who)
+{
+    if (!who)
+        return;
+
+    // Mouvement que pour les IA en mêlée
+    if (type != AI_Type::Distance)
+        SetCombatMovement(true);
+    else
+        SetCombatMovement(false);
+
+    ScriptedAI::AttackStart(who);
+}
+
 void CustomAI::JustSummoned(Creature* summon)
 {
     summons.Summon(summon);

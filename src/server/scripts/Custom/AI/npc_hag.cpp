@@ -22,7 +22,6 @@ class npc_hag : public CreatureScript
     {
         npc_hagAI(Creature* creature) : CustomAI(creature), hasUsedIceBlock(false)
         {
-            SetCombatMovement(false);
         }
 
         void Reset() override

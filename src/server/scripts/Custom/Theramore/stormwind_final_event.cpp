@@ -6,6 +6,7 @@
 #include "ScriptedCreature.h"
 #include "CreatureAIImpl.h"
 #include "MotionMaster.h"
+#include "Group.h"
 
 #define VARIAN_PATH_SIZE 4
 
@@ -31,6 +32,7 @@ enum NPCs
 enum Spells
 {
     SPELL_TELEPORT              = 51347,
+    SPELL_INVISIBILITY          = 16380
 };
 
 enum Texts
@@ -54,10 +56,11 @@ enum Texts
     SAY_JAINA_08,
 };
 
-enum Phase
+enum class Phases
 {
-    PHASE_NONE,
-    PHASE_IN_PROGRESS
+    None,
+    Progress,
+    Done
 };
 
 const Position varianPath[VARIAN_PATH_SIZE] =
@@ -83,7 +86,7 @@ class stormwind_final_event : public CreatureScript
 
     struct stormwind_final_eventAI : public ScriptedAI
     {
-        stormwind_final_eventAI(Creature* creature) : ScriptedAI(creature), phase(PHASE_NONE)
+        stormwind_final_eventAI(Creature* creature) : ScriptedAI(creature), phase(Phases::None)
         {
             Initialize();
         }
@@ -98,19 +101,39 @@ class stormwind_final_event : public CreatureScript
 
         void MoveInLineOfSight(Unit* who) override
         {
-            if (who->GetTypeId() != TYPEID_PLAYER || phase != PHASE_NONE)
+            if (who->GetTypeId() != TYPEID_PLAYER || phase != Phases::None)
                 return;
 
-            player = who->ToPlayer();
-            if (player->IsGameMaster())
-                return;
-
-            if (player->GetPhaseMask() == PHASEMASK_EVENT
-                && player->GetQuestStatus(QUEST_WHAT_HAD_TO_BE_DONE) == QUEST_STATUS_COMPLETE
-                && me->IsFriendlyTo(player)
-                && me->IsWithinDist(player, 6.f, false))
+            if (Player* player = me->SelectNearestPlayer(2000.f))
             {
-                phase = PHASE_IN_PROGRESS;
+                players.clear();
+
+                if (Group* group = player->GetGroup())
+                {
+                    for (GroupReference* groupRef = group->GetFirstMember(); groupRef != nullptr; groupRef = groupRef->next())
+                    {
+                        if (Player* member = groupRef->GetSource())
+                            players.push_back(member);
+                    }
+                }
+                else
+                    players.push_back(player);
+            }
+
+            for (Player* player : players)
+            {
+                if (player->GetPhaseMask() == PHASEMASK_EVENT
+                    && me->IsFriendlyTo(player)
+                    && player->GetQuestStatus(QUEST_WHAT_HAD_TO_BE_DONE) == QUEST_STATUS_COMPLETE)
+                {
+                    continue;
+                }
+                return;
+            }
+
+            if (me->IsWithinDist(who, 6.f, false))
+            {
+                phase = Phases::Progress;
 
                 jaina = GetClosestCreatureWithEntry(me, NPC_JAINA_PROUDMOORE, 35.f);
                 varian = GetClosestCreatureWithEntry(me, NPC_VARIAN_WRYNN, 35.f);
@@ -119,9 +142,9 @@ class stormwind_final_event : public CreatureScript
                 jaina->SetWalk(true);
                 varian->SetWalk(true);
                 varian->SetSheath(SHEATH_STATE_UNARMED);
+                varian->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
 
-                events.SetPhase(PHASE_IN_PROGRESS);
-                events.ScheduleEvent(1, 2s, PHASE_IN_PROGRESS);
+                events.ScheduleEvent(1, 2s);
             }
         }
 
@@ -136,18 +159,18 @@ class stormwind_final_event : public CreatureScript
                     case 1:
                         jaina->RemoveAllAuras();
                         varian->GetMotionMaster()->MoveSmoothPath(0, varianPath, VARIAN_PATH_SIZE, true);
-                        events.ScheduleEvent(2, 200ms, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(2, 200ms);
                         break;
 
                     case 2:
                         jaina->CastSpell(jaina, SPELL_TELEPORT);
-                        events.ScheduleEvent(3, 2s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(3, 2s);
                         break;
 
                     case 3:
                         varian->AI()->Talk(SAY_VARIAN_01);
                         jaina->GetMotionMaster()->MovePoint(0, -8461.18f, 333.342f, 120.88f, true, 6.15f);
-                        events.ScheduleEvent(4, 4s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(4, 4s);
                         break;
 
                     case 4:
@@ -155,93 +178,93 @@ class stormwind_final_event : public CreatureScript
                         jaina->SetFacingToObject(varian);
                         varian->SetFacingToObject(jaina);
                         anduin->SetFacingToObject(jaina);
-                        events.ScheduleEvent(5, 3s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(5, 3s);
                         break;
 
                     case 5:
                         varian->AI()->Talk(SAY_VARIAN_02);
-                        events.ScheduleEvent(6, 1s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(6, 1s);
                         break;
 
                     case 6:
                         jaina->AI()->Talk(SAY_JAINA_02);
-                        events.ScheduleEvent(7, 7s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(7, 7s);
                         break;
 
                     case 7:
                         varian->AI()->Talk(SAY_VARIAN_03);
-                        events.ScheduleEvent(8, 1s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(8, 1s);
                         break;
 
                     case 8:
                         jaina->AI()->Talk(SAY_JAINA_03);
-                        events.ScheduleEvent(9, 3s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(9, 3s);
                         break;
 
                     case 9:
                         varian->AI()->Talk(SAY_VARIAN_04);
-                        events.ScheduleEvent(10, 3s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(10, 3s);
                         break;
 
                     case 10:
                         jaina->AI()->Talk(SAY_JAINA_04);
-                        events.ScheduleEvent(11, 6s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(11, 6s);
                         break;
 
                     case 11:
                         varian->AI()->Talk(SAY_VARIAN_05);
-                        events.ScheduleEvent(12, 3s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(12, 3s);
                         break;
 
                     case 12:
                         jaina->AI()->Talk(SAY_JAINA_05);
-                        events.ScheduleEvent(13, 3s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(13, 3s);
                         break;
 
                     case 13:
                         varian->AI()->Talk(SAY_VARIAN_06);
-                        events.ScheduleEvent(14, 9s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(14, 9s);
                         break;
 
                     case 14:
                         jaina->AI()->Talk(SAY_JAINA_06);
-                        events.ScheduleEvent(15, 1s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(15, 1s);
                         break;
 
                     case 15:
                         varian->AI()->Talk(SAY_VARIAN_07);
-                        events.ScheduleEvent(16, 3s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(16, 3s);
                         break;
 
                     case 16:
                         jaina->AI()->Talk(SAY_JAINA_07);
-                        events.ScheduleEvent(17, 7s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(17, 7s);
                         break;
 
                     case 17:
                         varian->AI()->Talk(SAY_VARIAN_08);
                         anduin->SetFacingToObject(varian);
-                        events.ScheduleEvent(18, 6s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(18, 6s);
                         break;
 
                     case 18:
                         jaina->AI()->Talk(SAY_JAINA_08);
-                        events.ScheduleEvent(19, 2s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(19, 2s);
                         break;
 
                     case 19:
                         varian->GetMotionMaster()->MoveSmoothPath(0, varianPathReversed, VARIAN_PATH_SIZE, true);
                         jaina->GetMotionMaster()->MovePoint(0, -8464.64f, 333.68f, 120.88f, true, 3.01f);
-                        events.ScheduleEvent(20, 2s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(20, 2s);
                         break;
 
                     case 20:
                         jaina->CastSpell(jaina, SPELL_TELEPORT);
-                        events.ScheduleEvent(21, 2s, PHASE_IN_PROGRESS);
+                        events.ScheduleEvent(21, 2s);
                         break;
 
                     case 21:
-                        jaina->AddAura(16380, jaina);
+                        jaina->AddAura(SPELL_INVISIBILITY, jaina);
                         if (GameObject* portal = GetClosestGameObjectWithEntry(me, GOB_PORTAL_TO_DALARAN, 45.f))
                             portal->Delete();
                         varian->SetFacingTo(2.24f);
@@ -257,8 +280,8 @@ class stormwind_final_event : public CreatureScript
 
         private:
         EventMap events;
-        Phase phase;
-        Player* player;
+        Phases phase;
+        std::vector<Player*> players;
         Creature* jaina;
         Creature* varian;
         Creature* anduin;

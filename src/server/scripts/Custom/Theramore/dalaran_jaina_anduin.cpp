@@ -8,6 +8,7 @@
 #include "ScriptedCreature.h"
 #include "CreatureAIImpl.h"
 #include "SpellMgr.h"
+#include "ObjectMgr.h"
 #include "MotionMaster.h"
 #include "Group.h"
 #include "DatabaseEnv.h"
@@ -27,8 +28,7 @@ enum NPCs
 	NPC_KAEL_THAS           = 100043,
 	NPC_BLOOD_ELF           = 100044,
 	NPC_AETHAS_SUNREAVER    = 30116,
-	NPC_SUNREAVER_MAGE      = 29255,
-	NPC_SUNREAVER_GUARDIAN  = 33543,
+	NPC_SUNREAVER_MAGE      = 100046,
 	NPC_DRAGONHAWK          = 35148,
 };
 
@@ -225,38 +225,38 @@ struct Scene
 	Emote Emote;
 	uint32 Spell;
 	const Position Spawn;
-	const QuaternionData Rotation;
+	const QuaternionData Rotation = QuaternionData::QuaternionData();
 };
 
 const Scene Kalecgos[SCENE_KALECGOS_COUNT] =
 {
-	{ 1, NPC_JAINA_PROUDMOORE,  EMOTE_STATE_TALK,     0,       { 5849.48f, 855.61f, 843.21f, 4.63f }, QuaternionData::QuaternionData() },
-	{ 1, NPC_KALEC,             EMOTE_STATE_TALK,     0,       { 5849.49f, 852.97f, 843.21f, 1.50f }, QuaternionData::QuaternionData() }
+	{ 1, NPC_JAINA_PROUDMOORE,  EMOTE_STATE_TALK,     0,       { 5849.48f, 855.61f, 843.21f, 4.63f } },
+	{ 1, NPC_KALEC,             EMOTE_STATE_TALK,     0,       { 5849.49f, 852.97f, 843.21f, 1.50f } }
 };
 
 const Scene Kelthuzad[SCENE_KEL_THUZAD_COUNT] =
 {
-	{ 1, NPC_KEL_THUZAD,        EMOTE_ONESHOT_NONE,   100043,  { 5848.40f, 853.14f, 843.21f, 2.63f }, QuaternionData::QuaternionData() },
-	{ 1, NPC_WOUNDED_DALARAN,   EMOTE_ONESHOT_NONE,   27965,   { 5846.39f, 852.60f, 843.21f, 4.53f }, QuaternionData::QuaternionData() },
+	{ 1, NPC_KEL_THUZAD,        EMOTE_ONESHOT_NONE,   100043,  { 5848.40f, 853.14f, 843.21f, 2.63f } },
+	{ 1, NPC_WOUNDED_DALARAN,   EMOTE_ONESHOT_NONE,   27965,   { 5846.39f, 852.60f, 843.21f, 4.53f } },
 	{ 2, 181756,                EMOTE_ONESHOT_NONE,   0,       { 5849.65f, 857.74f, 843.21f, 2.24f }, { 0.f, 0.f, -0.90f, -0.43f } }
 };
 
 const Scene Kaelthas[SCENE_KAEL_THAS_COUNT] =
 {
-	{ 1, NPC_KAEL_THAS,         EMOTE_STATE_SPELL_CHANNEL_DIRECTED, 0,      { 5851.68f, 859.24f, 843.22f, 4.18f }, QuaternionData::QuaternionData() },
-	{ 1, NPC_BLOOD_ELF,         EMOTE_STATE_KNEEL,                  0,      { 5851.73f, 849.30f, 843.21f, 1.71f }, QuaternionData::QuaternionData() },
-	{ 1, NPC_BLOOD_ELF,         EMOTE_STATE_KNEEL,                  0,      { 5848.67f, 848.25f, 843.21f, 1.35f }, QuaternionData::QuaternionData() },
-	{ 1, NPC_BLOOD_ELF,         EMOTE_STATE_KNEEL,                  0,      { 5842.58f, 853.39f, 843.21f, 0.70f }, QuaternionData::QuaternionData() },
-	{ 1, NPC_BLOOD_ELF,         EMOTE_STATE_KNEEL,                  0,      { 5844.27f, 850.18f, 843.21f, 0.70f }, QuaternionData::QuaternionData() },
-	{ 1, NPC_INVISIBLE_STALKER, EMOTE_STATE_KNEEL,                  71183,  { 5848.36f, 853.19f, 843.21f, 4.10f }, QuaternionData::QuaternionData() }
+	{ 1, NPC_KAEL_THAS,         EMOTE_STATE_SPELL_CHANNEL_DIRECTED, 0,      { 5851.68f, 859.24f, 843.22f, 4.18f } },
+	{ 1, NPC_BLOOD_ELF,         EMOTE_STATE_KNEEL,                  0,      { 5851.73f, 849.30f, 843.21f, 1.71f } },
+	{ 1, NPC_BLOOD_ELF,         EMOTE_STATE_KNEEL,                  0,      { 5848.67f, 848.25f, 843.21f, 1.35f } },
+	{ 1, NPC_BLOOD_ELF,         EMOTE_STATE_KNEEL,                  0,      { 5842.58f, 853.39f, 843.21f, 0.70f } },
+	{ 1, NPC_BLOOD_ELF,         EMOTE_STATE_KNEEL,                  0,      { 5844.27f, 850.18f, 843.21f, 0.70f } },
+	{ 1, NPC_INVISIBLE_STALKER, EMOTE_STATE_KNEEL,                  71183,  { 5848.36f, 853.19f, 843.21f, 4.10f } }
 };
 
 const Scene Aethas[SCENE_AETHAS_COUNT] =
 {
-	{ 1, NPC_AETHAS_SUNREAVER,      EMOTE_ONESHOT_NONE, 0, { 5847.70f, 855.39f, 843.21f, 3.17f }, QuaternionData::QuaternionData() },
-	{ 1, NPC_SUNREAVER_MAGE,        EMOTE_ONESHOT_NONE, 0, { 5850.47f, 849.40f, 843.21f, 2.76f }, QuaternionData::QuaternionData() },
-	{ 1, NPC_SUNREAVER_GUARDIAN,    EMOTE_ONESHOT_NONE, 0, { 5848.48f, 848.52f, 843.21f, 2.33f }, QuaternionData::QuaternionData() },
-	{ 1, NPC_DRAGONHAWK,            EMOTE_ONESHOT_NONE, 0, { 5850.83f, 856.70f, 843.21f, 3.14f }, QuaternionData::QuaternionData() }
+	{ 1, NPC_AETHAS_SUNREAVER,      EMOTE_ONESHOT_NONE, 0, { 5847.70f, 855.39f, 843.21f, 3.17f } },
+	{ 1, NPC_SUNREAVER_MAGE,        EMOTE_ONESHOT_NONE, 0, { 5850.47f, 849.40f, 843.21f, 2.76f } },
+	{ 1, NPC_SUNREAVER_MAGE,        EMOTE_ONESHOT_NONE, 0, { 5848.48f, 848.52f, 843.21f, 2.33f } },
+	{ 1, NPC_DRAGONHAWK,            EMOTE_ONESHOT_NONE, 0, { 5850.83f, 856.70f, 843.21f, 3.14f } }
 };
 
 const Scene Antonidas[SCENE_ANTONIDAS_COUNT]
@@ -440,7 +440,7 @@ public:
 				return false;
 			case 2:
 				owner->SetVisible(false);
-				player->SetPhaseMask(1, true);
+                ChangeGroupPhaseMask();
 				portal->SetPhaseMask(1, true);
 				stage++;
 				owner->m_Events.AddEvent(this, Milliseconds(eventTime + 1000));
@@ -459,6 +459,16 @@ private:
 	Player* player;
 	uint8 stage;
 	GameObject* portal;
+
+    void ChangeGroupPhaseMask()
+    {
+        Map::PlayerList const& PlayerList = owner->GetMap()->GetPlayers();
+        for (Map::PlayerList::const_iterator itr = PlayerList.begin(); itr != PlayerList.end(); ++itr)
+        {
+            if (Player* player = itr->GetSource())
+                player->SetPhaseMask(1, true);
+        }
+    }
 };
 
 class dalaran_jaina_anduin : public CreatureScript
@@ -478,7 +488,6 @@ class dalaran_jaina_anduin : public CreatureScript
 			sceneIndex = 0;
 			magicTracks = 0;
 			talkIndex = SAY_JAINA_6;
-			player = nullptr;
 			anduin = nullptr;
 			phase = Phases::None;
 		}
@@ -528,38 +537,76 @@ class dalaran_jaina_anduin : public CreatureScript
 				case QUEST_TRACKING_THE_THIEVES:
 					SetData(ACTION_INTRO_DARNASSUS, 0);
 					break;
-
 				case QUEST_JAINAS_RESOLUTION:
-					if (portal)
-						portal->RemoveFlag(GAMEOBJECT_FLAGS, GO_FLAG_NOT_SELECTABLE);
-					player->SetPhaseMask(16, true);
+					if (portal) portal->RemoveFlag(GAMEOBJECT_FLAGS, GO_FLAG_NOT_SELECTABLE);
+                    if (Group* group = player->GetGroup())
+                    {
+                        for (GroupReference* groupRef = group->GetFirstMember(); groupRef != nullptr; groupRef = groupRef->next())
+                        {
+                            if (Player* member = groupRef->GetSource())
+                                member->SetPhaseMask(16, true);
+                        }
+                    }
+                    else
+                    {
+                        player->SetPhaseMask(16, true);
+                    }
 					break;
 			}
 		}
 
+        void OnQuestReward(Player* player, Quest const* quest, uint32 /*opt*/) override
+        {
+            if (quest->GetQuestId() == QUEST_DARNASSUS_ATTACKED
+                || quest->GetQuestId() == QUEST_TRACKING_THE_THIEVES)
+            {
+                if (Group* group = player->GetGroup())
+                {
+                    for (GroupReference* groupRef = group->GetFirstMember(); groupRef != nullptr; groupRef = groupRef->next())
+                    {
+                        if (Player* member = groupRef->GetSource())
+                            member->RewardQuest(quest, 0, me);
+                    }
+                }
+            }
+        }
+
 		void SetData(uint32 id, uint32 /*value*/) override
 		{
-			switch (id)
+            if (Player* player = me->SelectNearestPlayer(50.f))
+            {
+                players.clear();
+
+                if (Group* group = player->GetGroup())
+                {
+                    for (GroupReference* groupRef = group->GetFirstMember(); groupRef != nullptr; groupRef = groupRef->next())
+                    {
+                        if (Player* member = groupRef->GetSource())
+                            players.push_back(member);
+                    }
+                }
+                else
+                    players.push_back(player);
+            }
+
+            switch (id)
 			{
 				case ACTION_INTRO_TELEPORT:
 					anduin = GetClosestCreatureWithEntry(me, NPC_ANDUIN_WRYNN, 10.f);
-					if (!player) player = me->SelectNearestPlayer(50.f);
 					anduin->AI()->Talk(SAY_ANDUIN_0);
 					events.ScheduleEvent(EVENT_INTRO_1,  5s);
 					events.ScheduleEvent(EVENT_TELEPORT, 5ms);
 					break;
 
 				case ACTION_START_REUNION:
-					me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+                    me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
 					anduin->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
 					anduin->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
 					phase = Phases::Started;
-					events.CancelEvent(EVENT_TELEPORT);
 					events.ScheduleEvent(EVENT_REUNION_1, 2s);
 					break;
 
 				case ACTION_INTRO_DARNASSUS:
-					if (!player) player = me->SelectNearestPlayer(50.f);
 					me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
 					me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
 					phase = Phases::Started;
@@ -573,7 +620,7 @@ class dalaran_jaina_anduin : public CreatureScript
 			if (who->GetTypeId() != TYPEID_PLAYER || phase != Phases::None)
 				return;
 
-			player = who->ToPlayer();
+            Player* player = who->ToPlayer();
 			if (player->IsGameMaster())
 				return;
 
@@ -591,7 +638,7 @@ class dalaran_jaina_anduin : public CreatureScript
 
 				case MAP_KALIMDOR:
 				{
-					if (player->GetPhaseMask() == PHASEMASK_DARNASSUS && me->IsFriendlyTo(player) && me->IsWithinDist(player, 30.f))
+					if (player->GetPhaseMask() == PHASEMASK_DARNASSUS && me->IsFriendlyTo(player) && me->IsWithinDist(player, 6.f))
 					{
 						phase = Phases::Unstarted;
 						me->PlayDirectMusic(SOUND_JAINA_DARNA_MUSIC);
@@ -631,21 +678,25 @@ class dalaran_jaina_anduin : public CreatureScript
 						break;
 
 					case EVENT_INTRO_2:
-						anduin->SetFacingToObject(player ? player->ToUnit() : me);
+						anduin->SetFacingToObject(players[0] ? players[0]->ToUnit() : me);
 						anduin->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
-						me->SetFacingToObject(player ? player->ToUnit() : anduin);
+						me->SetFacingToObject(players[0] ? players[0]->ToUnit() : anduin);
 						break;
 
 					case EVENT_TELEPORT:
 					{
-						if (!player)
-							player = me->SelectNearestPlayer(10.f);
-
-						if (player && player->GetPositionZ() < 840.f)
-						{
-							me->CastSpell(me, SPELL_TELEPORT_ANIM, true);
-							me->CastSpell(player, SPELL_TELEPORT_EFFECT);
-						}
+                        Map::PlayerList const& PlayerList = me->GetMap()->GetPlayers();
+                        for (Map::PlayerList::const_iterator itr = PlayerList.begin(); itr != PlayerList.end(); ++itr)
+                        {
+                            if (Player* player = itr->GetSource())
+                            {
+                                if (player->GetPositionZ() < 840.f)
+                                {
+                                    me->CastSpell(me, SPELL_TELEPORT_ANIM, true);
+                                    me->CastSpell(player, SPELL_TELEPORT_EFFECT);
+                                }
+                            }
+                        }
 
 						events.RescheduleEvent(EVENT_TELEPORT, 5ms);
 						break;
@@ -687,13 +738,15 @@ class dalaran_jaina_anduin : public CreatureScript
 					case EVENT_REUNION_6:
 						me->PlayDirectMusic(SOUND_REUNION_MUSIC);
 						center->AddAura(SPELL_SPOT_SCALED, center);
-						player->AddAura(SPELL_REMEMBER_SHADOW, player);
+                        for (Player* player : players)
+						    player->AddAura(SPELL_REMEMBER_SHADOW, player);
 						events.ScheduleEvent(EVENT_TALK_SCENE, 60ms);
 						break;
 
 					case EVENT_REUNION_7:
 						Talk(SAY_JAINA_9);
-						player->RemoveAurasDueToSpell(SPELL_REMEMBER_SHADOW);
+                        for (Player* player : players)
+                            player->RemoveAurasDueToSpell(SPELL_REMEMBER_SHADOW);
 						events.ScheduleEvent(EVENT_REUNION_8, 5s);
 						break;
 
@@ -721,7 +774,8 @@ class dalaran_jaina_anduin : public CreatureScript
 
 					case EVENT_REUNION_12:
 						Talk(SAY_JAINA_16);
-						player->CompleteQuest(QUEST_THE_FATE_OF_DALARAN);
+                        for (Player* player : players)
+                            player->CompleteQuest(QUEST_THE_FATE_OF_DALARAN);
 						anduin->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
 						break;
 
@@ -805,7 +859,7 @@ class dalaran_jaina_anduin : public CreatureScript
 					}
 
 					case EVENT_DARNASSUS_4:
-						me->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, PET_FOLLOW_DIST);
+						me->GetMotionMaster()->MoveFollow(players[0], PET_FOLLOW_DIST, PET_FOLLOW_DIST);
 						events.ScheduleEvent(EVENT_DARNASSUS_5, 20s);
 						events.ScheduleEvent(EVENT_DARNASSUS_6, 50s);
 						events.ScheduleEvent(EVENT_CHECK_SPEED, 1s);
@@ -821,14 +875,15 @@ class dalaran_jaina_anduin : public CreatureScript
 
 					case EVENT_DARNASSUS_7:
 						Talk(SAY_JAINA_DARNASSUS_5);
-						me->SetFacingToObject(player);
-						player->CompleteQuest(QUEST_TRACKING_THE_THIEVES);
+						me->SetFacingToObject(players[0]);
+                        for (Player* player : players)
+                            player->CompleteQuest(QUEST_TRACKING_THE_THIEVES);
 						events.ScheduleEvent(EVENT_DARNASSUS_8, 9s);
 						break;
 
 					case EVENT_DARNASSUS_8:
 						Talk(SAY_JAINA_DARNASSUS_6);
-						me->SetFacingToObject(player);
+						me->SetFacingToObject(players[0]);
 						me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
 						me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
 						break;
@@ -879,7 +934,7 @@ class dalaran_jaina_anduin : public CreatureScript
         GameObject* portal;
         GuidList guids;
         Phases phase;
-        Player* player;
+        std::vector<Player*> players;
         float startOrientation;
         int sceneIndex;
         int talkIndex;
@@ -952,9 +1007,7 @@ class dalaran_jaina_anduin : public CreatureScript
             {
                 for (int i = 0; i < 8; ++i)
                 {
-                    float angle = float(rand_norm() * 2 * M_PI);
-                    float dist = frand(1, 5);
-                    const Position pos = { temp->GetPositionX() + cos(angle) * dist, temp->GetPositionY() + sin(angle) * dist, temp->GetPositionZ(), angle };
+                    const Position pos = temp->GetRandomNearPosition(5.f);
                     if (Creature* ghoul = temp->SummonCreature(NPC_GHOUL, pos, TEMPSUMMON_TIMED_DESPAWN, 8s))
                     {
                         ghoul->AddAura(SPELL_ALPHA_75_PCT, ghoul);
@@ -1043,12 +1096,12 @@ class dalaran_jaina_anduin : public CreatureScript
 
         void UpdateSpeed()
         {
-            if (player->IsMounted())
+            if (players[0]->IsMounted())
                 me->Mount(MOUNT_WHITE_STEED);
             else
                 me->Dismount();
 
-            me->SetSpeed(MOVE_RUN, player->GetSpeed(MOVE_RUN));
+            me->SetSpeed(MOVE_RUN, players[0]->GetSpeed(MOVE_RUN));
         }
     };
 

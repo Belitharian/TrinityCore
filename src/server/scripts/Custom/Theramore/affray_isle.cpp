@@ -71,8 +71,11 @@ class jaina_affray_isle : public CreatureScript
                 }
             }
 
-            if (spell->Id == SPELL_ICE_FALL && events.IsInPhase(PHASE_ICE_FALL))
+            if (spell->Id == SPELL_ICE_FALL
+                && reason == SPELL_FINISHED_CHANNELING_COMPLETE
+                && events.IsInPhase(PHASE_ICE_FALL))
             {
+                me->RemoveAurasDueToSpell(SPELL_ICY_GLARE);
                 me->SetControlled(false, UNIT_STATE_ROOT);
                 events.SetPhase(PHASE_COMBAT);
                 events.ScheduleEvent(EVENT_FROST_BOLT, 3s, 0, PHASE_COMBAT);
@@ -203,7 +206,7 @@ class jaina_affray_isle : public CreatureScript
                                 klannoc->SetFaction(14);
                             }
 
-                            Position pos = GetPositionAround(player, 180.f, 1.3f);
+                            Position pos = GetPositionAround(player, 180.f, 1.f);
                             if (playerSpectator = me->SummonCreature(NPC_AFFRAY_SPECTATOR, pos, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10min))
                             {
                                 playerSpectator->CastSpell(player, SPELL_STUNNED);
@@ -217,6 +220,7 @@ class jaina_affray_isle : public CreatureScript
                                 playerSpectator->SetReactState(REACT_PASSIVE);
                                 playerSpectator->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY_THROWN);
                                 playerSpectator->SetFaction(14);
+                                playerSpectator->LoadEquipment(urand(0, 3));
                             }
 
                             float angle = 45.f;
@@ -232,8 +236,9 @@ class jaina_affray_isle : public CreatureScript
                                     spectator->CastSpell(spectator, SPELL_SMOKE_REVEAL);
                                     spectator->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
                                     spectator->SetReactState(REACT_PASSIVE);
-                                    spectator->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY_UNARMED);
+                                    spectator->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY_THROWN);
                                     spectator->SetFaction(14);
+                                    spectator->LoadEquipment(urand(0, 3));
 
                                     spectators.push_back(spectator);
                                 }
@@ -505,12 +510,12 @@ class jaina_affray_isle : public CreatureScript
                             events.RescheduleEvent(EVENT_FROST_BOLT, 2s, 0, PHASE_COMBAT);
                             break;
                         case EVENT_SCHEDULE_PHASE_BLINK:
-                            me->CastStop();
+                            me->InterruptNonMeleeSpells(true);
                             me->StopMoving();
                             me->SetControlled(true, UNIT_STATE_ROOT);
                             events.SetPhase(PHASE_BLINK);
                             events.ScheduleEvent(EVENT_BLINK, 100ms, 0, PHASE_BLINK);
-                            events.RescheduleEvent(EVENT_SCHEDULE_PHASE_BLINK, 1min, 0, PHASE_COMBAT);
+                            events.RescheduleEvent(EVENT_SCHEDULE_PHASE_BLINK, 1min, 2min, 0, PHASE_COMBAT);
                             break;
                         case EVENT_BLINK:
                             if (blinkIndex > 3)
@@ -529,14 +534,15 @@ class jaina_affray_isle : public CreatureScript
                             }
                             break;
                         case EVENT_SCHEDULE_PHASE_ICE_FALL:
-                            me->CastStop();
+                            me->InterruptNonMeleeSpells(true);
                             me->StopMoving();
                             me->SetControlled(true, UNIT_STATE_ROOT);
                             events.SetPhase(PHASE_ICE_FALL);
                             events.ScheduleEvent(EVENT_ICE_FALL, 100ms, 0, PHASE_ICE_FALL);
-                            events.RescheduleEvent(EVENT_SCHEDULE_PHASE_ICE_FALL, 35s, 45s, 0, PHASE_COMBAT);
+                            events.RescheduleEvent(EVENT_SCHEDULE_PHASE_ICE_FALL, 45s, 1min, 0, PHASE_COMBAT);
                             break;
                         case EVENT_ICE_FALL:
+                            me->AddAura(SPELL_ICY_GLARE, me);
                             me->CastSpell(JainaBattlePos, SPELL_BLINK, true);
                             break;
                     }

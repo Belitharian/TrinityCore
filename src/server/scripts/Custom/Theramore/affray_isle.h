@@ -170,6 +170,7 @@ enum Spells
     SPELL_FROST_BOTL            = 100121,
     SPELL_ARCANE_EXPLOSION      = 100122,
     SPELL_TORNADO               = 100124,
+    SPELL_ICY_GLARE             = 100125
 };
 
 const Position PlayerEntrancePos    = { -1710.83f, -4390.23f,  4.37f, 1.28f };

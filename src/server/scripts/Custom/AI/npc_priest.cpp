@@ -6,7 +6,10 @@
 #include "GridNotifiersImpl.h"
 #include "CreatureAIImpl.h"
 #include "CellImpl.h"
+#include "SpellAuraEffects.h"
 #include "CustomAI.h"
+
+#include <iostream>
 
 enum Spells
 {
@@ -19,13 +22,11 @@ enum Spells
     SPELL_MANA_POTION           = 100022,
     SPELL_HEALTH_POTION         = 100023,
     SPELL_REJUVENATION          = 100024,
+    SPELL_DIVINE_AEGIS          = 100063,
+    SPELL_PRAYER_OF_HEALING     = 100062,
+    SPELL_ETERNAL_AFFECTION     = 100030,
     SPELL_SPIRIT_HEALER_VISUAL  = 70571,
-    SPELL_HOLY_NOVA             = 66546,
-    SPELL_PRAYER_OF_MENDING     = 48113,
     SPELL_MASS_DISPEL           = 32375,
-    SPELL_ETERNAL_AFFECTION     = 30878,
-    SPELL_WEAKENED_SOUL         = 6788,
-    SPELL_POWER_WORD_BARRIER    = 100104
 };
 
 enum Phase
@@ -37,6 +38,11 @@ enum Phase
 
 enum Misc
 {
+    // Talk
+    SAY_HEAL                    = 0,
+
+    // NPS
+    NPC_MEDIC_HELAINA           = 100014,
     NPC_LIGHTWELL               = 100013,
     NPC_SPIRIT_HEALER           = 100015,
     NPC_INVISIBLE_STALKER       = 32780
@@ -51,7 +57,6 @@ class npc_priest : public CreatureScript
     {
         npc_priestAI(Creature* creature) : CustomAI(creature), hasUsedDamageReduction(false)
         {
-            SetCombatMovement(false);
         }
 
         void Initialize() override
@@ -69,7 +74,7 @@ class npc_priest : public CreatureScript
         void JustDied(Unit* /*killer*/) override
         {
             // Que pour Medic Helaina
-            if (me->GetEntry() != 100014)
+            if (me->GetEntry() != NPC_MEDIC_HELAINA)
                 return;
 
             if (Creature* spiritHealder = DoSummon(NPC_SPIRIT_HEALER, me->GetPosition(), 13s, TEMPSUMMON_TIMED_DESPAWN))
@@ -105,8 +110,7 @@ class npc_priest : public CreatureScript
                 scheduler
                     .Schedule(1s, PHASE_ENDANGERED, [this](TaskContext /*context*/)
                     {
-                        me->Say("La lumière me vient en aide !", LANG_COMMON);
-
+                        Talk(SAY_HEAL);
                         DoCast(SPELL_MANA_POTION);
                         DoCast(SPELL_ETERNAL_AFFECTION);
                     })
@@ -118,6 +122,25 @@ class npc_priest : public CreatureScript
                     {
                         hasUsedDamageReduction = false;
                     });
+            }
+        }
+
+        void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
+        {
+            if (Unit* hit = target->ToUnit())
+            {
+                if (spellInfo->HasEffect(SPELL_EFFECT_HEAL))
+                {
+                    int32 absorb = CalculatePct(spellInfo->Effects[EFFECT_0].BasePoints, 90);
+
+                    if (Aura* aegis = hit->GetAura(SPELL_DIVINE_AEGIS))
+                        absorb = absorb * (aegis->GetStackAmount() + 1);
+
+                    CastSpellExtraArgs args;
+                    args.AddSpellBP0(absorb);
+
+                    hit->CastSpell(hit, SPELL_DIVINE_AEGIS, args);
+                }
             }
         }
 
@@ -167,9 +190,16 @@ class npc_priest : public CreatureScript
                 {
                     if (Unit* target = DoSelectBelowHpPctFriendly(30.0f, 80, false))
                     {
-                        me->InterruptNonMeleeSpells(true);
-                        DoCast(target, SPELL_REJUVENATION);
-                        rejuvenation.Repeat(4s);
+                        if (!target->HasAura(SPELL_REJUVENATION))
+                        {
+                            me->CastStop();
+                            DoCast(target, SPELL_REJUVENATION);
+                            rejuvenation.Repeat(12s);
+                        }
+                        else
+                        {
+                            rejuvenation.Repeat(1s);
+                        }
                     }
                     else
                     {
@@ -180,62 +210,36 @@ class npc_priest : public CreatureScript
                 {
                     if (Unit* target = DoSelectBelowHpPctFriendly(30.0f, 50, false))
                     {
-                        me->InterruptNonMeleeSpells(true);
+                        me->CastStop();
                         DoCast(target, SPELL_FLASH_HEAL);
                     }
-
-                    heal.Repeat(1s);
+                    heal.Repeat(500ms);
                 })
-                .Schedule(5ms, PHASE_HEALING, [this](TaskContext prayer_of_mending)
+                .Schedule(20s, 28s, PHASE_HEALING, [this](TaskContext prayer_of_healing)
                 {
-                    if (Unit* target = DoSelectBelowHpPctFriendly(30.0f, 40, false))
-                    {
-                        CastSpellExtraArgs args;
-                        args.AddSpellBP0(3000);
-
-                        me->InterruptNonMeleeSpells(true);
-                        DoCast(target, SPELL_PRAYER_OF_MENDING, args);
-                    }
-
-                    prayer_of_mending.Repeat(2s);
+                    me->CastStop();
+                    DoCastAOE(SPELL_PRAYER_OF_HEALING);
+                    prayer_of_healing.Repeat(5s, 8s);
                 })
                 .Schedule(5ms, PHASE_HEALING, [this](TaskContext power_word_shield)
                 {
-                    Unit* target = DoSelectBelowHpPctFriendly(30.0f, 20, false);
-                    if (target && !target->HasAura(SPELL_WEAKENED_SOUL))
+                    if (Unit* target = DoSelectBelowHpPctFriendly(30.0f, 20, false))
                     {
-                        me->InterruptNonMeleeSpells(true);
+                        me->CastStop();
                         DoCast(target, SPELL_POWER_WORD_SHIELD);
-                        DoCast(target, SPELL_WEAKENED_SOUL);
-                        power_word_shield.Repeat(3s);
                     }
-                    else
-                    {
-                        power_word_shield.Repeat(5ms);
-                    }
+                    power_word_shield.Repeat(2s);
                 })
                 .Schedule(5ms, PHASE_COMBAT, [this](TaskContext smite)
                 {
                     DoCastVictim(SPELL_SMITE);
-                    smite.Repeat(3s);
+                    smite.Repeat(8s);
                 })
                 .Schedule(8s, PHASE_COMBAT, [this](TaskContext holy_fire)
                 {
                     if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                         DoCast(target, SPELL_HOLY_FIRE);
-                    holy_fire.Repeat(5s, 10s);
-                })
-                .Schedule(25s, PHASE_COMBAT, [this](TaskContext power_word_barrier)
-                {
-                    if (Unit* target = DoSelectLowestHpFriendly(40.0f))
-                    {
-                        me->CastSpell(target->GetPosition(), SPELL_POWER_WORD_BARRIER);
-                        power_word_barrier.Repeat(60s, 80s);
-                    }
-                    else
-                    {
-                        power_word_barrier.Repeat(5ms);
-                    }
+                    holy_fire.Repeat(10s, 20s);
                 })
                 .Schedule(2s, PHASE_HEALING, [this](TaskContext mass_dispel)
                 {
@@ -244,7 +248,7 @@ class npc_priest : public CreatureScript
                     {
                         if (Unit* victim = me->GetVictim())
                         {
-                            me->InterruptNonMeleeSpells(true);
+                            me->CastStop();
                             me->CastSpell(victim->GetPosition(), SPELL_MASS_DISPEL);
                             mass_dispel.Repeat(25s, 30s);
                         }
@@ -263,7 +267,42 @@ class npc_priest : public CreatureScript
     }
 };
 
+class spell_power_word_shield : public SpellScriptLoader
+{
+    public:
+    spell_power_word_shield() : SpellScriptLoader("spell_power_word_shield")
+    {
+    }
+
+    class spell_power_word_shield_SpellScript : public SpellScript
+    {
+        PrepareSpellScript(spell_power_word_shield_SpellScript);
+
+        bool Validate(SpellInfo const* spellInfo) override
+        {
+            return ValidateSpellInfo({ spellInfo->ExcludeTargetAuraSpell });
+        }
+
+        void WeakenSoul()
+        {
+            if (Unit* target = GetHitUnit())
+                GetCaster()->CastSpell(target, GetSpellInfo()->ExcludeTargetAuraSpell, true);
+        }
+
+        void Register() override
+        {
+            AfterHit += SpellHitFn(spell_power_word_shield_SpellScript::WeakenSoul);
+        }
+    };
+
+    SpellScript* GetSpellScript() const override
+    {
+        return new spell_power_word_shield_SpellScript();
+    }
+};
+
 void AddSC_npc_priest()
 {
     new npc_priest();
+    new spell_power_word_shield();
 }

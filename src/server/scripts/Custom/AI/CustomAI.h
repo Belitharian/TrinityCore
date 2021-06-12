@@ -21,6 +21,8 @@ class TC_GAME_API CustomAI : public ScriptedAI
 
         virtual void Initialize();
 
+        void AttackStart(Unit* who) override;
+
         void JustSummoned(Creature* /*summon*/) override;
         void SummonedCreatureDespawn(Creature* /*summon*/) override;
         void SummonedCreatureDies(Creature* /*summon*/, Unit* /*killer*/) override;

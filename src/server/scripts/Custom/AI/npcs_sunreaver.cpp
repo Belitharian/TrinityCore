@@ -21,6 +21,8 @@ enum Spells
     // Assassin
     SPELL_SINISTER_STRIKE       = 59409,
     SPELL_KIDNEY_SHOT           = 72335,
+    SPELL_STEALTH               = 32615,
+    SPELL_SHADOWSTEP            = 36563,
 
     // Duelist
     SPELL_MIGHTY_KICK           = 69021,
@@ -31,7 +33,7 @@ enum Spells
     SPELL_FIREBLAST             = 100004,
     SPELL_PYROBLAST             = 100005,
 
-    // Forsthand
+    // Frosthand
     SPELL_FROST_ARMOR           = 43008,
     SPELL_FROSTBOLT             = 100006,
     SPELL_ICE_LANCE             = 100007,
@@ -70,24 +72,34 @@ class npc_sunreaver_assassin : public CreatureScript
     {
         npc_sunreaver_assassinAI(Creature* creature) : CustomAI(creature, AI_Type::Melee) {}
 
-        void JustEngagedWith(Unit* /*who*/) override
+        void JustEngagedWith(Unit* who) override
         {
             scheduler
-                .Schedule(5s, [this](TaskContext sinisterStrike)
+                .Schedule(100ms, [this, who](TaskContext /*context*/)
+                {
+                    if (me->HasAura(SPELL_STEALTH))
+                    {
+                        me->RemoveAurasDueToSpell(SPELL_STEALTH);
+
+                        DoCast(who, SPELL_SHADOWSTEP);
+                        me->AddAura(SPELL_KIDNEY_SHOT, who);
+                    }
+                })
+                .Schedule(5s, [this](TaskContext sinister_strike)
                 {
                     DoCast(SPELL_SINISTER_STRIKE);
-                    sinisterStrike.Repeat(14s, 28s);
+                    sinister_strike.Repeat(14s, 28s);
                 })
-                .Schedule(10s, [this](TaskContext kidneyShot)
+                .Schedule(10s, [this](TaskContext kidney_shot)
                 {
                     if (Unit* target = DoSelectCastingUnit(SPELL_KIDNEY_SHOT, 35.f))
                     {
                         DoCast(target, SPELL_KIDNEY_SHOT);
-                        kidneyShot.Repeat(25s, 40s);
+                        kidney_shot.Repeat(25s, 40s);
                     }
                     else
                     {
-                        kidneyShot.Repeat(1s);
+                        kidney_shot.Repeat(1s);
                     }
                 });
         }
@@ -95,6 +107,19 @@ class npc_sunreaver_assassin : public CreatureScript
         void JustDied(Unit* killer) override
         {
             KillCredit(killer);
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            // aura refresh
+            if (!UpdateVictim())
+            {
+                if (!me->HasAura(SPELL_STEALTH))
+                    DoCastSelf(SPELL_STEALTH);
+                return;
+            }
+
+            CustomAI::UpdateAI(diff);
         }
     };
 
@@ -146,7 +171,7 @@ class npc_sunreaver_pyromancer : public CreatureScript
         void JustEngagedWith(Unit* /*who*/) override
         {
             scheduler
-                .Schedule(5s, [this](TaskContext fireball)
+                .Schedule(5ms, [this](TaskContext fireball)
                 {
                     DoCast(SPELL_FIREBALL);
                     fireball.Repeat(5s, 8s);
@@ -201,7 +226,7 @@ class npc_sunreaver_frosthand : public CreatureScript
         void JustEngagedWith(Unit* /*who*/) override
         {
             scheduler
-                .Schedule(5s, [this](TaskContext frostbotl)
+                .Schedule(5ms, [this](TaskContext frostbotl)
                 {
                     DoCast(SPELL_FROSTBOLT);
                     frostbotl.Repeat(5s, 8s);
@@ -226,7 +251,7 @@ class npc_sunreaver_frosthand : public CreatureScript
 
         void UpdateAI(uint32 diff) override
         {
-            // Combat
+            // aura refresh
             if (!UpdateVictim())
             {
                 if (!me->HasAura(SPELL_FROST_ARMOR))

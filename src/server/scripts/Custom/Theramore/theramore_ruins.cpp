@@ -15,6 +15,7 @@
 #include "DatabaseEnv.h"
 #include "Mail.h"
 #include "Vehicle.h"
+#include "Group.h"
 
 class JainaStandEvent : public BasicEvent
 {
@@ -90,10 +91,6 @@ class npc_jaina_ruins : public CreatureScript
             if (who->GetTypeId() != TYPEID_PLAYER)
                 return;
 
-            Player* player = who->ToPlayer();
-            if (!player)
-                return;
-
             switch (me->GetMapId())
             {
                 case 1:
@@ -101,25 +98,45 @@ class npc_jaina_ruins : public CreatureScript
                     if (canSayDestruction)
                         return;
 
-                    if (me->IsWithinDist(player, 30.f))
+                    if (Player* player = me->SelectNearestPlayer(2000.f))
                     {
-                        if (player->GetQuestStatus(QUEST_LIMIT_THE_NUKE) == QUEST_STATUS_COMPLETE)
+                        players.clear();
+
+                        if (Group* group = player->GetGroup())
                         {
-                            playerForQuest = player;
+                            for (GroupReference* groupRef = group->GetFirstMember(); groupRef != nullptr; groupRef = groupRef->next())
+                            {
+                                if (Player* member = groupRef->GetSource())
+                                    players.push_back(member);
+                            }
+                        }
+                        else
+                            players.push_back(player);
+                    }
 
-                            me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
-                            me->SetStandState(UNIT_STAND_STATE_STAND);
+                    if (me->IsWithinDist(who, 30.f))
+                    {
+                        for (Player* player : players)
+                        {
+                            if (player->GetQuestStatus(QUEST_LIMIT_THE_NUKE) == QUEST_STATUS_COMPLETE)
+                                continue;
+                            return;
+                        }
 
-                            Quest const* limitTheNuke = sObjectMgr->GetQuestTemplate(QUEST_LIMIT_THE_NUKE);
+                        me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
+                        me->SetStandState(UNIT_STAND_STATE_STAND);
+
+                        Quest const* limitTheNuke = sObjectMgr->GetQuestTemplate(QUEST_LIMIT_THE_NUKE);
+                        for (Player* player : players)
                             player->RewardQuest(limitTheNuke, 0, me);
 
-                            Quest const* returnToTheramore = sObjectMgr->GetQuestTemplate(QUEST_RETURN_TO_THERAMORE);
+                        Quest const* returnToTheramore = sObjectMgr->GetQuestTemplate(QUEST_RETURN_TO_THERAMORE);
+                        for (Player* player : players)
                             player->AddQuestAndCheckCompletion(returnToTheramore, me);
 
-                            SetData(EVENT_START_RETURN, 1U);
+                        SetData(EVENT_START_RETURN, 1U);
 
-                            canSayDestruction = true;
-                        }
+                        canSayDestruction = true;
                     }
 
                     break;
@@ -130,19 +147,45 @@ class npc_jaina_ruins : public CreatureScript
                     if (canSayIntro && canSayEnd)
                         return;
 
-                    if (me->IsWithinDist(player, 6.f))
+                    if (Player* player = me->SelectNearestPlayer(2000.f))
                     {
-                        if (!canSayIntro && player->GetQuestStatus(QUEST_RETURN_TO_THERAMORE) == QUEST_STATUS_COMPLETE)
-                        {
-                            playerForQuest = player;
+                        players.clear();
 
-                            me->m_Events.AddEvent(new JainaStandEvent(me, player), me->m_Events.CalculateTime(1s));
+                        if (Group* group = player->GetGroup())
+                        {
+                            for (GroupReference* groupRef = group->GetFirstMember(); groupRef != nullptr; groupRef = groupRef->next())
+                            {
+                                if (Player* member = groupRef->GetSource())
+                                    players.push_back(member);
+                            }
+                        }
+                        else
+                            players.push_back(player);
+                    }
+
+                    if (me->IsWithinDist(who, 6.f))
+                    {
+                        if (!canSayIntro)
+                        {
+                            for (Player* player : players)
+                            {
+                                if (player->GetQuestStatus(QUEST_RETURN_TO_THERAMORE) == QUEST_STATUS_COMPLETE)
+                                    continue;
+                                return;
+                            }
+
+                            me->m_Events.AddEvent(new JainaStandEvent(me, who->ToPlayer()), me->m_Events.CalculateTime(1s));
                             canSayIntro = true;
                         }
 
-                        if (!canSayEnd && player->GetQuestStatus(QUEST_DESTROY_THE_DESTROYER) == QUEST_STATUS_COMPLETE)
+                        if (!canSayEnd)
                         {
-                            playerForQuest = player;
+                            for (Player* player : players)
+                            {
+                                if (player->GetQuestStatus(QUEST_DESTROY_THE_DESTROYER) == QUEST_STATUS_COMPLETE)
+                                    continue;
+                                return;
+                            }
 
                             canSayEnd = true;
                             Talk(SAY_IRIS_3);
@@ -157,18 +200,39 @@ class npc_jaina_ruins : public CreatureScript
 
         void OnQuestReward(Player* player, Quest const* quest, uint32 /*opt*/) override
         {
-            playerForQuest = player;
-
             switch (quest->GetQuestId())
             {
                 case QUEST_RETURN_TO_THERAMORE:
+                {
+                    Quest const* returnToTheramore = sObjectMgr->GetQuestTemplate(QUEST_RETURN_TO_THERAMORE);
+                    for (Player* player : players)
+                        player->RewardQuest(returnToTheramore, 0, me);
                     SetData(EVENT_START_IRIS, 1U);
                     break;
+                }
             }
         }
 
         void SetData(uint32 id, uint32 /*value*/) override
         {
+            if (players.empty())
+            {
+                if (Player* player = me->SelectNearestPlayer(2000.f))
+                {
+                    if (Group* group = player->GetGroup())
+                    {
+                        for (GroupReference* groupRef = group->GetFirstMember(); groupRef != nullptr; groupRef = groupRef->next())
+                        {
+                            if (Player* member = groupRef->GetSource())
+                                if (member->IsInMap(player))
+                                    players.push_back(player);
+                        }
+                    }
+                    else
+                        players.push_back(player);
+                }
+            }
+
             me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
             me->SetSheath(SHEATH_STATE_UNARMED);
 
@@ -325,22 +389,33 @@ class npc_jaina_ruins : public CreatureScript
                     case EVENT_RETURN_16:
                         me->SetVisible(false);
                         kalecgos->AI()->Talk(SAY_RETURN_13);
-                        kalecgos->SetFacingToObject(playerForQuest);
+                        kalecgos->SetFacingToObject(players[0]);
                         events.ScheduleEvent(EVENT_RETURN_17, 3s);
                         break;
 
                     case EVENT_RETURN_17:
                         kalecgos->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_ONESHOT_SPELL_CAST_OMNI);
-                        if (Player * player = me->SelectNearestPlayer(50.f))
-                            player->CastSpell(me, SPELL_POWER_BALL_VISUAL);
+                        for (Player* player : players)
+                            player->CastSpell(player, SPELL_POWER_BALL_VISUAL);
                         events.ScheduleEvent(EVENT_RETURN_18, 1s);
                         break;
 
                     case EVENT_RETURN_18:
                         kalecgos->DespawnOrUnsummon(3s);
-                        playerForQuest->CompleteQuest(QUEST_RETURN_TO_THERAMORE);
-                        playerForQuest->SetPhaseMask(1, true);
-                        playerForQuest->TeleportTo(725, -3755.96f, -4479.34f, 0.018f, 0.25f);
+                        for (Player* player : players)
+                        {
+                            player->CompleteQuest(QUEST_RETURN_TO_THERAMORE);
+                            player->SetPhaseMask(1, true);
+
+                            const float radius = 10.f;
+
+                            Position pos = { -3755.96f, -4479.34f, 0.018f, 0.25f };
+                            player->MovePosition(pos, radius * (float)rand_norm(), (float)rand_norm() * static_cast<float>(2 * M_PI));
+
+                            const WorldLocation destination = { 725, pos };
+
+                            player->TeleportTo(destination);
+                        }
                         break;
 
                         #pragma endregion
@@ -361,8 +436,11 @@ class npc_jaina_ruins : public CreatureScript
                     case EVENT_IRIS_3:
                     {
                         Quest const* quest = sObjectMgr->GetQuestTemplate(QUEST_DESTROY_THE_DESTROYER);
-                        if (playerForQuest->CanAddQuest(quest, true))
-                            playerForQuest->AddQuestAndCheckCompletion(quest, me);
+                        for (Player* player : players)
+                        {
+                            if (player->CanAddQuest(quest, true))
+                                player->AddQuestAndCheckCompletion(quest, me);
+                        }
 
                         if (Creature * dummy = me->SummonCreature(NPC_INVISIBLE_STALKER, -3698.69f, -4467.94f, -20.87f, 3.55f, TEMPSUMMON_MANUAL_DESPAWN))
                         {
@@ -377,11 +455,14 @@ class npc_jaina_ruins : public CreatureScript
                     {
                         Quest const* destroyTheDestroyer = sObjectMgr->GetQuestTemplate(QUEST_DESTROY_THE_DESTROYER);
                         Quest const* protectTheArtefact = sObjectMgr->GetQuestTemplate(QUEST_PROTECT_THE_ARTEFACT);
-                        playerForQuest->RewardQuest(destroyTheDestroyer, 0, me);
-                        if (playerForQuest->CanAddQuest(protectTheArtefact, true))
-                            playerForQuest->AddQuestAndCheckCompletion(protectTheArtefact, me);
+                        for (Player* player : players)
+                        {
+                            player->RewardQuest(destroyTheDestroyer, 0, me);
+                            if (player->CanAddQuest(protectTheArtefact, true))
+                                player->AddQuestAndCheckCompletion(protectTheArtefact, me);
+                        }
 
-                        channelTarget->RemoveAllAuras();
+                        channelTarget->DespawnOrUnsummon();
                         me->RemoveAllAuras();
 
                         events.ScheduleEvent(EVENT_IRIS_5, 3s);
@@ -404,7 +485,11 @@ class npc_jaina_ruins : public CreatureScript
                     case EVENT_IRIS_7:
                         me->SetReactState(REACT_PASSIVE);
                         me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                        me->CastSpell(me, SPELL_ARCANE_CANALISATION, true);
+                        if (Creature* dummy = me->SummonCreature(NPC_INVISIBLE_STALKER, -3698.69f, -4467.94f, -22.15f, 3.55f, TEMPSUMMON_MANUAL_DESPAWN))
+                        {
+                            me->CastSpell(dummy, SPELL_ARCANE_CANALISATION, true);
+                            channelTarget = dummy;
+                        }
                         for (uint8 i = 0; i < 2; ++i)
                         {
                             elementals[i]->GetMotionMaster()->MovePoint(0, ElementalsPos[i + 2], false, ElementalsPos[i + 2].GetOrientation());
@@ -463,8 +548,8 @@ class npc_jaina_ruins : public CreatureScript
                     {
                         warlord->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
                         warlord->SetReactState(REACT_AGGRESSIVE);
-                        warlord->Attack(playerForQuest, true);
-                        warlord->GetMotionMaster()->MoveChase(playerForQuest, 1.f);
+                        warlord->Attack(players[0], true);
+                        warlord->GetMotionMaster()->MoveChase(players[0], 1.f);
 
                         for (Creature* soldier : soldiers)
                         {
@@ -489,7 +574,7 @@ class npc_jaina_ruins : public CreatureScript
 
                     case EVENT_IRIS_15:
                     {
-                        if (warlord->GetHealthPct() < 10.f || playerForQuest->GetHealthPct() <= 20.f)
+                        if (warlord->GetHealthPct() < 10.f || players[0]->GetHealthPct() <= 20.f)
                         {
                             warlord->RemoveAllAuras();
                             warlord->SetImmuneToAll(true);
@@ -509,7 +594,8 @@ class npc_jaina_ruins : public CreatureScript
 
                     case EVENT_IRIS_16:
                     {
-                        playerForQuest->ResurrectPlayer(10.f);
+                        for (Player* player : players)
+                            player->ResurrectPlayer(10.f);
 
                         warlord->CombatStop(true);
                         warlord->GetMotionMaster()->Clear();
@@ -517,6 +603,9 @@ class npc_jaina_ruins : public CreatureScript
                         warlord->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
                         warlord->SetReactState(REACT_PASSIVE);
                         warlord->SetStandState(UNIT_STAND_STATE_KNEEL);
+
+                        channelTarget->DespawnOrUnsummon();
+                        me->RemoveAllAuras();
 
                         CastSpellExtraArgs args;
                         args.SetTriggerFlags(TRIGGERED_CAST_DIRECTLY);
@@ -589,8 +678,11 @@ class npc_jaina_ruins : public CreatureScript
                     case EVENT_IRIS_21:
                     {
                         Quest const* protectTheArtefact = sObjectMgr->GetQuestTemplate(QUEST_PROTECT_THE_ARTEFACT);
-                        playerForQuest->CompleteQuest(QUEST_PROTECT_THE_ARTEFACT);
-                        playerForQuest->RewardQuest(protectTheArtefact, 0, me);
+                        for (Player* player : players)
+                        {
+                            player->CompleteQuest(QUEST_PROTECT_THE_ARTEFACT);
+                            player->RewardQuest(protectTheArtefact, 0, me);
+                        }
 
                         Unit::Kill(me, warlord);
 
@@ -601,7 +693,7 @@ class npc_jaina_ruins : public CreatureScript
 
                     case EVENT_IRIS_22:
                         Talk(SAY_IRIS_9);
-                        me->SetFacingToObject(playerForQuest);
+                        me->SetFacingToObject(players[0]);
                         events.ScheduleEvent(EVENT_IRIS_23, 8s);
                         break;
 
@@ -619,7 +711,8 @@ class npc_jaina_ruins : public CreatureScript
                         break;
 
                     case EVENT_IRIS_25:
-                        SendMailToPlayer(playerForQuest);
+                        for (Player* player : players)
+                            SendMailToPlayer(player);
                         me->SetVisible(false);
                         me->SummonGameObject(500015, me->GetPosition(), QuaternionData(), 0s);
                         break;
@@ -650,7 +743,7 @@ class npc_jaina_ruins : public CreatureScript
         Creature* warlord;
         Creature* channelTarget;
         Creature* elementals[2];
-        Player* playerForQuest;
+        std::vector<Player*> players;
         GameObject* mirror;
         TaskScheduler scheduler;
         bool canSayIntro, canSayEnd, canSayDestruction;

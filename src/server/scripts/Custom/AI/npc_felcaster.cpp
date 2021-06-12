@@ -37,8 +37,6 @@ class npc_felcaster : public CreatureScript
     {
         npc_felcasterAI(Creature* creature) : CustomAI(creature), healOnCooldown(false)
         {
-            SetCombatMovement(false);
-
             corruptionInfo = sSpellMgr->AssertSpellInfo(SPELL_CORRUPTION);
             curseOfAgonyInfo = sSpellMgr->AssertSpellInfo(SPELL_CURSE_OF_AGONY);
 

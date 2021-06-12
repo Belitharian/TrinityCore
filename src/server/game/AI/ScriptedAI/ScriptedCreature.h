@@ -224,8 +224,11 @@ struct TC_GAME_API ScriptedAI : public CreatureAI
         // Returns a list of all friendly units missing a specific buff within range
         std::list<Creature*> DoFindFriendlyMissingBuff(float range, uint32 spellId);
 
-        // Returns a list of all friendly units missing a specific buff within range
+        // Returns a unit missing a specific dot within range
         Unit* DoFindEnemyMissingDot(float range, SpellInfo const* spellInfo);
+
+        // Returns a unit missing a specific buff within range
+        Unit* DoFindFriendlyMissingHot(float range, uint32 uiSpellid);
 
         // Return a player with at least minimumRange from me
         Player* GetPlayerAtMinimumRange(float minRange);

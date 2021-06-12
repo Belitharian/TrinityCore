@@ -93,7 +93,7 @@ enum Spells
     SPELL_PORTAL                    = 57687,
     SPELL_OPENED_PORTAL             = 61236,
     SPELL_CANALISATION              = 58012,
-    SPELL_ARCANE_CANALISATION       = 54219,
+    SPELL_ARCANE_CANALISATION       = 100128,
     SPELL_WATER_SHIELD              = 100040,
     SPELL_FROST_EXPLOSION           = 73773,
     SPELL_ARCANE_FORM               = 70573,

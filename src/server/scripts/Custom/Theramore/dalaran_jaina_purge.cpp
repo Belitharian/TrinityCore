@@ -4,6 +4,8 @@
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "SpellInfo.h"
+#include "SpellScript.h"
+#include "SpellAuraEffects.h"
 #include "SpellMgr.h"
 #include "TemporarySummon.h"
 #include "ScriptedCreature.h"
@@ -14,10 +16,11 @@
 #include "CellImpl.h"
 #include "World.h"
 #include "ScriptedGossip.h"
+#include "Group.h"
 
 #include <iostream>
 
-constexpr uint32 NPCS_TOTAL_COUNT = 5;
+#define NPCS_TOTAL_COUNT 5
 
 enum NPCs
 {
@@ -32,7 +35,7 @@ enum NPCs
 
 enum Spells
 {
-    SPELL_FIREBALL              = 100002,
+    SPELL_FROSTBOLT             = 100006,
     SPELL_BLIZZARD              = 100001,
     SPELL_TELEPORT              = 51347,
     SPELL_DIRECT_TELEPORT       = 100045,
@@ -69,6 +72,7 @@ enum Misc
     // Jaina's casting
     CASTING_BLIZZARD            = 1,
     CASTING_FIREBALL            = 2,
+    CASTING_TELEPORT            = 3,
 
     // Sunreaver's casting
     CASTING_FIREBLAST           = 1,
@@ -160,18 +164,6 @@ class npc_displaced_sunreaver : public CreatureScript
         }
 
         void Initialize() { }
-
-        void Teleport()
-        {
-            DoCastSelf(SPELL_TELEPORT);
-
-            me->SetFaction(35);
-            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-            me->SetControlled(true, UNIT_STATE_ROOT);
-            me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_ONESHOT_NONE);
-            me->GetMotionMaster()->Clear();
-            me->DespawnOrUnsummon(1s);
-        }
 
         void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
         {
@@ -350,6 +342,7 @@ class dalaran_jaina_purge : public CreatureScript
         {
             events.ScheduleEvent(CASTING_FIREBALL, 0s);
             events.ScheduleEvent(CASTING_BLIZZARD, 5s);
+            events.ScheduleEvent(CASTING_TELEPORT, 15s);
         }
 
         bool CanAIAttack(Unit const* who) const override
@@ -377,7 +370,6 @@ class dalaran_jaina_purge : public CreatureScript
                                 Talk(SAY_JAINA_TELEPORT);
 
                             DoCast(sunreaver, SPELL_DIRECT_TELEPORT);
-                            ENSURE_AI(npc_displaced_sunreaver::npc_displaced_sunreaverAI, sunreaver->AI())->Teleport();
                             teleportTimer = urand(5 * IN_MILLISECONDS, 15 * IN_MILLISECONDS);
                         }
                     }
@@ -395,6 +387,15 @@ class dalaran_jaina_purge : public CreatureScript
                 {
                     switch (eventId)
                     {
+                        case CASTING_TELEPORT:
+                            if (Unit* target = me->GetVictim())
+                            {
+                                if (target->GetTypeId() == TYPEID_PLAYER)
+                                    DoCastVictim(SPELL_DIRECT_TELEPORT);
+                            }
+                            events.RescheduleEvent(CASTING_TELEPORT, 14s, 25s);
+                            break;
+
                         case CASTING_BLIZZARD:
                         {
                             if (me->GetThreatManager().GetThreatenedByMeList().size() < 3)
@@ -411,7 +412,7 @@ class dalaran_jaina_purge : public CreatureScript
 
                         case CASTING_FIREBALL:
                             if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                                DoCast(target, SPELL_FIREBALL);
+                                DoCast(target, SPELL_FROSTBOLT);
                             events.RescheduleEvent(CASTING_FIREBALL, 5s, 8s);
                             break;
 
@@ -464,11 +465,16 @@ class dalaran_aethas_event : public CreatureScript
             if (playingEvent || who->GetTypeId() != TYPEID_PLAYER)
                 return;
 
-            player = who->ToPlayer();
+            Player* player = who->ToPlayer();
             if (me->GetMapId() == 727)
             {
-                if (player->GetPhaseMask() == me->GetPhaseMask() && me->IsFriendlyTo(player) && me->IsWithinDist(player, 30.f, false))
+                if (me->GetPhaseMask() == player->GetPhaseMask()
+                    && me->IsFriendlyTo(player)
+                    && me->IsWithinDist(player, 6.f, false))
+                {
+                    playingEvent = true;
                     SetData(ACTION_INTRO, 1U);
+                }
             }
         }
 
@@ -480,11 +486,28 @@ class dalaran_aethas_event : public CreatureScript
 
         void SetData(uint32 id, uint32 /*value*/) override
         {
+            if (Player* player = me->SelectNearestPlayer(2000.f))
+            {
+                players.clear();
+
+                if (Group* group = player->GetGroup())
+                {
+                    for (GroupReference* groupRef = group->GetFirstMember(); groupRef != nullptr; groupRef = groupRef->next())
+                    {
+                        if (Player* member = groupRef->GetSource())
+                        {
+                            players.push_back(member);
+                        }
+                    }
+                }
+                else
+                    players.push_back(player);
+            }
+
             switch (id)
             {
                 case ACTION_INTRO:
 
-                    playingEvent = true;
                     victimIndex = 0;
                     for (ObjectGuid guid : guardians)
                         guid.Clear();
@@ -505,6 +528,7 @@ class dalaran_aethas_event : public CreatureScript
                         temp->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
                         temp->SetReactState(REACT_PASSIVE);
                         temp->SetFaction(2129);
+                        temp->SetImmuneToPC(true);
 
                         switch (npcsLocation[i].entry)
                         {
@@ -612,8 +636,11 @@ class dalaran_aethas_event : public CreatureScript
                         break;
 
                     case EVENT_AETHAS_11:
-                        player->CompleteQuest(QUEST_JAINAS_RESOLUTION);
-                        player->SetPhaseMask(1, true);
+                        for (Player* player : players)
+                        {
+                            player->CompleteQuest(QUEST_JAINAS_RESOLUTION);
+                            player->SetPhaseMask(1, true);
+                        }
                         elemental->KillSelf();
                         elemental->DespawnOrUnsummon(2s);
                         me->setActive(false);
@@ -627,7 +654,7 @@ class dalaran_aethas_event : public CreatureScript
 
         private:
         EventMap events;
-        Player* player;
+        std::vector<Player*> players;
         Creature* aethas;
         Creature* jaina;
         Creature* elemental;
@@ -1098,6 +1125,61 @@ class npc_vereesa_windrunner : public CreatureScript
     }
 };
 
+class spell_teleport_violet_hold : public SpellScriptLoader
+{
+    public:
+    spell_teleport_violet_hold() : SpellScriptLoader("spell_teleport_violet_hold")
+    {
+    }
+
+    class spell_teleport_violet_hold_SpellScript : public SpellScript
+    {
+        PrepareSpellScript(spell_teleport_violet_hold_SpellScript);
+
+        void OnBeforeHit(SpellMissInfo missInfo)
+        {
+            if (missInfo != SPELL_MISS_NONE)
+                return;
+
+            if (Creature* target = GetHitCreature())
+            {
+                target->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_STUN);
+                target->SetImmuneToNPC(true);
+                target->SetImmuneToPC(true);
+                target->SetReactState(REACT_PASSIVE);
+                target->GetMotionMaster()->Clear();
+            }
+        }
+
+        void OnAfterHit()
+        {
+            if (Creature* target = GetHitCreature())
+                target->DespawnOrUnsummon(1s);
+
+            if (Player* target = GetHitPlayer())
+            {
+                const float distance = 6.f;
+                Position pos = { 5694.98f, 504.86f, 652.67f, 0.88f };
+                target->MovePosition(pos, distance * (float)rand_norm(), (float)rand_norm() * static_cast<float>(2 * M_PI));
+
+                const WorldLocation destination = { 727, pos };
+                target->TeleportTo(destination);
+            }
+        }
+
+        void Register() override
+        {
+            BeforeHit += BeforeSpellHitFn(spell_teleport_violet_hold_SpellScript::OnBeforeHit);
+            AfterHit += SpellHitFn(spell_teleport_violet_hold_SpellScript::OnAfterHit);
+        }
+    };
+
+    SpellScript* GetSpellScript() const override
+    {
+        return new spell_teleport_violet_hold_SpellScript();
+    }
+};
+
 void AddSC_dalaran_jaina_purge()
 {
     new dalaran_jaina_purge();
@@ -1107,4 +1189,5 @@ void AddSC_dalaran_jaina_purge()
     new npc_arcanist_uovril();
     new npc_enchanter_isian();
     new npc_vereesa_windrunner();
+    new spell_teleport_violet_hold();
 }

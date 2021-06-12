@@ -25,7 +25,6 @@ class npc_shaman : public CreatureScript
     {
         npc_shamanAI(Creature* creature) : CustomAI(creature)
         {
-            SetCombatMovement(false);
         }
 
         void JustEngagedWith(Unit* who) override
