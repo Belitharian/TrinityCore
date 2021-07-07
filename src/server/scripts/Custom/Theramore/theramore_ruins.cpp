@@ -636,7 +636,7 @@ class npc_jaina_ruins : public CreatureScript
 
                     case EVENT_IRIS_17:
                         me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_ONESHOT_NONE);
-                        if (GameObject * temp = GetClosestGameObjectWithEntry(me, 190561, 100))
+                        if (GameObject * temp = GetClosestGameObjectWithEntry(me, GAMEOBJECT_CRYSTAL, 100))
                         {
                             float distanceToTravel = me->GetExactDist2d(temp->GetPosition()) - 1.5f;
                             float angle = me->GetAbsoluteAngle(temp);
@@ -655,12 +655,10 @@ class npc_jaina_ruins : public CreatureScript
                         break;
 
                     case EVENT_IRIS_19:
-                    {
                         mirror->Delete();
                         me->SetStandState(UNIT_STAND_STATE_STAND);
                         events.ScheduleEvent(EVENT_IRIS_20, 2s);
                         break;
-                    }
 
                     case EVENT_IRIS_20:
                     {

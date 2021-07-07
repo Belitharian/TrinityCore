@@ -17,18 +17,9 @@ void CustomAI::Initialize()
     }
 }
 
-void CustomAI::AttackStart(Unit* who)
+void CustomAI::CanMove(bool canMove)
 {
-    if (!who)
-        return;
-
-    // Mouvement que pour les IA en mêlée
-    if (type != AI_Type::Distance)
-        SetCombatMovement(true);
-    else
-        SetCombatMovement(false);
-
-    ScriptedAI::AttackStart(who);
+    me->SetControlled(!canMove, UNIT_STATE_ROOT);
 }
 
 void CustomAI::JustSummoned(Creature* summon)
@@ -54,6 +45,8 @@ void CustomAI::SummonedCreatureDies(Creature* summon, Unit* killer)
 
 void CustomAI::EnterEvadeMode(EvadeReason why)
 {
+    CanMove(true);
+
     summons.DespawnAll();
     scheduler.CancelAll();
 
@@ -68,6 +61,16 @@ void CustomAI::Reset()
     scheduler.CancelAll();
 
     ScriptedAI::Reset();
+}
+
+void CustomAI::JustEnteredCombat(Unit* who)
+{
+    ScriptedAI::JustEnteredCombat(who);
+
+    if (type == AI_Type::Distance)
+    {
+        CanMove(false);
+    }
 }
 
 void CustomAI::JustEngagedWith(Unit* who)

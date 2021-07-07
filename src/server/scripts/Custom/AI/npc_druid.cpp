@@ -19,6 +19,10 @@ enum Spells
     SPELL_MOONFIRE                  = 100135,
     SPELL_WILD_GROWTH               = 100136,
     SPELL_SHAPESHIFT_BEAR           = 100137,
+    SPELL_SHAPESHIFT_CAT            = 100138,
+    SPELL_SHRED                     = 100139,
+    SPELL_RAKE                      = 100140,
+    SPELL_CLEARCASTING              = 100141,
 	SPELL_NATURE_SWIFTNESS          = 17116,
 };
 
@@ -27,12 +31,15 @@ enum Phases
     PHASE_COMBAT,
     PHASE_HEALING,
     PHASE_BEAR,
+    PHASE_CAT,
 };
 
 class npc_druid : public CreatureScript
 {
 	public:
-	npc_druid() : CreatureScript("npc_druid") {}
+	npc_druid() : CreatureScript("npc_druid")
+    {
+    }
 
 	struct npc_druidAI : public CustomAI
 	{
@@ -42,11 +49,11 @@ class npc_druid : public CreatureScript
 
         void DamageTaken(Unit* attacker, uint32& /*damage*/) override
         {
-            if (!shapeshifted && !me->HasAura(SPELL_SHAPESHIFT_BEAR) && HealthBelowPct(20))
+            if (!shapeshifted && !me->HasAura(SPELL_SHAPESHIFT_BEAR) && HealthBelowPct(50))
             {
                 shapeshifted = true;
 
-                //SetCombatMovement(true);
+                CanMove(true);
 
                 DoCastSelf(SPELL_REJUVENATION, true);
 
@@ -56,17 +63,50 @@ class npc_druid : public CreatureScript
                 scheduler
                     .Schedule(1s, PHASE_BEAR, [this, attacker](TaskContext context)
                     {
+                        if (me->HasAura(SPELL_SHAPESHIFT_CAT))
+                        {
+                            me->RemoveAurasDueToSpell(SPELL_SHAPESHIFT_CAT);
+                        }
+
                         DoCastSelf(SPELL_SHAPESHIFT_BEAR);
                         me->GetMotionMaster()->MoveFleeing(attacker, 10 * IN_MILLISECONDS);
                     })
-                    //.Schedule(10s, PHASE_BEAR, [this](TaskContext context)
-                    //{
-                    //    SetCombatMovement(false);
-                    //})
+                    .Schedule(12s, PHASE_BEAR, [this, attacker](TaskContext /*context*/)
+                    {
+                        CanMove(false);
+                    })
                     .Schedule(3min, PHASE_BEAR, [this](TaskContext /*context*/)
                     {
                         shapeshifted = false;
                     });
+            }
+        }
+
+        void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
+        {
+            if (spellInfo->Id == SPELL_SHAPESHIFT_CAT)
+            {
+                CanMove(true);
+
+                scheduler
+                    .Schedule(1min, PHASE_CAT, [this](TaskContext /*context*/)
+                    {
+                        CanMove(false);
+                        scheduler.CancelGroup(PHASE_CAT);
+                    });
+            }
+        }
+
+        void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
+        {
+            if (target->IsFriendlyTo(me)
+                && spellInfo->GetSchoolMask() == SPELL_SCHOOL_MASK_NATURE
+                && (spellInfo->HasEffect(SPELL_EFFECT_HEAL) || spellInfo->HasAura(SPELL_AURA_PERIODIC_HEAL)))
+            {
+                if (roll_chance_i(30))
+                {
+                    DoCastSelf(SPELL_CLEARCASTING);
+                }
             }
         }
 
@@ -84,6 +124,38 @@ class npc_druid : public CreatureScript
                         DoCast(target, SPELL_MOONFIRE);
                     moonfire.Repeat(8s, 12s);
                 })
+                .Schedule(5s, PHASE_COMBAT, [this](TaskContext shapeshift_cat)
+                {
+                    float powerPct = CalculatePct(me->GetMaxPower(POWER_MANA), 20);
+                    if (me->GetPower(POWER_MANA) <= powerPct)
+                    {
+                        scheduler.DelayGroup(PHASE_COMBAT, 1min);
+                        scheduler.DelayGroup(PHASE_HEALING, 1min);
+                        DoCastSelf(SPELL_SHAPESHIFT_CAT);
+                        shapeshift_cat.Repeat(10min);
+                    }
+                    else
+                    {
+                        shapeshift_cat.Repeat(1s);
+                    }
+                })
+                .Schedule(8s, PHASE_CAT, [this](TaskContext rake)
+                {
+                    if (HasShapeshiftCat())
+                    {
+                        if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                            DoCast(target, SPELL_RAKE);
+                    }
+                    rake.Repeat(2s, 8s);
+                })
+                .Schedule(8s, PHASE_CAT, [this](TaskContext shred)
+                {
+                    if (HasShapeshiftCat())
+                    {
+                        DoCastVictim(SPELL_SHRED);
+                    }
+                    shred.Repeat(3s, 10s);
+                })
                 .Schedule(3s, PHASE_HEALING, [this](TaskContext nature_swiftness)
                 {
                     if (!me->HasAura(SPELL_NATURE_SWIFTNESS))
@@ -100,8 +172,8 @@ class npc_druid : public CreatureScript
                 .Schedule(10s, 15s, PHASE_HEALING, [this](TaskContext wild_growth)
                 {
                     me->CastStop();
-                    DoCastAOE(SPELL_WILD_GROWTH);
-                    wild_growth.Repeat(5s, 8s);
+                    DoCastAOE(SPELL_WILD_GROWTH, HasNatureSwiftness());
+                    wild_growth.Repeat(20s, 32s);
                 })
                 .Schedule(1s, PHASE_HEALING, [this](TaskContext healing_touch)
                 {
@@ -110,19 +182,19 @@ class npc_druid : public CreatureScript
                         me->CastStop();
                         DoCast(target, SPELL_HEALING_TOUCH, HasNatureSwiftness());
                     }
-                    healing_touch.Repeat(500ms);
+                    healing_touch.Repeat(8s, 15s);
                 })
                 .Schedule(1s, PHASE_HEALING, [this](TaskContext lifebloom)
                 {
                     if (Unit* target = DoSelectBelowHpPctFriendly(30.0f, 20, false))
                         DoCast(target, SPELL_LIFEBLOOM);
-                    lifebloom.Repeat(1s);
+                    lifebloom.Repeat(10s);
                 })
                 .Schedule(1s, PHASE_HEALING, [this](TaskContext rejuvenation)
                 {
                     if (Unit* target = DoFindFriendlyMissingHot(40.0f, SPELL_REJUVENATION))
                         DoCast(target, SPELL_REJUVENATION);
-                    rejuvenation.Repeat(1s);
+                    rejuvenation.Repeat(3s);
                 })
                 .Schedule(1s, PHASE_HEALING, [this](TaskContext regrowth)
                 {
@@ -131,7 +203,7 @@ class npc_druid : public CreatureScript
                         me->CastStop();
                         DoCast(target, SPELL_REGROWTH, HasNatureSwiftness());
                     }
-                    regrowth.Repeat(1s);
+                    regrowth.Repeat(5s);
                 });
 		}
 
@@ -147,6 +219,11 @@ class npc_druid : public CreatureScript
                 me->RemoveAurasDueToSpell(SPELL_NATURE_SWIFTNESS);
             }
             return args;
+        }
+
+        bool HasShapeshiftCat()
+        {
+            return me->HasAura(SPELL_SHAPESHIFT_CAT);
         }
 	};
 

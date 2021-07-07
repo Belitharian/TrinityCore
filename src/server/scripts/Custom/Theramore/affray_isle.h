@@ -9,7 +9,8 @@
 #define KLANNOC_PATH_01_SIZE         5
 #define SPECTATORS_MAX_NUMBER        8
 #define FIRES_MAX_NUMBER            12
-#define ICE_WALLS_MAX_NUMBER        10
+#define ICE_WALLS_MAX_NUMBER        13
+#define CHANNELING_MAX_NUMBER        8
 
 enum NPCs
 {
@@ -23,6 +24,8 @@ enum NPCs
     NPC_FOCUSING_IRIS           = 100069,
     NPC_WIND_ELEMENTAL          = 100091,
     NPC_ICE_WALL_TRIGGER        = 100092,
+    NPC_TARGET_ICE_WALL         = 37014,
+    NPC_KALECGOS_DRAGON         = 100094,
 };
 
 enum Talks
@@ -54,7 +57,30 @@ enum Talks
     TALK_THRALL_22              = 9,
     TALK_JAINA_23               = 19,
     TALK_JAINA_24               = 20,
-    TALK_THRALL_25              = 10
+    TALK_THRALL_25              = 10,
+
+    TALK_KALECGOS_26            = 17,
+    TALK_JAINA_27               = 21,
+    TALK_KALECGOS_28            = 18,
+    TALK_KALECGOS_29            = 19,
+    TALK_JAINA_30               = 22,
+    TALK_KALECGOS_31            = 20,
+    TALK_JAINA_32               = 23,
+    TALK_KALECGOS_33            = 21,
+    TALK_JAINA_34               = 24,
+    TALK_KALECGOS_35            = 22,
+    TALK_JAINA_36               = 25,
+    TALK_THRALL_37              = 11,
+    TALK_JAINA_38               = 26,
+    TALK_KALECGOS_39            = 23,
+    TALK_KALECGOS_40            = 24,
+    TALK_JAINA_41               = 27,
+    TALK_JAINA_42               = 28,
+    TALK_THRALL_43              = 12,
+    TALK_JAINA_44               = 29,
+    TALK_JAINA_45               = 30,
+    TALK_KALECGOS_46            = 25,
+    TALK_JAINA_47               = 31
 };
 
 enum Misc
@@ -74,7 +100,15 @@ enum Misc
     GOB_ICE_WALL                = 201385,
 
     // Mounts
-    MOUNT_WHITE_WOLF_WOUNDED    = 19042
+    MOUNT_WHITE_WOLF_WOUNDED    = 19042,
+
+    // Points ID
+    POINTID_KALECGOS_01         = 1,
+    POINTID_KALECGOS_02,
+    POINTID_KALECGOS_03,
+    POINTID_KALECGOS_04,
+    POINTID_KALECGOS_05,
+    POINTID_KALECGOS_06,
 };
 
 enum Events
@@ -84,6 +118,7 @@ enum Events
     START_SUMMON_THRALL,         
     START_THRALL_ARRIVES,
     START_BATTLE,
+    START_POST_BATTLE,
 
     // Introduction
     EVENT_INTRO_01              = 1000,
@@ -119,7 +154,6 @@ enum Events
 	EVENT_THRALL_13,
 	EVENT_THRALL_14,
 	EVENT_THRALL_15,
-	EVENT_THRALL_16,
 	
 	// Battle
 	EVENT_BATTLE_01,
@@ -127,11 +161,36 @@ enum Events
 	EVENT_BATTLE_03,
 	EVENT_BATTLE_04,
 	EVENT_BATTLE_05,
-	EVENT_BATTLE_06,
-	EVENT_BATTLE_07,
-	EVENT_BATTLE_08,
-	EVENT_BATTLE_09,
-	EVENT_BATTLE_10,
+
+    // Post-battle
+	EVENT_POST_BATTLE_01,
+	EVENT_POST_BATTLE_02,
+	EVENT_POST_BATTLE_03,
+	EVENT_POST_BATTLE_04,
+	EVENT_POST_BATTLE_05,
+	EVENT_POST_BATTLE_06,
+	EVENT_POST_BATTLE_07,
+	EVENT_POST_BATTLE_08,
+	EVENT_POST_BATTLE_09,
+	EVENT_POST_BATTLE_10,
+    EVENT_POST_BATTLE_11,
+    EVENT_POST_BATTLE_12,
+    EVENT_POST_BATTLE_13,
+    EVENT_POST_BATTLE_14,
+    EVENT_POST_BATTLE_15,
+    EVENT_POST_BATTLE_16,
+    EVENT_POST_BATTLE_17,
+    EVENT_POST_BATTLE_18,
+    EVENT_POST_BATTLE_19,
+    EVENT_POST_BATTLE_20,
+    EVENT_POST_BATTLE_21,
+    EVENT_POST_BATTLE_22,
+    EVENT_POST_BATTLE_23,
+    EVENT_POST_BATTLE_24,
+    EVENT_POST_BATTLE_25,
+    EVENT_POST_BATTLE_26,
+    EVENT_POST_BATTLE_27,
+    EVENT_POST_BATTLE_28,
 
     // Phases
     EVENT_SCHEDULE_PHASE_BLINK,
@@ -145,19 +204,25 @@ enum Events
 
 enum Spells
 {
+    SPELL_ASTRAL_RECALL         = 556,
     SPELL_SMOKE_REVEAL          = 10389,
+    SPELL_TRANSFORM_VISUAL      = 24085,
     SPELL_NATURE_CANALISATION   = 28892,
     SPELL_ARCANE_CLOUD          = 39952,
+    SPELL_KALECGOS_TRANSFORM    = 44670,
+    SPELL_ARCANIC_FORM          = 45832,
     SPELL_FROST_CANALISATION    = 45846,
     SPELL_IMMOLATE              = 48150,
     SPELL_VISUAL_TELEPORT       = 51347,
+    SPELL_POWER_BALL_VISUAL     = 54139,
     SPELL_ICE_NOVA              = 56935,
-    SPELL_FORCED_TELEPORT       = 70525,
     SPELL_FROST_EXPLOSION       = 73775,
     SPELL_PYROBLAST             = 100005,
     SPELL_ICE_LANCE             = 100007,
     SPELL_ARCANE_BARRAGE        = 100009,
+    SPELL_HEALING_WAVE          = 100025,
     SPELL_LIGHTNING_BOLT        = 100026,
+    SPELL_LIGHTNING_CHAIN       = 100031,
     SPELL_SIMPLE_TELEPORT       = 100032,
     SPELL_METEOR                = 100054,
     SPELL_WAVE_VISUAL           = 100060,
@@ -170,7 +235,9 @@ enum Spells
     SPELL_FROST_BOTL            = 100121,
     SPELL_ARCANE_EXPLOSION      = 100122,
     SPELL_TORNADO               = 100124,
-    SPELL_ICY_GLARE             = 100125
+    SPELL_ICY_GLARE             = 100125,
+    SPELL_FORCED_TELEPORT       = 100142,
+    SPELL_FIRE_ELEMENTAL_TOTEM  = 100143,
 };
 
 const Position PlayerEntrancePos    = { -1710.83f, -4390.23f,  4.37f, 1.28f };
@@ -250,16 +317,19 @@ const Position BuildingMeteorPos[FIRES_MAX_NUMBER] =
 
 const float IceWallsPos[ICE_WALLS_MAX_NUMBER][8] =
 {
-    { -1632.79f, -4332.48f,  4.83f, 2.99f, 0.0f, 0.0f, -0.99f, -0.07f },
-    { -1683.79f, -4269.71f,  2.69f, 1.58f, 0.0f, 0.0f, -0.71f, -0.70f },
-    { -1634.66f, -4277.96f, -1.71f, 3.76f, 0.0f, 0.0f, -0.95f,  0.30f },
-    { -1702.05f, -4380.88f,  4.73f, 4.08f, 0.0f, 0.0f, -0.89f,  0.45f },
-    { -1657.94f, -4378.16f,  5.13f, 5.53f, 0.0f, 0.0f, -0.36f,  0.93f },
-    { -1711.58f, -4330.22f,  4.21f, 3.01f, 0.0f, 0.0f, -0.99f, -0.06f },
-    { -1718.14f, -4273.43f, -1.53f, 5.34f, 0.0f, 0.0f, -0.45f,  0.89f },
-    { -1616.15f, -4297.27f, -8.34f, 3.19f, 0.0f, 0.0f, -0.99f,  0.02f },
-    { -1731.68f, -4360.19f,  3.67f, 0.21f, 0.0f, 0.0f, -0.10f, -0.99f },
-    { -1684.69f, -4401.76f, 18.98f, 1.41f, 0.0f, 0.0f, -0.65f, -0.75f }
+    { -1609.08f, -4327.80f, -0.63f, 3.21f, 0.f, 0.f, -0.99f,  0.03f },
+    { -1630.66f, -4304.81f,  2.19f, 0.72f, 0.f, 0.f, -0.35f, -0.93f },
+    { -1661.81f, -4261.06f,  3.19f, 4.25f, 0.f, 0.f, -0.84f,  0.52f },
+    { -1632.90f, -4277.13f,  0.00f, 3.67f, 0.f, 0.f, -0.96f,  0.26f },
+    { -1606.19f, -4369.08f,  6.44f, 2.39f, 0.f, 0.f, -0.93f, -0.36f },
+    { -1632.96f, -4398.10f,  6.43f, 2.39f, 0.f, 0.f, -0.93f, -0.36f },
+    { -1670.69f, -4413.72f,  0.08f, 1.62f, 0.f, 0.f, -0.72f, -0.68f },
+    { -1707.12f, -4405.81f,  1.35f, 1.20f, 0.f, 0.f, -0.56f, -0.82f },
+    { -1697.36f, -4259.62f,  0.40f, 4.92f, 0.f, 0.f, -0.62f,  0.77f },
+    { -1720.85f, -4280.50f,  0.00f, 5.61f, 0.f, 0.f, -0.32f,  0.94f },
+    { -1738.52f, -4316.20f,  3.48f, 6.16f, 0.f, 0.f, -0.06f,  0.99f },
+    { -1732.12f, -4362.97f,  5.56f, 0.64f, 0.f, 0.f, -0.31f, -0.94f },
+    { -1733.03f, -4393.99f,  2.98f, 0.23f, 0.f, 0.f, -0.11f, -0.99f }
 };
 
 class KlannocBurning : public BasicEvent

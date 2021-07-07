@@ -21,7 +21,7 @@ class TC_GAME_API CustomAI : public ScriptedAI
 
         virtual void Initialize();
 
-        void AttackStart(Unit* who) override;
+        void CanMove(bool canMove);
 
         void JustSummoned(Creature* /*summon*/) override;
         void SummonedCreatureDespawn(Creature* /*summon*/) override;
@@ -30,6 +30,7 @@ class TC_GAME_API CustomAI : public ScriptedAI
         void EnterEvadeMode(EvadeReason why = EVADE_REASON_OTHER) override;
 
         void Reset() override;
+        void JustEnteredCombat(Unit* /*who*/) override;
         void JustEngagedWith(Unit* /*who*/) override;
         void JustDied(Unit* /*killer*/) override;
         void UpdateAI(uint32 diff) override;

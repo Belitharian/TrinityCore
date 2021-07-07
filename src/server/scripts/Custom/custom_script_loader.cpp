@@ -39,6 +39,7 @@ void AddSC_action_update_phase();
 void AddSC_jaina_affray_isle();
 void AddSC_stormwind_final_event();
 void AddSC_npc_water_elemental();
+void AddSC_dalaran_jaina_escort();
 
 // Tristam Catacombs
 void AddSC_instance_tristam_catacombs();
@@ -71,6 +72,7 @@ void AddCustomScripts()
     AddSC_jaina_affray_isle();
     AddSC_stormwind_final_event();
     AddSC_npc_water_elemental();
+    AddSC_dalaran_jaina_escort();
 
     // Tristam Catacombs
     AddSC_instance_tristam_catacombs();

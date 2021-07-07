@@ -132,6 +132,8 @@ enum Text
 
 enum Misc
 {
+    GAMEOBJECT_CRYSTAL              = 190561,
+
     MAIL_TIDES_ENTRY                = 292,
     MAIL_DELIVER_DELAY_MIN          = 1 * MINUTE,
     MAIL_DELIVER_DELAY_MAX          = 2 * MINUTE

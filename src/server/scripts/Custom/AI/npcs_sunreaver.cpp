@@ -5,8 +5,6 @@
 #include "World.h"
 #include "CustomAI.h"
 
-#include <iostream>
-
 enum Misc
 {
     // Quests
@@ -66,11 +64,15 @@ void KillCredit(Unit* killer)
 class npc_sunreaver_assassin : public CreatureScript
 {
     public:
-    npc_sunreaver_assassin() : CreatureScript("npc_sunreaver_assassin") {}
+    npc_sunreaver_assassin() : CreatureScript("npc_sunreaver_assassin")
+    {
+    }
 
     struct npc_sunreaver_assassinAI : public CustomAI
     {
-        npc_sunreaver_assassinAI(Creature* creature) : CustomAI(creature, AI_Type::Melee) {}
+        npc_sunreaver_assassinAI(Creature* creature) : CustomAI(creature, AI_Type::Melee)
+        {
+        }
 
         void JustEngagedWith(Unit* who) override
         {
@@ -132,18 +134,22 @@ class npc_sunreaver_assassin : public CreatureScript
 class npc_sunreaver_duelist : public CreatureScript
 {
     public:
-    npc_sunreaver_duelist() : CreatureScript("npc_sunreaver_duelist") {}
+    npc_sunreaver_duelist() : CreatureScript("npc_sunreaver_duelist")
+    {
+    }
 
     struct npc_sunreaver_duelistAI : public CustomAI
     {
-        npc_sunreaver_duelistAI(Creature* creature) : CustomAI(creature, AI_Type::Melee) {}
+        npc_sunreaver_duelistAI(Creature* creature) : CustomAI(creature, AI_Type::Melee)
+        {
+        }
 
         void JustEngagedWith(Unit* /*who*/) override
         {
-            scheduler.Schedule(5s, [this](TaskContext mightyKick)
+            scheduler.Schedule(5s, [this](TaskContext mighty_kick)
             {
                 DoCast(SPELL_MIGHTY_KICK);
-                mightyKick.Repeat(14s, 28s);
+                mighty_kick.Repeat(14s, 28s);
             });
         }
 
@@ -162,11 +168,15 @@ class npc_sunreaver_duelist : public CreatureScript
 class npc_sunreaver_pyromancer : public CreatureScript
 {
     public:
-    npc_sunreaver_pyromancer() : CreatureScript("npc_sunreaver_pyromancer") {}
+    npc_sunreaver_pyromancer() : CreatureScript("npc_sunreaver_pyromancer")
+    {
+    }
 
     struct npc_sunreaver_pyromancerAI : public CustomAI
     {
-        npc_sunreaver_pyromancerAI(Creature* creature) : CustomAI(creature) {}
+        npc_sunreaver_pyromancerAI(Creature* creature) : CustomAI(creature)
+        {
+        }
 
         void JustEngagedWith(Unit* /*who*/) override
         {
@@ -217,30 +227,34 @@ class npc_sunreaver_pyromancer : public CreatureScript
 class npc_sunreaver_frosthand : public CreatureScript
 {
     public:
-    npc_sunreaver_frosthand() : CreatureScript("npc_sunreaver_frosthand") {}
+    npc_sunreaver_frosthand() : CreatureScript("npc_sunreaver_frosthand")
+    {
+    }
 
     struct npc_sunreaver_frosthandAI : public CustomAI
     {
-        npc_sunreaver_frosthandAI(Creature* creature) : CustomAI(creature) {}
+        npc_sunreaver_frosthandAI(Creature* creature) : CustomAI(creature)
+        {
+        }
 
         void JustEngagedWith(Unit* /*who*/) override
         {
             scheduler
-                .Schedule(5ms, [this](TaskContext frostbotl)
+                .Schedule(5ms, [this](TaskContext frostbolt)
                 {
                     DoCast(SPELL_FROSTBOLT);
-                    frostbotl.Repeat(5s, 8s);
+                    frostbolt.Repeat(5s, 8s);
                 })
-                .Schedule(14s, [this](TaskContext iceLance)
+                .Schedule(14s, [this](TaskContext ice_lance)
                 {
                     if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                         DoCast(target, SPELL_ICE_LANCE);
-                    iceLance.Repeat(14s, 28s);
+                    ice_lance.Repeat(14s, 28s);
                 })
-                .Schedule(20s, [this](TaskContext frostCone)
+                .Schedule(20s, [this](TaskContext frost_cone)
                 {
                     DoCast(SPELL_FROST_CONE);
-                    frostCone.Repeat(18s, 30s);
+                    frost_cone.Repeat(18s, 30s);
                 });
         }
 
@@ -272,14 +286,15 @@ class npc_sunreaver_frosthand : public CreatureScript
 class npc_magister_brasael : public CreatureScript
 {
     public:
-    npc_magister_brasael() : CreatureScript("npc_magister_brasael") {}
+    npc_magister_brasael() : CreatureScript("npc_magister_brasael")
+    {
+    }
 
     struct npc_magister_brasaelAI : public CustomAI
     {
         npc_magister_brasaelAI(Creature* creature) : CustomAI(creature),
             phase(Phases::Normal), meteors(0), combustionUsed(false)
         {
-
         }
 
         void JustEngagedWith(Unit* /*who*/) override
