@@ -173,7 +173,7 @@ public:
 
         void JustSummoned(Creature* summoned) override
         {
-            summoned->SetInCombatWithZone();
+            DoZoneInCombat(summoned);
             if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                 summoned->AI()->AttackStart(target);
 
@@ -231,7 +231,7 @@ public:
                         me->SetDisableGravity(false);
                         me->SetAnimTier(UNIT_BYTE1_FLAG_NONE, false);
                         if (Creature* trigger = ObjectAccessor::GetCreature(*me, triggerGUID))
-                            me->Kill(trigger);
+                            Unit::Kill(me, trigger);
                         me->SetReactState(REACT_AGGRESSIVE);
                         // tank selection based on phase one. If tank is not there i take nearest one
                         if (Unit* tank = ObjectAccessor::GetUnit(*me, tankGUID))

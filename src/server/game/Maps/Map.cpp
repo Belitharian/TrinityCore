@@ -3461,7 +3461,7 @@ bool Map::SpawnGroupSpawn(uint32 groupId, bool ignoreRespawn, bool force, std::v
     return true;
 }
 
-bool Map::SpawnGroupDespawn(uint32 groupId, bool deleteRespawnTimes)
+bool Map::SpawnGroupDespawn(uint32 groupId, bool deleteRespawnTimes, size_t* count)
 {
     SpawnGroupTemplateData const* groupData = GetSpawnGroupData(groupId);
     if (!groupData || groupData->flags & SPAWNGROUP_FLAG_SYSTEM)
@@ -3498,6 +3498,10 @@ bool Map::SpawnGroupDespawn(uint32 groupId, bool deleteRespawnTimes)
                 return false;
         }
     }
+
+    if (count)
+        *count = toUnload.size();
+
     // now do the actual despawning
     for (WorldObject* obj : toUnload)
         obj->AddObjectToRemoveList();
@@ -4845,6 +4849,21 @@ Weather* Map::GetOrGenerateZoneDefaultWeather(uint32 zoneId)
     }
 
     return info.DefaultWeather.get();
+}
+
+WeatherState Map::GetZoneWeather(uint32 zoneId) const
+{
+    ZoneDynamicInfo const* zoneDynamicInfo = Trinity::Containers::MapGetValuePtr(_zoneDynamicInfo, zoneId);
+    if (zoneDynamicInfo)
+    {
+        if (WeatherState weatherId = zoneDynamicInfo->WeatherId)
+            return weatherId;
+
+        if (zoneDynamicInfo->DefaultWeather)
+            return zoneDynamicInfo->DefaultWeather->GetWeatherState();
+    }
+
+    return WEATHER_STATE_FINE;
 }
 
 void Map::SetZoneWeather(uint32 zoneId, WeatherState weatherId, float weatherGrade)
