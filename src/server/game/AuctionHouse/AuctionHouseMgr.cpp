@@ -244,6 +244,10 @@ void AuctionPosting::BuildAuctionItem(WorldPackets::AuctionHouse::AuctionItem* a
     // SMSG_AUCTION_LIST_BIDDER_ITEMS_RESULT, SMSG_AUCTION_LIST_OWNER_ITEMS_RESULT, SMSG_AUCTION_REPLICATE_RESPONSE (if commodity)
     if (sendKey)
         auctionItem->AuctionBucketKey.emplace(AuctionsBucketKey::ForItem(Items[0]));
+
+    // all
+    if (!Items[0]->m_itemData->Creator->IsEmpty())
+        auctionItem->Creator = *Items[0]->m_itemData->Creator;
 }
 
 uint64 AuctionPosting::CalculateMinIncrement(uint64 bidAmount)
@@ -551,12 +555,12 @@ void AuctionHouseMgr::LoadAuctions()
             }
 
             Item* item = NewItemOrBag(proto);
-            if (!item->LoadFromDB(itemGuid, ObjectGuid::Create<HighGuid::Player>(fields[43].GetUInt64()), fields, itemEntry))
+            if (!item->LoadFromDB(itemGuid, ObjectGuid::Create<HighGuid::Player>(fields[51].GetUInt64()), fields, itemEntry))
             {
                 delete item;
                 continue;
             }
-            uint32 auctionId = fields[44].GetUInt32();
+            uint32 auctionId = fields[52].GetUInt32();
             itemsByAuction[auctionId].push_back(item);
 
             ++count;
