@@ -148,9 +148,8 @@ class TC_GAME_API MotionMaster
         // NOTE: MOTION_SLOT_DEFAULT wont be affected
         void Clear(MovementGeneratorPriority priority);
         void PropagateSpeedChange();
-
         bool GetDestination(float &x, float &y, float &z);
-        float GetTime() const;
+        bool StopOnDeath();
 
         void MoveIdle();
         void MoveTargetedHome();
@@ -179,7 +178,7 @@ class TC_GAME_API MotionMaster
         void MoveJump(Position const& pos, float speedXY, float speedZ, uint32 id = EVENT_JUMP, bool hasOrientation = false);
         void MoveJump(float x, float y, float z, float o, float speedXY, float speedZ, uint32 id = EVENT_JUMP, bool hasOrientation = false);
         void MoveCirclePath(float x, float y, float z, float radius, bool clockwise, uint8 stepCount);
-        void MoveSmoothPath(uint32 pointId, Position const* pathPoints, size_t pathSize, bool walk, Optional<float> finalOrient = {});
+        void MoveSmoothPath(uint32 pointId, Position const* pathPoints, size_t pathSize, bool walk);
         // Walk along spline chain stored in DB (script_spline_chain_meta and script_spline_chain_waypoints)
         void MoveAlongSplineChain(uint32 pointId, uint16 dbChainId, bool walk);
         void MoveAlongSplineChain(uint32 pointId, std::vector<SplineChainLink> const& chain, bool walk);
@@ -204,9 +203,6 @@ class TC_GAME_API MotionMaster
         bool HasFlag(uint8 const flag) const { return (_flags & flag) != 0; }
         void RemoveFlag(uint8 const flag) { _flags &= ~flag; }
 
-        void SetTime(float x, float y);
-        void SetTime(Position destination);
-
         void ResolveDelayedActions();
         void Remove(MotionMasterContainer::iterator iterator, bool active, bool movementInform);
         void Pop(bool active, bool movementInform);
@@ -222,10 +218,7 @@ class TC_GAME_API MotionMaster
         void ClearBaseUnitState(MovementGenerator const* movement);
         void ClearBaseUnitStates();
 
-        const float OFFSET_TIME = 1.5f;
-
         Unit* _owner;
-        float _timeToReachDestination;
         MovementGeneratorPointer _defaultGenerator;
         MotionMasterContainer _generators;
         MotionMasterUnitStatesContainer _baseUnitStatesMap;

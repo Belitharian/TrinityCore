@@ -543,9 +543,26 @@ bool MotionMaster::GetDestination(float &x, float &y, float &z)
     return true;
 }
 
-float MotionMaster::GetTime() const
+bool MotionMaster::StopOnDeath()
 {
-    return _timeToReachDestination;
+    if (MovementGenerator* movementGenerator = GetCurrentMovementGenerator())
+        if (movementGenerator->HasFlag(MOVEMENTGENERATOR_FLAG_PERSIST_ON_DEATH))
+            return false;
+
+    if (_owner->IsInWorld())
+    {
+        // Only clear MotionMaster for entities that exists in world
+        // Avoids crashes in the following conditions :
+        //  * Using 'call pet' on dead pets
+        //  * Using 'call stabled pet'
+        //  * Logging in with dead pets
+        Clear();
+        MoveIdle();
+    }
+
+    _owner->StopMoving();
+
+    return true;
 }
 
 void MotionMaster::MoveIdle()
@@ -651,8 +668,6 @@ void MotionMaster::MovePoint(uint32 id, float x, float y, float z, bool generate
     }
     else
     {
-        SetTime(x, y);
-
         TC_LOG_DEBUG("movement.motionmaster", "MotionMaster::MovePoint: '%s', targeted point Id: %u (X: %f, Y: %f, Z: %f)", _owner->GetGUID().ToString().c_str(), id, x, y, z);
         Add(new PointMovementGenerator<Creature>(id, x, y, z, generatePath, 0.0f, finalOrient));
     }
@@ -764,6 +779,7 @@ void MotionMaster::MoveKnockbackFrom(float srcX, float srcY, float speedXY, floa
 
     GenericMovementGenerator* movement = new GenericMovementGenerator(std::move(init), EFFECT_MOTION_TYPE, 0);
     movement->Priority = MOTION_PRIORITY_HIGHEST;
+    movement->AddFlag(MOVEMENTGENERATOR_FLAG_PERSIST_ON_DEATH);
     Add(movement);
 }
 
@@ -808,6 +824,7 @@ void MotionMaster::MoveJump(float x, float y, float z, float o, float speedXY, f
     GenericMovementGenerator* movement = new GenericMovementGenerator(std::move(init), EFFECT_MOTION_TYPE, id);
     movement->Priority = MOTION_PRIORITY_HIGHEST;
     movement->BaseUnitState = UNIT_STATE_JUMPING;
+    movement->AddFlag(MOVEMENTGENERATOR_FLAG_PERSIST_ON_DEATH);
     Add(movement);
 }
 
@@ -851,7 +868,7 @@ void MotionMaster::MoveCirclePath(float x, float y, float z, float radius, bool 
     Add(new GenericMovementGenerator(std::move(init), EFFECT_MOTION_TYPE, 0));
 }
 
-void MotionMaster::MoveSmoothPath(uint32 pointId, Position const* pathPoints, size_t pathSize, bool walk, Optional<float> finalOrient)
+void MotionMaster::MoveSmoothPath(uint32 pointId, Position const* pathPoints, size_t pathSize, bool walk)
 {
     Movement::MoveSplineInit init(_owner);
     Movement::PointsArray path;
@@ -864,9 +881,6 @@ void MotionMaster::MoveSmoothPath(uint32 pointId, Position const* pathPoints, si
     init.MovebyPath(path);
     init.SetSmooth();
     init.SetWalk(walk);
-
-    if (finalOrient)
-        init.SetFacing(*finalOrient);
 
     // This code is not correct
     // GenericMovementGenerator does not affect UNIT_STATE_ROAMING_MOVE
@@ -1053,22 +1067,6 @@ void MotionMaster::LaunchMoveSpline(Movement::MoveSplineInit&& init, uint32 id/*
 
 /******************** Private methods ********************/
 
-void MotionMaster::SetTime(float x, float y)
-{
-    if (_owner->GetTypeId() != TYPEID_UNIT)
-        return;
-
-    float distance = _owner->GetExactDist2d(x, y);
-    float speed = _owner->IsWalking() ? _owner->GetSpeed(MOVE_WALK) : _owner->GetSpeed(MOVE_RUN);
-
-    _timeToReachDestination = (distance / speed) * IN_MILLISECONDS;
-}
-
-void MotionMaster::SetTime(Position destination)
-{
-    SetTime(destination.m_positionX, destination.m_positionY);
-}
-
 void MotionMaster::ResolveDelayedActions()
 {
     while (!_delayedActions.empty())
@@ -1174,10 +1172,7 @@ void MotionMaster::DirectAdd(MovementGenerator* movement, MovementSlot slot/* = 
     {
         case MOTION_SLOT_DEFAULT:
             if (_defaultGenerator)
-            {
                 _defaultGenerator->Finalize(_owner, _generators.empty(), false);
-                _defaultGenerator->NotifyAIOnFinalize(_owner);
-            }
 
             _defaultGenerator = MovementGeneratorPointer(movement);
             if (IsStatic(movement))
@@ -1222,7 +1217,6 @@ void MotionMaster::Delete(MovementGenerator* movement, bool active, bool movemen
         movement->Priority, movement->Flags, movement->BaseUnitState, movement->GetMovementGeneratorType(), _owner->GetGUID().ToString().c_str());
 
     movement->Finalize(_owner, active, movementInform);
-    movement->NotifyAIOnFinalize(_owner);
     ClearBaseUnitState(movement);
     MovementGeneratorPointerDeleter(movement);
 }
@@ -1233,7 +1227,6 @@ void MotionMaster::DeleteDefault(bool active, bool movementInform)
         _defaultGenerator->Priority, _defaultGenerator->Flags, _defaultGenerator->BaseUnitState, _defaultGenerator->GetMovementGeneratorType(), _owner->GetGUID().ToString().c_str());
 
     _defaultGenerator->Finalize(_owner, active, movementInform);
-    _defaultGenerator->NotifyAIOnFinalize(_owner);
     _defaultGenerator = MovementGeneratorPointer(GetIdleMovementGenerator());
     AddFlag(MOTIONMASTER_FLAG_STATIC_INITIALIZATION_PENDING);
 }
