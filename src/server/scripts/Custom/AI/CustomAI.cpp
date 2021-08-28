@@ -1,0 +1,112 @@
+#include "CustomAI.h"
+
+CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
+    type(type), summons(creature)
+{
+    Initialize();
+}
+
+void CustomAI::Initialize()
+{
+    if (type == AI_Type::Distance)
+    {
+        scheduler.SetValidator([this]
+        {
+            return !me->HasUnitState(UNIT_STATE_CASTING);
+        });
+    }
+}
+
+void CustomAI::CanMove(bool canMove)
+{
+    me->SetControlled(!canMove, UNIT_STATE_ROOT);
+}
+
+void CustomAI::JustSummoned(Creature* summon)
+{
+    summons.Summon(summon);
+
+    ScriptedAI::JustSummoned(summon);
+}
+
+void CustomAI::SummonedCreatureDespawn(Creature* summon)
+{
+    summons.Despawn(summon);
+
+    ScriptedAI::SummonedCreatureDespawn(summon);
+}
+
+void CustomAI::SummonedCreatureDies(Creature* summon, Unit* killer)
+{
+    summons.Despawn(summon);
+
+    ScriptedAI::SummonedCreatureDies(summon, killer);
+}
+
+void CustomAI::EnterEvadeMode(EvadeReason why)
+{
+    CanMove(true);
+
+    summons.DespawnAll();
+    scheduler.CancelAll();
+
+    ScriptedAI::EnterEvadeMode(why);
+}
+
+void CustomAI::Reset()
+{
+    Initialize();
+
+    summons.DespawnAll();
+    scheduler.CancelAll();
+
+    ScriptedAI::Reset();
+}
+
+void CustomAI::JustEnteredCombat(Unit* who)
+{
+    ScriptedAI::JustEnteredCombat(who);
+
+    if (type == AI_Type::Distance)
+    {
+        CanMove(false);
+    }
+}
+
+void CustomAI::JustEngagedWith(Unit* who)
+{
+    ScriptedAI::JustEngagedWith(who);
+}
+
+void CustomAI::JustExitedCombat()
+{
+    me->ReleaseFocus(nullptr, false);   // remove spellcast focus
+    me->DoNotReacquireTarget();         // cancel delayed re-target
+    me->SetTarget(ObjectGuid::Empty);   // drop target - dead mobs shouldn't ever target things
+}
+
+void CustomAI::JustDied(Unit* killer)
+{
+    summons.DespawnAll();
+    scheduler.CancelAll();
+
+    ScriptedAI::JustDied(killer);
+}
+
+void CustomAI::UpdateAI(uint32 diff)
+{
+    ScriptedAI::UpdateAI(diff);
+
+    scheduler.Update(diff, [this]
+    {
+        if (UpdateVictim())
+            DoMeleeAttackIfReady();
+    });
+}
+
+bool CustomAI::CanAIAttack(Unit const* who) const
+{
+    return who->IsAlive() && me->IsValidAttackTarget(who)
+        && !who->HasBreakableByDamageCrowdControlAura()
+        && ScriptedAI::CanAIAttack(who);
+}

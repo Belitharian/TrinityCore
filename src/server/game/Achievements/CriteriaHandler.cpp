@@ -738,6 +738,11 @@ void CriteriaHandler::UpdateCriteria(CriteriaTypes type, uint64 miscValue1 /*= 0
             case CRITERIA_TYPE_REACH_GUILD_LEVEL:
                 SetCriteriaProgress(criteria, miscValue1, referencePlayer);
                 break;
+            case CRITERIA_TYPE_SEND_EVENT_SCENARIO:
+                if (miscValue1 != uint64(criteria->Entry->Asset.ScenarioEventID))
+                    continue;
+                SetCriteriaProgress(criteria, 1, referencePlayer);
+                break;
             // FIXME: not triggered in code as result, need to implement
             case CRITERIA_TYPE_COMPLETE_RAID:
             case CRITERIA_TYPE_PLAY_ARENA:
@@ -795,7 +800,6 @@ void CriteriaHandler::UpdateCriteria(CriteriaTypes type, uint64 miscValue1 /*= 0
             case CRITERIA_TYPE_SEND_EVENT:
             case CRITERIA_TYPE_COOK_RECIPES_GUILD:
             case CRITERIA_TYPE_EARN_PET_BATTLE_ACHIEVEMENT_POINTS:
-            case CRITERIA_TYPE_SEND_EVENT_SCENARIO:
             case CRITERIA_TYPE_RELEASE_SPIRIT:
             case CRITERIA_TYPE_OWN_PET:
             case CRITERIA_TYPE_GARRISON_COMPLETE_DUNGEON_ENCOUNTER:
@@ -1182,6 +1186,7 @@ bool CriteriaHandler::IsCompletedCriteria(Criteria const* criteria, uint64 requi
         case CRITERIA_TYPE_GAIN_PARAGON_REPUTATION:
         case CRITERIA_TYPE_EARN_HONOR_XP:
         case CRITERIA_TYPE_RELIC_TALENT_UNLOCKED:
+        case CRITERIA_TYPE_SEND_EVENT_SCENARIO:
         case CRITERIA_TYPE_REACH_ACCOUNT_HONOR_LEVEL:
         case CRITERIA_TYPE_HEART_OF_AZEROTH_ARTIFACT_POWER_EARNED:
         case CRITERIA_TYPE_HEART_OF_AZEROTH_LEVEL_REACHED:

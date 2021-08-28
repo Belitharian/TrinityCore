@@ -615,6 +615,14 @@ void InstanceScript::DoSendNotifyToInstance(char const* format, ...)
     }
 }
 
+// Send scenario event
+void InstanceScript::DoSendScenarioEvent(uint32 eventId)
+{
+    if (!instance->GetPlayers().isEmpty())
+        if (Player* player = instance->GetPlayers().begin()->GetSource())
+            player->GetScenario()->SendScenarioEvent(player, eventId);
+}
+
 // Update Achievement Criteria for all players in instance
 void InstanceScript::DoUpdateCriteria(CriteriaTypes type, uint32 miscValue1 /*= 0*/, uint32 miscValue2 /*= 0*/, Unit* unit /*= nullptr*/)
 {

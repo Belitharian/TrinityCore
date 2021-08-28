@@ -35,6 +35,8 @@ Scenario::Scenario(ScenarioData const* scenarioData) : _data(scenarioData), _cur
         SetStep(step);
     else
         TC_LOG_ERROR("scenario", "Scenario::Scenario: Could not launch Scenario (id: %u), found no valid scenario step", _data->Entry->ID);
+
+    _scenarioType = SCENARIO_INSTANCE_TYPE_SCENARIO;
 }
 
 Scenario::~Scenario()
@@ -331,4 +333,9 @@ void Scenario::SendBootPlayer(Player* player)
     WorldPackets::Scenario::ScenarioVacate scenarioBoot;
     scenarioBoot.ScenarioID = _data->Entry->ID;
     player->SendDirectMessage(scenarioBoot.Write());
+}
+
+void Scenario::SendScenarioEvent(Player* player, uint32 eventId)
+{
+    UpdateCriteria(CRITERIA_TYPE_SEND_EVENT_SCENARIO, eventId, 0, 0, nullptr, player);
 }
