@@ -42,6 +42,12 @@ class npc_archmage_fire : public CreatureScript
                 case 0:
                     me->SetFacingTo(0.70f);
                     break;
+                case 1:
+                    me->SetFacingTo(2.14f);
+                    me->SetVisible(false);
+                    break;
+                default:
+                    break;
             }
         }
 

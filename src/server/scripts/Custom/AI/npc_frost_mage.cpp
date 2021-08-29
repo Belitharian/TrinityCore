@@ -52,6 +52,8 @@ class npc_archmage_frost : public CreatureScript
                         DoCastSelf(SPELL_TELEPORT, true);
                     });
                     break;
+                default:
+                    break;
             }
         }
 

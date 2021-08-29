@@ -16,6 +16,11 @@ enum Spells
     SPELL_SUPERNOVA         = 157980,
 };
 
+enum Misc
+{
+    NPC_KINNDY_SPARKSHINE   = 500001,
+};
+
 class npc_archmage_arcane : public CreatureScript
 {
     public:
@@ -27,6 +32,22 @@ class npc_archmage_arcane : public CreatureScript
     {
         npc_archmage_arcaneAI(Creature* creature) : CustomAI(creature)
         {
+        }
+
+        void MovementInform(uint32 /*type*/, uint32 id) override
+        {
+            if (me->GetEntry() != NPC_KINNDY_SPARKSHINE)
+                return;
+
+            switch (id)
+            {
+                case 1:
+                    me->SetFacingTo(4.62f);
+                    me->SetVisible(false);
+                    break;
+                default:
+                    break;
+            }
         }
 
         void JustEngagedWith(Unit* /*who*/) override
