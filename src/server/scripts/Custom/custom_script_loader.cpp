@@ -17,16 +17,22 @@
 
 // This is where scripts' loading functions should be declared:
 void AddSC_battle_for_theramore();
+void AddSC_scenario_battle_for_theramore();
+
 void AddSC_npc_archmage_fire();
 void AddSC_npc_archmage_frost();
 void AddSC_npc_archmage_arcane();
+void AddSC_npc_priest();
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
 void AddCustomScripts()
 {
     AddSC_battle_for_theramore();
+    AddSC_scenario_battle_for_theramore();
+
     AddSC_npc_archmage_fire();
     AddSC_npc_archmage_frost();
     AddSC_npc_archmage_arcane();
+    AddSC_npc_priest();
 }

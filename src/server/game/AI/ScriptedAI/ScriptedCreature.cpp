@@ -366,6 +366,16 @@ Unit* ScriptedAI::DoSelectLowestHpFriendly(float range, uint32 minHPDiff)
     return unit;
 }
 
+Unit* ScriptedAI::DoSelectBelowHpPctFriendly(float range, uint8 minHPDiff)
+{
+    Unit* unit = nullptr;
+    Trinity::FriendlyBelowHpPctInRange u_check(me, range, minHPDiff);
+    Trinity::UnitLastSearcher<Trinity::FriendlyBelowHpPctInRange> searcher(me, unit, u_check);
+    Cell::VisitAllObjects(me, searcher, range);
+
+    return unit;
+}
+
 Unit* ScriptedAI::DoSelectBelowHpPctFriendlyWithEntry(uint32 entry, float range, uint8 minHPDiff, bool excludeSelf)
 {
     Unit* unit = nullptr;

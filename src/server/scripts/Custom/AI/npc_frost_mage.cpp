@@ -13,7 +13,15 @@ enum Spells
     SPELL_ICE_NOVA              = 157997,
     SPELL_COMET_STORM           = 153595,
     SPELL_COMET_STORM_DAMAGE    = 285127,
-    SPELL_COMET_STORM_VISUAL    = 242210
+    SPELL_COMET_STORM_VISUAL    = 242210,
+
+    SPELL_DISSOLVE              = 255295,
+    SPELL_TELEPORT              = 357601
+};
+
+enum Misc
+{
+    NPC_KALECGOS                = 64565
 };
 
 class npc_archmage_frost : public CreatureScript
@@ -27,6 +35,24 @@ class npc_archmage_frost : public CreatureScript
     {
         npc_archmage_frostAI(Creature* creature) : CustomAI(creature)
         {
+        }
+
+        void MovementInform(uint32 /*type*/, uint32 id) override
+        {
+            if (me->GetEntry() != NPC_KALECGOS)
+                return;
+
+            switch (id)
+            {
+                case 0:
+                    me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                    scheduler.Schedule(2s, [this](TaskContext /*context*/)
+                    {
+                        DoCastSelf(SPELL_DISSOLVE);
+                        DoCastSelf(SPELL_TELEPORT, true);
+                    });
+                    break;
+            }
         }
 
         void JustEngagedWith(Unit* /*who*/) override
@@ -70,13 +96,12 @@ class npc_archmage_frost : public CreatureScript
         {
             ScriptedAI::UpdateAI(diff);
 
+            scheduler.Update(diff);
+
             if (!UpdateVictim())
                 return;
 
-            scheduler.Update(diff, [this]
-            {
-                DoMeleeAttackIfReady();
-            });
+            DoMeleeAttackIfReady();
         }
     };
 

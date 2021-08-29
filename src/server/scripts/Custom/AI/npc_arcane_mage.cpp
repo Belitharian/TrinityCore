@@ -14,7 +14,6 @@ enum Spells
 {
     SPELL_ARCANE_BOLT       = 154235,
     SPELL_SUPERNOVA         = 157980,
-    SPELL_POLYMORPH         = 321134,
 };
 
 class npc_archmage_arcane : public CreatureScript
@@ -39,36 +38,11 @@ class npc_archmage_arcane : public CreatureScript
                         DoCast(target, SPELL_SUPERNOVA);
                     supernova.Repeat(14s, 22s);
                 })
-                .Schedule(19s, 24s, [this](TaskContext polymorph)
-                {
-                    if (Unit* target = SelectTarget(SelectAggroTarget::SELECT_TARGET_RANDOM, 0))
-                        DoCast(target, SPELL_POLYMORPH);
-                    polymorph.Repeat(3min);
-                })
-                .Schedule(12s, 18s, [this](TaskContext pyroblast)
-                {
-                    //if (Unit* target = SelectTarget(SelectAggroTarget::SELECT_TARGET_MAXDISTANCE, 0))
-                    //    DoCast(target, SPELL_FLAMESTRIKE);
-                    //pyroblast.Repeat(22s, 35s);
-                })
                 .Schedule(3s, [this](TaskContext arcane_bolt)
                 {
                     DoCastVictim(SPELL_ARCANE_BOLT);
                     arcane_bolt.Repeat(2s);
                 });
-        }
-
-        void UpdateAI(uint32 diff) override
-        {
-            ScriptedAI::UpdateAI(diff);
-
-            if (!UpdateVictim())
-                return;
-
-            scheduler.Update(diff, [this]
-            {
-                DoMeleeAttackIfReady();
-            });
         }
     };
 

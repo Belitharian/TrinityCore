@@ -852,6 +852,24 @@ namespace Trinity
             uint64 i_hp;
     };
 
+    class FriendlyBelowHpPctInRange
+    {
+        public:
+            FriendlyBelowHpPctInRange(Unit const* obj, float range, uint8 pct) : i_obj(obj), i_range(range), i_pct(pct) { }
+
+            bool operator()(Unit* u)
+            {
+                if (u->IsAlive() && u->IsInCombat() && !i_obj->IsHostileTo(u) && i_obj->IsWithinDistInMap(u, i_range) && u->HealthBelowPct(i_pct))
+                    return true;
+                return false;
+            }
+
+        private:
+            Unit const* i_obj;
+            float i_range;
+            uint8 i_pct;
+    };
+
     class FriendlyBelowHpPctEntryInRange
     {
         public:

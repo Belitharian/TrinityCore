@@ -81,11 +81,6 @@ class TC_GAME_API Scenario : public CriteriaHandler
         void SendBootPlayer(Player* player);
         void SendScenarioEvent(Player* player, uint32 eventId);
 
-        inline bool IsInstanceScenarioo() const { return _scenarioType == SCENARIO_INSTANCE_TYPE_INSTANCE_SCENARIO; }
-        InstanceScenario* ToInstanceScenario() { if (IsInstanceScenarioo()) return reinterpret_cast<InstanceScenario*>(this); else return nullptr; }
-        InstanceScenario const* ToInstanceScenario() const { if (IsInstanceScenarioo()) return reinterpret_cast<InstanceScenario const*>(this); else return nullptr; }
-
-
     protected:
         GuidUnorderedSet _players;
 

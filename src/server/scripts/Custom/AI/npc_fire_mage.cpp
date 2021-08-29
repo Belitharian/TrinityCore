@@ -14,6 +14,11 @@ enum Spells
     SPELL_CONFLAGRATION     = 226757
 };
 
+enum Misc
+{
+    NPC_ARCHMAGE_TERVOSH    = 500000
+};
+
 class npc_archmage_fire : public CreatureScript
 {
     public:
@@ -25,6 +30,19 @@ class npc_archmage_fire : public CreatureScript
     {
         npc_archmage_fireAI(Creature* creature) : CustomAI(creature)
         {
+        }
+
+        void MovementInform(uint32 /*type*/, uint32 id) override
+        {
+            if (me->GetEntry() != NPC_ARCHMAGE_TERVOSH)
+                return;
+
+            switch (id)
+            {
+                case 0:
+                    me->SetFacingTo(0.70f);
+                    break;
+            }
         }
 
         void SpellHitTarget(Unit* target, SpellInfo const* spell) override
