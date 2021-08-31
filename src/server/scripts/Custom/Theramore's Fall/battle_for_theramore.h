@@ -9,10 +9,11 @@
 
 #define TERVOSH_PATH_01     6
 #define TERVOSH_PATH_02     10
-
 #define KALECGOS_PATH_01    17
-
 #define KINNDY_PATH_01      16
+#define OFFICER_PATH_01     10
+
+#define PERITH_LOCATION     3
 
 enum BFTData
 {
@@ -21,6 +22,11 @@ enum BFTData
     DATA_ARCHMAGE_TERVOSH,
     DATA_KINNDY_SPARKSHINE,
     DATA_KALECGOS,
+    DATA_PAINED,
+    DATA_PERITH_STORMHOOVE,
+    DATA_THERAMORE_OFFICER,
+
+    DATA_SCENARIO_WAIT_EVENT_01,
 
     // GameObjects
     DATA_PORTAL_TO_STORMWIND
@@ -28,22 +34,103 @@ enum BFTData
 
 enum BFTCreatures
 {
-    NPC_JAINA_PROUDMOORE 	= 64560,
-    NPC_ARCHMAGE_TERVOSH 	= 500000,
-    NPC_KINNDY_SPARKSHINE 	= 500001,
-    NPC_KALECGOS 			= 64565,
-    NPC_INVISIBLE_STALKER   = 32780
+    NPC_JAINA_PROUDMOORE                = 64560,
+    NPC_KALECGOS                        = 64565,
+    NPC_INVISIBLE_STALKER               = 32780,
+    NPC_THERAMORE_OFFICER               = 58913,
+    NPC_THERAMORE_FOOTMAN               = 58612,
+
+    NPC_ARCHMAGE_TERVOSH 	            = 500000,
+    NPC_KINNDY_SPARKSHINE 	            = 500001,
+    NPC_PAINED 	                        = 500002,
+    NPC_PERITH_STORMHOOVE               = 500003
 };
 
 enum BFTGameObjets
 {
-    GOB_PORTAL_TO_STORMWIND = 353823
+    GOB_PORTAL_TO_STORMWIND             = 353823
 };
 
 enum BFTEvents
 {
     EVENT_FIND_JAINA                    = 65800,
     EVENT_LOCALIZE_THE_FOCUSING_IRIS    = 65801,
+    EVENT_WAITING_SOMETHING_HAPPENING   = 65802,
+    EVENT_UNKNOWN_TAUREN                = 65803,
+};
+
+enum BFTTalks
+{
+    SAY_REUNION_1         = 0,
+    SAY_REUNION_2         = 0,
+    SAY_REUNION_3         = 1,
+    SAY_REUNION_4         = 1,
+    SAY_REUNION_5         = 2,
+    SAY_REUNION_6         = 0,
+    SAY_REUNION_7         = 0,
+    SAY_REUNION_8         = 1,
+    SAY_REUNION_9         = 1,
+    SAY_REUNION_9_BIS     = 2,
+    SAY_REUNION_10        = 3,
+    SAY_REUNION_11        = 2,
+    SAY_REUNION_12        = 4,
+    SAY_REUNION_13        = 3,
+    SAY_REUNION_14        = 3,
+    SAY_REUNION_15        = 5,
+    SAY_REUNION_16        = 4,
+    SAY_REUNION_17        = 5,
+
+    SAY_WARN_1            = 0,
+    SAY_WARN_2            = 6,
+    SAY_WARN_3            = 1,
+    SAY_WARN_4            = 2,
+    SAY_WARN_5            = 7,
+    SAY_WARN_6            = 3,
+    SAY_WARN_7            = 4,
+    SAY_WARN_8            = 8,
+    SAY_WARN_9            = 9,
+    SAY_WARN_10           = 10,
+    SAY_WARN_11           = 5,
+    SAY_WARN_12           = 0,
+    SAY_WARN_13           = 11,
+    SAY_WARN_14           = 0,
+    SAY_WARN_15           = 12,
+    SAY_WARN_16           = 1,
+    SAY_WARN_17           = 2,
+    SAY_WARN_18           = 3,
+    SAY_WARN_19           = 13,
+    SAY_WARN_20           = 4,
+    SAY_WARN_21           = 14,
+    SAY_WARN_22           = 5,
+    SAY_WARN_23           = 6,
+    SAY_WARN_24           = 15,
+    SAY_WARN_25           = 7,
+    SAY_WARN_26           = 16,
+    SAY_WARN_27           = 17,
+    SAY_WARN_28           = 18,
+    SAY_WARN_29           = 8,
+    SAY_WARN_30           = 9,
+    SAY_WARN_31           = 19,
+    SAY_WARN_32           = 10,
+    SAY_WARN_33           = 20,
+    SAY_WARN_34           = 11,
+    SAY_WARN_35           = 21,
+    SAY_WARN_36           = 6,
+    SAY_WARN_37           = 22,
+};
+
+struct Location
+{
+    uint32 entry;
+    Position const position;
+    Position const destination;
+};
+
+Location const perithLocation[PERITH_LOCATION] =
+{
+    { NPC_THERAMORE_OFFICER,    { -3733.33f, -4422.51f, 30.51f, 3.92f }, { -3746.61f, -4435.87f, 30.55f, 3.17f } },
+    { NPC_PAINED,               { -3734.16f, -4425.18f, 30.55f, 3.92f }, { -3746.69f, -4437.91f, 30.55f, 3.57f } },
+    { NPC_PERITH_STORMHOOVE,    { -3731.74f, -4422.76f, 30.49f, 3.92f }, { -3744.75f, -4435.91f, 30.55f, 3.49f } }
 };
 
 Position const TervoshPath01[TERVOSH_PATH_01] =
@@ -111,8 +198,24 @@ Position const KalecgosPath01[KALECGOS_PATH_01] =
     { -3685.71f, -4390.25f, 10.67f, 0.45f }
 };
 
+Position const OfficerPath01[OFFICER_PATH_01] =
+{
+    { -3748.30f, -4436.64f, 30.55f, 3.89f },
+    { -3749.04f, -4438.16f, 30.55f, 4.76f },
+    { -3747.74f, -4440.53f, 30.55f, 5.74f },
+    { -3745.61f, -4440.45f, 30.55f, 0.57f },
+    { -3744.42f, -4437.99f, 30.55f, 1.44f },
+    { -3743.96f, -4435.54f, 30.55f, 1.20f },
+    { -3742.57f, -4433.53f, 30.55f, 0.78f },
+    { -3740.16f, -4431.23f, 30.55f, 0.77f },
+    { -3729.92f, -4421.16f, 30.43f, 0.76f },
+    { -3723.88f, -4415.31f, 26.56f, 0.76f }
+};
+
 Position const KinndyPoint01    = { -3748.06f, -4442.12f, 30.55f, 1.24f };
 Position const JainaPoint01     = { -3751.32f, -4438.13f, 30.55f, 0.40f };
+Position const PainedPoint01    = { -3747.93f, -4442.05f, 30.54f, 1.54f };
+Position const OfficerPoint01   = { -3748.43f, -4432.99f, 30.54f, 4.66f };
 
 template <class AI, class T>
 inline AI* GetBattleForTheramoreAI(T* obj)

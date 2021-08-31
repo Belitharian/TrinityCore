@@ -9,6 +9,12 @@
 #include "Log.h"
 #include "battle_for_theramore.h"
 
+enum class Phases
+{
+    Normal,
+    Timed
+};
+
 class scenario_battle_for_theramore : public InstanceMapScript
 {
     public:
@@ -18,7 +24,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
     struct scenario_battle_for_theramore_InstanceScript : public InstanceScript
     {
-        scenario_battle_for_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map)
+        scenario_battle_for_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map), phase(Phases::Normal)
         {
             SetHeaders(DataHeader);
         }
@@ -54,6 +60,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 case NPC_KINNDY_SPARKSHINE:
                     kinndyGUID = creature->GetGUID();
                     break;
+                case NPC_PAINED:
+                    painedGUID = creature->GetGUID();
+                    break;
+                case NPC_PERITH_STORMHOOVE:
+                    perithGUID = creature->GetGUID();
+                    break;
+                case NPC_THERAMORE_OFFICER:
+                    officerGUID = creature->GetGUID();
+                    break;
                 default:
                     break;
             }
@@ -73,6 +88,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     return tervoshGUID;
                 case DATA_KINNDY_SPARKSHINE:
                     return kinndyGUID;
+                case DATA_PAINED:
+                    return painedGUID;
+                case DATA_PERITH_STORMHOOVE:
+                    return perithGUID;
+                case DATA_THERAMORE_OFFICER:
+                    return officerGUID;
                 default:
                     break;
             }
@@ -80,11 +101,39 @@ class scenario_battle_for_theramore : public InstanceMapScript
             return ObjectGuid::Empty;
         }
 
+        void SetData(uint32 dataId, uint32 /*value*/) override
+        {
+            if (dataId == DATA_SCENARIO_WAIT_EVENT_01)
+            {
+                phase = Phases::Timed;
+                scheduler.Schedule(Seconds(10s), [this](TaskContext /*context*/)
+                {
+                    DoSendScenarioEvent(EVENT_WAITING_SOMETHING_HAPPENING);
+                    if (Creature* jaina = instance->GetCreature(jainaGUID))
+                        jaina->AI()->DoAction(24);
+                    phase = Phases::Normal;
+                });
+            }
+        }
+
+        void Update(uint32 diff) override
+        {
+            if (phase == Phases::Timed)
+            {
+                scheduler.Update(diff);
+            }
+        }
+
         private:
+        TaskScheduler scheduler;
+        Phases phase;
         ObjectGuid jainaGUID;
         ObjectGuid kalecgosGUID;
         ObjectGuid tervoshGUID;
         ObjectGuid kinndyGUID;
+        ObjectGuid perithGUID;
+        ObjectGuid painedGUID;
+        ObjectGuid officerGUID;
         ObjectGuid portalGUID;
     };
 
