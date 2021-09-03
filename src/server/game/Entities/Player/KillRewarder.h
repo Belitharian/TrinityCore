@@ -30,6 +30,7 @@ public:
     KillRewarder(Player* killer, Unit* victim, bool isBattleGround);
 
     void Reward();
+    void Reward(uint32 entry);
 
 private:
     void _InitXP(Player* player);

@@ -9,12 +9,6 @@
 #include "Log.h"
 #include "battle_for_theramore.h"
 
-enum class Phases
-{
-    Normal,
-    Timed
-};
-
 class scenario_battle_for_theramore : public InstanceMapScript
 {
     public:
@@ -24,7 +18,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
     struct scenario_battle_for_theramore_InstanceScript : public InstanceScript
     {
-        scenario_battle_for_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map), phase(Phases::Normal)
+        scenario_battle_for_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map), phase(BFTPhases::Normal)
         {
             SetHeaders(DataHeader);
         }
@@ -69,6 +63,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 case NPC_THERAMORE_OFFICER:
                     officerGUID = creature->GetGUID();
                     break;
+                case NPC_THERAMORE_CITIZEN_MALE:
+                case NPC_THERAMORE_CITIZEN_FEMALE:
+                    if (phase == BFTPhases::Evacuation)
+                        break;
+                    creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                    citizens.push_back(creature->GetGUID());
+                    break;
                 default:
                     break;
             }
@@ -101,24 +102,51 @@ class scenario_battle_for_theramore : public InstanceMapScript
             return ObjectGuid::Empty;
         }
 
-        void SetData(uint32 dataId, uint32 /*value*/) override
+        void SetData(uint32 dataId, uint32 value) override
         {
-            if (dataId == DATA_SCENARIO_WAIT_EVENT_01)
+            if (dataId == DATA_SCENARIO_PHASE)
             {
-                phase = Phases::Timed;
-                scheduler.Schedule(Seconds(10s), [this](TaskContext /*context*/)
+                phase = (BFTPhases)value;
+                switch (phase)
                 {
-                    DoSendScenarioEvent(EVENT_WAITING_SOMETHING_HAPPENING);
-                    if (Creature* jaina = instance->GetCreature(jainaGUID))
-                        jaina->AI()->DoAction(24);
-                    phase = Phases::Normal;
-                });
+                    case BFTPhases::Timed:
+                        scheduler.Schedule(Seconds(10s), [this](TaskContext /*context*/)
+                        {
+                            DoSendScenarioEvent(EVENT_WAITING_SOMETHING_HAPPENING);
+                            if (Creature* jaina = instance->GetCreature(jainaGUID))
+                                jaina->AI()->DoAction(24);
+                            phase = BFTPhases::Normal;
+                        });
+                        break;
+                    case BFTPhases::Evacuation:
+                        for (uint8 i = 0; i < citizens.size(); i++)
+                        {
+                            if (Creature* citizen = instance->GetCreature(citizens[i]))
+                            {
+                                if (Creature* faithful = citizen->FindNearestCreature(NPC_THERAMORE_FAITHFUL, 15.f))
+                                    continue;
+
+                                citizen->SetNpcFlags(UNIT_NPC_FLAG_GOSSIP);
+                            }
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        uint32 GetData(uint32 dataId) const override
+        {
+            if (dataId == DATA_SCENARIO_PHASE)
+            {
+                return (uint32)phase;
             }
         }
 
         void Update(uint32 diff) override
         {
-            if (phase == Phases::Timed)
+            if (phase == BFTPhases::Timed)
             {
                 scheduler.Update(diff);
             }
@@ -126,7 +154,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
         private:
         TaskScheduler scheduler;
-        Phases phase;
+        BFTPhases phase;
         ObjectGuid jainaGUID;
         ObjectGuid kalecgosGUID;
         ObjectGuid tervoshGUID;
@@ -135,6 +163,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
         ObjectGuid painedGUID;
         ObjectGuid officerGUID;
         ObjectGuid portalGUID;
+        std::vector<ObjectGuid> citizens;
     };
 
     InstanceScript* GetInstanceScript(InstanceMap* map) const override

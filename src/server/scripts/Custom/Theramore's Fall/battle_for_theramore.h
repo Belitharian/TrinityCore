@@ -9,11 +9,20 @@
 
 #define TERVOSH_PATH_01     6
 #define TERVOSH_PATH_02     10
+#define TERVOSH_PATH_03     16
 #define KALECGOS_PATH_01    17
 #define KINNDY_PATH_01      16
+#define KINNDY_PATH_02      10
 #define OFFICER_PATH_01     10
 
 #define PERITH_LOCATION     3
+
+enum class BFTPhases
+{
+    Normal,
+    Timed,
+    Evacuation
+};
 
 enum BFTData
 {
@@ -26,7 +35,7 @@ enum BFTData
     DATA_PERITH_STORMHOOVE,
     DATA_THERAMORE_OFFICER,
 
-    DATA_SCENARIO_WAIT_EVENT_01,
+    DATA_SCENARIO_PHASE,
 
     // GameObjects
     DATA_PORTAL_TO_STORMWIND
@@ -39,6 +48,9 @@ enum BFTCreatures
     NPC_INVISIBLE_STALKER               = 32780,
     NPC_THERAMORE_OFFICER               = 58913,
     NPC_THERAMORE_FOOTMAN               = 58612,
+    NPC_THERAMORE_FAITHFUL              = 59595,
+    NPC_THERAMORE_CITIZEN_MALE          = 143773,
+    NPC_THERAMORE_CITIZEN_FEMALE        = 143776,
 
     NPC_ARCHMAGE_TERVOSH 	            = 500000,
     NPC_KINNDY_SPARKSHINE 	            = 500001,
@@ -46,8 +58,12 @@ enum BFTCreatures
     NPC_PERITH_STORMHOOVE               = 500003
 };
 
-enum BFTGameObjets
+enum BFTMisc
 {
+    // Spells
+    SPELL_COSMETIC_LARGE_FIRE           = 277763,
+
+    // GameObjects
     GOB_PORTAL_TO_STORMWIND             = 353823
 };
 
@@ -157,6 +173,26 @@ Position const TervoshPath02[TERVOSH_PATH_02] =
     { -3760.45f, -4442.08f, 35.21f, 2.08f }
 };
 
+Position const TervoshPath03[TERVOSH_PATH_03] =
+{
+    { -3761.81f, -4441.01f, 35.21f, 2.67f },
+    { -3762.99f, -4440.28f, 35.21f, 2.37f },
+    { -3763.56f, -4437.21f, 35.21f, 1.33f },
+    { -3761.65f, -4434.85f, 34.83f, 0.61f },
+    { -3759.32f, -4433.47f, 33.82f, 0.45f },
+    { -3756.29f, -4432.44f, 32.74f, 0.16f },
+    { -3752.55f, -4432.24f, 31.40f, 6.17f },
+    { -3749.87f, -4433.35f, 30.55f, 5.68f },
+    { -3747.98f, -4435.74f, 30.55f, 5.05f },
+    { -3747.66f, -4438.79f, 30.55f, 4.53f },
+    { -3748.67f, -4441.65f, 30.55f, 4.46f },
+    { -3748.51f, -4444.42f, 30.55f, 4.94f },
+    { -3748.51f, -4447.08f, 30.55f, 4.31f },
+    { -3750.97f, -4448.87f, 30.55f, 3.45f },
+    { -3753.54f, -4449.37f, 30.55f, 3.18f },
+    { -3757.23f, -4449.74f, 30.55f, 4.07f }
+};
+
 Position const KinndyPath01[KINNDY_PATH_01] =
 {
     { -3747.85f, -4440.07f, 30.55f, 1.36f },
@@ -175,6 +211,20 @@ Position const KinndyPath01[KINNDY_PATH_01] =
     { -3758.91f, -4455.53f, 37.99f, 2.70f },
     { -3762.38f, -4452.92f, 37.99f, 2.33f },
     { -3762.73f, -4450.42f, 37.99f, 4.62f }
+};
+
+Position const KinndyPath02[KINNDY_PATH_02] =
+{
+    { -3761.76f, -4453.74f, 37.99f, 5.44f },
+    { -3759.69f, -4455.62f, 37.99f, 5.65f },
+    { -3756.62f, -4457.10f, 37.99f, 6.08f },
+    { -3752.35f, -4457.36f, 36.91f, 0.10f },
+    { -3747.91f, -4456.21f, 35.28f, 0.51f },
+    { -3744.90f, -4453.93f, 33.98f, 0.79f },
+    { -3742.48f, -4450.88f, 32.63f, 1.10f },
+    { -3741.36f, -4446.71f, 31.06f, 1.51f },
+    { -3742.50f, -4441.13f, 30.55f, 1.95f },
+    { -3745.87f, -4443.12f, 30.55f, 3.83f }
 };
 
 Position const KalecgosPath01[KALECGOS_PATH_01] =
@@ -216,6 +266,7 @@ Position const KinndyPoint01    = { -3748.06f, -4442.12f, 30.55f, 1.24f };
 Position const JainaPoint01     = { -3751.32f, -4438.13f, 30.55f, 0.40f };
 Position const PainedPoint01    = { -3747.93f, -4442.05f, 30.54f, 1.54f };
 Position const OfficerPoint01   = { -3748.43f, -4432.99f, 30.54f, 4.66f };
+Position const QuillPoint01     = { -3751.32f, -4438.13f, 31.26f, 3.33f };
 
 template <class AI, class T>
 inline AI* GetBattleForTheramoreAI(T* obj)

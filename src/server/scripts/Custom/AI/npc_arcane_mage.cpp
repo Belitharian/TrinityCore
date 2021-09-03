@@ -45,6 +45,9 @@ class npc_archmage_arcane : public CreatureScript
                     me->SetFacingTo(4.62f);
                     me->SetVisible(false);
                     break;
+                case 2:
+                    me->SetFacingTo(1.24f);
+                    break;
                 default:
                     break;
             }

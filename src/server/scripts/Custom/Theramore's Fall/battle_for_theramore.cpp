@@ -1,3 +1,4 @@
+#include "boost/range/algorithm/reverse.hpp"
 #include "ScriptMgr.h"
 #include "battle_for_theramore.h"
 #include "ObjectAccessor.h"
@@ -5,19 +6,10 @@
 #include "GameObject.h"
 #include "Scenario.h"
 #include "ScriptedCreature.h"
+#include "ScriptedGossip.h"
 #include "InstanceScript.h"
+#include "KillRewarder.h"
 #include "Log.h"
-
-enum class Phases
-{
-    Normal,
-    Started,
-};
-
-enum Spells
-{
-    SPELL_CLOSE_PORTAL = 203542
-};
 
 class npc_jaina_theramore : public CreatureScript
 {
@@ -26,9 +18,29 @@ public:
 
     struct npc_jaina_theramoreAI: public ScriptedAI
     {
+        enum class Phases
+        {
+            Normal,
+            Started,
+        };
+
+        enum Spells
+        {
+            SPELL_CLOSE_PORTAL          = 203542,
+            SPELL_MAGIC_QUILL           = 171980,
+            SPELL_ARCANE_CANALISATION   = 288451
+        };
+
         npc_jaina_theramoreAI(Creature* creature) : ScriptedAI(creature), eventId(1)
         {
             phase = Phases::Normal;
+            tervosh = nullptr;
+            kinndy = nullptr;
+            kalecgos = nullptr;
+            pained = nullptr;
+            perith = nullptr;
+            officer = nullptr;
+
             Initialize();
         }
 
@@ -74,6 +86,11 @@ public:
                         tervosh->NearTeleportTo(TervoshPath02[TERVOSH_PATH_02 - 1]);
                         kinndy->NearTeleportTo(KinndyPath01[KINNDY_PATH_01 - 1]);
                         break;
+                    case 70:
+                        instance->DoSendScenarioEvent(EVENT_FIND_JAINA);
+                        instance->DoSendScenarioEvent(EVENT_LOCALIZE_THE_FOCUSING_IRIS);
+                        instance->DoSendScenarioEvent(EVENT_WAITING_SOMETHING_HAPPENING);
+                        break;
                 }
 
                 events.ScheduleEvent(value, 1s);
@@ -86,7 +103,7 @@ public:
             {
                 case 0:
                     instance->DoSendScenarioEvent(EVENT_LOCALIZE_THE_FOCUSING_IRIS);
-                    instance->SetData(DATA_SCENARIO_WAIT_EVENT_01, 0U);
+                    instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Timed);
                     break;
                 default:
                     break;
@@ -350,12 +367,12 @@ public:
                     case 37:
                         Talk(me, SAY_WARN_10);
                         ClearTarget();
-                        pained->GetMotionMaster()->MovePoint(0, PainedPoint01, true, PainedPoint01.GetOrientation());
+                        pained->GetMotionMaster()->MovePoint(1, PainedPoint01, true, PainedPoint01.GetOrientation());
                         Next(2s);
                         break;
                     case 38:
                         Talk(pained, SAY_WARN_11);
-                        officer->GetMotionMaster()->MoveCloserAndStop(0, me, 3.0f);
+                        officer->GetMotionMaster()->MoveCloserAndStop(1, me, 3.0f);
                         Next(2s);
                         break;
                     case 39:
@@ -370,15 +387,143 @@ public:
                         break;
                     case 41:
                         ClearTarget();
-                        officer->GetMotionMaster()->MoveSmoothPath(0, OfficerPath01, OFFICER_PATH_01, true);
-                        officer->DespawnOrUnsummon(10s);
+                        officer->GetMotionMaster()->MoveSmoothPath(2, OfficerPath01, OFFICER_PATH_01, true);
+                        officer->DespawnOrUnsummon(15s);
                         perith->GetMotionMaster()->MoveCloserAndStop(0, me, 3.0f);
                         Next(3s);
                         break;
                     case 42:
                         Talk(perith, SAY_WARN_14);
+                        perith->SetTarget(me->GetGUID());
                         SetTarget(perith);
                         Next(5s);
+                        break;
+                    case 43:
+                        Talk(me, SAY_WARN_15);
+                        Next(4s);
+                        break;
+                    case 44:
+                        Talk(perith, SAY_WARN_16);
+                        Next(10s);
+                        break;
+                    case 45:
+                        Talk(perith, SAY_WARN_17);
+                        Next(10s);
+                        break;
+                    case 46:
+                        Talk(perith, SAY_WARN_18);
+                        Next(10s);
+                        break;
+                    case 47:
+                        Talk(me, SAY_WARN_19);
+                        Next(5s);
+                        break;
+                    case 48:
+                        Talk(perith, SAY_WARN_20);
+                        Next(5s);
+                        break;
+                    case 49:
+                        Talk(me, SAY_WARN_21);
+                        Next(2s);
+                        break;
+                    case 50:
+                        Talk(perith, SAY_WARN_22);
+                        Next(12s);
+                        break;
+                    case 51:
+                        Talk(perith, SAY_WARN_23);
+                        Next(8s);
+                        break;
+                    case 52:
+                        Talk(me, SAY_WARN_24);
+                        Next(10s);
+                        break;
+                    case 53:
+                        Talk(perith, SAY_WARN_25);
+                        Next(11s);
+                        break;
+                    case 54:
+                        Talk(perith, SAY_WARN_26);
+                        Next(3s);
+                        break;
+                    case 55:
+                        me->SetTarget(ObjectGuid::Empty);
+                        me->SetFacingTo(3.33f);
+                        Next(2s);
+                        break;
+                    case 56:
+                        Talk(me, SAY_WARN_27);
+                        DoCast(SPELL_ARCANE_CANALISATION);
+                        if (Creature* quill = me->SummonCreature(NPC_INVISIBLE_STALKER, QuillPoint01, TEMPSUMMON_TIMED_DESPAWN, 10s))
+                            quill->AddAura(SPELL_MAGIC_QUILL, quill);
+                        Next(10s);
+                        break;
+                    case 57:
+                        me->RemoveAurasDueToSpell(SPELL_ARCANE_CANALISATION);
+                        me->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        me->SetFacingToObject(perith);
+                        Next(2s);
+                        break;
+                    case 58:
+                        Talk(me, SAY_WARN_28);
+                        Next(3s);
+                        break;
+                    case 59:
+                        Talk(perith, SAY_WARN_29);
+                        Next(5s);
+                        break;
+                    case 60:
+                        Talk(perith, SAY_WARN_30);
+                        Next(8s);
+                        break;
+                    case 61:
+                        Talk(me, SAY_WARN_31);
+                        Next(5s);
+                        break;
+                    case 62:
+                        Talk(perith, SAY_WARN_32);
+                        Next(4s);
+                        break;
+                    case 63:
+                        Talk(me, SAY_WARN_33);
+                        Next(5s);
+                        break;
+                    case 64:
+                        Talk(perith, SAY_WARN_34);
+                        Next(4s);
+                        break;
+                    case 65:
+                        ClearTarget();
+                        pained->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        perith->GetMotionMaster()->MoveSmoothPath(1, OfficerPath01, OFFICER_PATH_01, true);
+                        perith->DespawnOrUnsummon(15s);
+                        Next(5s);
+                        break;
+                    case 66:
+                        Talk(me, SAY_WARN_35);
+                        me->SetFacingToObject(pained);
+                        pained->SetFacingToObject(me);
+                        Next(5s);
+                        break;
+                    case 67:
+                        Talk(pained, SAY_WARN_36);
+                        Next(3s);
+                        break;
+                    case 68:
+                        Talk(me, SAY_WARN_37);
+                        Next(3s);
+                        break;
+                    case 69:
+                        me->SetFacingTo(0.39f);
+                        pained->GetMotionMaster()->MoveSmoothPath(2, KinndyPath01, KINNDY_PATH_01, true);
+                        break;
+                    case 70:
+                        instance->DoSendScenarioEvent(EVENT_UNKNOWN_TAUREN);
+                        instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Evacuation);
+                        kinndy->SetVisible(true);
+                        kinndy->GetMotionMaster()->MoveSmoothPath(2, KinndyPath02, KINNDY_PATH_02, true);
+                        tervosh->SetVisible(true);
+                        tervosh->GetMotionMaster()->MoveSmoothPath(2, TervoshPath03, TERVOSH_PATH_03, true);
                         break;
                     default:
                         break;
@@ -409,42 +554,59 @@ public:
         {
             ObjectGuid guid = creature->GetGUID();
 
-            if (kinndy->GetGUID() != guid)
-                kinndy->SetTarget(guid);
+            if (me->GetGUID() != guid) me->SetTarget(guid);
 
-            if (tervosh->GetGUID() != guid)
-                tervosh->SetTarget(guid);
+            if (Creature* kinndy = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_KINNDY_SPARKSHINE)))
+            {
+                if (kinndy->GetGUID() != guid) kinndy->SetTarget(guid);
+            }
 
-            if (kalecgos->GetGUID() != guid)
-                kalecgos->SetTarget(guid);
+            if (Creature* tervosh = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_ARCHMAGE_TERVOSH)))
+            {
+                if (tervosh->GetGUID() != guid) tervosh->SetTarget(guid);
+            }
 
-            if (pained && pained->GetGUID() != guid)
-                pained->SetTarget(guid);
+            if (Creature* kalecgos = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_KALECGOS)))
+            {
+                if (kalecgos->GetGUID() != guid) kalecgos->SetTarget(guid);
+            }
 
-            if (perith && perith->GetGUID() != guid)
-                perith->SetTarget(guid);
+            if (Creature* pained = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_PAINED)))
+            {
+                if (pained->GetGUID() != guid) pained->SetTarget(guid);
+            }
 
-            if (officer && officer->GetGUID() != guid)
-                officer->SetTarget(guid);
+            if (Creature* perith = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_PERITH_STORMHOOVE)))
+            {
+                if (perith->GetGUID() != guid) perith->SetTarget(guid);
+            }
 
-            if (me->GetGUID() != guid)
-                me->SetTarget(guid);
+            if (Creature* officer = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_THERAMORE_OFFICER)))
+            {
+                if (officer->GetGUID() != guid) officer->SetTarget(guid);
+            }
         }
 
         void ClearTarget()
         {
-            kinndy->SetTarget(ObjectGuid::Empty);
-            tervosh->SetTarget(ObjectGuid::Empty);
-            kalecgos->SetTarget(ObjectGuid::Empty);
             me->SetTarget(ObjectGuid::Empty);
 
-            if (pained)
+            if (Creature* kinndy = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_KINNDY_SPARKSHINE)))
+                kinndy->SetTarget(ObjectGuid::Empty);
+
+            if (Creature* tervosh = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_ARCHMAGE_TERVOSH)))
+                tervosh->SetTarget(ObjectGuid::Empty);
+
+            if (Creature* kalecgos = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_KALECGOS)))
+                kalecgos->SetTarget(ObjectGuid::Empty);
+
+            if (Creature* pained = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_PAINED)))
                 pained->SetTarget(ObjectGuid::Empty);
 
-            if (perith)
+            if (Creature* perith = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_PERITH_STORMHOOVE)))
                 perith->SetTarget(ObjectGuid::Empty);
 
-            if (officer)
+            if (Creature* officer = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_THERAMORE_OFFICER)))
                 officer->SetTarget(ObjectGuid::Empty);
         }
 
@@ -476,7 +638,146 @@ public:
     }
 };
 
+class npc_pained : public CreatureScript
+{
+    public:
+    npc_pained() : CreatureScript("npc_pained")
+    {
+    }
+
+    struct npc_painedAI : public ScriptedAI
+    {
+        npc_painedAI(Creature* creature) : ScriptedAI(creature)
+        {
+            instance = me->GetInstanceScript();
+        }
+
+        InstanceScript* instance;
+
+        void MovementInform(uint32 /*type*/, uint32 id) override
+        {
+            switch (id)
+            {
+                case 2:
+                    me->SetVisible(false);
+                    if (Creature* jaina = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_JAINA_PROUDMOORE)))
+                        jaina->AI()->DoAction(70);
+                    break;
+                default:
+                    break;
+            }
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return GetBattleForTheramoreAI<npc_painedAI>(creature);
+    }
+};
+
+class npc_theramore_citizen : public CreatureScript
+{
+    public:
+    npc_theramore_citizen() : CreatureScript("npc_theramore_citizen")
+    {
+    }
+
+    struct npc_theramore_citizenAI : public ScriptedAI
+    {
+        enum Misc
+        {
+            GOSSIP_MENU_DEFAULT             = 65000,
+            NPC_THERAMORE_CITIZEN_CREDIT    = 500005
+        };
+
+        npc_theramore_citizenAI(Creature* creature) : ScriptedAI(creature)
+        {
+            instance = creature->GetInstanceScript();
+        }
+
+        TaskScheduler scheduler;
+        InstanceScript* instance;
+
+        void MovementInform(uint32 /*type*/, uint32 id) override
+        {
+            if (id == 0)
+            {
+                me->SetVisible(false);
+            }
+        }
+
+        bool GossipHello(Player* player) override
+        {
+            player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
+            player->SendPreparedGossip(me);
+            return true;
+        }
+
+        bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
+        {
+            ClearGossipMenuFor(player);
+
+            switch (gossipListId)
+            {
+                case 0:
+                {
+                    me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                    me->SetEmoteState(EMOTE_STATE_NONE);
+                    scheduler.Schedule(5ms, [this, player](TaskContext context)
+                    {
+                        switch (context.GetRepeatCounter())
+                        {
+                            case 0:
+                                me->SetTarget(player->GetGUID());
+                                me->SetWalk(false);
+                                context.Repeat(1s);
+                                break;
+                            case 1:
+                                Talk(0);
+                                context.Repeat(5s);
+                                break;
+                            case 2:
+                                me->SetTarget(ObjectGuid::Empty);
+                                if (Creature* stalker = GetClosestCreatureWithEntry(me, NPC_INVISIBLE_STALKER, 35.f))
+                                    me->GetMotionMaster()->MovePoint(0, stalker->GetPosition());
+                                context.Repeat(1s);
+                                break;
+                            case 3:
+                                KillRewarder(player, me, false).Reward(NPC_THERAMORE_CITIZEN_CREDIT);
+                                break;
+                            default:
+                                break;
+                        }
+                    });
+                    break;
+                }
+            }
+
+            CloseGossipMenuFor(player);
+            return true;
+        }
+
+        void Reset() override
+        {
+            me->SetVisible(true);
+            scheduler.CancelAll();
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            scheduler.Update(diff);
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return GetBattleForTheramoreAI<npc_theramore_citizenAI>(creature);
+    }
+};
+
 void AddSC_battle_for_theramore()
 {
     new npc_jaina_theramore();
+    new npc_pained();
+    new npc_theramore_citizen();
 }

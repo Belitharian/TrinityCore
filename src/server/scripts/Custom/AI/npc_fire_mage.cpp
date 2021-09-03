@@ -46,6 +46,10 @@ class npc_archmage_fire : public CreatureScript
                     me->SetFacingTo(2.14f);
                     me->SetVisible(false);
                     break;
+                case 2:
+                    me->SetFacingTo(4.05);
+                    me->SetEmoteState(EMOTE_STATE_READ);
+                    break;
                 default:
                     break;
             }
