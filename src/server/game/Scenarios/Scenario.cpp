@@ -21,6 +21,8 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "InstanceScenario.h"
+#include "InstanceScript.h"
 #include "ScenarioMgr.h"
 #include "ScenarioPackets.h"
 
@@ -195,6 +197,15 @@ bool Scenario::CanCompleteCriteriaTree(CriteriaTree const* tree)
 
 void Scenario::CompletedCriteriaTree(CriteriaTree const* tree, Player* /*referencePlayer*/)
 {
+    if (InstanceScenario* instanceScenario = reinterpret_cast<InstanceScenario*>(this))
+    {
+        if (InstanceMap* instanceMap = instanceScenario->GetMap()->ToInstanceMap())
+        {
+            if (InstanceScript* instanceScript = instanceMap->GetInstanceScript())
+                instanceScript->OnCompletedCriteriaTree(tree);
+        }
+    }
+
     ScenarioStepEntry const* step = tree->ScenarioStep;
     if (!step)
         return;

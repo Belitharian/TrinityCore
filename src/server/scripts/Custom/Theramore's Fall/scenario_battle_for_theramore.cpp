@@ -1,5 +1,6 @@
 #include "GameObject.h"
 #include "PhasingHandler.h"
+#include "CriteriaHandler.h"
 #include "Map.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
@@ -23,6 +24,39 @@ class scenario_battle_for_theramore : public InstanceMapScript
             SetHeaders(DataHeader);
         }
 
+        void OnCompletedCriteriaTree(CriteriaTree const* tree) override
+        {
+            switch (tree->ID)
+            {
+                case CRITERIA_TREE_EVACUATION:
+                    if (Creature* jaina = instance->GetCreature(jainaGUID))
+                    {
+                        jaina->NearTeleportTo(JainaPoint02);
+                        jaina->SetHomePosition(JainaPoint02);
+                        jaina->AI()->SetData(DATA_SCENARIO_PHASE, 2);
+                    }
+                    if (Creature* tervosh = instance->GetCreature(tervoshGUID))
+                    {
+                        tervosh->NearTeleportTo(TervoshPoint01);
+                        tervosh->SetHomePosition(TervoshPoint01);
+                        tervosh->CastSpell(tervosh, SPELL_COSMETIC_FIRE_LIGHT);
+                    }
+                    if (Creature* kinndy = instance->GetCreature(kinndyGUID))
+                    {
+                        kinndy->NearTeleportTo(KinndyPoint02);
+                        kinndy->SetHomePosition(KinndyPoint02);
+                    }
+                    if (Creature* kalecgos = instance->GetCreature(kalecgosGUID))
+                    {
+                        kalecgos->NearTeleportTo(KalecgosPoint01);
+                        kalecgos->SetHomePosition(KalecgosPoint01);
+                        kalecgos->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                        kalecgos->RemoveAllAuras();
+                    }
+                    break;
+            }
+        }
+
         void OnGameObjectCreate(GameObject* go) override
         {
             switch (go->GetEntry())
@@ -31,7 +65,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     go->SetLootState(GO_READY);
                     go->UseDoorOrButton();
                     go->SetFlags(GO_FLAG_NOT_SELECTABLE);
-                    portalGUID = go->GetGUID();
+                    stormwindGUID = go->GetGUID();
+                    break;
+                case GOB_PORTAL_TO_DALARAN:
+                    go->SetLootState(GO_READY);
+                    go->UseDoorOrButton();
+                    go->SetFlags(GO_FLAG_NOT_SELECTABLE);
+                    dalaranGUID = go->GetGUID();
                     break;
                 default:
                     break;
@@ -63,6 +103,21 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 case NPC_THERAMORE_OFFICER:
                     officerGUID = creature->GetGUID();
                     break;
+                case NPC_RHONIN:
+                    rhoninGUID = creature->GetGUID();
+                    break;
+                case NPC_VEREESA_WINDRUNNER:
+                    vereesaGUID = creature->GetGUID();
+                    break;
+                case NPC_THALEN_SONGWEAVER:
+                    thalenGUID = creature->GetGUID();
+                    break;
+                case NPC_HEDRIC_EVENCANE:
+                    hedricGUID = creature->GetGUID();
+                    break;
+                case NPC_ALLIANCE_PEASANT:
+                    peasants.push_back(creature->GetGUID());
+                    break;
                 case NPC_THERAMORE_CITIZEN_MALE:
                 case NPC_THERAMORE_CITIZEN_FEMALE:
                     if (phase == BFTPhases::Evacuation)
@@ -80,7 +135,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
             switch (type)
             {
                 case DATA_PORTAL_TO_STORMWIND:
-                    return portalGUID;
+                    return stormwindGUID;
+                case DATA_PORTAL_TO_DALARAN:
+                    return dalaranGUID;
                 case DATA_JAINA_PROUDMOORE:
                     return jainaGUID;
                 case DATA_KALECGOS:
@@ -95,6 +152,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     return perithGUID;
                 case DATA_THERAMORE_OFFICER:
                     return officerGUID;
+                case DATA_RHONIN:
+                    return rhoninGUID;
+                case DATA_VEREESA_WINDRUNNER:
+                    return vereesaGUID;
+                case DATA_THALEN_SONGWEAVER:
+                    return thalenGUID;
+                case DATA_HEDRIC_EVENCANE:
+                    return hedricGUID;
                 default:
                     break;
             }
@@ -110,7 +175,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 switch (phase)
                 {
                     case BFTPhases::Timed:
-                        scheduler.Schedule(Seconds(10s), [this](TaskContext /*context*/)
+                        scheduler.Schedule(10s, [this](TaskContext /*context*/)
                         {
                             DoSendScenarioEvent(EVENT_WAITING_SOMETHING_HAPPENING);
                             if (Creature* jaina = instance->GetCreature(jainaGUID))
@@ -130,6 +195,33 @@ class scenario_battle_for_theramore : public InstanceMapScript
                             }
                         }
                         break;
+                    case BFTPhases::Battle:
+                        for (uint8 i = 0; i < citizens.size(); i++)
+                        {
+                            if (Creature* citizen = instance->GetCreature(citizens[i]))
+                                citizen->SetVisible(false);
+                        }
+                        for (uint8 i = 0; i < peasants.size(); i++)
+                        {
+                            if (Creature* peasant = instance->GetCreature(peasants[i]))
+                            {
+                                if (roll_chance_i(30))
+                                    peasant->SetVisible(false);
+                                else
+                                {
+                                    peasant->AddUnitFlag(UNIT_FLAG_IMMUNE_TO_NPC);
+                                    peasant->AddUnitFlag(UNIT_FLAG_IMMUNE_TO_PC);
+                                    peasant->AddUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
+                                    peasant->AddUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
+                                }
+                            }
+                        }
+                        scheduler.Schedule(10s, [this](TaskContext camera_shake)
+                        {
+                            DoCastSpellOnPlayers(SPELL_CAMERA_SHAKE_VOLCANO);
+                            camera_shake.Repeat(8s, 32s);
+                        });
+                        break;
                     default:
                         break;
                 }
@@ -146,7 +238,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
         void Update(uint32 diff) override
         {
-            if (phase == BFTPhases::Timed)
+            if (phase == BFTPhases::Timed || phase == BFTPhases::Battle)
             {
                 scheduler.Update(diff);
             }
@@ -162,8 +254,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
         ObjectGuid perithGUID;
         ObjectGuid painedGUID;
         ObjectGuid officerGUID;
-        ObjectGuid portalGUID;
+        ObjectGuid rhoninGUID;
+        ObjectGuid vereesaGUID;
+        ObjectGuid thalenGUID;
+        ObjectGuid hedricGUID;
+        ObjectGuid stormwindGUID;
+        ObjectGuid dalaranGUID;
         std::vector<ObjectGuid> citizens;
+        std::vector<ObjectGuid> peasants;
     };
 
     InstanceScript* GetInstanceScript(InstanceMap* map) const override

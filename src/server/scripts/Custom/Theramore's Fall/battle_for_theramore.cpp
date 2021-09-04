@@ -22,16 +22,21 @@ public:
         {
             Normal,
             Started,
+            Preparation,
+            Battle
         };
 
         enum Spells
         {
+            SPELL_TELEPORT_DUMMY        = 51347,
             SPELL_CLOSE_PORTAL          = 203542,
             SPELL_MAGIC_QUILL           = 171980,
-            SPELL_ARCANE_CANALISATION   = 288451
+            SPELL_ARCANE_CANALISATION   = 288451,
+            SPELL_VANISH                = 342048,
+            SPELL_MASS_TELEPORT         = 60516,
         };
 
-        npc_jaina_theramoreAI(Creature* creature) : ScriptedAI(creature), eventId(1)
+        npc_jaina_theramoreAI(Creature* creature) : ScriptedAI(creature), eventId(1), archmagesIndex(0)
         {
             phase = Phases::Normal;
             tervosh = nullptr;
@@ -51,6 +56,7 @@ public:
 
         EventMap events;
         uint8 eventId;
+        uint8 archmagesIndex;
         Phases phase;
         InstanceScript* instance;
 
@@ -60,11 +66,34 @@ public:
         Creature* pained;
         Creature* perith;
         Creature* officer;
+        Creature* rhonin;
+        Creature* vereesa;
+        Creature* thalen;
+        Creature* hedric;
+        std::vector<Creature*> archmages;
 
         void Reset() override
         {
             events.Reset();
             Initialize();
+        }
+
+        void OnSuccessfulSpellCast(SpellInfo const* spell) override
+        {
+            if (spell->Id == SPELL_MASS_TELEPORT)
+            {
+                kinndy->CastSpell(kinndy, SPELL_TELEPORT_DUMMY);
+                tervosh->CastSpell(tervosh, SPELL_TELEPORT_DUMMY);
+                kalecgos->CastSpell(kalecgos, SPELL_TELEPORT_DUMMY);
+                hedric->CastSpell(hedric, SPELL_TELEPORT_DUMMY);
+                rhonin->CastSpell(hedric, SPELL_TELEPORT_DUMMY);
+                vereesa->CastSpell(vereesa, SPELL_TELEPORT_DUMMY);
+                thalen->CastSpell(thalen, SPELL_TELEPORT_DUMMY);
+                for (Creature* archmage : archmages)
+                    archmage->CastSpell(archmage, SPELL_TELEPORT_DUMMY);
+
+                events.ScheduleEvent(90, 1800ms);
+            }
         }
 
         void SetData(uint32 id, uint32 value) override
@@ -73,7 +102,7 @@ public:
             {
                 me->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
 
-                ClosePortal();
+                ClosePortal(DATA_PORTAL_TO_STORMWIND);
                 SearchCreatures();
 
                 phase = Phases::Started;
@@ -94,6 +123,10 @@ public:
                 }
 
                 events.ScheduleEvent(value, 1s);
+            }
+            else if (id == DATA_SCENARIO_PHASE)
+            {
+                phase = (Phases)value;
             }
         }
 
@@ -123,22 +156,28 @@ public:
                     return;
             }
 
-            if (phase == Phases::Normal && who->IsFriendlyTo(me) && who->IsWithinDist(me, 4.f))
+            if (who->IsFriendlyTo(me) && who->IsWithinDist(me, 4.f))
             {
-                Talk(me, SAY_REUNION_1);
-
-                instance->DoSendScenarioEvent(EVENT_FIND_JAINA);
-
-                SearchCreatures();
-
-                phase = Phases::Started;
-
-                tervosh->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-                kinndy->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-                kalecgos->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-                me->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-
-                events.ScheduleEvent(1, 5s);
+                switch (phase)
+                {
+                    case Phases::Preparation:
+                        phase = Phases::Battle;
+                        instance->DoSendScenarioEvent(EVENT_PREPARING_THE_DEFENSES);
+                        instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Battle);
+                        events.ScheduleEvent(71, 5s);
+                        break;
+                    case Phases::Normal:
+                        phase = Phases::Started;
+                        Talk(me, SAY_REUNION_1);
+                        instance->DoSendScenarioEvent(EVENT_FIND_JAINA);
+                        SearchCreatures();
+                        tervosh->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        kinndy->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        kalecgos->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        me->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        events.ScheduleEvent(1, 5s);
+                        break;
+                }
             }
         }
 
@@ -149,7 +188,7 @@ public:
 
         void UpdateAI(uint32 diff) override
         {
-            if (phase == Phases::Started)
+            if (phase == Phases::Started || phase == Phases::Battle)
             {
                 events.Update(diff);
                 switch (eventId = events.ExecuteEvent())
@@ -158,7 +197,7 @@ public:
                     #pragma region LOCALIZE_FOCUSING_IRIS
 
                     case 1:
-                        ClosePortal();
+                        ClosePortal(DATA_PORTAL_TO_STORMWIND);
                         tervosh->SetControlled(false, UNIT_STATE_ROOT);
                         tervosh->SetEmoteState(EMOTE_STAND_STATE_NONE);
                         tervosh->GetMotionMaster()->MoveSmoothPath(0, TervoshPath01, TERVOSH_PATH_01, true);
@@ -272,6 +311,9 @@ public:
                         break;
 
                     #pragma endregion
+
+                    // The Unknow Tauren
+                    #pragma region THE_UNKNOW_TAUREN
 
                     case 24:
                         for (uint8 i = 0; i < PERITH_LOCATION; i++)
@@ -525,6 +567,156 @@ public:
                         tervosh->SetVisible(true);
                         tervosh->GetMotionMaster()->MoveSmoothPath(2, TervoshPath03, TERVOSH_PATH_03, true);
                         break;
+
+                    #pragma endregion
+
+                    // Preparing the defenses
+                    #pragma region PREPARING_THE_DEFENSES
+
+                    case 71:
+                        instance->DoCastSpellOnPlayers(SPELL_CAMERA_SHAKE_VOLCANO);
+                        hedric = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_HEDRIC_EVENCANE));
+                        hedric->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        hedric->GetMotionMaster()->Clear();
+                        hedric->GetMotionMaster()->MoveIdle();
+                        hedric->NearTeleportTo(HedricPoint01);
+                        hedric->PlayDirectSound(SOUND_FEARFUL_CROWD);
+                        Talk(hedric, SAY_PRE_BATTLE_1);
+                        Next(3s);
+                        break;
+                    case 72:
+                        Talk(me, SAY_PRE_BATTLE_2);
+                        hedric->GetMotionMaster()->MoveSmoothPath(0, HedricPath01, HEDRIC_PATH_01);
+                        Next(2s);
+                        break;
+                    case 73:
+                        Talk(hedric, SAY_PRE_BATTLE_3);
+                        Next(3s);
+                        break;
+                    case 74:
+                        Talk(me, SAY_PRE_BATTLE_4);
+                        Next(4s);
+                        break;
+                    case 75:
+                        me->SummonGameObject(GOB_PORTAL_TO_DALARAN, PortalPoint01, QuaternionData::QuaternionData(), 0);
+                        Next(1s);
+                        break;
+                    case 76:
+                        hedric->SetWalk(true);
+                        hedric->GetMotionMaster()->MovePoint(0, HedricPoint02, true, HedricPoint02.GetOrientation());
+                        Next(1s);
+                        break;
+                    case 77:
+                        if (archmagesIndex >= ARCHMAGES_LOCATION)
+                        {
+                            Next(2s);
+                        }
+                        else if (Creature* archmage = me->SummonCreature(archmagesLocation[archmagesIndex].entry, PortalPoint01))
+                        {
+                            archmage->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                            archmage->SetSheath(SHEATH_STATE_UNARMED);
+                            archmage->SetWalk(true);
+                            archmage->GetMotionMaster()->MovePoint(0, archmagesLocation[archmagesIndex].destination, true, archmagesLocation[archmagesIndex].destination.GetOrientation());
+                            archmage->CastSpell(archmage, SPELL_TELEPORT_DUMMY);
+
+                            switch (archmagesLocation[archmagesIndex].entry)
+                            {
+                                case NPC_RHONIN:
+                                    rhonin = archmage;
+                                    Talk(rhonin, SAY_PRE_BATTLE_5);
+                                    break;
+                                case NPC_VEREESA_WINDRUNNER:
+                                    vereesa = archmage;
+                                    break;
+                                case NPC_THALEN_SONGWEAVER:
+                                    thalen = archmage;
+                                    break;
+                                default:
+                                    archmages.push_back(archmage);
+                                    break;
+                            }
+
+                            archmagesIndex++;
+
+                            events.ScheduleEvent(77, 800ms, 1s);
+                        }
+                        break;
+                    case 78:
+                        SetTarget(rhonin);
+                        ClosePortal(DATA_PORTAL_TO_DALARAN);
+                        Next(2s);
+                        break;
+                    case 79:
+                        Talk(me, SAY_PRE_BATTLE_6);
+                        SetTarget(me);
+                        Next(11s);
+                        break;
+                    case 80:
+                        Talk(me, SAY_PRE_BATTLE_7);
+                        Next(9s);
+                        break;
+                    case 81:
+                        Talk(thalen, SAY_PRE_BATTLE_8);
+                        SetTarget(thalen);
+                        Next(7s);
+                        break;
+                    case 82:
+                        Talk(me, SAY_PRE_BATTLE_9);
+                        SetTarget(me);
+                        Next(3s);
+                        break;
+                    case 83:
+                        Talk(me, SAY_PRE_BATTLE_10);
+                        Next(7s);
+                        break;
+                    case 84:
+                        Talk(rhonin, SAY_PRE_BATTLE_11);
+                        SetTarget(rhonin);
+                        Next(2s);
+                        break;
+                    case 85:
+                        Talk(me, SAY_PRE_BATTLE_12);
+                        SetTarget(tervosh);
+                        Next(2s);
+                        break;
+                    case 86:
+                        Talk(vereesa, SAY_PRE_BATTLE_13);
+                        SetTarget(vereesa);
+                        Next(2s);
+                        break;
+                    case 87:
+                        vereesa->CastSpell(vereesa, SPELL_VANISH);
+                        Talk(me, SAY_PRE_BATTLE_14);
+                        SetTarget(me);
+                        Next(2s);
+                        break;
+                    case 88:
+                        Talk(me, SAY_PRE_BATTLE_15);
+                        if (Player* player = me->SelectNearestPlayer(150.f))
+                            me->SetFacingToObject(player);
+                        vereesa->SetFaction(35);
+                        vereesa->SetVisible(false);
+                        Next(5s);
+                        break;
+                    case 89:
+                        ClearTarget();
+                        DoCast(SPELL_MASS_TELEPORT);
+                        break;
+                    case 90:
+                        me->SetVisible(false);
+                        kinndy->SetVisible(false);
+                        tervosh->SetVisible(false);
+                        kalecgos->SetVisible(false);
+                        hedric->SetVisible(false);
+                        rhonin->SetVisible(false);
+                        vereesa->SetVisible(false);
+                        thalen->SetVisible(false);
+                        for (Creature* archmage : archmages)
+                            archmage->SetVisible(false);
+                        break;
+
+                    #pragma endregion
+
                     default:
                         break;
                 }
@@ -550,7 +742,7 @@ public:
             events.ScheduleEvent(eventId, time);
         }
 
-        void SetTarget(Creature* creature)
+        void SetTarget(Unit* creature)
         {
             ObjectGuid guid = creature->GetGUID();
 
@@ -585,6 +777,32 @@ public:
             {
                 if (officer->GetGUID() != guid) officer->SetTarget(guid);
             }
+
+            if (Creature* hedric = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_HEDRIC_EVENCANE)))
+            {
+                if (hedric->GetGUID() != guid) hedric->SetTarget(guid);
+            }
+
+            if (Creature* rhonin = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_RHONIN)))
+            {
+                if (rhonin->GetGUID() != guid) rhonin->SetTarget(guid);
+            }
+
+            if (Creature* vereesa = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_VEREESA_WINDRUNNER)))
+            {
+                if (vereesa->GetGUID() != guid) vereesa->SetTarget(guid);
+            }
+
+            if (Creature* thalen = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_THALEN_SONGWEAVER)))
+            {
+                if (thalen->GetGUID() != guid) thalen->SetTarget(guid);
+            }
+
+            if (!archmages.empty())
+            {
+                for (Creature* archmage : archmages)
+                    if (archmage->GetGUID() != guid) archmage->SetTarget(guid);
+            }
         }
 
         void ClearTarget()
@@ -608,11 +826,29 @@ public:
 
             if (Creature* officer = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_THERAMORE_OFFICER)))
                 officer->SetTarget(ObjectGuid::Empty);
+
+            if (Creature* hedric = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_HEDRIC_EVENCANE)))
+                hedric->SetTarget(ObjectGuid::Empty);
+
+            if (Creature* rhonin = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_RHONIN)))
+                rhonin->SetTarget(ObjectGuid::Empty);
+
+            if (Creature* vereesa = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_VEREESA_WINDRUNNER)))
+                vereesa->SetTarget(ObjectGuid::Empty);
+
+            if (Creature* thalen = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_THALEN_SONGWEAVER)))
+                thalen->SetTarget(ObjectGuid::Empty);
+
+            if (!archmages.empty())
+            {
+                for (Creature* archmage : archmages)
+                    archmage->SetTarget(ObjectGuid::Empty);
+            }
         }
 
-        void ClosePortal()
+        void ClosePortal(uint32 dataId)
         {
-            if (GameObject* portal = ObjectAccessor::GetGameObject(*me, instance->GetGuidData(DATA_PORTAL_TO_STORMWIND)))
+            if (GameObject* portal = ObjectAccessor::GetGameObject(*me, instance->GetGuidData(dataId)))
             {
                 portal->Delete();
 

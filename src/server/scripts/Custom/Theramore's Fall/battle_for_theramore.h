@@ -14,14 +14,17 @@
 #define KINNDY_PATH_01      16
 #define KINNDY_PATH_02      10
 #define OFFICER_PATH_01     10
+#define HEDRIC_PATH_01      7
 
 #define PERITH_LOCATION     3
+#define ARCHMAGES_LOCATION  6
 
 enum class BFTPhases
 {
     Normal,
     Timed,
-    Evacuation
+    Evacuation,
+    Battle
 };
 
 enum BFTData
@@ -34,17 +37,24 @@ enum BFTData
     DATA_PAINED,
     DATA_PERITH_STORMHOOVE,
     DATA_THERAMORE_OFFICER,
+    DATA_RHONIN,
+    DATA_VEREESA_WINDRUNNER,
+    DATA_THALEN_SONGWEAVER,
+    DATA_HEDRIC_EVENCANE,
 
     DATA_SCENARIO_PHASE,
 
     // GameObjects
-    DATA_PORTAL_TO_STORMWIND
+    DATA_PORTAL_TO_STORMWIND,
+    DATA_PORTAL_TO_DALARAN
 };
 
 enum BFTCreatures
 {
     NPC_JAINA_PROUDMOORE                = 64560,
+    NPC_RHONIN                          = 64564,
     NPC_KALECGOS                        = 64565,
+    NPC_HEDRIC_EVENCANE                 = 58840,
     NPC_INVISIBLE_STALKER               = 32780,
     NPC_THERAMORE_OFFICER               = 58913,
     NPC_THERAMORE_FOOTMAN               = 58612,
@@ -55,16 +65,31 @@ enum BFTCreatures
     NPC_ARCHMAGE_TERVOSH 	            = 500000,
     NPC_KINNDY_SPARKSHINE 	            = 500001,
     NPC_PAINED 	                        = 500002,
-    NPC_PERITH_STORMHOOVE               = 500003
+    NPC_PERITH_STORMHOOVE               = 500003,
+    NPC_ALLIANCE_PEASANT                = 500004,
+    NPC_VEREESA_WINDRUNNER              = 500006,
+    NPC_TARI_COGG                       = 500007,
+    NPC_AMARA_LEESON                    = 500008,
+    NPC_THADER_WINDERMERE               = 500009,
+    NPC_THALEN_SONGWEAVER               = 500010,
 };
 
 enum BFTMisc
 {
     // Spells
     SPELL_COSMETIC_LARGE_FIRE           = 277763,
+    SPELL_COSMETIC_FIRE_LIGHT           = 320348,
+    SPELL_CAMERA_SHAKE_VOLCANO          = 246439,
 
     // GameObjects
-    GOB_PORTAL_TO_STORMWIND             = 353823
+    GOB_PORTAL_TO_STORMWIND             = 353823,
+    GOB_PORTAL_TO_DALARAN               = 323842,
+
+    // Criteria Trees
+    CRITERIA_TREE_EVACUATION            = 1000009,
+
+    // Sounds
+    SOUND_FEARFUL_CROWD                 = 15003
 };
 
 enum BFTEvents
@@ -73,6 +98,7 @@ enum BFTEvents
     EVENT_LOCALIZE_THE_FOCUSING_IRIS    = 65801,
     EVENT_WAITING_SOMETHING_HAPPENING   = 65802,
     EVENT_UNKNOWN_TAUREN                = 65803,
+    EVENT_PREPARING_THE_DEFENSES        = 65804,
 };
 
 enum BFTTalks
@@ -133,6 +159,22 @@ enum BFTTalks
     SAY_WARN_35           = 21,
     SAY_WARN_36           = 6,
     SAY_WARN_37           = 22,
+
+    SAY_PRE_BATTLE_1      = 0,
+    SAY_PRE_BATTLE_2      = 23,
+    SAY_PRE_BATTLE_3      = 1,
+    SAY_PRE_BATTLE_4      = 24,
+    SAY_PRE_BATTLE_5      = 0,
+    SAY_PRE_BATTLE_6      = 25,
+    SAY_PRE_BATTLE_7      = 26,
+    SAY_PRE_BATTLE_8      = 0,
+    SAY_PRE_BATTLE_9      = 27,
+    SAY_PRE_BATTLE_10     = 28,
+    SAY_PRE_BATTLE_11     = 1,
+    SAY_PRE_BATTLE_12     = 29,
+    SAY_PRE_BATTLE_13     = 0,
+    SAY_PRE_BATTLE_14     = 30,
+    SAY_PRE_BATTLE_15     = 31,
 };
 
 struct Location
@@ -147,6 +189,16 @@ Location const perithLocation[PERITH_LOCATION] =
     { NPC_THERAMORE_OFFICER,    { -3733.33f, -4422.51f, 30.51f, 3.92f }, { -3746.61f, -4435.87f, 30.55f, 3.17f } },
     { NPC_PAINED,               { -3734.16f, -4425.18f, 30.55f, 3.92f }, { -3746.69f, -4437.91f, 30.55f, 3.57f } },
     { NPC_PERITH_STORMHOOVE,    { -3731.74f, -4422.76f, 30.49f, 3.92f }, { -3744.75f, -4435.91f, 30.55f, 3.49f } }
+};
+
+Location const archmagesLocation[ARCHMAGES_LOCATION] =
+{
+    { NPC_RHONIN,		        { 0.f, 0.f, 0.f, 0.f }, { -3718.51f, -4542.53f, 25.82f, 3.59f } },
+    { NPC_TARI_COGG,		    { 0.f, 0.f, 0.f, 0.f }, { -3717.86f, -4539.88f, 25.82f, 3.59f } },
+    { NPC_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3716.01f, -4540.03f, 25.82f, 3.59f } },
+    { NPC_THADER_WINDERMERE,	{ 0.f, 0.f, 0.f, 0.f }, { -3717.01f, -4538.31f, 25.82f, 3.59f } },
+    { NPC_THALEN_SONGWEAVER,    { 0.f, 0.f, 0.f, 0.f }, { -3715.66f, -4544.08f, 25.82f, 3.59f } },
+    { NPC_VEREESA_WINDRUNNER,	{ 0.f, 0.f, 0.f, 0.f }, { -3716.33f, -4543.03f, 25.82f, 3.59f } }
 };
 
 Position const TervoshPath01[TERVOSH_PATH_01] =
@@ -262,11 +314,29 @@ Position const OfficerPath01[OFFICER_PATH_01] =
     { -3723.88f, -4415.31f, 26.56f, 0.76f }
 };
 
+Position const HedricPath01[HEDRIC_PATH_01]
+{
+    { -3717.79f, -4522.24f, 25.82f, 5.16f },
+    { -3714.91f, -4528.24f, 25.82f, 5.16f },
+    { -3713.09f, -4532.02f, 25.82f, 5.16f },
+    { -3711.22f, -4535.91f, 25.82f, 5.16f },
+    { -3710.03f, -4538.38f, 25.82f, 5.16f },
+    { -3712.85f, -4539.80f, 25.82f, 3.60f },
+    { -3716.85f, -4541.81f, 25.82f, 3.60f }
+};
+
 Position const KinndyPoint01    = { -3748.06f, -4442.12f, 30.55f, 1.24f };
+Position const KinndyPoint02    = { -3725.93f, -4543.47f, 25.82f, 0.11f };
 Position const JainaPoint01     = { -3751.32f, -4438.13f, 30.55f, 0.40f };
+Position const JainaPoint02     = { -3731.47f, -4547.05f, 27.11f, 0.25f };
 Position const PainedPoint01    = { -3747.93f, -4442.05f, 30.54f, 1.54f };
 Position const OfficerPoint01   = { -3748.43f, -4432.99f, 30.54f, 4.66f };
 Position const QuillPoint01     = { -3751.32f, -4438.13f, 31.26f, 3.33f };
+Position const TervoshPoint01   = { -3720.83f, -4551.10f, 25.82f, 1.35f };
+Position const KalecgosPoint01  = { -3730.39f, -4550.39f, 27.11f, 0.54f };
+Position const PortalPoint01    = { -3712.42f, -4539.62f, 25.82f, 3.59f };
+Position const HedricPoint01    = { -3717.79f, -4522.24f, 25.82f, 5.16f };
+Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f };
 
 template <class AI, class T>
 inline AI* GetBattleForTheramoreAI(T* obj)
