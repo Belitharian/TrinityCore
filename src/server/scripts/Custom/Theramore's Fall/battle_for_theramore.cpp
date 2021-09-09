@@ -703,6 +703,8 @@ public:
                         DoCast(SPELL_MASS_TELEPORT);
                         break;
                     case 90:
+                        instance->HandleGameObject(instance->GetGuidData(DATA_MYSTIC_BARRIER_01), true);
+                        instance->HandleGameObject(instance->GetGuidData(DATA_MYSTIC_BARRIER_02), true);
                         me->SetVisible(false);
                         kinndy->SetVisible(false);
                         tervosh->SetVisible(false);
@@ -1011,9 +1013,123 @@ class npc_theramore_citizen : public CreatureScript
     }
 };
 
+class event_theramore_medic : public CreatureScript
+{
+    public:
+    event_theramore_medic() : CreatureScript("event_theramore_medic")
+    {
+    }
+
+    struct event_theramore_medicAI : public ScriptedAI
+    {
+        event_theramore_medicAI(Creature* creature) : ScriptedAI(creature), scheduled(false)
+        {
+            instance = creature->GetInstanceScript();
+        }
+
+        TaskScheduler scheduler;
+        bool scheduled;
+        InstanceScript* instance;
+
+        enum Misc
+        {
+            // NPCs
+            NPC_TRAINING_DUMMY              = 87318,
+
+            // Spells
+            SPELL_HEAL                      = 332706,
+            SPELL_POWER_WORD_SHIELD         = 318158,
+            SPELL_ARCANE_PROJECTILES        = 5143,
+            SPELL_EVOCATION                 = 320218,
+            SPELL_SUPERNOVA                 = 157980,
+        };
+
+        void Initialize(Creature* creature, Emote emote, Creature* target)
+        {
+            uint64 health = creature->GetMaxHealth() * 0.1f;
+            creature->SetEmoteState(emote);
+            creature->SetRegenerateHealth(false);
+            creature->SetHealth(health);
+
+            if (target)
+                creature->SetTarget(target->GetGUID());
+        }
+
+        void SetData(uint32 id, uint32 value) override
+        {
+            if (scheduled)
+                return;
+
+            scheduled = true;
+
+            std::vector<Creature*> footmen;
+            GetCreatureListWithEntryInGrid(footmen, me, NPC_THERAMORE_FOOTMAN, 15.f);
+            if (footmen.empty())
+                return;
+
+            Initialize(footmen[0], EMOTE_STATE_ATTACK1H, footmen[1]);
+            Initialize(footmen[1], EMOTE_STATE_BLOCK_SHIELD, footmen[0]);
+
+            Creature* faithful = GetClosestCreatureWithEntry(me, NPC_THERAMORE_FAITHFUL, 15.f);
+            Creature* arcanist = GetClosestCreatureWithEntry(me, NPC_THERAMORE_ARCANIST, 15.f);
+            Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
+
+            if (faithful && arcanist && training)
+            {
+                scheduler
+                    .Schedule(1s, [faithful, footmen](TaskContext context)
+                    {
+                        Creature* victim = footmen[urand(0, 1)];
+                        faithful->SetTarget(victim->GetGUID());
+                        faithful->CastSpell(victim, RAND(SPELL_HEAL, SPELL_POWER_WORD_SHIELD));
+                        context.Repeat(8s);
+                    })
+                    .Schedule(1s, [footmen](TaskContext context)
+                    {
+                        footmen[0]->DealDamage(footmen[1], footmen[0], urand(2596, 3450));
+                        footmen[1]->DealDamage(footmen[0], footmen[1], urand(2596, 3450));
+                        context.Repeat(8s);
+                    })
+                    .Schedule(1s, [arcanist, training](TaskContext context)
+                    {
+                        switch (context.GetRepeatCounter())
+                        {
+                            case 0:
+                                arcanist->CastSpell(arcanist, SPELL_EVOCATION);
+                                arcanist->SetTarget(training->GetGUID());
+                                context.Repeat(7s);
+                                break;
+                            default:
+                                arcanist->CastSpell(training, RAND(SPELL_ARCANE_PROJECTILES, SPELL_SUPERNOVA));
+                                context.Repeat(3s);
+                                break;
+                        }
+                    });
+                }
+        }
+
+        void Reset() override
+        {
+            scheduled = false;
+            scheduler.CancelAll();
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            scheduler.Update(diff);
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return GetBattleForTheramoreAI<event_theramore_medicAI>(creature);
+    }
+};
+
 void AddSC_battle_for_theramore()
 {
     new npc_jaina_theramore();
     new npc_pained();
     new npc_theramore_citizen();
+    new event_theramore_medic();
 }

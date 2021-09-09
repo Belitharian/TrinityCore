@@ -760,6 +760,12 @@ void CriteriaHandler::UpdateCriteria(CriteriaType type, uint64 miscValue1 /*= 0*
             case CriteriaType::GuildAttainedLevel:
                 SetCriteriaProgress(criteria, miscValue1, referencePlayer);
                 break;
+            case CriteriaType::PlayerTriggerGameEvent:
+            case CriteriaType::AnyoneTriggerGameEventScenario:
+                if (miscValue1 != uint64(criteria->Entry->Asset.EventID))
+                    continue;
+                SetCriteriaProgress(criteria, 1, referencePlayer);
+                break;
             // FIXME: not triggered in code as result, need to implement
             case CriteriaType::RunInstance:
             case CriteriaType::ParticipateInArena:
@@ -814,10 +820,8 @@ void CriteriaHandler::UpdateCriteria(CriteriaType type, uint64 miscValue1 /*= 0*
             case CriteriaType::CompleteAnyChallengeMode:
             case CriteriaType::KilledAllUnitsInSpawnRegion:
             case CriteriaType::CompleteChallengeMode:
-            case CriteriaType::PlayerTriggerGameEvent:
             case CriteriaType::CreatedItemsByCastingSpellWithLimit:
             case CriteriaType::BattlePetAchievementPointsEarned:
-            case CriteriaType::AnyoneTriggerGameEventScenario:
             case CriteriaType::ReleasedSpirit:
             case CriteriaType::AccountKnownPet:
             case CriteriaType::DefeatDungeonEncounterWhileElegibleForLoot:
@@ -1207,6 +1211,7 @@ bool CriteriaHandler::IsCompletedCriteria(Criteria const* criteria, uint64 requi
         case CriteriaType::ParagonLevelIncreaseWithFaction:
         case CriteriaType::PlayerHasEarnedHonor:
         case CriteriaType::ChooseRelicTalent:
+        case CriteriaType::AnyoneTriggerGameEventScenario:
         case CriteriaType::AccountHonorLevelReached:
         case CriteriaType::EarnArtifactXPForAzeriteItem:
         case CriteriaType::AzeriteLevelReached:

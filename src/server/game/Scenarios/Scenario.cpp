@@ -348,5 +348,5 @@ void Scenario::SendBootPlayer(Player* player)
 
 void Scenario::SendScenarioEvent(Player* player, uint32 eventId)
 {
-    UpdateCriteria(CRITERIA_TYPE_SEND_EVENT_SCENARIO, eventId, 0, 0, nullptr, player);
+    UpdateCriteria(CriteriaType::AnyoneTriggerGameEventScenario, eventId, 0, 0, nullptr, player);
 }

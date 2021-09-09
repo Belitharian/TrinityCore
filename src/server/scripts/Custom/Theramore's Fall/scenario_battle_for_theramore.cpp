@@ -73,6 +73,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     go->SetFlags(GO_FLAG_NOT_SELECTABLE);
                     dalaranGUID = go->GetGUID();
                     break;
+                case GOB_MYSTIC_BARRIER:
+                    barriers.push_back(go->GetGUID());
+                    break;
                 default:
                     break;
             }
@@ -160,6 +163,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     return thalenGUID;
                 case DATA_HEDRIC_EVENCANE:
                     return hedricGUID;
+                case DATA_MYSTIC_BARRIER_01:
+                    return barriers[0];
+                case DATA_MYSTIC_BARRIER_02:
+                    return barriers[1];
                 default:
                     break;
             }
@@ -260,6 +267,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
         ObjectGuid hedricGUID;
         ObjectGuid stormwindGUID;
         ObjectGuid dalaranGUID;
+        std::vector<ObjectGuid> barriers;
         std::vector<ObjectGuid> citizens;
         std::vector<ObjectGuid> peasants;
     };

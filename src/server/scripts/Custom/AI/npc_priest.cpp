@@ -14,9 +14,6 @@ enum Spells
     SPELL_RENEW                     = 294342,
     SPELL_PRAYER_OF_HEALING         = 220118,
     SPELL_POWER_WORD_SHIELD         = 318158,
-    SPELL_POWER_WORD_BARRIER        = 204756,
-    SPELL_POWER_WORD_BARRIER_BUFF   = 204760,
-    SPELL_LEVITATE                  = 1706,
     SPELL_PAIN_SUPPRESSION          = 69910,
 };
 
@@ -34,14 +31,6 @@ class npc_priest : public CreatureScript
         }
 
         bool _ascension;
-
-        void Reset()
-        {
-            CustomAI::Reset();
-
-            if (roll_chance_i(60))
-                DoCastSelf(SPELL_LEVITATE);
-        }
 
         void DamageTaken(Unit* /*attacker*/, uint32& damage) override
         {

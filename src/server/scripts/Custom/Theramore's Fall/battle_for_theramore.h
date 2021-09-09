@@ -46,7 +46,9 @@ enum BFTData
 
     // GameObjects
     DATA_PORTAL_TO_STORMWIND,
-    DATA_PORTAL_TO_DALARAN
+    DATA_PORTAL_TO_DALARAN,
+    DATA_MYSTIC_BARRIER_01,
+    DATA_MYSTIC_BARRIER_02,
 };
 
 enum BFTCreatures
@@ -55,10 +57,12 @@ enum BFTCreatures
     NPC_RHONIN                          = 64564,
     NPC_KALECGOS                        = 64565,
     NPC_HEDRIC_EVENCANE                 = 58840,
+    NPC_KNIGHT_OF_THERAMORE             = 59654,
     NPC_INVISIBLE_STALKER               = 32780,
     NPC_THERAMORE_OFFICER               = 58913,
     NPC_THERAMORE_FOOTMAN               = 58612,
     NPC_THERAMORE_FAITHFUL              = 59595,
+    NPC_THERAMORE_ARCANIST              = 59596,
     NPC_THERAMORE_CITIZEN_MALE          = 143773,
     NPC_THERAMORE_CITIZEN_FEMALE        = 143776,
 
@@ -72,6 +76,8 @@ enum BFTCreatures
     NPC_AMARA_LEESON                    = 500008,
     NPC_THADER_WINDERMERE               = 500009,
     NPC_THALEN_SONGWEAVER               = 500010,
+
+    NPC_EVENT_THERAMORE_MEDIC           = 550000,
 };
 
 enum BFTMisc
@@ -81,7 +87,9 @@ enum BFTMisc
     SPELL_COSMETIC_FIRE_LIGHT           = 320348,
     SPELL_CAMERA_SHAKE_VOLCANO          = 246439,
 
+
     // GameObjects
+    GOB_MYSTIC_BARRIER                  = 323860,
     GOB_PORTAL_TO_STORMWIND             = 353823,
     GOB_PORTAL_TO_DALARAN               = 323842,
 
