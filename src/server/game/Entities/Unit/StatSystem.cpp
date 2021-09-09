@@ -538,20 +538,20 @@ void Player::UpdateMastery()
     if (!chrSpec)
         return;
 
-    for (uint32 i = 0; i < MAX_MASTERY_SPELLS; ++i)
+    for (int32 masterySpellId : chrSpec->MasterySpellID)
     {
-        if (Aura* aura = GetAura(chrSpec->MasterySpellID[i]))
+        if (Aura* aura = GetAura(masterySpellId))
         {
-            for (SpellEffectInfo const* effect : aura->GetSpellInfo()->GetEffects())
+            for (AuraEffect* auraEff : aura->GetAuraEffects())
             {
-                if (!effect)
+                if (!auraEff)
                     continue;
 
-                float mult = effect->BonusCoefficient;
+                float mult = auraEff->GetSpellEffectInfo().BonusCoefficient;
                 if (G3D::fuzzyEq(mult, 0.0f))
                     continue;
 
-                aura->GetEffect(effect->EffectIndex)->ChangeAmount(int32(value * mult));
+                auraEff->ChangeAmount(int32(value * mult));
             }
         }
     }
@@ -742,14 +742,12 @@ void Player::UpdateArmorPenetration(int32 amount)
 
 void Player::UpdateMeleeHitChances()
 {
-    m_modMeleeHitChance = 7.5f + (float)GetTotalAuraModifier(SPELL_AURA_MOD_HIT_CHANCE);
-    m_modMeleeHitChance += GetRatingBonusValue(CR_HIT_MELEE);
+    m_modMeleeHitChance = 7.5f + GetRatingBonusValue(CR_HIT_MELEE);
 }
 
 void Player::UpdateRangedHitChances()
 {
-    m_modRangedHitChance = 7.5f + (float)GetTotalAuraModifier(SPELL_AURA_MOD_HIT_CHANCE);
-    m_modRangedHitChance += GetRatingBonusValue(CR_HIT_RANGED);
+    m_modRangedHitChance = 7.5f + GetRatingBonusValue(CR_HIT_RANGED);
 }
 
 void Player::UpdateSpellHitChances()

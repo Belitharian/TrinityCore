@@ -60,6 +60,7 @@ enum Spells
     SPELL_CLEAR_ALL                     = 71721,
     SPELL_AWARD_REPUTATION_BOSS_KILL    = 73843,
     SPELL_CORRUPTION_VALITHRIA          = 70904,
+    SPELL_WEAKENED_SOUL                 = 72232,
 
     // The Lich King
     SPELL_TIMER_GLUTTONOUS_ABOMINATION  = 70915,
@@ -248,7 +249,7 @@ class ValithriaDespawner : public BasicEvent
                 default:
                     return;
             }
-                
+
             creature->DespawnOrUnsummon(0, 10s);
         }
 
@@ -1235,7 +1236,7 @@ class spell_dreamwalker_summoner : public SpellScriptLoader
                 if (!GetHitUnit())
                     return;
 
-                GetHitUnit()->CastSpell(GetCaster(), GetSpellInfo()->GetEffect(effIndex)->TriggerSpell, GetCaster()->GetInstanceScript()->GetGuidData(DATA_VALITHRIA_LICH_KING));
+                GetHitUnit()->CastSpell(GetCaster(), GetEffectInfo().TriggerSpell, GetCaster()->GetInstanceScript()->GetGuidData(DATA_VALITHRIA_LICH_KING));
             }
 
             void Register() override
@@ -1326,7 +1327,7 @@ class spell_dreamwalker_summon_suppresser_effect : public SpellScriptLoader
                 if (!GetHitUnit())
                     return;
 
-                GetHitUnit()->CastSpell(GetCaster(), GetSpellInfo()->GetEffect(effIndex)->TriggerSpell, GetCaster()->GetInstanceScript()->GetGuidData(DATA_VALITHRIA_LICH_KING));
+                GetHitUnit()->CastSpell(GetCaster(), GetEffectInfo().TriggerSpell, GetCaster()->GetInstanceScript()->GetGuidData(DATA_VALITHRIA_LICH_KING));
             }
 
             void Register() override
@@ -1462,7 +1463,7 @@ class spell_dreamwalker_twisted_nightmares : public SpellScriptLoader
                 //    return;
 
                 if (InstanceScript* instance = GetHitUnit()->GetInstanceScript())
-                    GetHitUnit()->CastSpell(nullptr, GetSpellInfo()->GetEffect(effIndex)->TriggerSpell, instance->GetGuidData(DATA_VALITHRIA_DREAMWALKER));
+                    GetHitUnit()->CastSpell(nullptr, GetEffectInfo().TriggerSpell, instance->GetGuidData(DATA_VALITHRIA_DREAMWALKER));
             }
 
             void Register() override
@@ -1475,6 +1476,34 @@ class spell_dreamwalker_twisted_nightmares : public SpellScriptLoader
         {
             return new spell_dreamwalker_twisted_nightmares_SpellScript();
         }
+};
+
+// 47788 - Guardian Spirit
+class spell_dreamwalker_guardian_spirit_restriction : public SpellScript
+{
+    PrepareSpellScript(spell_dreamwalker_guardian_spirit_restriction);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_WEAKENED_SOUL });
+    }
+
+    bool Load() override
+    {
+        return InstanceHasScript(GetCaster(), ICCScriptName);
+    }
+
+    SpellCastResult SkipWithWeakenedSoul()
+    {
+        if (!GetExplTargetUnit() || GetExplTargetUnit()->HasAura(SPELL_WEAKENED_SOUL))
+            return SPELL_FAILED_TARGET_AURASTATE;
+        return SPELL_CAST_OK;
+    }
+
+    void Register() override
+    {
+        OnCheckCast += SpellCheckCastFn(spell_dreamwalker_guardian_spirit_restriction::SkipWithWeakenedSoul);
+    }
 };
 
 class achievement_portal_jockey : public AchievementCriteriaScript
@@ -1509,5 +1538,6 @@ void AddSC_boss_valithria_dreamwalker()
     new spell_dreamwalker_summon_nightmare_portal();
     new spell_dreamwalker_nightmare_cloud();
     new spell_dreamwalker_twisted_nightmares();
+    RegisterSpellScript(spell_dreamwalker_guardian_spirit_restriction);
     new achievement_portal_jockey();
 }

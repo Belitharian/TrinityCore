@@ -634,14 +634,19 @@ class spell_q12683_take_sputum_sample : public SpellScriptLoader
         {
             PrepareSpellScript(spell_q12683_take_sputum_sample_SpellScript);
 
+            bool Validate(SpellInfo const* spellInfo) override
+            {
+                return spellInfo->GetEffects().size() > EFFECT_1;
+            }
+
             void HandleDummy(SpellEffIndex /*effIndex*/)
             {
-                uint32 reqAuraId = GetSpellInfo()->GetEffect(EFFECT_1)->CalcValue();
+                uint32 reqAuraId = GetEffectInfo(EFFECT_1).CalcValue();
 
                 Unit* caster = GetCaster();
                 if (caster->HasAuraEffect(reqAuraId, 0))
                 {
-                    uint32 spellId = GetSpellInfo()->GetEffect(EFFECT_0)->CalcValue();
+                    uint32 spellId = GetEffectInfo().CalcValue();
                     caster->CastSpell(caster, spellId, true);
                 }
             }
@@ -996,36 +1001,57 @@ class spell_q12805_lifeblood_dummy : public SpellScriptLoader
  */
 enum BattleStandard
 {
-    NPC_KING_OF_THE_MOUNTAINT_KC                    = 31766,
+    NPC_KING_OF_THE_MOUNTAINT_KC         = 31766,
+    SPELL_PLANT_HORDE_BATTLE_STANDARD    = 59643,
+    SPELL_HORDE_BATTLE_STANDARD_STATE    = 59642,
+    SPELL_ALLIANCE_BATTLE_STANDARD_STATE = 4339,
+    SPELL_JUMP_ROCKET_BLAST              = 4340
 };
 
-class spell_q13280_13283_plant_battle_standard: public SpellScriptLoader
+class spell_q13280_13283_plant_battle_standard : public SpellScript
 {
-    public:
-        spell_q13280_13283_plant_battle_standard() : SpellScriptLoader("spell_q13280_13283_plant_battle_standard") { }
+    PrepareSpellScript(spell_q13280_13283_plant_battle_standard);
 
-        class spell_q13280_13283_plant_battle_standard_SpellScript : public SpellScript
-        {
-            PrepareSpellScript(spell_q13280_13283_plant_battle_standard_SpellScript);
+    void HandleDummy(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetHitUnit();
+        uint32 triggeredSpellID = SPELL_ALLIANCE_BATTLE_STANDARD_STATE;
 
-            void HandleDummy(SpellEffIndex /*effIndex*/)
-            {
-                Unit* caster = GetCaster();
-                if (caster->IsVehicle())
-                    if (Unit* player = caster->GetVehicleKit()->GetPassenger(0))
-                         player->ToPlayer()->KilledMonsterCredit(NPC_KING_OF_THE_MOUNTAINT_KC);
-            }
+        caster->HandleEmoteCommand(EMOTE_ONESHOT_ROAR);
+        if (caster->IsVehicle())
+            if (Unit* player = caster->GetVehicleKit()->GetPassenger(0))
+                player->ToPlayer()->KilledMonsterCredit(NPC_KING_OF_THE_MOUNTAINT_KC);
 
-            void Register() override
-            {
-                OnEffectHit += SpellEffectFn(spell_q13280_13283_plant_battle_standard_SpellScript::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
-            }
-        };
+        if (GetSpellInfo()->Id == SPELL_PLANT_HORDE_BATTLE_STANDARD)
+            triggeredSpellID = SPELL_HORDE_BATTLE_STANDARD_STATE;
 
-        SpellScript* GetSpellScript() const override
-        {
-            return new spell_q13280_13283_plant_battle_standard_SpellScript();
-        }
+        target->RemoveAllAuras();
+        target->CastSpell(target, triggeredSpellID, true);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_q13280_13283_plant_battle_standard::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+class spell_q13280_13283_jump_jets : public SpellScript
+{
+    PrepareSpellScript(spell_q13280_13283_jump_jets);
+
+    void HandleCast()
+    {
+        Unit* caster = GetCaster();
+        if (caster->IsVehicle())
+            if (Unit* rocketBunny = caster->GetVehicleKit()->GetPassenger(1))
+                rocketBunny->CastSpell(rocketBunny, SPELL_JUMP_ROCKET_BLAST, true);
+    }
+
+    void Register() override
+    {
+        OnCast += SpellCastFn(spell_q13280_13283_jump_jets::HandleCast);
+    }
 };
 
 enum ChumTheWaterSummons
@@ -1916,7 +1942,8 @@ class spell_q13086_cannons_target : public SpellScriptLoader
 
             bool Validate(SpellInfo const* spellInfo) override
             {
-                return ValidateSpellInfo({ static_cast<uint32>(spellInfo->GetEffect(EFFECT_0)->CalcValue()) });
+                return !spellInfo->GetEffects().empty()
+                    && ValidateSpellInfo({ static_cast<uint32>(spellInfo->GetEffect(EFFECT_0).CalcValue()) });
             }
 
             void HandleEffectDummy(SpellEffIndex /*effIndex*/)
@@ -2160,7 +2187,7 @@ class spell_q12308_escape_from_silverbrook_summon_worgen : public SpellScriptLoa
 
             void ModDest(SpellDestination& dest)
             {
-                float dist = GetSpellInfo()->GetEffect(EFFECT_0)->CalcRadius(GetCaster());
+                float dist = GetEffectInfo(EFFECT_0).CalcRadius(GetCaster());
                 float angle = frand(0.75f, 1.25f) * float(M_PI);
 
                 Position pos = GetCaster()->GetNearPosition(dist, angle);
@@ -2301,7 +2328,7 @@ class spell_q12619_emblazon_runeblade : public SpellScriptLoader
             {
                 PreventDefaultAction();
                 if (Unit* caster = GetCaster())
-                    caster->CastSpell(caster, aurEff->GetSpellEffectInfo()->TriggerSpell, aurEff);
+                    caster->CastSpell(caster, aurEff->GetSpellEffectInfo().TriggerSpell, aurEff);
             }
 
             void Register() override
@@ -2894,7 +2921,8 @@ void AddSC_quest_spell_scripts()
     new spell_q12659_ahunaes_knife();
     new spell_q9874_liquid_fire();
     new spell_q12805_lifeblood_dummy();
-    new spell_q13280_13283_plant_battle_standard();
+    RegisterSpellScript(spell_q13280_13283_plant_battle_standard);
+    RegisterSpellScript(spell_q13280_13283_jump_jets);
     new spell_q14112_14145_chum_the_water();
     new spell_q9452_cast_net();
     new spell_q12279_cast_net();

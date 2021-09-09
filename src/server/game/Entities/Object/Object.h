@@ -50,6 +50,7 @@ class Player;
 class Scenario;
 class Spell;
 class SpellCastTargets;
+class SpellEffectInfo;
 class SpellInfo;
 class TempSummon;
 class Transport;
@@ -564,7 +565,7 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         Player* GetAffectingPlayer() const;
 
         Player* GetSpellModOwner() const;
-        int32 CalculateSpellDamage(Unit const* target, SpellInfo const* spellInfo, uint8 effIndex, int32 const* basePoints = nullptr, float* variance = nullptr, uint32 castItemId = 0, int32 itemLevel = -1) const;
+        int32 CalculateSpellDamage(Unit const* target, SpellEffectInfo const& spellEffectInfo, int32 const* basePoints = nullptr, float* variance = nullptr, uint32 castItemId = 0, int32 itemLevel = -1) const;
 
         // target dependent range checks
         float GetSpellMaxRangeForTarget(Unit const* target, SpellInfo const* spellInfo) const;
@@ -580,6 +581,7 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         virtual SpellMissInfo MeleeSpellHitResult(Unit* victim, SpellInfo const* spellInfo) const;
         SpellMissInfo MagicSpellHitResult(Unit* victim, SpellInfo const* spellInfo) const;
         SpellMissInfo SpellHitResult(Unit* victim, SpellInfo const* spellInfo, bool canReflect = false) const;
+        void SendSpellMiss(Unit* target, uint32 spellID, SpellMissInfo missInfo);
 
         virtual uint32 GetFaction() const = 0;
         virtual void SetFaction(uint32 /*faction*/) { }
@@ -598,11 +600,8 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         void CastSpell(WorldObject* target, uint32 spellId, CastSpellExtraArgs const& args = { });
         void CastSpell(Position const& dest, uint32 spellId, CastSpellExtraArgs const& args = { });
 
-        bool IsValidAttackTarget(WorldObject const* target, SpellInfo const* bySpell = nullptr, bool spellCheck = true) const;
-        bool IsValidSpellAttackTarget(WorldObject const* target, SpellInfo const* bySpell) const;
-
-        bool IsValidAssistTarget(WorldObject const* target, SpellInfo const* bySpell = nullptr, bool spellCheck = true) const;
-        bool IsValidSpellAssistTarget(WorldObject const* target, SpellInfo const* bySpell) const;
+        bool IsValidAttackTarget(WorldObject const* target, SpellInfo const* bySpell = nullptr) const;
+        bool IsValidAssistTarget(WorldObject const* target, SpellInfo const* bySpell = nullptr) const;
 
         Unit* GetMagicHitRedirectTarget(Unit* victim, SpellInfo const* spellInfo);
 

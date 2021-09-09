@@ -40,7 +40,7 @@ class ModuleReference;
 class Player;
 class Unit;
 struct InstanceSpawnGroupInfo;
-enum CriteriaTypes : uint8;
+enum class CriteriaType : uint8;
 enum class CriteriaStartEvent : uint8;
 enum EncounterCreditType : uint8;
 namespace WorldPackets
@@ -226,7 +226,7 @@ class TC_GAME_API InstanceScript : public ZoneScript
         void DoSendScenarioEvent(uint32 eventId);
 
         // Update Achievement Criteria for all players in instance
-        void DoUpdateCriteria(CriteriaTypes type, uint32 miscValue1 = 0, uint32 miscValue2 = 0, Unit* unit = nullptr);
+        void DoUpdateCriteria(CriteriaType type, uint32 miscValue1 = 0, uint32 miscValue2 = 0, Unit* unit = nullptr);
 
         // Start/Stop Timed Achievement Criteria for all players in instance
         void DoStartCriteriaTimer(CriteriaStartEvent startEvent, uint32 entry);
