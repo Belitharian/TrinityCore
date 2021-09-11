@@ -77,7 +77,8 @@ enum BFTCreatures
     NPC_THADER_WINDERMERE               = 500009,
     NPC_THALEN_SONGWEAVER               = 500010,
 
-    NPC_EVENT_THERAMORE_MEDIC           = 550000,
+    NPC_EVENT_THERAMORE_TRAINING        = 550000,
+    NPC_EVENT_THERAMORE_FAITHFUL        = 550001,
 };
 
 enum BFTMisc
@@ -94,7 +95,9 @@ enum BFTMisc
     GOB_PORTAL_TO_DALARAN               = 323842,
 
     // Criteria Trees
+    CRITERIA_FIND_JAINA                 = 1000001,
     CRITERIA_TREE_EVACUATION            = 1000009,
+    CRITERIA_TREE_A_LITTLE_HELP         = 1000011,
 
     // Sounds
     SOUND_FEARFUL_CROWD                 = 15003

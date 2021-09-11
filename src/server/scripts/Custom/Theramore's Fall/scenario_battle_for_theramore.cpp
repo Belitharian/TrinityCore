@@ -7,6 +7,8 @@
 #include "InstanceScript.h"
 #include "Player.h"
 #include "ObjectMgr.h"
+#include "Weather.h"
+#include "MiscPackets.h"
 #include "Log.h"
 #include "battle_for_theramore.h"
 
@@ -24,10 +26,32 @@ class scenario_battle_for_theramore : public InstanceMapScript
             SetHeaders(DataHeader);
         }
 
+        void OnPlayerEnter(Player* player) override
+        {
+            WorldPackets::Misc::Weather weather(WEATHER_STATE_THUNDERS, 1.f);
+            weather.Write();
+
+            player->SendDirectMessage(weather.GetRawPacket());
+        }
+
         void OnCompletedCriteriaTree(CriteriaTree const* tree) override
         {
             switch (tree->ID)
             {
+                case CRITERIA_FIND_JAINA:
+                    for (ObjectGuid guid : events)
+                    {
+                        if (Creature* dummy = instance->GetCreature(guid))
+                            dummy->AI()->DoAction(1U);
+                    }
+                    break;
+                case CRITERIA_TREE_A_LITTLE_HELP:
+                    for (ObjectGuid guid : events)
+                    {
+                        if (Creature* dummy = instance->GetCreature(guid))
+                            dummy->AI()->DoAction(2U);
+                    }
+                    break;
                 case CRITERIA_TREE_EVACUATION:
                     if (Creature* jaina = instance->GetCreature(jainaGUID))
                     {
@@ -120,6 +144,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     break;
                 case NPC_ALLIANCE_PEASANT:
                     peasants.push_back(creature->GetGUID());
+                    break;
+                case NPC_EVENT_THERAMORE_TRAINING:
+                case NPC_EVENT_THERAMORE_FAITHFUL:
+                    events.push_back(creature->GetGUID());
                     break;
                 case NPC_THERAMORE_CITIZEN_MALE:
                 case NPC_THERAMORE_CITIZEN_FEMALE:
@@ -241,6 +269,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
             {
                 return (uint32)phase;
             }
+
+            return (uint32)0;
         }
 
         void Update(uint32 diff) override
@@ -270,6 +300,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
         std::vector<ObjectGuid> barriers;
         std::vector<ObjectGuid> citizens;
         std::vector<ObjectGuid> peasants;
+        std::vector<ObjectGuid> events;
     };
 
     InstanceScript* GetInstanceScript(InstanceMap* map) const override
