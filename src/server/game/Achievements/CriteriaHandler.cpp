@@ -762,8 +762,6 @@ void CriteriaHandler::UpdateCriteria(CriteriaType type, uint64 miscValue1 /*= 0*
                 break;
             case CriteriaType::PlayerTriggerGameEvent:
             case CriteriaType::AnyoneTriggerGameEventScenario:
-                if (miscValue1 != uint64(criteria->Entry->Asset.EventID))
-                    continue;
                 SetCriteriaProgress(criteria, 1, referencePlayer);
                 break;
             // FIXME: not triggered in code as result, need to implement
@@ -1211,7 +1209,6 @@ bool CriteriaHandler::IsCompletedCriteria(Criteria const* criteria, uint64 requi
         case CriteriaType::ParagonLevelIncreaseWithFaction:
         case CriteriaType::PlayerHasEarnedHonor:
         case CriteriaType::ChooseRelicTalent:
-        case CriteriaType::AnyoneTriggerGameEventScenario:
         case CriteriaType::AccountHonorLevelReached:
         case CriteriaType::EarnArtifactXPForAzeriteItem:
         case CriteriaType::AzeriteLevelReached:
@@ -1224,6 +1221,7 @@ bool CriteriaHandler::IsCompletedCriteria(Criteria const* criteria, uint64 requi
         case CriteriaType::CompleteQuest:
         case CriteriaType::LearnOrKnowSpell:
         case CriteriaType::RevealWorldMapOverlay:
+        case CriteriaType::AnyoneTriggerGameEventScenario:
         case CriteriaType::RecruitGarrisonFollower:
         case CriteriaType::LearnedNewPet:
         case CriteriaType::HonorLevelIncrease:
@@ -1416,6 +1414,10 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
         case CriteriaType::KillCreature:
         case CriteriaType::KilledByCreature:
             if (!miscValue1 || uint32(criteria->Entry->Asset.CreatureID) != miscValue1)
+                return false;
+            break;
+        case CriteriaType::AnyoneTriggerGameEventScenario:
+            if (!miscValue1 || uint64(criteria->Entry->Asset.EventID) != miscValue1)
                 return false;
             break;
         case CriteriaType::SkillRaised:

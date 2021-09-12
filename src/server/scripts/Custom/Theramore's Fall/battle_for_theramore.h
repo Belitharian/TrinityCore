@@ -7,40 +7,49 @@
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader    "BFT"
 
-#define TERVOSH_PATH_01     6
-#define TERVOSH_PATH_02     10
-#define TERVOSH_PATH_03     16
-#define KALECGOS_PATH_01    17
-#define KINNDY_PATH_01      16
-#define KINNDY_PATH_02      10
-#define OFFICER_PATH_01     10
-#define HEDRIC_PATH_01      7
+#define TERVOSH_PATH_01         6
+#define TERVOSH_PATH_02         10
+#define TERVOSH_PATH_03         16
+#define KALECGOS_PATH_01        17
+#define KINNDY_PATH_01          16
+#define KINNDY_PATH_02          10
+#define OFFICER_PATH_01         10
+#define HEDRIC_PATH_01          7
 
-#define PERITH_LOCATION     3
-#define ARCHMAGES_LOCATION  6
+#define PERITH_LOCATION         3
+#define ARCHMAGES_LOCATION      6
+#define ACTORS_RELOCATION       10
+
+#define FIRE_LOCATION           35
 
 enum class BFTPhases
 {
-    Normal,
-    Timed,
+    FindJaina,
+    TheCouncil,
+    Waiting,
+    TheUnknownTauren,
     Evacuation,
-    Battle
+    ALittleHelp,
+    Preparation,
 };
 
 enum BFTData
 {
     // NPCs
-    DATA_JAINA_PROUDMOORE,
+    DATA_JAINA_PROUDMOORE               = 1,
     DATA_ARCHMAGE_TERVOSH,
     DATA_KINNDY_SPARKSHINE,
     DATA_KALECGOS,
     DATA_PAINED,
     DATA_PERITH_STORMHOOVE,
     DATA_THERAMORE_OFFICER,
+    DATA_HEDRIC_EVENCANE,
     DATA_RHONIN,
     DATA_VEREESA_WINDRUNNER,
     DATA_THALEN_SONGWEAVER,
-    DATA_HEDRIC_EVENCANE,
+    DATA_TARI_COGG,
+    DATA_AMARA_LEESON,
+    DATA_THADER_WINDERMERE,
 
     DATA_SCENARIO_PHASE,
 
@@ -95,21 +104,20 @@ enum BFTMisc
     GOB_PORTAL_TO_DALARAN               = 323842,
 
     // Criteria Trees
-    CRITERIA_FIND_JAINA                 = 1000001,
     CRITERIA_TREE_EVACUATION            = 1000009,
     CRITERIA_TREE_A_LITTLE_HELP         = 1000011,
 
     // Sounds
-    SOUND_FEARFUL_CROWD                 = 15003
-};
+    SOUND_FEARFUL_CROWD                 = 15003,
 
-enum BFTEvents
-{
+    // Events
     EVENT_FIND_JAINA                    = 65800,
-    EVENT_LOCALIZE_THE_FOCUSING_IRIS    = 65801,
-    EVENT_WAITING_SOMETHING_HAPPENING   = 65802,
-    EVENT_UNKNOWN_TAUREN                = 65803,
-    EVENT_PREPARING_THE_DEFENSES        = 65804,
+    EVENT_THE_COUNCIL                   = 65801,
+    EVENT_WAITING                       = 65802,
+    EVENT_THE_UNKNOWN_TAUREN            = 65803,
+    EVENT_A_LITTLE_HELP                 = 65804,
+    EVENT_SPEAK_THADER                  = 65805,
+    EVENT_SPEAK_RHONIN                  = 65806,
 };
 
 enum BFTTalks
@@ -143,9 +151,9 @@ enum BFTTalks
     SAY_WARN_8            = 8,
     SAY_WARN_9            = 9,
     SAY_WARN_10           = 10,
-    SAY_WARN_11           = 5,
-    SAY_WARN_12           = 0,
-    SAY_WARN_13           = 11,
+    SAY_WARN_11           = 0,
+    SAY_WARN_12           = 11,
+    SAY_WARN_13           = 5,
     SAY_WARN_14           = 0,
     SAY_WARN_15           = 12,
     SAY_WARN_16           = 1,
@@ -190,26 +198,40 @@ enum BFTTalks
 
 struct Location
 {
-    uint32 entry;
+    uint32 dataId;
     Position const position;
     Position const destination;
 };
 
 Location const perithLocation[PERITH_LOCATION] =
 {
-    { NPC_THERAMORE_OFFICER,    { -3733.33f, -4422.51f, 30.51f, 3.92f }, { -3746.61f, -4435.87f, 30.55f, 3.17f } },
-    { NPC_PAINED,               { -3734.16f, -4425.18f, 30.55f, 3.92f }, { -3746.69f, -4437.91f, 30.55f, 3.57f } },
-    { NPC_PERITH_STORMHOOVE,    { -3731.74f, -4422.76f, 30.49f, 3.92f }, { -3744.75f, -4435.91f, 30.55f, 3.49f } }
+    { DATA_THERAMORE_OFFICER,    { -3733.33f, -4422.51f, 30.51f, 3.92f }, { -3746.61f, -4435.87f, 30.55f, 3.17f } },
+    { DATA_PAINED,               { -3734.16f, -4425.18f, 30.55f, 3.92f }, { -3746.69f, -4437.91f, 30.55f, 3.57f } },
+    { DATA_PERITH_STORMHOOVE,    { -3731.74f, -4422.76f, 30.49f, 3.92f }, { -3744.75f, -4435.91f, 30.55f, 3.49f } }
 };
 
 Location const archmagesLocation[ARCHMAGES_LOCATION] =
 {
-    { NPC_RHONIN,		        { 0.f, 0.f, 0.f, 0.f }, { -3718.51f, -4542.53f, 25.82f, 3.59f } },
-    { NPC_TARI_COGG,		    { 0.f, 0.f, 0.f, 0.f }, { -3717.86f, -4539.88f, 25.82f, 3.59f } },
-    { NPC_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3716.01f, -4540.03f, 25.82f, 3.59f } },
-    { NPC_THADER_WINDERMERE,	{ 0.f, 0.f, 0.f, 0.f }, { -3717.01f, -4538.31f, 25.82f, 3.59f } },
-    { NPC_THALEN_SONGWEAVER,    { 0.f, 0.f, 0.f, 0.f }, { -3715.66f, -4544.08f, 25.82f, 3.59f } },
-    { NPC_VEREESA_WINDRUNNER,	{ 0.f, 0.f, 0.f, 0.f }, { -3716.33f, -4543.03f, 25.82f, 3.59f } }
+    { DATA_RHONIN,		         { 0.f, 0.f, 0.f, 0.f }, { -3718.51f, -4542.53f, 25.82f, 3.59f } },
+    { DATA_VEREESA_WINDRUNNER,	 { 0.f, 0.f, 0.f, 0.f }, { -3716.33f, -4543.03f, 25.82f, 3.59f } },
+    { DATA_THALEN_SONGWEAVER,    { 0.f, 0.f, 0.f, 0.f }, { -3715.66f, -4544.08f, 25.82f, 3.59f } },
+    { DATA_TARI_COGG,		     { 0.f, 0.f, 0.f, 0.f }, { -3717.86f, -4539.88f, 25.82f, 3.59f } },
+    { DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3716.01f, -4540.03f, 25.82f, 3.59f } },
+    { DATA_THADER_WINDERMERE,	 { 0.f, 0.f, 0.f, 0.f }, { -3717.01f, -4538.31f, 25.82f, 3.59f } }
+};
+
+Location const actorsRelocation[ACTORS_RELOCATION] =
+{
+    { DATA_JAINA_PROUDMOORE,     { 0.f, 0.f, 0.f, 0.f }, { -3658.39f, -4372.87f,  9.35f, 0.69f } },
+    { DATA_KINNDY_SPARKSHINE,    { 0.f, 0.f, 0.f, 0.f }, { -3666.15f, -4519.95f, 10.03f, 2.44f } },
+    { DATA_ARCHMAGE_TERVOSH,     { 0.f, 0.f, 0.f, 0.f }, { -3808.72f, -4541.01f, 10.68f, 3.09f } },
+    { DATA_HEDRIC_EVENCANE,      { 0.f, 0.f, 0.f, 0.f }, { -3661.38f, -4376.67f,  9.35f, 0.69f } },
+    { DATA_RHONIN,               { 0.f, 0.f, 0.f, 0.f }, { -3677.44f, -4521.55f, 10.21f, 0.50f } },
+    { DATA_VEREESA_WINDRUNNER,   { 0.f, 0.f, 0.f, 0.f }, { -3833.79f, -4545.92f,  9.22f, 0.75f } },
+    { DATA_THALEN_SONGWEAVER,    { 0.f, 0.f, 0.f, 0.f }, { -3652.05f, -4365.66f,  9.53f, 0.69f } },
+    { DATA_TARI_COGG,            { 0.f, 0.f, 0.f, 0.f }, { -3786.23f, -4263.26f,  7.03f, 1.56f } },
+    { DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3649.58f, -4369.21f,  9.57f, 0.69f } },
+    { DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3778.58f, -4263.91f,  6.99f, 1.56f } }
 };
 
 Position const TervoshPath01[TERVOSH_PATH_01] =
@@ -334,6 +356,45 @@ Position const HedricPath01[HEDRIC_PATH_01]
     { -3710.03f, -4538.38f, 25.82f, 5.16f },
     { -3712.85f, -4539.80f, 25.82f, 3.60f },
     { -3716.85f, -4541.81f, 25.82f, 3.60f }
+};
+
+Position const FireLocation[FIRE_LOCATION]
+{
+    { -3665.85f, -4486.16f, 11.07f, 3.5946f },
+    { -3645.48f, -4520.75f,  9.49f, 5.0731f },
+    { -3783.41f, -4373.28f, 16.78f, 4.6534f },
+    { -3775.22f, -4333.53f, 11.28f, 2.1618f },
+    { -3762.54f, -4348.24f, 11.13f, 2.1735f },
+    { -3743.14f, -4344.01f, 11.41f, 3.9171f },
+    { -3732.43f, -4332.31f, 11.75f, 3.8288f },
+    { -3708.37f, -4337.79f, 10.91f, 0.7127f },
+    { -3701.79f, -4345.72f, 16.68f, 0.0000f },
+    { -3731.25f, -4412.55f, 26.87f, 4.3923f },
+    { -3715.47f, -4474.48f, 44.50f, 0.0000f },
+    { -3720.81f, -4477.59f, 31.13f, 0.3063f },
+    { -3698.33f, -4547.57f, 37.80f, 5.9886f },
+    { -3696.88f, -4513.77f, 11.84f, 4.1742f },
+    { -3676.81f, -4529.64f, 10.33f, 4.0027f },
+    { -3870.74f, -4562.49f,  8.35f, 2.2128f },
+    { -3846.46f, -4577.59f,  8.19f, 0.0000f },
+    { -3893.06f, -4595.04f,  9.23f, 0.0000f },
+    { -3844.41f, -4630.65f,  9.25f, 4.7987f },
+    { -3886.46f, -4457.42f, 43.65f, 2.0793f },
+    { -3852.64f, -4497.29f, 29.97f, 1.6022f },
+    { -3842.07f, -4460.03f, 25.87f, 0.0000f },
+    { -3738.28f, -4435.75f, 77.07f, 5.3937f },
+    { -3737.87f, -4434.29f, 37.12f, 0.0000f },
+    { -3653.61f, -4361.11f,  9.67f, 0.6832f },
+    { -3643.00f, -4374.14f, 10.17f, 0.6832f },
+    { -3652.12f, -4379.96f, 10.84f, 4.1743f },
+    { -3676.51f, -4368.60f, 11.63f, 3.2495f },
+    { -3630.37f, -4374.75f, 32.74f, 0.0000f },
+    { -3622.40f, -4391.60f, 42.40f, 0.0000f },
+    { -3629.11f, -4443.47f, 14.38f, 0.0235f },
+    { -3613.41f, -4408.58f, 16.86f, 1.7848f },
+    { -3611.27f, -4403.01f, 27.29f, 0.0000f },
+    { -3660.06f, -4442.44f, 11.33f, 0.8482f },
+    { -3750.13f, -4322.90f,  9.63f, 4.6809f }
 };
 
 Position const KinndyPoint01    = { -3748.06f, -4442.12f, 30.55f, 1.24f };
