@@ -210,6 +210,12 @@ void Scenario::CompletedCriteriaTree(CriteriaTree const* tree, Player* /*referen
     if (!step)
         return;
 
+    if (const CriteriaTree* parent = sCriteriaMgr->GetCriteriaTree(step->Criteriatreeid))
+    {
+        if (!IsCompletedCriteriaTree(parent))
+            return;
+    }
+
     if (!step->IsBonusObjective() && step != GetStep())
         return;
 
