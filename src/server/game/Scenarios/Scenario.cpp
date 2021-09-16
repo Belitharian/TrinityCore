@@ -356,3 +356,39 @@ void Scenario::SendScenarioEvent(Player* player, uint32 eventId)
 {
     UpdateCriteria(CriteriaType::AnyoneTriggerGameEventScenario, eventId, 0, 0, nullptr, player);
 }
+
+void Scenario::CompleteCurrentStep()
+{
+    const ScenarioStepEntry* step = GetStep();
+    if (!step)
+        return;
+
+    if (const CriteriaTree* tree = sCriteriaMgr->GetCriteriaTree(step->Criteriatreeid))
+    {
+        for (CriteriaTree const* node : tree->Children)
+        {
+            for (ObjectGuid guid : _players)
+            {
+                if (Player* player = ObjectAccessor::FindPlayer(guid))
+                {
+                    if (const CriteriaEntry* criteria = node->Criteria->Entry)
+                    {
+                        switch ((CriteriaType)criteria->Type)
+                        {
+                            case CriteriaType::KillCreature:
+                                UpdateCriteria(CriteriaType::KillCreature, criteria->Asset.CreatureID, node->Entry->Amount, 0, nullptr, player);
+                                break;
+                            case CriteriaType::AnyoneTriggerGameEventScenario:
+                                UpdateCriteria(CriteriaType::AnyoneTriggerGameEventScenario, criteria->Asset.EventID, 0, 0, nullptr, player);
+                                break;
+                        }
+
+                        CompletedCriteriaTree(node, nullptr);
+                    }
+                }
+            }
+        }
+
+        CompletedCriteriaTree(tree, nullptr);
+    }
+}

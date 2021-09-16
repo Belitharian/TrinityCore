@@ -5,12 +5,10 @@
 #include "GameObject.h"
 #include "Scenario.h"
 #include "ScriptedCreature.h"
-#include "ScriptedGossip.h"
 #include "SpellMgr.h"
 #include "SpellInfo.h"
 #include "SpellHistory.h"
 #include "InstanceScript.h"
-#include "KillRewarder.h"
 #include "battle_for_theramore.h"
 #include "Custom/AI/CustomAI.h"
 
@@ -21,9 +19,9 @@ class npc_jaina_theramore : public CreatureScript
     {
     }
 
-    struct npc_jaina_theramoreAI : public ScriptedAI
+    struct npc_jaina_theramoreAI : public CustomAI
     {
-        npc_jaina_theramoreAI(Creature* creature) : ScriptedAI(creature)
+        npc_jaina_theramoreAI(Creature* creature) : CustomAI(creature)
         {
             Initialize();
         }
@@ -38,6 +36,19 @@ class npc_jaina_theramore : public CreatureScript
         void Reset() override
         {
             Initialize();
+        }
+
+        void SetData(uint32 id, uint32 value) override
+        {
+            if (id == 100)
+            {
+                if (Scenario* scenario = me->GetScenario())
+                    scenario->CompleteCurrentStep();
+            }
+            else if (id == 200)
+            {
+                instance->SetData(DATA_SCENARIO_PHASE, value);
+            }
         }
 
         void MovementInform(uint32 /*type*/, uint32 id) override
@@ -129,200 +140,6 @@ class npc_pained : public CreatureScript
     }
 };
 
-class npc_theramore_citizen : public CreatureScript
-{
-    public:
-    npc_theramore_citizen() : CreatureScript("npc_theramore_citizen")
-    {
-    }
-
-    struct npc_theramore_citizenAI : public ScriptedAI
-    {
-        enum Misc
-        {
-            GOSSIP_MENU_DEFAULT             = 65000,
-            NPC_THERAMORE_CITIZEN_CREDIT    = 500005
-        };
-
-        npc_theramore_citizenAI(Creature* creature) : ScriptedAI(creature)
-        {
-            instance = creature->GetInstanceScript();
-        }
-
-        TaskScheduler scheduler;
-        InstanceScript* instance;
-
-        void MovementInform(uint32 /*type*/, uint32 id) override
-        {
-            if (id == 0)
-            {
-                me->SetVisible(false);
-            }
-        }
-
-        bool GossipHello(Player* player) override
-        {
-            player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
-            player->SendPreparedGossip(me);
-            return true;
-        }
-
-        bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
-        {
-            ClearGossipMenuFor(player);
-
-            switch (gossipListId)
-            {
-                case 0:
-                {
-                    me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                    me->SetEmoteState(EMOTE_STATE_NONE);
-                    scheduler.Schedule(5ms, [this, player](TaskContext context)
-                    {
-                        switch (context.GetRepeatCounter())
-                        {
-                            case 0:
-                                me->SetTarget(player->GetGUID());
-                                me->SetWalk(false);
-                                context.Repeat(1s);
-                                break;
-                            case 1:
-                                Talk(0);
-                                context.Repeat(5s);
-                                break;
-                            case 2:
-                                me->SetTarget(ObjectGuid::Empty);
-                                if (Creature* stalker = GetClosestCreatureWithEntry(me, NPC_INVISIBLE_STALKER, 35.f))
-                                    me->GetMotionMaster()->MovePoint(0, stalker->GetPosition());
-                                context.Repeat(1s);
-                                break;
-                            case 3:
-                                KillRewarder(player, me, false).Reward(NPC_THERAMORE_CITIZEN_CREDIT);
-                                break;
-                            default:
-                                break;
-                        }
-                    });
-                    break;
-                }
-            }
-
-            CloseGossipMenuFor(player);
-            return true;
-        }
-
-        void Reset() override
-        {
-            me->SetVisible(true);
-            scheduler.CancelAll();
-        }
-
-        void UpdateAI(uint32 diff) override
-        {
-            scheduler.Update(diff);
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetBattleForTheramoreAI<npc_theramore_citizenAI>(creature);
-    }
-};
-
-class npc_rhonin : public CreatureScript
-{
-    public:
-    npc_rhonin() : CreatureScript("npc_rhonin")
-    {
-    }
-
-    struct npc_rhoninAI : public CustomAI
-    {
-        enum Misc
-        {
-            GOSSIP_MENU_DEFAULT = 65001,
-        };
-
-        npc_rhoninAI(Creature* creature) : CustomAI(creature)
-        {
-        }
-
-        bool GossipHello(Player* player) override
-        {
-            player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
-            player->SendPreparedGossip(me);
-            return true;
-        }
-
-        bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
-        {
-            ClearGossipMenuFor(player);
-
-            switch (gossipListId)
-            {
-                case 0:
-                    KillRewarder(player, me, false).Reward(me->GetEntry());
-                    break;
-            }
-
-            CloseGossipMenuFor(player);
-            return true;
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetBattleForTheramoreAI<npc_rhoninAI>(creature);
-    }
-};
-
-class npc_thader_windermere : public CreatureScript
-{
-    public:
-    npc_thader_windermere() : CreatureScript("npc_thader_windermere")
-    {
-    }
-
-    struct npc_thader_windermereAI : public CustomAI
-    {
-        enum Misc
-        {
-            GOSSIP_MENU_DEFAULT = 65002,
-        };
-
-        npc_thader_windermereAI(Creature* creature) : CustomAI(creature)
-        {
-        }
-
-        bool GossipHello(Player* player) override
-        {
-            player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
-            player->SendPreparedGossip(me);
-            return true;
-        }
-
-        bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
-        {
-            ClearGossipMenuFor(player);
-
-            switch (gossipListId)
-            {
-                case 0:
-                    KillRewarder(player, me, false).Reward(me->GetEntry());
-                    break;
-            }
-
-            CloseGossipMenuFor(player);
-            return true;
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetBattleForTheramoreAI<npc_thader_windermereAI>(creature);
-    }
-};
-
 class event_theramore_training : public CreatureScript
 {
     public:
@@ -404,7 +221,6 @@ class event_theramore_training : public CreatureScript
                         .Schedule(1s, [faithful, footmen](TaskContext context)
                         {
                             Creature* victim = footmen[urand(0, 1)];
-                            faithful->SetTarget(victim->GetGUID());
                             faithful->CastSpell(victim, RAND(SPELL_FLASH_HEAL, SPELL_HEAL, SPELL_POWER_WORD_SHIELD));
                             context.Repeat(8s);
                         })
@@ -566,9 +382,6 @@ void AddSC_battle_for_theramore()
 {
     new npc_jaina_theramore();
     new npc_pained();
-    new npc_theramore_citizen();
-    new npc_rhonin();
-    new npc_thader_windermere();
     new event_theramore_training();
     new event_theramore_faithful();
 }

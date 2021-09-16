@@ -35,18 +35,40 @@ const ObjectData gameobjectData[] =
 {
     { GOB_PORTAL_TO_STORMWIND,  DATA_PORTAL_TO_STORMWIND    },
     { GOB_PORTAL_TO_DALARAN,    DATA_PORTAL_TO_DALARAN      },
+    { GOB_PORTAL_TO_ORGRIMMAR,  DATA_PORTAL_TO_ORGRIMMAR    },
     { 0,                        0                           }   // END
 };
 
-const char* debugPhaseNames[] =
+class HordeDoorsEvent : public BasicEvent
 {
-    "FindJaina",
-    "TheCouncil",
-    "Waiting",
-    "TheUnknownTauren",
-    "Evacuation",
-    "ALittleHelp",
-    "Preparation",
+    public:
+    HordeDoorsEvent(GameObject* owner) : owner(owner)
+    {
+    }
+
+    bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
+    {
+        Position pos;
+        pos.m_positionX = minPosX + (rand() % static_cast<int>(maxPosX - minPosX + 1));
+        pos.m_positionY = -4248.63f;
+        pos.m_positionZ = 6.00f;
+
+        if (Creature* creature = owner->SummonCreature(RAND(NPC_ROKNAH_GRUNT, NPC_ROKNAH_LOA_SINGER, NPC_ROKNAH_HAG, NPC_ROKNAH_FELCASTER), PortalPoint02, TEMPSUMMON_MANUAL_DESPAWN))
+        {
+            creature->SetImmuneToAll(true);
+            creature->CastSpell(creature, SPELL_TELEPORT_DUMMY);
+            creature->GetMotionMaster()->MovePoint(0, pos);
+        }
+
+        owner->m_Events.AddEvent(this, eventTime + urand(3 * IN_MILLISECONDS, 5 * IN_MILLISECONDS));
+
+        return false;
+    }
+
+    private:
+    GameObject* owner;
+    const float minPosX = -3792.73f;
+    const float maxPosX = -3772.15f;
 };
 
 class scenario_battle_for_theramore : public InstanceMapScript
@@ -67,12 +89,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
         enum Spells
         {
-            SPELL_TELEPORT_DUMMY        = 51347,
             SPELL_CLOSE_PORTAL          = 203542,
             SPELL_MAGIC_QUILL           = 171980,
             SPELL_ARCANE_CANALISATION   = 288451,
             SPELL_PORTAL_CHANNELING_01  = 286636,
             SPELL_PORTAL_CHANNELING_02  = 287432,
+            SPELL_PORTAL_CHANNELING_03  = 288451,
             SPELL_VANISH                = 342048,
             SPELL_MASS_TELEPORT         = 60516,
         };
@@ -81,6 +103,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
         {
             switch (tree->ID)
             {
+                case CRITERIA_TREE_REPAIR_TANKS:
+                    for (Creature* tank : tanks)
+                    {
+                        if (Creature* fire = tank->FindNearestCreature(WORLD_TRIGGER, 5.f))
+                            fire->DespawnOrUnsummon();
+
+                        tank->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+                        tank->SetRegenerateHealth(true);
+                        tank->SetHealth(tank->GetMaxHealth());
+                    }
+                    break;
                 case CRITERIA_TREE_EVACUATION:
                     SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
                     if (Creature* jaina = GetJaina())
@@ -92,7 +125,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     {
                         tervosh->NearTeleportTo(TervoshPoint01);
                         tervosh->SetHomePosition(TervoshPoint01);
-                        tervosh->CastSpell(GetTervosh(), SPELL_COSMETIC_FIRE_LIGHT);
+                        tervosh->CastSpell(tervosh, SPELL_COSMETIC_FIRE_LIGHT);
                     }
                     if (Creature* kinndy = GetKinndy())
                     {
@@ -131,13 +164,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     break;
                 case NPC_THERAMORE_CITIZEN_FEMALE:
                 case NPC_THERAMORE_CITIZEN_MALE:
+                    citizens.push_back(creature);
                     if (phase == BFTPhases::Evacuation)
                         break;
                     creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                    citizens.push_back(creature);
                     break;
                 case NPC_ALLIANCE_PEASANT:
                     citizens.push_back(creature);
+                    break;
+                case NPC_UNMANNED_TANK:
+                    creature->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+                    tanks.push_back(creature);
                     break;
             }
         }
@@ -155,6 +192,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     break;
                 case GOB_PORTAL_TO_DALARAN:
                 case GOB_PORTAL_TO_STORMWIND:
+                case GOB_PORTAL_TO_ORGRIMMAR:
                     go->SetLootState(GO_READY);
                     go->UseDoorOrButton();
                     go->SetFlags(GO_FLAG_NOT_SELECTABLE);
@@ -175,8 +213,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
         {
             if (dataId == DATA_SCENARIO_PHASE)
             {
-                printf("Change scenario phase: %s", debugPhaseNames[value]);
-
                 phase = (BFTPhases)value;
                 switch (phase)
                 {
@@ -189,6 +225,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     // 2d phase : Le Conseil
                     // Joue les mini évènements pour décorer
                     case BFTPhases::TheCouncil:
+                    {
                         ClosePortal(DATA_PORTAL_TO_STORMWIND);
                         GetTervosh()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
                         GetKinndy()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
@@ -203,12 +240,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
                             dummy->AI()->DoAction(1U);
                         events.ScheduleEvent(1, 2s);
                         break;
+                    }
                     // 3e phase : Attendre l'action
                     case BFTPhases::Waiting:
                         events.ScheduleEvent(24, 10s);
                         break;
                     // 4e phase : Un Mystérieux Tauren
                     case BFTPhases::TheUnknownTauren:
+                    {
                         for (uint8 i = 0; i < PERITH_LOCATION; i++)
                         {
                             if (Creature* creature = GetCreature(perithLocation[i].dataId))
@@ -218,8 +257,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         GetOfficer()->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
                         events.ScheduleEvent(25, 1s);
                         break;
+                    }
                     // 5e phase : L'Evacuation
                     case BFTPhases::Evacuation:
+                    {
                         for (Creature* citizen : citizens)
                         {
                             if (Creature* faithful = citizen->FindNearestCreature(NPC_THERAMORE_FAITHFUL, 10.f))
@@ -239,9 +280,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
                             tervosh->GetMotionMaster()->MoveSmoothPath(2, TervoshPath03, TERVOSH_PATH_03, true);
                         }
                         break;
+                    }
                     // 7e phase : Préparer la bataille
                     // Supprime les mini évènements avant la bataille
                     case BFTPhases::Preparation:
+                    {
                         if (Creature* jaina = GetCreature(DATA_JAINA_PROUDMOORE))
                         {
                             for (uint8 i = 0; i < FIRE_LOCATION; i++)
@@ -250,9 +293,23 @@ class scenario_battle_for_theramore : public InstanceMapScript
                                 if (Creature* trigger = jaina->SummonTrigger(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), 0.0f, 0U))
                                     trigger->CastSpell(trigger, SPELL_COSMETIC_LARGE_FIRE);
                             }
+
+                            for (uint8 i = 0; i < IMAGES_LOCATION; i++)
+                            {
+                                if (Creature* image = jaina->SummonCreature(NPC_LADY_JAINA_PROUMOORE_IMAGE, JainaImageLocation[i], TEMPSUMMON_DEAD_DESPAWN, 2s))
+                                {
+
+                                }
+                            }
                         }
                         for (Creature* dummy : dummies)
                             dummy->AI()->DoAction(2U);
+                        for (Creature* tank : tanks)
+                        {
+                            tank->SetNpcFlags(UNIT_NPC_FLAG_SPELLCLICK);
+                            tank->SetRegenerateHealth(false);
+                            tank->SetHealth(static_cast<float>(tank->GetHealth()) * frand(0.15f, 0.60f));
+                        }
                         for (Creature* citizen : citizens)
                         {
                             citizen->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
@@ -261,6 +318,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                             else
                             {
                                 citizen->SetRegenerateHealth(false);
+                                citizen->SetHealth(0U);
                                 citizen->SetStandState(UNIT_STAND_STATE_DEAD);
                                 citizen->AddUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
                                 citizen->AddUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
@@ -268,6 +326,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         }
                         events.ScheduleEvent(71, 1s);
                         break;
+                    }
+                    // 8e phase : Survivre à l'attaque
+                    case BFTPhases::Battle:
+                    {
+                        if (Creature* jaina = GetCreature(DATA_JAINA_PROUDMOORE))
+                        {
+                            if (GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_ORGRIMMAR, PortalPoint02, QuaternionData::QuaternionData(), 0))
+                                portal->m_Events.AddEvent(new HordeDoorsEvent(portal), portal->m_Events.CalculateTime(5 * IN_MILLISECONDS));
+                        }
+                        break;
+                    }
                 }
             }
         }
@@ -757,10 +826,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     Next(2s);
                     break;
                 case 87:
-                    if (Creature* vereesa = GetVereesa())
-                        vereesa->CastSpell(vereesa, SPELL_VANISH);
-                    Talk(GetJaina(), SAY_PRE_BATTLE_14);
-                    SetTarget(GetJaina());
+                    if (Creature* jaina = GetJaina())
+                    {
+                        Talk(jaina, SAY_PRE_BATTLE_14);
+                        SetTarget(jaina);
+                        jaina->SetTarget(ObjectGuid::Empty);
+                        jaina->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                    }
                     Next(2s);
                     break;
                 case 88:
@@ -768,13 +840,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     {
                         Talk(jaina, SAY_PRE_BATTLE_15);
                         if (Player* player = jaina->SelectNearestPlayer(150.f))
-                        {
-                            jaina->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
                             jaina->SetFacingToObject(player);
-                        }
                     }
                     if (Creature* vereesa = GetVereesa())
                     {
+                        vereesa->CastSpell(vereesa, SPELL_VANISH);
                         vereesa->SetFaction(FACTION_FRIENDLY);
                         vereesa->SetVisible(false);
                     }
@@ -799,18 +869,23 @@ class scenario_battle_for_theramore : public InstanceMapScript
                             switch (creature->GetEntry())
                             {
                                 case NPC_AMARA_LEESON:
+                                    creature->CastSpell(creature, SPELL_PORTAL_CHANNELING_03);
+                                    break;
                                 case NPC_TARI_COGG:
                                     creature->CastSpell(creature, SPELL_PORTAL_CHANNELING_01);
                                     break;
                                 case NPC_THADER_WINDERMERE:
                                     creature->AddNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                                    creature->CastSpell(creature, SPELL_PORTAL_CHANNELING_01);
+                                    creature->CastSpell(creature, SPELL_PORTAL_CHANNELING_03);
                                     break;
                                 case NPC_THALEN_SONGWEAVER:
                                     creature->CastSpell(creature, SPELL_PORTAL_CHANNELING_02);
                                     break;
                                 case NPC_RHONIN:
                                     creature->AddNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                                    break;
+                                case NPC_ARCHMAGE_TERVOSH:
+                                    creature->RemoveAllAuras();
                                     break;
                             }
 
@@ -820,9 +895,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         }
                     }
                     Next(600ms);
-                    break;
-                case 91:
-                    TeleportPlayers();
                     break;
 
                 #pragma endregion
@@ -836,6 +908,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
         std::vector<GameObject*> barriers;
         std::vector<Creature*> citizens;
         std::vector<Creature*> dummies;
+        std::vector<Creature*> tanks;
 
         Creature* GetJaina()    { return GetCreature(DATA_JAINA_PROUDMOORE); }
         Creature* GetKinndy()   { return GetCreature(DATA_KINNDY_SPARKSHINE); }
@@ -897,23 +970,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 if (Creature* special = portal->SummonTrigger(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), pos.GetOrientation(), 5 * IN_MILLISECONDS))
                 {
                     special->CastSpell(special, SPELL_CLOSE_PORTAL, args);
-                }
-            }
-        }
-
-        void TeleportPlayers()
-        {
-            Map::PlayerList const& players = instance->GetPlayers();
-
-            if (players.isEmpty())
-                return;
-
-            for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
-            {
-                if (Player* player = i->GetSource())
-                {
-                    if (Creature* jaina = GetCreature(DATA_JAINA_PROUDMOORE))
-                        player->NearTeleportTo(jaina->GetRandomNearPosition(5.f));
                 }
             }
         }

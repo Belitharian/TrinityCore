@@ -18,6 +18,7 @@
 // This is where scripts' loading functions should be declared:
 void AddSC_battle_for_theramore();
 void AddSC_scenario_battle_for_theramore();
+void AddSC_npcs_battle_for_theramore();
 
 void AddSC_npc_archmage_fire();
 void AddSC_npc_archmage_frost();
@@ -30,6 +31,7 @@ void AddCustomScripts()
 {
     AddSC_battle_for_theramore();
     AddSC_scenario_battle_for_theramore();
+    AddSC_npcs_battle_for_theramore();
 
     AddSC_npc_archmage_fire();
     AddSC_npc_archmage_frost();
