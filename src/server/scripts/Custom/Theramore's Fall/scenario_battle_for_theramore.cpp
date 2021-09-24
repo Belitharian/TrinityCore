@@ -97,12 +97,23 @@ class scenario_battle_for_theramore : public InstanceMapScript
             SPELL_PORTAL_CHANNELING_03  = 288451,
             SPELL_VANISH                = 342048,
             SPELL_MASS_TELEPORT         = 60516,
+            SPELL_FIRE_CHANNELING       = 329612,
+            SPELL_METEOR                = 276973,
+            SPELL_BIG_EXPLOSION         = 348750,
+            SPELL_BLAZING_BARRIER       = 295238,
+            SPELL_ICY_GLARE             = 304463,
+            SPELL_POWER_BALL_VISUAL     = 54139,
+            SPELL_DISSOLVE              = 255295,
+            SPELL_TELEPORT              = 357601
         };
 
         void OnCompletedCriteriaTree(CriteriaTree const* tree) override
         {
             switch (tree->ID)
             {
+                case CRITERIA_TREE_PREPARATION:
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ExposeTheSpy);
+                    break;
                 case CRITERIA_TREE_REPAIR_TANKS:
                     for (Creature* tank : tanks)
                     {
@@ -220,6 +231,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     case BFTPhases::FindJaina:
                     // 6e phase : Un coup de pouce
                     case BFTPhases::ALittleHelp:
+                    // 8e phase : Retrouver Jaina
+                    case BFTPhases::ExposeTheSpy:
                     default:
                         break;
                     // 2d phase : Le Conseil
@@ -236,8 +249,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
                             Talk(jaina, SAY_REUNION_1);
                             SetTarget(jaina);
                         }
-                        for (Creature* dummy : dummies)
-                            dummy->AI()->DoAction(1U);
                         events.ScheduleEvent(1, 2s);
                         break;
                     }
@@ -327,14 +338,19 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         events.ScheduleEvent(71, 1s);
                         break;
                     }
-                    // 8e phase : Survivre à l'attaque
+                        break;
+                    // 8e phase : Survivre à la bataille
                     case BFTPhases::Battle:
                     {
-                        if (Creature* jaina = GetCreature(DATA_JAINA_PROUDMOORE))
+                        GetRhonin()->AI()->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ExposeTheSpy);
+                        if (Creature* jaina = GetJaina())
                         {
+                            jaina->AI()->Talk(SAY_BATTLE_01);
                             if (GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_ORGRIMMAR, PortalPoint02, QuaternionData::QuaternionData(), 0))
                                 portal->m_Events.AddEvent(new HordeDoorsEvent(portal), portal->m_Events.CalculateTime(5 * IN_MILLISECONDS));
                         }
+                        events.ScheduleEvent(91, 3s);
+                        events.ScheduleEvent(92, 1s);
                         break;
                     }
                 }
@@ -891,10 +907,92 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
                             creature->NearTeleportTo(actorsRelocation[i].destination);
                             creature->SetHomePosition(actorsRelocation[i].destination);
+                            creature->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
                             creature->SetSheath(SHEATH_STATE_MELEE);
                         }
                     }
-                    Next(600ms);
+                    break;
+
+                #pragma endregion
+
+                // The Battle
+                #pragma region THE_BATTLE
+
+                case 91:
+                    GetJaina()->AI()->Talk(SAY_BATTLE_02);
+                    events.ScheduleEvent(93, 5s);
+                    break;
+                case 92:
+                    if (Creature* thalen = GetThalen())
+                    {
+                        if (Creature* trigger = thalen->SummonTrigger(ExplodingPoint01.GetPositionX(), ExplodingPoint01.GetPositionY(),
+                            ExplodingPoint01.GetPositionZ(), ExplodingPoint01.GetOrientation(), 2 * IN_MILLISECONDS))
+                        {
+                            trigger->CastSpell(trigger, SPELL_BIG_EXPLOSION);
+                        }
+                    }
+                    events.Repeat(1s, 1800ms);
+                    break;
+                case 93:
+                    if (Creature* thalen = GetThalen())
+                    {
+                        events.CancelEvent(92);
+
+                        thalen->RemoveAllAuras();
+                        thalen->CastSpell(thalen, SPELL_BLAZING_BARRIER);
+                        if (Creature* trigger = GetJaina()->SummonTrigger(ExplodingPoint01.GetPositionX(), ExplodingPoint01.GetPositionY(),
+                            ExplodingPoint01.GetPositionZ(), ExplodingPoint01.GetOrientation(), 3 * IN_MILLISECONDS))
+                        {
+                            trigger->CastSpell(trigger, SPELL_METEOR);
+                        }
+                    }
+                    Next(1s);
+                    break;
+                case 94:
+                    if (GameObject* barrier = GetClosestGameObjectWithEntry(GetJaina(), GOB_MYSTIC_BARRIER, 15.f))
+                    {
+                        barrier->Delete();
+                        if (Creature* trigger = barrier->SummonTrigger(ExplodingPoint01.GetPositionX(), ExplodingPoint01.GetPositionY(),
+                            ExplodingPoint01.GetPositionZ(), ExplodingPoint01.GetOrientation(), 2 * IN_MILLISECONDS))
+                        {
+                            trigger->CastSpell(trigger, SPELL_BIG_EXPLOSION);
+                        }
+                    }
+                    Next(1s);
+                    break;
+                case 95:
+                    if (Creature* amara = GetAmara())
+                    {
+                        amara->RemoveAllAuras();
+                        amara->SetEmoteState(EMOTE_STATE_READY2HL_ALLOW_MOVEMENT);
+                    }
+                    GetThalen()->HandleEmoteCommand(EMOTE_ONESHOT_LAUGH);
+                    GetJaina()->SetEmoteState(EMOTE_STATE_READY2HL_ALLOW_MOVEMENT);
+                    GetHedric()->SetEmoteState(EMOTE_STATE_READY1H_ALLOW_MOVEMENT);
+                    Next(1s);
+                    break;
+                case 96:
+                    GetJaina()->AI()->Talk(SAY_BATTLE_03);
+                    if (Creature* thalen = GetThalen())
+                    {
+                        thalen->SetWalk(false);
+                        thalen->GetMotionMaster()->MovePoint(0, PortalPoint03, true, PortalPoint03.GetOrientation());
+                    }
+                    Next(1s);
+                    break;
+                case 97:
+                    GetJaina()->AI()->Talk(SAY_BATTLE_04);
+                    GetThalen()->CastSpell(GetThalen(), SPELL_ICY_GLARE);
+                    GetThalen()->StopMoving();
+                    Next(2s);
+                    break;
+                case 98:
+                    if (Creature* thalen = GetThalen())
+                    {
+                        thalen->RemoveAurasDueToSpell(SPELL_BLAZING_BARRIER);
+                        thalen->CastSpell(thalen, SPELL_DISSOLVE);
+                        thalen->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                    }
                     break;
 
                 #pragma endregion
@@ -921,6 +1019,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
         Creature* GetRhonin()   { return GetCreature(DATA_RHONIN); }
         Creature* GetVereesa()  { return GetCreature(DATA_VEREESA_WINDRUNNER); }
         Creature* GetThalen()   { return GetCreature(DATA_THALEN_SONGWEAVER); }
+        Creature* GetAmara()    { return GetCreature(DATA_AMARA_LEESON); }
 
         void Talk(Creature* creature, uint8 id)
         {

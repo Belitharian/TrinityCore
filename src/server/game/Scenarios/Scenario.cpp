@@ -378,8 +378,11 @@ void Scenario::CompleteCurrentStep()
                             case CriteriaType::KillCreature:
                                 UpdateCriteria(CriteriaType::KillCreature, criteria->Asset.CreatureID, node->Entry->Amount, 0, nullptr, player);
                                 break;
+                            case CriteriaType::CastSpell:
+                                UpdateCriteria(CriteriaType::CastSpell, criteria->Asset.SpellID, node->Entry->Amount, 0, nullptr, player);
+                                break;
                             case CriteriaType::AnyoneTriggerGameEventScenario:
-                                UpdateCriteria(CriteriaType::AnyoneTriggerGameEventScenario, criteria->Asset.EventID, 0, 0, nullptr, player);
+                                UpdateCriteria(CriteriaType::AnyoneTriggerGameEventScenario, criteria->Asset.EventID, node->Entry->Amount, 0, nullptr, player);
                                 break;
                         }
 

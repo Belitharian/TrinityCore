@@ -3,6 +3,7 @@
 #include "ObjectAccessor.h"
 #include "MotionMaster.h"
 #include "GameObject.h"
+#include "PassiveAI.h"
 #include "Scenario.h"
 #include "ScriptedCreature.h"
 #include "SpellMgr.h"
@@ -21,10 +22,17 @@ class npc_jaina_theramore : public CreatureScript
 
     struct npc_jaina_theramoreAI : public CustomAI
     {
-        npc_jaina_theramoreAI(Creature* creature) : CustomAI(creature)
+        npc_jaina_theramoreAI(Creature* creature) : CustomAI(creature, AI_Type::Melee)
         {
             Initialize();
         }
+
+        enum Spells
+        {
+            SPELL_ICE_SHARD         = 290621,
+            SPELL_BROADSIDE         = 288218,
+            SPELL_RING_OF_FROST     = 285459
+        };
 
         void Initialize()
         {
@@ -36,6 +44,27 @@ class npc_jaina_theramore : public CreatureScript
         void Reset() override
         {
             Initialize();
+        }
+
+        void JustEngagedWith(Unit* who) override
+        {
+            scheduler
+                .Schedule(5ms, [this](TaskContext ice_shard)
+                {
+                    DoCastVictim(SPELL_ICE_SHARD);
+                    ice_shard.Repeat(8s);
+                })
+                .Schedule(2s, [this](TaskContext broadside)
+                {
+                    if (Unit* victim = SelectTarget(SELECT_TARGET_RANDOM))
+                        DoCast(victim, SPELL_BROADSIDE);
+                    broadside.Repeat(12s, 14s);
+                })
+                .Schedule(15s, [this](TaskContext ring_of_frost)
+                {
+                    DoCast(SPELL_RING_OF_FROST);
+                    ring_of_frost.Repeat(30s);
+                });
         }
 
         void SetData(uint32 id, uint32 value) override
@@ -51,8 +80,11 @@ class npc_jaina_theramore : public CreatureScript
             }
         }
 
-        void MovementInform(uint32 /*type*/, uint32 id) override
+        void MovementInform(uint32 type, uint32 id) override
         {
+            if (type != POINT_MOTION_TYPE)
+                return;
+
             switch (id)
             {
                 case 0:
@@ -67,6 +99,9 @@ class npc_jaina_theramore : public CreatureScript
         void MoveInLineOfSight(Unit* who) override
         {
             ScriptedAI::MoveInLineOfSight(who);
+
+            if (me->IsEngaged())
+                return;
 
             if (who->GetTypeId() != TYPEID_PLAYER)
                 return;
@@ -88,6 +123,11 @@ class npc_jaina_theramore : public CreatureScript
                         case BFTPhases::ALittleHelp:
                             instance->DoSendScenarioEvent(EVENT_A_LITTLE_HELP);
                             instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Preparation);
+                            break;
+                        case BFTPhases::ExposeTheSpy:
+                            instance->SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, me);
+                            instance->DoSendScenarioEvent(EVENT_RETRIEVE_JAINA);
+                            instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Battle);
                             break;
                         default:
                             break;
@@ -119,8 +159,11 @@ class npc_pained : public CreatureScript
 
         InstanceScript* instance;
 
-        void MovementInform(uint32 /*type*/, uint32 id) override
+        void MovementInform(uint32 type, uint32 id) override
         {
+            if (type != EFFECT_MOTION_TYPE)
+                return;
+
             switch (id)
             {
                 case 2:
@@ -140,6 +183,96 @@ class npc_pained : public CreatureScript
     }
 };
 
+class npc_kalecgos_theramore : public CreatureScript
+{
+    public:
+    npc_kalecgos_theramore() : CreatureScript("npc_kalecgos_theramore")
+    {
+    }
+
+    struct npc_kalecgos_theramoreAI : public CustomAI
+    {
+        npc_kalecgos_theramoreAI(Creature* creature) : CustomAI(creature)
+        {
+            instance = me->GetInstanceScript();
+        }
+
+        enum Spells
+        {
+            SPELL_COMET_STORM           = 153595,
+            SPELL_DISSOLVE              = 255295,
+            SPELL_TELEPORT              = 357601,
+            SPELL_CHILLED               = 333602,
+            SPELL_FLURRY                = 320008,
+            SPELL_ICE_NOVA              = 157997
+        };
+
+        InstanceScript* instance;
+
+        void MovementInform(uint32 type, uint32 id) override
+        {
+            if (type != POINT_MOTION_TYPE)
+                return;
+
+            switch (id)
+            {
+                case 0:
+                    me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                    scheduler.Schedule(2s, [this](TaskContext /*context*/)
+                    {
+                        DoCastSelf(SPELL_DISSOLVE);
+                        DoCastSelf(SPELL_TELEPORT, true);
+                    });
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        void JustEngagedWith(Unit* /*who*/) override
+        {
+            scheduler
+                .Schedule(8s, 10s, [this](TaskContext chilled)
+                {
+                    if (Unit* target = SelectTarget(SelectAggroTarget::SELECT_TARGET_RANDOM, 0))
+                        DoCast(target, SPELL_CHILLED);
+                    chilled.Repeat(14s, 22s);
+                })
+                .Schedule(12s, 18s, [this](TaskContext comet_barrage)
+                {
+                    if (Unit* target = SelectTarget(SelectAggroTarget::SELECT_TARGET_MAXDISTANCE, 0))
+                        DoCast(target, SPELL_COMET_STORM);
+                    comet_barrage.Repeat(30s, 35s);
+                })
+                .Schedule(5ms, [this](TaskContext frostbolt)
+                {
+                    DoCastVictim(SPELL_FLURRY);
+                    frostbolt.Repeat(2s);
+                })
+                .Schedule(5s, [this](TaskContext ice_nova)
+                {
+                    for (auto* ref : me->GetThreatManager().GetUnsortedThreatList())
+                    {
+                        Unit* target = ref->GetVictim();
+                        if (target && target->isMoving())
+                        {
+                            me->InterruptNonMeleeSpells(true);
+                            DoCast(target, SPELL_ICE_NOVA);
+                            ice_nova.Repeat(3s, 5s);
+                            return;
+                        }
+                    }
+                    ice_nova.Repeat(1s);
+                });
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return GetBattleForTheramoreAI<npc_kalecgos_theramoreAI>(creature);
+    }
+};
+
 class event_theramore_training : public CreatureScript
 {
     public:
@@ -147,15 +280,16 @@ class event_theramore_training : public CreatureScript
     {
     }
 
-    struct event_theramore_trainingAI : public ScriptedAI
+    struct event_theramore_trainingAI : public NullCreatureAI
     {
-        event_theramore_trainingAI(Creature* creature) : ScriptedAI(creature)
+        event_theramore_trainingAI(Creature* creature) : NullCreatureAI(creature), launched(false)
         {
             instance = creature->GetInstanceScript();
         }
 
         TaskScheduler scheduler;
         InstanceScript* instance;
+        bool launched;
 
         enum Misc
         {
@@ -287,6 +421,12 @@ class event_theramore_training : public CreatureScript
 
         void UpdateAI(uint32 diff) override
         {
+            if (!launched)
+            {
+                DoAction(1U);
+                launched = true;
+            }
+
             scheduler.Update(diff);
         }
     };
@@ -306,13 +446,14 @@ class event_theramore_faithful : public CreatureScript
 
     struct event_theramore_faithfulAI : public ScriptedAI
     {
-        event_theramore_faithfulAI(Creature* creature) : ScriptedAI(creature)
+        event_theramore_faithfulAI(Creature* creature) : ScriptedAI(creature), launched(false)
         {
             instance = creature->GetInstanceScript();
         }
 
         TaskScheduler scheduler;
         InstanceScript* instance;
+        bool launched;
 
         enum Misc
         {
@@ -368,6 +509,12 @@ class event_theramore_faithful : public CreatureScript
 
         void UpdateAI(uint32 diff) override
         {
+            if (!launched)
+            {
+                DoAction(1U);
+                launched = true;
+            }
+
             scheduler.Update(diff);
         }
     };
@@ -382,6 +529,7 @@ void AddSC_battle_for_theramore()
 {
     new npc_jaina_theramore();
     new npc_pained();
+    new npc_kalecgos_theramore();
     new event_theramore_training();
     new event_theramore_faithful();
 }
