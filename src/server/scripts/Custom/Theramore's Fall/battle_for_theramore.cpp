@@ -1,17 +1,16 @@
-#include "boost/range/algorithm/reverse.hpp"
-#include "ScriptMgr.h"
-#include "ObjectAccessor.h"
-#include "MotionMaster.h"
 #include "GameObject.h"
+#include "InstanceScript.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
 #include "PassiveAI.h"
 #include "Scenario.h"
+#include "ScriptMgr.h"
 #include "ScriptedCreature.h"
-#include "SpellMgr.h"
-#include "SpellInfo.h"
 #include "SpellHistory.h"
-#include "InstanceScript.h"
-#include "battle_for_theramore.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "Custom/AI/CustomAI.h"
+#include "battle_for_theramore.h"
 
 class npc_jaina_theramore : public CreatureScript
 {
@@ -22,7 +21,7 @@ class npc_jaina_theramore : public CreatureScript
 
     struct npc_jaina_theramoreAI : public CustomAI
     {
-        npc_jaina_theramoreAI(Creature* creature) : CustomAI(creature, AI_Type::Melee)
+        npc_jaina_theramoreAI(Creature* creature) : CustomAI(creature), escaped(false)
         {
             Initialize();
         }
@@ -30,8 +29,9 @@ class npc_jaina_theramore : public CreatureScript
         enum Spells
         {
             SPELL_ICE_SHARD         = 290621,
-            SPELL_BROADSIDE         = 288218,
-            SPELL_RING_OF_FROST     = 285459
+            SPELL_RING_OF_FROST     = 285459,
+            SPELL_ICEBOUND_ESCAPE   = 290878,
+            SPELL_GLACIAL_RAY       = 288345
         };
 
         void Initialize()
@@ -40,10 +40,59 @@ class npc_jaina_theramore : public CreatureScript
         }
 
         InstanceScript* instance;
+        bool escaped;
 
         void Reset() override
         {
             Initialize();
+
+            escaped = false;
+
+            me->SetReactState(REACT_AGGRESSIVE);
+            me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+        }
+
+        void OnSuccessfulSpellCast(SpellInfo const* spell) override
+        {
+            switch (spell->Id)
+            {
+                case SPELL_ICEBOUND_ESCAPE:
+                    me->DespawnOrUnsummon();
+                    break;
+                case SPELL_GLACIAL_RAY:
+                {
+                    int32 duration = spell->GetDuration();
+
+                    me->StopMoving();
+                    me->SetReactState(REACT_PASSIVE);
+                    me->GetMotionMaster()->Clear();
+                    me->GetMotionMaster()->MoveRotate(duration, urand(0, 1) ? ROTATE_DIRECTION_LEFT : ROTATE_DIRECTION_RIGHT);
+
+                    scheduler.Schedule(Milliseconds(duration), [this](TaskContext glacial_ray)
+                    {
+                        me->SetReactState(REACT_AGGRESSIVE);
+                        me->GetMotionMaster()->Clear();
+                        me->GetMotionMaster()->MoveChase(me->GetVictim());
+                    });
+
+                    break;
+                }
+            }
+        }
+
+        void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+        {
+            if (!escaped && HealthBelowPct(20))
+            {
+                me->CombatStop();
+                me->CastStop();
+                me->SetReactState(REACT_PASSIVE);
+
+                damage = 0;
+                escaped = true;
+
+                DoCast(SPELL_ICEBOUND_ESCAPE);
+            }
         }
 
         void JustEngagedWith(Unit* who) override
@@ -52,47 +101,32 @@ class npc_jaina_theramore : public CreatureScript
                 .Schedule(5ms, [this](TaskContext ice_shard)
                 {
                     DoCastVictim(SPELL_ICE_SHARD);
-                    ice_shard.Repeat(8s);
+                    ice_shard.Repeat(2s);
                 })
-                .Schedule(2s, [this](TaskContext broadside)
+                .Schedule(8s, [this](TaskContext ice_shard)
                 {
-                    if (Unit* victim = SelectTarget(SELECT_TARGET_RANDOM))
-                        DoCast(victim, SPELL_BROADSIDE);
-                    broadside.Repeat(12s, 14s);
+                    DoCast(SPELL_GLACIAL_RAY);
+                    ice_shard.Repeat(2min);
                 })
                 .Schedule(15s, [this](TaskContext ring_of_frost)
                 {
                     DoCast(SPELL_RING_OF_FROST);
-                    ring_of_frost.Repeat(30s);
+                    ring_of_frost.Repeat(1min);
                 });
-        }
-
-        void SetData(uint32 id, uint32 value) override
-        {
-            if (id == 100)
-            {
-                if (Scenario* scenario = me->GetScenario())
-                    scenario->CompleteCurrentStep();
-            }
-            else if (id == 200)
-            {
-                instance->SetData(DATA_SCENARIO_PHASE, value);
-            }
         }
 
         void MovementInform(uint32 type, uint32 id) override
         {
-            if (type != POINT_MOTION_TYPE)
-                return;
-
-            switch (id)
+            if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
             {
-                case 0:
-                    instance->DoSendScenarioEvent(EVENT_THE_COUNCIL);
-                    instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Waiting);
-                    break;
-                default:
-                    break;
+                switch (id)
+                {
+                    case 0:
+                        instance->DoSendScenarioEvent(EVENT_THE_COUNCIL);
+                        break;
+                    default:
+                        break;
+                }
             }
         }
 
@@ -118,16 +152,12 @@ class npc_jaina_theramore : public CreatureScript
                     {
                         case BFTPhases::FindJaina:
                             instance->DoSendScenarioEvent(EVENT_FIND_JAINA);
-                            instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheCouncil);
                             break;
                         case BFTPhases::ALittleHelp:
                             instance->DoSendScenarioEvent(EVENT_A_LITTLE_HELP);
-                            instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Preparation);
                             break;
-                        case BFTPhases::ExposeTheSpy:
-                            instance->SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, me);
+                        case BFTPhases::TheBattle:
                             instance->DoSendScenarioEvent(EVENT_RETRIEVE_JAINA);
-                            instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Battle);
                             break;
                         default:
                             break;
@@ -161,18 +191,17 @@ class npc_pained : public CreatureScript
 
         void MovementInform(uint32 type, uint32 id) override
         {
-            if (type != EFFECT_MOTION_TYPE)
-                return;
-
-            switch (id)
+            if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
             {
-                case 2:
-                    me->SetVisible(false);
-                    instance->DoSendScenarioEvent(EVENT_THE_UNKNOWN_TAUREN);
-                    instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Evacuation);
-                    break;
-                default:
-                    break;
+                switch (id)
+                {
+                    case 2:
+                        me->SetVisible(false);
+                        instance->DoSendScenarioEvent(EVENT_THE_UNKNOWN_TAUREN);
+                        break;
+                    default:
+                        break;
+                }
             }
         }
     };
@@ -211,21 +240,21 @@ class npc_kalecgos_theramore : public CreatureScript
 
         void MovementInform(uint32 type, uint32 id) override
         {
-            if (type != POINT_MOTION_TYPE)
-                return;
-
-            switch (id)
+            if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
             {
-                case 0:
-                    me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
-                    scheduler.Schedule(2s, [this](TaskContext /*context*/)
-                    {
-                        DoCastSelf(SPELL_DISSOLVE);
-                        DoCastSelf(SPELL_TELEPORT, true);
-                    });
-                    break;
-                default:
-                    break;
+                switch (id)
+                {
+                    case 0:
+                        me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                        scheduler.Schedule(2s, [this](TaskContext /*context*/)
+                        {
+                            DoCastSelf(SPELL_DISSOLVE);
+                            DoCastSelf(SPELL_TELEPORT, true);
+                        });
+                        break;
+                    default:
+                        break;
+                }
             }
         }
 
@@ -256,7 +285,7 @@ class npc_kalecgos_theramore : public CreatureScript
                         Unit* target = ref->GetVictim();
                         if (target && target->isMoving())
                         {
-                            me->InterruptNonMeleeSpells(true);
+                            me->CastStop();
                             DoCast(target, SPELL_ICE_NOVA);
                             ice_nova.Repeat(3s, 5s);
                             return;
@@ -333,11 +362,34 @@ class event_theramore_training : public CreatureScript
             {
                 if (param == 2)
                 {
-                    footmen[0]->SetVisible(false);
-                    footmen[1]->SetVisible(false);
-                    faithful->SetVisible(false);
-                    arcanist->SetVisible(false);
+
+                    footmen[0]->SetTarget(ObjectGuid::Empty);
+                    footmen[0]->SetEmoteState(EMOTE_STATE_NONE);
+                    footmen[0]->SetFacingTo(2.60f);
+                    footmen[0]->SetRegenerateHealth(false);
+                    footmen[0]->SetHealth(footmen[0]->GetMaxHealth());
+                    footmen[0]->SetReactState(REACT_AGGRESSIVE);
+
+                    footmen[1]->SetTarget(ObjectGuid::Empty);
+                    footmen[1]->SetEmoteState(EMOTE_STATE_NONE);
+                    footmen[1]->SetFacingTo(2.60f);
+                    footmen[1]->SetRegenerateHealth(false);
+                    footmen[1]->SetHealth(footmen[1]->GetMaxHealth());
+                    footmen[1]->SetReactState(REACT_AGGRESSIVE);
+
+                    faithful->SetTarget(ObjectGuid::Empty);
+                    faithful->SetFacingTo(2.60f);
+                    faithful->SetReactState(REACT_AGGRESSIVE);
+
+                    arcanist->CastStop();
+                    arcanist->CombatStop();
+                    arcanist->SetTarget(ObjectGuid::Empty);
+                    arcanist->SetFacingTo(2.60f);
+                    arcanist->SetReactState(REACT_AGGRESSIVE);
+
                     training->SetVisible(false);
+
+                    scheduler.CancelAll();
                 }
                 else
                 {
@@ -474,13 +526,10 @@ class event_theramore_faithful : public CreatureScript
 
             if (param == 2)
             {
-                if (citizens.empty())
-                    return;
+                faithful->RemoveAllAuras();
+                faithful->SetFacingTo(0.66f);
 
-                for (Creature* citizen : citizens)
-                    citizen->SetVisible(false);
-
-                faithful->SetVisible(false);
+                scheduler.CancelAll();
             }
             else
             {

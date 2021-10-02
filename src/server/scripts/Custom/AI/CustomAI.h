@@ -20,8 +20,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         virtual ~CustomAI() { }
 
         virtual void Initialize();
-
-        void CanMove(bool canMove);
+        virtual float GetDistance() { return 20.f; };
 
         void JustSummoned(Creature* /*summon*/) override;
         void SummonedCreatureDespawn(Creature* /*summon*/) override;
@@ -30,7 +29,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void EnterEvadeMode(EvadeReason why = EVADE_REASON_OTHER) override;
 
         void Reset() override;
-        void JustEnteredCombat(Unit* /*who*/) override;
+        void AttackStart(Unit* who) override;
         void JustEngagedWith(Unit* /*who*/) override;
         void JustExitedCombat() override;
         void JustDied(Unit* /*killer*/) override;

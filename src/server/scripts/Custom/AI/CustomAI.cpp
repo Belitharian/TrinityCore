@@ -17,11 +17,6 @@ void CustomAI::Initialize()
     }
 }
 
-void CustomAI::CanMove(bool canMove)
-{
-    me->SetControlled(!canMove, UNIT_STATE_ROOT);
-}
-
 void CustomAI::JustSummoned(Creature* summon)
 {
     summons.Summon(summon);
@@ -45,8 +40,6 @@ void CustomAI::SummonedCreatureDies(Creature* summon, Unit* killer)
 
 void CustomAI::EnterEvadeMode(EvadeReason why)
 {
-    CanMove(true);
-
     summons.DespawnAll();
     scheduler.CancelAll();
 
@@ -63,13 +56,18 @@ void CustomAI::Reset()
     ScriptedAI::Reset();
 }
 
-void CustomAI::JustEnteredCombat(Unit* who)
+void CustomAI::AttackStart(Unit* who)
 {
-    ScriptedAI::JustEnteredCombat(who);
+    if (!who)
+        return;
 
-    if (type == AI_Type::Distance)
+    if (me->Attack(who, true))
     {
-        CanMove(false);
+        if (type != AI_Type::Distance)
+            DoStartMovement(who);
+        else
+            DoStartMovement(who, GetDistance());
+        SetCombatMovement(true);
     }
 }
 
@@ -100,7 +98,9 @@ void CustomAI::UpdateAI(uint32 diff)
     scheduler.Update(diff, [this]
     {
         if (UpdateVictim())
+        {
             DoMeleeAttackIfReady();
+        }
     });
 }
 

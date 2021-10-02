@@ -25,15 +25,17 @@
 
 enum class BFTPhases
 {
+    None,
     FindJaina,
     TheCouncil,
     Waiting,
-    TheUnknownTauren,
+    UnknownTauren,
     Evacuation,
     ALittleHelp,
     Preparation,
-    ExposeTheSpy,
-    Battle
+    TheBattle,
+    TheBattle_RetrieveJaina,
+    TheBattle_Survive,
 };
 
 enum BFTData
@@ -118,10 +120,19 @@ enum BFTMisc
     GOB_PORTAL_TO_ORGRIMMAR             = 353822,
 
     // Criteria Trees
-    CRITERIA_TREE_EVACUATION            = 1000009,
-    CRITERIA_TREE_A_LITTLE_HELP         = 1000011,
-    CRITERIA_TREE_REPAIR_TANKS          = 1000015,
+    CRITERIA_TREE_FIND_JAINA            = 1000000,
+    CRITERIA_TREE_LOCALIZE_JAINA        = 1000001,
+    CRITERIA_TREE_THE_COUNCIL           = 1000002,
+    CRITERIA_TREE_WAITING               = 1000004,
+    CRITERIA_TREE_UNKNOW_TAUREN         = 1000006,
+    CRITERIA_TREE_EVACUATION            = 1000008,
+    CRITERIA_TREE_A_LITTLE_HELP         = 1000010,
+    CRITERIA_TREE_MEET_JAINA            = 1000010,
     CRITERIA_TREE_PREPARATION           = 1000012,
+    CRITERIA_TREE_REPAIR_TANKS          = 1000015,
+    CRITERIA_TREE_THE_BATTLE            = 1000017,
+    CRITERIA_TREE_RETRIEVE_JAINA        = 1000018,
+    CRITERIA_TREE_SURVIVE_THE_BATTLE    = 1000019,
 
     // Sounds
     SOUND_FEARFUL_CROWD                 = 15003,
@@ -433,12 +444,10 @@ Position const TervoshPoint01   = { -3720.83f, -4551.10f, 25.82f, 1.35f };
 Position const KalecgosPoint01  = { -3730.39f, -4550.39f, 27.11f, 0.54f };
 Position const PortalPoint01    = { -3712.42f, -4539.62f, 25.82f, 3.59f };
 Position const PortalPoint02    = { -3783.17f, -4205.77f,  7.60f, 4.71f };
-Position const PortalPoint03    = { -3632.12f, -4351.22f,  6.38f, 3.79f };
 Position const HedricPoint01    = { -3717.79f, -4522.24f, 25.82f, 5.16f };
 Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f };
 Position const ExplodingPoint01 = { -3648.24f, -4364.96f,  9.68f, 3.78f };
-Position const HagPoint01       = { -3635.29f, -4353.62f,  6.99f, 3.82f };
-Position const ThalenPoint01    = { -3609.83f, -4333.48f, 10.29f, 3.82f };
+Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f };
 
 template <class AI, class T>
 inline AI* GetBattleForTheramoreAI(T* obj)

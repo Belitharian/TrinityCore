@@ -947,6 +947,24 @@ namespace Trinity
             uint32 i_spell;
     };
 
+    class EnemyMissingDotInRange
+    {
+        public:
+            EnemyMissingDotInRange(Unit const* obj, SpellInfo const* spellInfo) : i_obj(obj), i_spellInfo(spellInfo) { }
+
+            bool operator()(Unit* u) const
+            {
+                if (u->IsAlive() && u->IsInCombat() && i_obj->IsHostileTo(u) && i_obj->IsWithinDistInMap(u, i_spellInfo->GetMaxRange()) && !u->HasAura(i_spellInfo->Id))
+                    return true;
+
+                return false;
+            }
+
+        private:
+            Unit const* i_obj;
+            SpellInfo const* i_spellInfo;
+    };
+
     class AnyUnfriendlyUnitInObjectRangeCheck
     {
         public:

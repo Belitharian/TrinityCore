@@ -396,6 +396,16 @@ Unit* ScriptedAI::DoSelectBelowHpPctFriendlyWithEntry(uint32 entry, float range,
     return unit;
 }
 
+Unit* ScriptedAI::DoFindEnemyMissingDot(SpellInfo const* spellInfo)
+{
+    Unit* unit = nullptr;
+    Trinity::EnemyMissingDotInRange u_check(me, spellInfo);
+    Trinity::UnitLastSearcher<Trinity::EnemyMissingDotInRange> searcher(me, unit, u_check);
+    Cell::VisitAllObjects(me, searcher, 50.0f);
+
+    return unit;
+}
+
 std::list<Creature*> ScriptedAI::DoFindFriendlyCC(float range)
 {
     std::list<Creature*> list;

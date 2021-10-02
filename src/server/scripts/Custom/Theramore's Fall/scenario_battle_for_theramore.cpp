@@ -1,13 +1,13 @@
-#include "TemporarySummon.h"
-#include "GameObject.h"
 #include "CriteriaHandler.h"
-#include "Map.h"
 #include "EventMap.h"
-#include "ScriptMgr.h"
-#include "ScriptedCreature.h"
+#include "GameObject.h"
 #include "InstanceScript.h"
+#include "Map.h"
 #include "MotionMaster.h"
 #include "Player.h"
+#include "ScriptMgr.h"
+#include "ScriptedCreature.h"
+#include "TemporarySummon.h"
 #include "battle_for_theramore.h"
 
 #define CREATURE_DATA_SIZE 15
@@ -104,33 +104,97 @@ class scenario_battle_for_theramore : public InstanceMapScript
             SPELL_ICY_GLARE             = 304463,
             SPELL_POWER_BALL_VISUAL     = 54139,
             SPELL_DISSOLVE              = 255295,
-            SPELL_TELEPORT              = 357601
+            SPELL_TELEPORT              = 357601,
+            SPELL_CHILLING_BLAST        = 337053
         };
+
+        uint32 GetData(uint32 dataId) const override
+        {
+            if (dataId == DATA_SCENARIO_PHASE)
+                return (uint32)phase;
+            return 0;
+        }
+
+        void SetData(uint32 dataId, uint32 value) override
+        {
+            if (dataId == DATA_SCENARIO_PHASE)
+                phase = (BFTPhases)value;
+        }
 
         void OnCompletedCriteriaTree(CriteriaTree const* tree) override
         {
             switch (tree->ID)
             {
-                case CRITERIA_TREE_PREPARATION:
-                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ExposeTheSpy);
-                    break;
-                case CRITERIA_TREE_REPAIR_TANKS:
-                    for (Creature* tank : tanks)
+                // Step 1 : Find Jaina
+                case CRITERIA_TREE_FIND_JAINA:
+                {
+                    ClosePortal(DATA_PORTAL_TO_STORMWIND);
+                    GetTervosh()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                    GetKinndy()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                    GetKalecgos()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                    if (Creature* jaina = GetCreature(DATA_JAINA_PROUDMOORE))
                     {
-                        if (Creature* fire = tank->FindNearestCreature(WORLD_TRIGGER, 5.f))
-                            fire->DespawnOrUnsummon();
-
-                        tank->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-                        tank->SetRegenerateHealth(true);
-                        tank->SetHealth(tank->GetMaxHealth());
+                        jaina->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        Talk(jaina, SAY_REUNION_1);
+                        SetTarget(jaina);
                     }
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheCouncil);
+                    events.ScheduleEvent(1, 2s);
                     break;
+                }
+                // Step 2 : The Council
+                case CRITERIA_TREE_THE_COUNCIL:
+                {
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Waiting);
+                    events.ScheduleEvent(24, 10s);
+                    break;
+                }
+                // Step 3 : Waiting
+                case CRITERIA_TREE_WAITING:
+                {
+                    for (uint8 i = 0; i < PERITH_LOCATION; i++)
+                    {
+                        if (Creature* creature = GetCreature(perithLocation[i].dataId))
+                            creature->NearTeleportTo(perithLocation[i].position);
+                    }
+                    GetOfficer()->SetSheath(SHEATH_STATE_UNARMED);
+                    GetOfficer()->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::UnknownTauren);
+                    events.ScheduleEvent(25, 1s);
+                    break;
+                }
+                // Step 4 : The Unknow Tauren
+                case CRITERIA_TREE_UNKNOW_TAUREN:
+                {
+                    for (Creature* citizen : citizens)
+                    {
+                        if (Creature* faithful = citizen->FindNearestCreature(NPC_THERAMORE_FAITHFUL, 10.f))
+                            continue;
+                        if (citizen->GetEntry() == NPC_ALLIANCE_PEASANT)
+                            continue;
+                        citizen->SetNpcFlags(UNIT_NPC_FLAG_GOSSIP);
+                    }
+                    if (Creature* kinndy = GetKinndy())
+                    {
+                        kinndy->SetVisible(true);
+                        kinndy->GetMotionMaster()->MoveSmoothPath(2, KinndyPath02, KINNDY_PATH_02, true);
+                    }
+                    if (Creature* tervosh = GetTervosh())
+                    {
+                        tervosh->SetVisible(true);
+                        tervosh->GetMotionMaster()->MoveSmoothPath(2, TervoshPath03, TERVOSH_PATH_03, true);
+                    }
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Evacuation);
+                    break;
+                }
+                // Step 5 : Evacuation
                 case CRITERIA_TREE_EVACUATION:
-                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
+                {
                     if (Creature* jaina = GetJaina())
                     {
                         jaina->NearTeleportTo(JainaPoint02);
                         jaina->SetHomePosition(JainaPoint02);
+                        jaina->AI()->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
                     }
                     if (Creature* tervosh = GetTervosh())
                     {
@@ -159,13 +223,103 @@ class scenario_battle_for_theramore : public InstanceMapScript
                             creature->NearTeleportTo(PortalPoint01);
                         }
                     }
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
                     break;
+                }
+                // Step 6 : A Little Help
+                case CRITERIA_TREE_A_LITTLE_HELP:
+                {
+                    if (Creature* jaina = GetCreature(DATA_JAINA_PROUDMOORE))
+                    {
+                        for (uint8 i = 0; i < FIRE_LOCATION; i++)
+                        {
+                            const Position pos = FireLocation[i];
+                            if (Creature* trigger = jaina->SummonTrigger(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), 0.0f, 0U))
+                                trigger->CastSpell(trigger, SPELL_COSMETIC_LARGE_FIRE);
+                        }
+
+                        for (uint8 i = 0; i < IMAGES_LOCATION; i++)
+                        {
+                            if (Creature* image = jaina->SummonCreature(NPC_LADY_JAINA_PROUMOORE_IMAGE, JainaImageLocation[i], TEMPSUMMON_DEAD_DESPAWN, 2s))
+                            {
+
+                            }
+                        }
+                    }
+                    for (Creature* dummy : dummies)
+                        dummy->AI()->DoAction(2U);
+                    for (Creature* tank : tanks)
+                    {
+                        tank->SetNpcFlags(UNIT_NPC_FLAG_SPELLCLICK);
+                        tank->SetRegenerateHealth(false);
+                        tank->SetHealth(static_cast<float>(tank->GetHealth()* frand(0.15f, 0.60f)));
+                    }
+                    for (Creature* citizen : citizens)
+                    {
+                        citizen->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                        if (roll_chance_i(60))
+                            citizen->SetVisible(false);
+                        else
+                        {
+                            citizen->SetRegenerateHealth(false);
+                            citizen->SetHealth(0U);
+                            citizen->SetStandState(UNIT_STAND_STATE_DEAD);
+                            citizen->AddUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
+                            citizen->AddUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
+                        }
+                    }
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Preparation);
+                    events.ScheduleEvent(71, 1s);
+                    break;
+                }
+                // Step 7 : Preparation - Parent
+                case CRITERIA_TREE_PREPARATION:
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle);
+                    break;
+                // Step 7 : Preparation - Tanks events
+                case CRITERIA_TREE_REPAIR_TANKS:
+                {
+                    for (Creature* tank : tanks)
+                    {
+                        if (Creature* fire = tank->FindNearestCreature(WORLD_TRIGGER, 5.f))
+                            fire->DespawnOrUnsummon();
+
+                        tank->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+                        tank->SetRegenerateHealth(true);
+                        tank->SetHealth(tank->GetMaxHealth());
+                    }
+                    break;
+                }
+                // Step 8 : The Battle - Parent
+                case CRITERIA_TREE_THE_BATTLE:
+                case CRITERIA_TREE_SURVIVE_THE_BATTLE:
+                    break;
+                // Step 8 : The Battle - Retrieve Lady Jaina Jaina
+                case CRITERIA_TREE_RETRIEVE_JAINA:
+                {
+                    if (Creature* jaina = GetJaina())
+                    {
+                        SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, jaina);
+
+                        jaina->AI()->Talk(SAY_BATTLE_01);
+                        if (GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_ORGRIMMAR, PortalPoint02, QuaternionData::QuaternionData(), 0))
+                            portal->m_Events.AddEvent(new HordeDoorsEvent(portal), portal->m_Events.CalculateTime(5 * IN_MILLISECONDS));
+                    }
+                    SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, GetRhonin());
+                    SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, GetKalecgos());
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle_Survive);
+                    events.ScheduleEvent(91, 3s);
+                    events.ScheduleEvent(92, 1s);
+                    break;
+                }
             }
         }
 
         void OnCreatureCreate(Creature* creature) override
         {
             InstanceScript::OnCreatureCreate(creature);
+
+            creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
 
             switch (creature->GetEntry())
             {
@@ -194,6 +348,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
         {
             InstanceScript::OnGameObjectCreate(go);
 
+            go->SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
+
             switch (go->GetEntry())
             {
                 case GOB_MYSTIC_BARRIER:
@@ -210,150 +366,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     break;
                 default:
                     break;
-            }
-        }
-
-        uint32 GetData(uint32 dataId) const override
-        {
-            if (dataId == DATA_SCENARIO_PHASE)
-                return (uint32)phase;
-            return 0;
-        }
-
-        void SetData(uint32 dataId, uint32 value) override
-        {
-            if (dataId == DATA_SCENARIO_PHASE)
-            {
-                phase = (BFTPhases)value;
-                switch (phase)
-                {
-                    // 1ère phase : Localiser Jaina
-                    case BFTPhases::FindJaina:
-                    // 6e phase : Un coup de pouce
-                    case BFTPhases::ALittleHelp:
-                    // 8e phase : Retrouver Jaina
-                    case BFTPhases::ExposeTheSpy:
-                    default:
-                        break;
-                    // 2d phase : Le Conseil
-                    // Joue les mini évènements pour décorer
-                    case BFTPhases::TheCouncil:
-                    {
-                        ClosePortal(DATA_PORTAL_TO_STORMWIND);
-                        GetTervosh()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-                        GetKinndy()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-                        GetKalecgos()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-                        if (Creature* jaina = GetCreature(DATA_JAINA_PROUDMOORE))
-                        {
-                            jaina->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-                            Talk(jaina, SAY_REUNION_1);
-                            SetTarget(jaina);
-                        }
-                        events.ScheduleEvent(1, 2s);
-                        break;
-                    }
-                    // 3e phase : Attendre l'action
-                    case BFTPhases::Waiting:
-                        events.ScheduleEvent(24, 10s);
-                        break;
-                    // 4e phase : Un Mystérieux Tauren
-                    case BFTPhases::TheUnknownTauren:
-                    {
-                        for (uint8 i = 0; i < PERITH_LOCATION; i++)
-                        {
-                            if (Creature* creature = GetCreature(perithLocation[i].dataId))
-                                creature->NearTeleportTo(perithLocation[i].position);
-                        }
-                        GetOfficer()->SetSheath(SHEATH_STATE_UNARMED);
-                        GetOfficer()->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
-                        events.ScheduleEvent(25, 1s);
-                        break;
-                    }
-                    // 5e phase : L'Evacuation
-                    case BFTPhases::Evacuation:
-                    {
-                        for (Creature* citizen : citizens)
-                        {
-                            if (Creature* faithful = citizen->FindNearestCreature(NPC_THERAMORE_FAITHFUL, 10.f))
-                                continue;
-                            if (citizen->GetEntry() == NPC_ALLIANCE_PEASANT)
-                                continue;
-                            citizen->SetNpcFlags(UNIT_NPC_FLAG_GOSSIP);
-                        }
-                        if (Creature* kinndy = GetKinndy())
-                        {
-                            kinndy->SetVisible(true);
-                            kinndy->GetMotionMaster()->MoveSmoothPath(2, KinndyPath02, KINNDY_PATH_02, true);
-                        }
-                        if (Creature* tervosh = GetTervosh())
-                        {
-                            tervosh->SetVisible(true);
-                            tervosh->GetMotionMaster()->MoveSmoothPath(2, TervoshPath03, TERVOSH_PATH_03, true);
-                        }
-                        break;
-                    }
-                    // 7e phase : Préparer la bataille
-                    // Supprime les mini évènements avant la bataille
-                    case BFTPhases::Preparation:
-                    {
-                        if (Creature* jaina = GetCreature(DATA_JAINA_PROUDMOORE))
-                        {
-                            for (uint8 i = 0; i < FIRE_LOCATION; i++)
-                            {
-                                const Position pos = FireLocation[i];
-                                if (Creature* trigger = jaina->SummonTrigger(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), 0.0f, 0U))
-                                    trigger->CastSpell(trigger, SPELL_COSMETIC_LARGE_FIRE);
-                            }
-
-                            for (uint8 i = 0; i < IMAGES_LOCATION; i++)
-                            {
-                                if (Creature* image = jaina->SummonCreature(NPC_LADY_JAINA_PROUMOORE_IMAGE, JainaImageLocation[i], TEMPSUMMON_DEAD_DESPAWN, 2s))
-                                {
-
-                                }
-                            }
-                        }
-                        for (Creature* dummy : dummies)
-                            dummy->AI()->DoAction(2U);
-                        for (Creature* tank : tanks)
-                        {
-                            tank->SetNpcFlags(UNIT_NPC_FLAG_SPELLCLICK);
-                            tank->SetRegenerateHealth(false);
-                            tank->SetHealth(static_cast<float>(tank->GetHealth()) * frand(0.15f, 0.60f));
-                        }
-                        for (Creature* citizen : citizens)
-                        {
-                            citizen->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                            if (roll_chance_i(60))
-                                citizen->SetVisible(false);
-                            else
-                            {
-                                citizen->SetRegenerateHealth(false);
-                                citizen->SetHealth(0U);
-                                citizen->SetStandState(UNIT_STAND_STATE_DEAD);
-                                citizen->AddUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
-                                citizen->AddUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
-                            }
-                        }
-                        events.ScheduleEvent(71, 1s);
-                        break;
-                    }
-                        break;
-                    // 8e phase : Survivre à la bataille
-                    case BFTPhases::Battle:
-                    {
-                        GetRhonin()->AI()->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ExposeTheSpy);
-                        if (Creature* jaina = GetJaina())
-                        {
-                            jaina->AI()->Talk(SAY_BATTLE_01);
-                            if (GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_ORGRIMMAR, PortalPoint02, QuaternionData::QuaternionData(), 0))
-                                portal->m_Events.AddEvent(new HordeDoorsEvent(portal), portal->m_Events.CalculateTime(5 * IN_MILLISECONDS));
-                        }
-                        events.ScheduleEvent(91, 3s);
-                        events.ScheduleEvent(92, 1s);
-                        break;
-                    }
-                }
             }
         }
 
@@ -494,7 +506,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
                 case 24:
                     DoSendScenarioEvent(EVENT_WAITING);
-                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheUnknownTauren);
                     break;
 
                 #pragma endregion
@@ -509,7 +520,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         {
                             creature->SetWalk(true);
                             creature->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-                            creature->GetMotionMaster()->MovePoint(0, perithLocation[i].destination, true, perithLocation[i].destination.GetOrientation());
+                            creature->GetMotionMaster()->MovePoint(0, perithLocation[i].destination, false, perithLocation[i].destination.GetOrientation());
                         }
                     }
                     Next(7s);
@@ -776,7 +787,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     break;
                 case 76:
                     GetHedric()->SetWalk(true);
-                    GetHedric()->GetMotionMaster()->MovePoint(0, HedricPoint02, true, HedricPoint02.GetOrientation());
+                    GetHedric()->GetMotionMaster()->MovePoint(0, HedricPoint02, false, HedricPoint02.GetOrientation());
                     Next(500ms);
                     break;
                 case 77:
@@ -791,7 +802,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         creature->SetVisible(true);
                         creature->CastSpell(creature, SPELL_TELEPORT_DUMMY);
                         creature->SetWalk(true);
-                        creature->GetMotionMaster()->MovePoint(0, archmagesLocation[archmagesIndex].destination, true, archmagesLocation[archmagesIndex].destination.GetOrientation());
+                        creature->GetMotionMaster()->MovePoint(0, archmagesLocation[archmagesIndex].destination, false, archmagesLocation[archmagesIndex].destination.GetOrientation());
 
                         archmagesIndex++;
 
@@ -903,6 +914,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
                                 case NPC_ARCHMAGE_TERVOSH:
                                     creature->RemoveAllAuras();
                                     break;
+                                case NPC_JAINA_PROUDMOORE:
+                                    TeleportPlayers(actorsRelocation[i].destination);
+                                    creature->AI()->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle);
+                                    break;
                             }
 
                             creature->NearTeleportTo(actorsRelocation[i].destination);
@@ -976,23 +991,39 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     if (Creature* thalen = GetThalen())
                     {
                         thalen->SetWalk(false);
-                        thalen->GetMotionMaster()->MovePoint(0, PortalPoint03, true, PortalPoint03.GetOrientation());
+                        thalen->GetMotionMaster()->MovePoint(0, ThalenPoint01, false, ThalenPoint01.GetOrientation());
+                    }
+                    Next(2s);
+                    break;
+                case 97:
+                    if (Creature* jaina = GetJaina())
+                    {
+                        const Position pos = GetRandomPosition(ThalenPoint01, 2.f);
+                        jaina->CastSpell(pos, SPELL_TELEPORT);
+                        jaina->AI()->Talk(SAY_BATTLE_04);
                     }
                     Next(1s);
                     break;
-                case 97:
-                    GetJaina()->AI()->Talk(SAY_BATTLE_04);
-                    GetThalen()->CastSpell(GetThalen(), SPELL_ICY_GLARE);
-                    GetThalen()->StopMoving();
+                case 98:
+                    GetJaina()->CastSpell(GetJaina(), SPELL_CHILLING_BLAST);
+                    if (Creature* thalen = GetThalen())
+                    {
+                        thalen->CastSpell(thalen, SPELL_ICY_GLARE);
+                        thalen->StopMoving();
+                    }
                     Next(2s);
                     break;
-                case 98:
+                case 99:
                     if (Creature* thalen = GetThalen())
                     {
                         thalen->RemoveAurasDueToSpell(SPELL_BLAZING_BARRIER);
                         thalen->CastSpell(thalen, SPELL_DISSOLVE);
                         thalen->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
                     }
+                    Next(3s);
+                    break;
+                case 100:
+                    GetJaina()->CastSpell(actorsRelocation[0].destination, SPELL_TELEPORT);
                     break;
 
                 #pragma endregion
@@ -1007,6 +1038,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
         std::vector<Creature*> citizens;
         std::vector<Creature*> dummies;
         std::vector<Creature*> tanks;
+        std::list<TempSummon*> hordes;
 
         Creature* GetJaina()    { return GetCreature(DATA_JAINA_PROUDMOORE); }
         Creature* GetKinndy()   { return GetCreature(DATA_KINNDY_SPARKSHINE); }
@@ -1071,6 +1103,29 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     special->CastSpell(special, SPELL_CLOSE_PORTAL, args);
                 }
             }
+        }
+
+        void TeleportPlayers(const Position center)
+        {
+            Map::PlayerList const& PlayerList = instance->GetPlayers();
+            if (PlayerList.isEmpty())
+                return;
+
+            Position pos = GetRandomPosition(center, 8.f);
+            for (Map::PlayerList::const_iterator i = PlayerList.begin(); i != PlayerList.end(); ++i)
+            {
+                if (Player* player = i->GetSource())
+                    player->NearTeleportTo(pos);
+            }
+        }
+
+        Position GetRandomPosition(Position center, float dist)
+        {
+            float alpha = 2 * float(M_PI) * float(rand_norm());
+            float r = dist * sqrtf(float(rand_norm()));
+            float x = r * cosf(alpha) + center.GetPositionX();
+            float y = r * sinf(alpha) + center.GetPositionY();
+            return { x, y, center.GetPositionZ(), 0.f };
         }
     };
 

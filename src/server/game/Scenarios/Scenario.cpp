@@ -197,14 +197,7 @@ bool Scenario::CanCompleteCriteriaTree(CriteriaTree const* tree)
 
 void Scenario::CompletedCriteriaTree(CriteriaTree const* tree, Player* /*referencePlayer*/)
 {
-    if (InstanceScenario* instanceScenario = reinterpret_cast<InstanceScenario*>(this))
-    {
-        if (InstanceMap* instanceMap = instanceScenario->GetMap()->ToInstanceMap())
-        {
-            if (InstanceScript* instanceScript = instanceMap->GetInstanceScript())
-                instanceScript->OnCompletedCriteriaTree(tree);
-        }
-    }
+    OnCompletedCriteriaTree(tree);
 
     ScenarioStepEntry const* step = tree->ScenarioStep;
     if (!step)
@@ -214,6 +207,8 @@ void Scenario::CompletedCriteriaTree(CriteriaTree const* tree, Player* /*referen
     {
         if (!IsCompletedCriteriaTree(parent))
             return;
+
+        OnCompletedCriteriaTree(parent);
     }
 
     if (!step->IsBonusObjective() && step != GetStep())
@@ -224,6 +219,18 @@ void Scenario::CompletedCriteriaTree(CriteriaTree const* tree, Player* /*referen
 
     SetStepState(step, SCENARIO_STEP_DONE);
     CompleteStep(step);
+}
+
+void Scenario::OnCompletedCriteriaTree(CriteriaTree const* tree)
+{
+    if (InstanceScenario* instanceScenario = reinterpret_cast<InstanceScenario*>(this))
+    {
+        if (InstanceMap* instanceMap = instanceScenario->GetMap()->ToInstanceMap())
+        {
+            if (InstanceScript* instanceScript = instanceMap->GetInstanceScript())
+                instanceScript->OnCompletedCriteriaTree(tree);
+        }
+    }
 }
 
 void Scenario::SendPacket(WorldPacket const* data) const
