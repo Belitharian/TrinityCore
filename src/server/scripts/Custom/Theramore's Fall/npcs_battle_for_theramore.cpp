@@ -46,7 +46,7 @@ class npc_theramore_citizen : public CreatureScript
             if (type != POINT_MOTION_TYPE)
                 return;
 
-            if (id == 0)
+            if (id == MOVEMENT_INFO_POINT_01)
             {
                 me->SetVisible(false);
             }
@@ -85,7 +85,7 @@ class npc_theramore_citizen : public CreatureScript
                             case 2:
                                 me->SetTarget(ObjectGuid::Empty);
                                 if (Creature* stalker = GetClosestCreatureWithEntry(me, NPC_INVISIBLE_STALKER, 35.f))
-                                    me->GetMotionMaster()->MovePoint(0, stalker->GetPosition());
+                                    me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, stalker->GetPosition());
                                 context.Repeat(1s);
                                 break;
                             case 3:
@@ -231,21 +231,42 @@ class npc_arcanic_image : public CreatureScript
     {
         enum Spells
         {
-            SPELL_BROADSIDE = 288214,
+            SPELL_ARCANE_BOMB       = 304027,
+            SPELL_TRANSPARENCY_50   = 44816
         };
+
 
         npc_arcanic_imageAI(Creature* creature) : CustomAI(creature)
         {
+            SetCombatMovement(false);
+        }
+
+        void Reset() override
+        {
+            me->AddAura(SPELL_TRANSPARENCY_50, me);
         }
 
         void JustEngagedWith(Unit* who) override
         {
-            me->SetEmoteState(EMOTE_STATE_STAND_SETEMOTESTATE);
-
-            scheduler.Schedule(5ms, [this](TaskContext broadside)
+            scheduler.Schedule(5ms, [this](TaskContext arcane_bomb)
             {
-                DoCastVictim(SPELL_BROADSIDE);
-                broadside.Repeat(8s);
+                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                {
+                    if (Creature* tempSumm = me->SummonTrigger(target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), 0.0f, 15 * IN_MILLISECONDS))
+                    {
+                        tempSumm->SetFaction(me->GetFaction());
+                        tempSumm->SetOwnerGUID(me->GetGUID());
+
+                        PhasingHandler::InheritPhaseShift(tempSumm, me);
+
+                        CastSpellExtraArgs args;
+                        args.AddSpellBP0(65000);
+
+                        tempSumm->CastSpell(target, SPELL_ARCANE_BOMB, args);
+                    }
+                }
+
+                arcane_bomb.Repeat(8s);
             });
         }
     };
@@ -312,6 +333,125 @@ struct npc_theramore_troopAI : public CustomAI
             emoteReceived = true;
         }
     }
+
+    protected:
+
+    uint32 EnemiesInRange(float distance)
+    {
+        uint32 count = 0;
+        for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
+            if (me->IsWithinDist(ref->GetVictim(), distance))
+                ++count;
+        return count;
+    }
+};
+
+class npc_theramore_officier : public CreatureScript
+{
+    public:
+    npc_theramore_officier() : CreatureScript("npc_theramore_officier")
+    {
+    }
+
+    struct npc_theramore_officierAI : public npc_theramore_troopAI
+    {
+        npc_theramore_officierAI(Creature* creature) : npc_theramore_troopAI(creature, AI_Type::Melee)
+        {
+        }
+
+        enum Misc
+        {
+            SPELL_FROST_NOVA            = 284879
+        };
+
+        enum Spells
+        {
+            SPELL_AVENGING_WRATH        = 292266,
+            SPELL_BLESSING_OF_FREEDOM   = 299256,
+            SPELL_CRUSADER_STRIKE       = 295670,
+            SPELL_HOLY_LIGHT            = 295698,
+            SPELL_JUDGMENT              = 295671,
+            SPELL_LIGHT_OF_DAWN         = 295710,
+            SPELL_REBUKE                = 173085,
+            SPELL_DIVINE_STORM          = 183897
+        };
+
+        void SpellHit(Unit* caster, SpellInfo const* spellInfo) override
+        {
+            if (spellInfo->Id == SPELL_FROST_NOVA)
+            {
+                scheduler.Schedule(2s, [caster, this](TaskContext /*blessing_of_freedom*/)
+                {
+                    me->AttackedTarget(caster, true);
+                    DoCastSelf(SPELL_BLESSING_OF_FREEDOM);
+                });
+            }
+        }
+
+        void JustEngagedWith(Unit* who) override
+        {
+            if (roll_chance_i(30))
+                DoCastSelf(SPELL_AVENGING_WRATH);
+
+            scheduler
+                .Schedule(5ms, [this](TaskContext rebuke)
+                {
+                    if (Unit* target = DoSelectCastingUnit(SPELL_REBUKE, 35.f))
+                    {
+                        me->CastStop();
+                        DoCast(target, SPELL_REBUKE);
+                        rebuke.Repeat(25s, 40s);
+                    }
+                    else
+                    {
+                        rebuke.Repeat(1s);
+                    }
+                })
+                .Schedule(1s, 2s, [this](TaskContext holy_light)
+                {
+                    if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 80))
+                    {
+                        me->CastStop();
+                        DoCast(target, SPELL_HOLY_LIGHT);
+                    }
+                    holy_light.Repeat(8s);
+                })
+                .Schedule(5s, 7s, [this](TaskContext light_of_dawn)
+                {
+                    if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 50))
+                    {
+                        me->CastStop();
+                        DoCast(target, SPELL_LIGHT_OF_DAWN);
+                    }
+                    light_of_dawn.Repeat(10s, 15s);
+                })
+                .Schedule(8s, 14s, [this](TaskContext divine_storm)
+                {
+                    if (EnemiesInRange(8.0f) >= 3)
+                    {
+                        DoCastAOE(SPELL_DIVINE_STORM);
+                        divine_storm.Repeat(12s, 25s);
+                    }
+                    else
+                        divine_storm.Repeat(1s);
+                })
+                .Schedule(14s, 22s, [this](TaskContext crusader_strike)
+                {
+                    DoCastVictim(SPELL_CRUSADER_STRIKE);
+                    crusader_strike.Repeat(5s, 8s);
+                })
+                .Schedule(2s, 8s, [this](TaskContext judgment)
+                {
+                    DoCastVictim(SPELL_JUDGMENT);
+                    judgment.Repeat(12s, 15s);
+                });
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_theramore_officierAI(creature);
+    }
 };
 
 class npc_theramore_footman : public CreatureScript
@@ -329,9 +469,7 @@ class npc_theramore_footman : public CreatureScript
 
         enum Spells
         {
-            SPELL_HEROIC_LEAP           = 279008,
-            SPELL_CLEAVE                = 178532,
-            SPELL_REFLECTIVE_SHIELD     = 189070,
+            SPELL_VIGILANT_STRIKE       = 260834,
             SPELL_WHIRLWIND             = 17207,
             SPELL_HAMMER_STUN           = 36138
         };
@@ -352,32 +490,22 @@ class npc_theramore_footman : public CreatureScript
                         hammer_stun.Repeat(1s);
 					}
                 })
-                .Schedule(3s, 8s, [this](TaskContext cleave)
+                .Schedule(1s, 5s, [this](TaskContext vigilant_strike)
                 {
-                    DoCast(SPELL_CLEAVE);
-                    cleave.Repeat(10s, 15s);
-                })
-                .Schedule(8s, 15s, [this](TaskContext reflective_shield)
-                {
-                    DoCast(SPELL_REFLECTIVE_SHIELD);
-                    reflective_shield.Repeat(30s);
-                })
-                .Schedule(12s, 23s, [this](TaskContext heroic_leap)
-                {
-                    DoCast(SPELL_HEROIC_LEAP);
-                    heroic_leap.Repeat(2min);
+                    DoCastVictim(SPELL_VIGILANT_STRIKE);
+                    vigilant_strike.Repeat(8s, 14s);
                 })
                 .Schedule(15s, 25s, [this](TaskContext whirlwind)
                 {
                     DoCast(SPELL_WHIRLWIND);
-                    whirlwind.Repeat(45s);
+                    whirlwind.Repeat(1min);
                 });
         }
     };
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return GetBattleForTheramoreAI<npc_theramore_footmanAI>(creature);
+        return new npc_theramore_footmanAI(creature);
     }
 };
 
@@ -399,7 +527,7 @@ class npc_theramore_arcanist : public CreatureScript
             SPELL_ARCANE_BLAST      = 270543,
             SPELL_ARCANE_EXPLOSION  = 277012,
             SPELL_ARCANE_MISSILES   = 191293,
-            SPELL_ARCANE_HASTE      = 47791,
+            SPELL_ARCANE_HASTE      = 50182,
         };
 
         float GetDistance() override
@@ -419,8 +547,14 @@ class npc_theramore_arcanist : public CreatureScript
                 })
                 .Schedule(3s, 5s, [this](TaskContext arcane_explosion)
                 {
-                    DoCast(SPELL_ARCANE_EXPLOSION);
-                    arcane_explosion.Repeat(12s, 14s);
+                    if (EnemiesInRange(10.f) >= 2)
+                    {
+                        me->CastStop();
+                        DoCast(SPELL_ARCANE_EXPLOSION);
+                        arcane_explosion.Repeat(10s, 14s);
+                    }
+                    else
+                        arcane_explosion.Repeat(1s);
                 })
                 .Schedule(4s, 8s, [this](TaskContext arcane_missiles)
                 {
@@ -431,14 +565,14 @@ class npc_theramore_arcanist : public CreatureScript
                 .Schedule(6s, 10s, [this](TaskContext arcane_haste)
                 {
                     DoCast(SPELL_ARCANE_HASTE);
-                    arcane_haste.Repeat(30s);
+                    arcane_haste.Repeat(1min, 1.2min);
                 });
         }
     };
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return GetBattleForTheramoreAI<npc_theramore_arcanistAI>(creature);
+        return new npc_theramore_arcanistAI(creature);
     }
 };
 
@@ -514,6 +648,18 @@ class npc_theramore_faithful : public CreatureScript
                     DoCastVictim(SPELL_SMITE);
                     smite.Repeat(2s);
                 })
+                .Schedule(1s, 2s, [this](TaskContext power_word_shield)
+                {
+                    if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 80))
+                        DoCast(target, SPELL_POWER_WORD_SHIELD);
+                    power_word_shield.Repeat(8s);
+                })
+                .Schedule(5s, 7s, [this](TaskContext renew)
+                {
+                    if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 50))
+                        DoCast(target, SPELL_RENEW);
+                    renew.Repeat(10s, 15s);
+                })
                 .Schedule(12s, 14s, [this](TaskContext prayer_of_healing)
                 {
                     DoCastSelf(SPELL_PRAYER_OF_HEALING);
@@ -531,8 +677,12 @@ class npc_theramore_faithful : public CreatureScript
                 .Schedule(1s, 3s, [this](TaskContext psychic_scream)
                 {
                     if (EnemiesInRange(10.f) >= 2)
+                    {
                         DoCastAOE(SPELL_PSYCHIC_SCREAM);
-                    psychic_scream.Repeat(10s, 25s);
+                        psychic_scream.Repeat(10s, 25s);
+                    }
+                    else
+                        psychic_scream.Repeat(1s);
                 })
                 .Schedule(1s, 8s, [this](TaskContext flash_heal)
                 {
@@ -544,20 +694,11 @@ class npc_theramore_faithful : public CreatureScript
                     flash_heal.Repeat(2s);
                 });
         }
-
-        uint32 EnemiesInRange(float distance)
-        {
-            uint32 count = 0;
-            for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
-                if (me->GetDistance2d(ref->GetVictim()) < distance)
-                    ++count;
-            return count;
-        }
     };
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return GetBattleForTheramoreAI<npc_theramore_faithfulAI>(creature);
+        return new npc_theramore_faithfulAI(creature);
     }
 };
 
@@ -577,29 +718,35 @@ struct npc_theramore_hordeAI : public CustomAI
     InstanceScript* instance;
     CastSpellExtraArgs args;
 
-    void MovementInform(uint32 /*type*/, uint32 id) override
+    void MovementInform(uint32 type, uint32 id) override
     {
-        switch (id)
+        if (me->IsEngaged())
+            return;
+
+        if (type == POINT_MOTION_TYPE)
         {
-            case 0:
-                me->CastSpell(me, SPELL_ARCANIC_BARRIER, args);
-                me->DespawnOrUnsummon(2s);
-                break;
-            default:
-                break;
+            switch (id)
+            {
+                case MOVEMENT_INFO_POINT_03:
+                    me->CastSpell(me, SPELL_ARCANIC_BARRIER, args);
+                    me->DespawnOrUnsummon(2s);
+                    break;
+                default:
+                    break;
+            }
         }
     }
 
     protected:
 
-        uint32 EnemiesInRange(float distance)
-        {
-            uint32 count = 0;
-            for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
-                if (me->GetDistance2d(ref->GetVictim()) < distance)
-                    ++count;
-            return count;
-        }
+    uint32 EnemiesInRange(float distance)
+    {
+        uint32 count = 0;
+        for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
+            if (ref->GetVictim()->IsWithinDist(me, distance, false))
+                ++count;
+        return count;
+    }
 };
 
 class npc_roknah_hag : public CreatureScript
@@ -611,9 +758,16 @@ class npc_roknah_hag : public CreatureScript
 
     struct npc_roknah_hagAI : public npc_theramore_hordeAI
     {
-        npc_roknah_hagAI(Creature* creature) : npc_theramore_hordeAI(creature, AI_Type::Distance)
+        npc_roknah_hagAI(Creature* creature) : npc_theramore_hordeAI(creature, AI_Type::Distance),
+            closeTarget(false), iceblock(false)
         {
         }
+
+        enum Groups
+        {
+            GROUP_NORMAL,
+            GROUP_FLEE
+        };
 
         enum Spells
         {
@@ -629,71 +783,124 @@ class npc_roknah_hag : public CreatureScript
             SPELL_ICE_BARRIER   = 284882
         };
 
+        bool closeTarget;
+        bool iceblock;
+
+        void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+        {
+            if (!iceblock && HealthBelowPct(20))
+            {
+                damage = 0;
+
+                iceblock = true;
+
+                me->CastStop();
+
+                DoCast(SPELL_ICE_BLOCK);
+
+                scheduler.Schedule(1min, [this](TaskContext /*context*/)
+                {
+                    iceblock = false;
+                });
+
+                CastFleeSequence(11s);
+            }
+        }
+
         void JustEngagedWith(Unit* /*who*/) override
         {
             DoCastSelf(SPELL_ICE_BARRIER);
 
             scheduler
-                .Schedule(5s, 8s, [this](TaskContext blizzard)
+                .Schedule(5s, 8s, GROUP_NORMAL, [this](TaskContext blizzard)
                 {
                     if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM))
-                        DoCast(target, SPELL_BLIZZARD);
-                    blizzard.Repeat(10s, 15s);
-                })
-                .Schedule(13s, 18s, [this](TaskContext cone_of_cold)
-                {
-                    if (EnemiesInRange(12.0f) < 3)
                     {
                         me->CastStop();
-                        DoCastSelf(SPELL_CONE_OF_COLD);
+                        DoCast(target, SPELL_BLIZZARD);
+                    }
+                    blizzard.Repeat(35s, 50s);
+                })
+                .Schedule(13s, 18s, GROUP_NORMAL, [this](TaskContext cone_of_cold)
+                {
+                    if (EnemiesInRange(12.0f) > 2)
+                    {
+                        me->CastStop();
+                        DoCast(SPELL_CONE_OF_COLD);
                         cone_of_cold.Repeat(5s, 8s);
                     }
                     else
                         cone_of_cold.Repeat(2s);
                 })
-                .Schedule(2s, 5s, [this](TaskContext ebonbolt)
+                .Schedule(2s, 5s, GROUP_NORMAL, [this](TaskContext ebonbolt)
                 {
                     DoCastVictim(SPELL_EBONBOLT);
                     ebonbolt.Repeat(2s, 5s);
                 })
-                .Schedule(12s, 15s, [this](TaskContext flurry)
+                .Schedule(12s, 15s, GROUP_NORMAL, [this](TaskContext flurry)
                 {
                     if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM))
-                    {
-                        me->CastStop();
                         DoCast(target, SPELL_FLURRY);
-                    }
                     flurry.Repeat(12s, 14s);
                 })
-                .Schedule(2s, 3s, [this](TaskContext frost_nova)
-                {
-                    if (EnemiesInRange(12.0f) < 4)
-                    {
-                        me->CastStop();
-                        DoCastSelf(SPELL_BLINK);
-                        DoCastSelf(SPELL_FROST_NOVA, true);
-                        frost_nova.Repeat(5s, 8s);
-                    }
-                    else
-                        frost_nova.Repeat(5s);
-                })
-                .Schedule(1ms, [this](TaskContext frostbolt)
+                .Schedule(1ms, GROUP_NORMAL, [this](TaskContext frostbolt)
                 {
                     DoCastVictim(SPELL_FROSTBOLT);
                     frostbolt.Repeat(2s);
                 })
-                .Schedule(20s, 25s, [this](TaskContext glacial_spike)
+                .Schedule(20s, 25s, GROUP_NORMAL, [this](TaskContext glacial_spike)
                 {
                     if (Unit* target = SelectTarget(SELECT_TARGET_MAXDISTANCE))
                         DoCast(target, SPELL_GLACIAL_SPIKE);
                     glacial_spike.Repeat(30s, 45s);
                 });
         }
+
+        void UpdateAI(uint32 diff) override
+        {
+            CustomAI::UpdateAI(diff);
+
+            if (!closeTarget
+                && !me->HasAura(SPELL_ICE_BLOCK)
+                && EnemiesInRange(12.0f) > 2)
+            {
+                closeTarget = true;
+                scheduler.DelayGroup(GROUP_NORMAL, 2s);
+                me->CastStop();
+                CastFleeSequence(1s);
+            }
+        }
+
+        void CastFleeSequence(Seconds start)
+        {
+            if (me->HasAura(SPELL_ICE_BLOCK))
+                return;
+
+            scheduler.Schedule(start, GROUP_FLEE, [this](TaskContext context)
+            {
+                switch (context.GetRepeatCounter())
+                {
+                    case 0:
+                        me->CastStop();
+                        DoCastSelf(SPELL_FROST_NOVA, true);
+                        context.Repeat(500ms);
+                        break;
+                    case 1:
+                        DoCastSelf(SPELL_BLINK, true);
+                        scheduler.CancelGroup(GROUP_FLEE);
+                        context.Repeat(5s);
+                        break;
+                    case 2:
+                        closeTarget = false;
+                        break;
+                }
+            });
+        }
     };
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return GetBattleForTheramoreAI<npc_roknah_hagAI>(creature);
+        return new npc_roknah_hagAI(creature);
     }
 };
 
@@ -710,12 +917,71 @@ class npc_roknah_grunt : public CreatureScript
         {
         }
 
+        enum Spells
+        {
+            SPELL_EXECUTE               = 283424,
+            SPELL_MORTAL_STRIKE         = 283410,
+            SPELL_OVERPOWER             = 283426,
+            SPELL_REND                  = 283419,
+            SPELL_SLAM                  = 299995,
+            SPELL_HAMMER_STUN           = 36138
+        };
 
+        void JustEngagedWith(Unit* who) override
+        {
+            scheduler
+                .Schedule(5ms, [this](TaskContext hammer_stun)
+                {
+                    if (Unit* target = DoSelectCastingUnit(SPELL_HAMMER_STUN, 35.f))
+					{
+						me->CastStop();
+						DoCast(target, SPELL_HAMMER_STUN);
+                        hammer_stun.Repeat(25s, 40s);
+					}
+					else
+					{
+                        hammer_stun.Repeat(1s);
+					}
+                })
+                .Schedule(5s, 8s, [this](TaskContext execute)
+                {
+                    DoCastVictim(SPELL_EXECUTE);
+                    execute.Repeat(15s, 28s);
+                })
+                .Schedule(2s, 5s, [this](TaskContext mortal_strike)
+                {
+                    switch (mortal_strike.GetRepeatCounter())
+                    {
+                        case 0:
+                            if (!me->HasAura(SPELL_OVERPOWER) && roll_chance_i(60))
+                                DoCastSelf(SPELL_OVERPOWER);
+                            mortal_strike.Repeat(1s);
+                            break;
+                        case 1:
+                            me->CastStop();
+                            DoCastVictim(SPELL_MORTAL_STRIKE);
+                            mortal_strike.Repeat(8s, 10s);
+                            break;
+                    }
+                })
+                .Schedule(14s, 22s, [this](TaskContext overpower)
+                {
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                        DoCast(target, SPELL_REND);
+                    overpower.Repeat(8s, 10s);
+                })
+                .Schedule(32s, 38s, [this](TaskContext rend_slam)
+                {
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                        DoCast(target, RAND(SPELL_REND, SPELL_SLAM));
+                    rend_slam.Repeat(2s, 8s);
+                });
+        }
     };
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return GetBattleForTheramoreAI<npc_roknah_gruntAI>(creature);
+        return new npc_roknah_gruntAI(creature);
     }
 };
 
@@ -730,14 +996,126 @@ class npc_roknah_loasinger : public CreatureScript
     {
         npc_roknah_loasingerAI(Creature* creature) : npc_theramore_hordeAI(creature, AI_Type::Distance)
         {
+            flameShock = sSpellMgr->AssertSpellInfo(SPELL_FLAME_SHOCK, DIFFICULTY_NONE);
+            frostShock = sSpellMgr->AssertSpellInfo(SPELL_FROST_SHOCK, DIFFICULTY_NONE);
         }
 
+        enum Spells
+        {
+            SPELL_ASTRAL_SHIFT      = 292158,
+            SPELL_CHAIN_LIGHTNING   = 290411,
+            SPELL_FLAME_SHOCK       = 290422,
+            SPELL_FROST_SHOCK       = 290441,
+            SPELL_EARTHQUAKE        = 160162,
+            SPELL_HEALING_SURGE     = 290435,
+            SPELL_LAVA_BURST        = 290423,
+            SPELL_WIND_SHEAR        = 290439,
+            SPELL_LIGHTNING_BOLT    = 290395,
+            SPELL_RIPTIDE           = 241892,
+            SPELL_CHAIN_HEAL        = 258099,
+        };
 
+        const SpellInfo* flameShock;
+        const SpellInfo* frostShock;
+
+        void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
+        {
+            if (HealthBelowPct(40))
+            {
+                scheduler.Schedule(1ms, [this](TaskContext astral_shift)
+                {
+                    DoCast(SPELL_ASTRAL_SHIFT);
+                    astral_shift.Repeat(1min);
+                });
+            }
+        }
+
+        void JustEngagedWith(Unit* /*who*/) override
+        {
+            scheduler
+                .Schedule(8s, 14s, [this](TaskContext chain_lightning)
+                {
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                        DoCast(target, SPELL_CHAIN_LIGHTNING);
+                    chain_lightning.Repeat(3s, 5s);
+                })
+                .Schedule(5s, 8s, [this](TaskContext frost_shock)
+                {
+                    if (Unit* target = DoFindEnemyMissingDot(frostShock))
+                    {
+                        if (!target->HasAura(SPELL_FROST_SHOCK))
+                            DoCast(target, SPELL_FROST_SHOCK);
+                    }
+                    frost_shock.Repeat(8s, 10s);
+                })
+                .Schedule(5s, 8s, [this](TaskContext flame_shock)
+                {
+                    if (Unit* target = DoFindEnemyMissingDot(flameShock))
+                    {
+                        if (!target->HasAura(SPELL_FLAME_SHOCK))
+                            DoCast(target, SPELL_FLAME_SHOCK);
+                    }
+                    flame_shock.Repeat(5s, 8s);
+                })
+                .Schedule(20s, 25s, [this](TaskContext earthquake)
+                {
+                    if (EnemiesInRange(8.0f) >= 3)
+                    {
+                        DoCastAOE(SPELL_EARTHQUAKE);
+                        earthquake.Repeat(10s, 13s);
+                    }
+                    else
+                        earthquake.Repeat(1s);
+                })
+                .Schedule(1ms, [this](TaskContext healing_surge)
+                {
+                    if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
+                        DoCast(target, SPELL_HEALING_SURGE);
+                    healing_surge.Repeat(2s);
+                })
+                .Schedule(1ms, [this](TaskContext riptide)
+                {
+                    if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 80))
+                    {
+                        if (!target->HasAura(SPELL_RIPTIDE))
+                            DoCast(target, SPELL_RIPTIDE);
+                    }
+                    riptide.Repeat(3s);
+                })
+                .Schedule(1ms, [this](TaskContext chain_heal)
+                {
+                    if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 40))
+                        DoCast(target, SPELL_CHAIN_HEAL);
+                    chain_heal.Repeat(5s);
+                })
+                .Schedule(11s, 15s, [this](TaskContext lava_burst)
+                {
+                    DoCastVictim(SPELL_LAVA_BURST);
+                    lava_burst.Repeat(8s, 10s);
+                })
+                .Schedule(1ms, [this](TaskContext wind_shear)
+                {
+                    if (Unit* target = DoSelectCastingUnit(SPELL_WIND_SHEAR, 35.f))
+                    {
+                        me->CastStop();
+                        DoCast(target, SPELL_WIND_SHEAR);
+                        wind_shear.Repeat(7s, 10s);
+                    }
+                    else
+                        wind_shear.Repeat(1s);
+
+                })
+                .Schedule(1ms, [this](TaskContext lightning_bolt)
+                {
+                    DoCastVictim(SPELL_LIGHTNING_BOLT);
+                    lightning_bolt.Repeat(2s);
+                });
+        }
     };
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return GetBattleForTheramoreAI<npc_roknah_loasingerAI>(creature);
+        return new npc_roknah_loasingerAI(creature);
     }
 };
 
@@ -767,7 +1145,7 @@ class npc_roknah_felcaster : public CreatureScript
             SPELL_INCINERATE        = 295438,
             SPELL_MORTAL_COIL       = 295459,
             SPELL_SUMMON_FELHUNTER  = 285232,
-            SPELL_CORRUPTION        = 285140,
+            SPELL_CORRUPTION        = 251406,
         };
 
         const SpellInfo* immolateInfo;
@@ -775,7 +1153,7 @@ class npc_roknah_felcaster : public CreatureScript
 
         float GetDistance() override
         {
-            return 30.f;
+            return 18.f;
         }
 
         void JustEngagedWith(Unit* /*who*/) override
@@ -822,19 +1200,16 @@ class npc_roknah_felcaster : public CreatureScript
                 {
                     if (Unit* target = DoFindEnemyMissingDot(immolateInfo))
                     {
-                        me->CastStop();
-                        DoCast(target, SPELL_IMMOLATE);
+                        if (!target->HasAura(SPELL_IMMOLATE))
+                            DoCast(target, SPELL_IMMOLATE);
                     }
-                    immolate.Repeat(2s);
+                    immolate.Repeat(2s, 5s);
                 })
                 .Schedule(1ms, [this](TaskContext corruption)
                 {
                     if (Unit* target = DoFindEnemyMissingDot(corruptionInfo))
-                    {
-                        me->CastStop();
                         DoCast(target, SPELL_CORRUPTION);
-                    }
-                    corruption.Repeat(2s);
+                    corruption.Repeat(2s, 5s);
                 })
                 .Schedule(1ms, [this](TaskContext incinerate)
                 {
@@ -860,7 +1235,33 @@ class npc_roknah_felcaster : public CreatureScript
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return GetBattleForTheramoreAI<npc_roknah_felcasterAI>(creature);
+        return new npc_roknah_felcasterAI(creature);
+    }
+};
+
+// Light of Dawn - 295712
+class spell_theramore_light_of_dawn : public SpellScript
+{
+    PrepareSpellScript(spell_theramore_light_of_dawn);
+
+    enum Spells
+    {
+        SPELL_LIGHT_OF_DAWN = 295712
+    };
+
+    void HandleDummy(SpellEffIndex effIndex)
+    {
+        if (Unit* target = GetHitUnit())
+        {
+            Unit* caster = GetCaster();
+            caster->CastSpell(caster, SPELL_LIGHT_OF_DAWN, true);
+            caster->CastSpell(target, SPELL_LIGHT_OF_DAWN, true);
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_theramore_light_of_dawn::HandleDummy, EFFECT_1, SPELL_EFFECT_DUMMY);
     }
 };
 
@@ -877,8 +1278,10 @@ class at_blizzard_theramore : public AreaTriggerEntityScript
     {
         at_blizzard_theramoreAI(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
         {
-            timeInterval = 1000;
+            timeInterval = interval;
         }
+
+        const int32 interval = 1000;
 
         int32 timeInterval;
 
@@ -894,22 +1297,43 @@ class at_blizzard_theramore : public AreaTriggerEntityScript
             if (!caster)
                 return;
 
-            if (caster->GetTypeId() != TYPEID_PLAYER)
-                return;
-
             timeInterval += diff;
-            if (timeInterval < 1000)
+            if (timeInterval < interval)
                 return;
 
             if (TempSummon* tempSumm = caster->SummonCreature(WORLD_TRIGGER, at->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 200))
             {
                 tempSumm->SetFaction(caster->GetFaction());
                 tempSumm->SetOwnerGUID(caster->GetGUID());
+
                 PhasingHandler::InheritPhaseShift(tempSumm, caster);
-                caster->CastSpell(tempSumm, SPELL_BLIZZARD_DAMAGE, true);
+
+                for (ObjectGuid unit : at->GetInsideUnits())
+                {
+                    if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
+                    {
+                        if (!caster->IsHostileTo(target))
+                            continue;
+
+                        caster->CastSpell(target, SPELL_BLIZZARD_DAMAGE, true);
+
+                        if (target->GetTypeId() == TYPEID_PLAYER)
+                            continue;
+
+                        if (target->HasUnitState(UNIT_STATE_FLEEING) || target->HasUnitState(UNIT_STATE_FLEEING_MOVE))
+                            continue;
+
+                        if (roll_chance_i(60))
+                        {
+                            target->CastStop();
+                            target->GetMotionMaster()->Clear();
+                            target->GetMotionMaster()->MoveFleeing(tempSumm, 1 * IN_MILLISECONDS);
+                        }
+                    }
+                }
             }
 
-            timeInterval -= 1000;
+            timeInterval -= interval;
         }
     };
 
@@ -926,6 +1350,7 @@ void AddSC_npcs_battle_for_theramore()
     new npc_thader_windermere();
     new npc_arcanic_image();
     new npc_unmanned_tank();
+    new npc_theramore_officier();
     new npc_theramore_footman();
     new npc_theramore_faithful();
     new npc_theramore_arcanist();
@@ -933,6 +1358,8 @@ void AddSC_npcs_battle_for_theramore()
     new npc_roknah_grunt();
     new npc_roknah_loasinger();
     new npc_roknah_felcaster();
+
+    RegisterSpellScript(spell_theramore_light_of_dawn);
 
     new at_blizzard_theramore();
 }

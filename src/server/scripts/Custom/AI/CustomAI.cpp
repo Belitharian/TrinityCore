@@ -6,13 +6,31 @@ CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
     Initialize();
 }
 
+void CustomAI::ReleaseFocus()
+{
+    me->ReleaseFocus(nullptr, false);   // remove spellcast focus
+    me->DoNotReacquireTarget();         // cancel delayed re-target
+    me->SetTarget(ObjectGuid::Empty);   // drop target - dead mobs shouldn't ever target things
+}
+
 void CustomAI::Initialize()
 {
+    me->SetCombatReach(10.f);
+
     if (type == AI_Type::Distance)
     {
         scheduler.SetValidator([this]
         {
-            return !me->HasUnitState(UNIT_STATE_CASTING);
+            return !me->HasUnitState(UNIT_STATE_CASTING)
+                || !me->HasUnitState(UNIT_STATE_FLEEING)
+                || !me->HasUnitState(UNIT_STATE_FLEEING_MOVE);
+        });
+    }
+    else
+    {
+        scheduler.SetValidator([this]
+        {
+            return !me->HasUnitState(UNIT_STATE_FLEEING) || !me->HasUnitState(UNIT_STATE_FLEEING_MOVE);
         });
     }
 }
@@ -40,6 +58,8 @@ void CustomAI::SummonedCreatureDies(Creature* summon, Unit* killer)
 
 void CustomAI::EnterEvadeMode(EvadeReason why)
 {
+    ReleaseFocus();
+
     summons.DespawnAll();
     scheduler.CancelAll();
 
@@ -49,6 +69,7 @@ void CustomAI::EnterEvadeMode(EvadeReason why)
 void CustomAI::Reset()
 {
     Initialize();
+    ReleaseFocus();
 
     summons.DespawnAll();
     scheduler.CancelAll();
@@ -78,13 +99,15 @@ void CustomAI::JustEngagedWith(Unit* who)
 
 void CustomAI::JustExitedCombat()
 {
-    me->ReleaseFocus(nullptr, false);   // remove spellcast focus
-    me->DoNotReacquireTarget();         // cancel delayed re-target
-    me->SetTarget(ObjectGuid::Empty);   // drop target - dead mobs shouldn't ever target things
+    ScriptedAI::JustExitedCombat();
+
+    ReleaseFocus();
 }
 
 void CustomAI::JustDied(Unit* killer)
 {
+    ReleaseFocus();
+
     summons.DespawnAll();
     scheduler.CancelAll();
 
@@ -99,7 +122,8 @@ void CustomAI::UpdateAI(uint32 diff)
     {
         if (UpdateVictim())
         {
-            DoMeleeAttackIfReady();
+            if (type != AI_Type::Distance)
+                DoMeleeAttackIfReady();
         }
     });
 }

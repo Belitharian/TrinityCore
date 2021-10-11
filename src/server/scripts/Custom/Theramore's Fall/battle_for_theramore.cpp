@@ -21,32 +21,32 @@ class npc_jaina_theramore : public CreatureScript
 
     struct npc_jaina_theramoreAI : public CustomAI
     {
-        npc_jaina_theramoreAI(Creature* creature) : CustomAI(creature), escaped(false)
+        npc_jaina_theramoreAI(Creature* creature) : CustomAI(creature)
         {
             Initialize();
         }
 
         enum Spells
         {
+            SPELL_FROST_BARRIER     = 69787,
+            SPELL_ICE_LANCE_VOLLEY  = 70464,
             SPELL_ICE_SHARD         = 290621,
             SPELL_RING_OF_FROST     = 285459,
-            SPELL_ICEBOUND_ESCAPE   = 290878,
             SPELL_GLACIAL_RAY       = 288345
         };
 
         void Initialize()
         {
             instance = me->GetInstanceScript();
+            healthLow = false;
         }
 
         InstanceScript* instance;
-        bool escaped;
+        bool healthLow;
 
         void Reset() override
         {
             Initialize();
-
-            escaped = false;
 
             me->SetReactState(REACT_AGGRESSIVE);
             me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
@@ -56,9 +56,6 @@ class npc_jaina_theramore : public CreatureScript
         {
             switch (spell->Id)
             {
-                case SPELL_ICEBOUND_ESCAPE:
-                    me->DespawnOrUnsummon();
-                    break;
                 case SPELL_GLACIAL_RAY:
                 {
                     int32 duration = spell->GetDuration();
@@ -80,18 +77,27 @@ class npc_jaina_theramore : public CreatureScript
             }
         }
 
-        void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+        void DamageTaken(Unit* attacker, uint32& damage) override
         {
-            if (!escaped && HealthBelowPct(20))
+            if (HealthBelowPct(20))
             {
-                me->CombatStop();
-                me->CastStop();
-                me->SetReactState(REACT_PASSIVE);
+                if (!me->HasAura(SPELL_FROST_BARRIER))
+                {
+                    me->CastStop();
+                    DoCast(SPELL_FROST_BARRIER);
+                }
+            }
+            else if (!healthLow && HealthBelowPct(30))
+            {
+                healthLow = true;
 
-                damage = 0;
-                escaped = true;
-
-                DoCast(SPELL_ICEBOUND_ESCAPE);
+                scheduler.Schedule(5ms, [attacker, this](TaskContext ice_lance)
+                {
+                    CastSpellExtraArgs args(SPELLVALUE_BASE_POINT0, 360000);
+                    me->CastStop();
+                    me->CastSpell(attacker, SPELL_ICE_LANCE_VOLLEY, args);
+                    ice_lance.Repeat(8s, 14s);
+                });
             }
         }
 
@@ -121,7 +127,7 @@ class npc_jaina_theramore : public CreatureScript
             {
                 switch (id)
                 {
-                    case 0:
+                    case MOVEMENT_INFO_POINT_01:
                         instance->DoSendScenarioEvent(EVENT_THE_COUNCIL);
                         break;
                     default:
@@ -173,6 +179,173 @@ class npc_jaina_theramore : public CreatureScript
     }
 };
 
+class npc_archmage_tervosh : public CreatureScript
+{
+    public:
+    npc_archmage_tervosh() : CreatureScript("npc_archmage_tervosh")
+    {
+    }
+
+    struct npc_archmage_tervoshAI : public CustomAI
+    {
+        npc_archmage_tervoshAI(Creature* creature) : CustomAI(creature)
+        {
+        }
+
+        enum Spells
+        {
+            SPELL_FIREBALL          = 358226,
+            SPELL_FLAMESTRIKE       = 330347,
+            SPELL_BLAZING_BARRIER   = 255714,
+            SPELL_SCORCH            = 358238,
+            SPELL_CONFLAGRATION     = 226757
+        };
+
+        void MovementInform(uint32 type, uint32 id) override
+        {
+            if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
+            {
+                printf("type: %u ; id: %u\n", type, id);
+
+                switch (id)
+                {
+                    case MOVEMENT_INFO_POINT_01:
+                        me->SetFacingTo(0.70f);
+                        break;
+                    case MOVEMENT_INFO_POINT_02:
+                        me->SetFacingTo(2.14f);
+                        me->SetVisible(false);
+                        break;
+                    case MOVEMENT_INFO_POINT_03:
+                        me->SetFacingTo(4.05f);
+                        me->SetEmoteState(EMOTE_STATE_READ);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        void SpellHitTarget(Unit* target, SpellInfo const* spell) override
+        {
+            switch (spell->Id)
+            {
+                case SPELL_FIREBALL:
+                case SPELL_FLAMESTRIKE:
+                case SPELL_SCORCH:
+                {
+                    Unit* victim = target->ToUnit();
+                    if (victim && !victim->HasAura(SPELL_CONFLAGRATION) && roll_chance_i(40))
+                        DoCast(victim, SPELL_CONFLAGRATION, true);
+                }
+                break;
+            }
+        }
+
+        void JustEngagedWith(Unit* /*who*/) override
+        {
+            DoCast(SPELL_BLAZING_BARRIER);
+
+            scheduler
+                .Schedule(30s, [this](TaskContext blazing_barrier)
+                {
+                    if (!me->HasAura(SPELL_BLAZING_BARRIER))
+                    {
+                        DoCast(SPELL_BLAZING_BARRIER);
+                        blazing_barrier.Repeat(30s);
+                    }
+                    else
+                    {
+                        blazing_barrier.Repeat(1s);
+                    }
+                })
+                .Schedule(8s, 10s, [this](TaskContext fireblast)
+                {
+                    if (Unit* target = SelectTarget(SelectAggroTarget::SELECT_TARGET_RANDOM, 0))
+                        DoCast(target, SPELL_SCORCH);
+                    fireblast.Repeat(14s, 22s);
+                })
+                .Schedule(12s, 18s, [this](TaskContext pyroblast)
+                {
+                    if (Unit* target = SelectTarget(SelectAggroTarget::SELECT_TARGET_MAXDISTANCE, 0))
+                        DoCast(target, SPELL_FLAMESTRIKE);
+                    pyroblast.Repeat(22s, 35s);
+                })
+                .Schedule(5ms, [this](TaskContext fireball)
+                {
+                    DoCastVictim(SPELL_FIREBALL);
+                    fireball.Repeat(2s);
+                });
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return GetBattleForTheramoreAI<npc_archmage_tervoshAI>(creature);
+    }
+};
+
+class npc_kinndy_sparkshine : public CreatureScript
+{
+    public:
+    npc_kinndy_sparkshine() : CreatureScript("npc_kinndy_sparkshine")
+    {
+    }
+
+    struct npc_kinndy_sparkshineAI : public CustomAI
+    {
+        npc_kinndy_sparkshineAI(Creature* creature) : CustomAI(creature)
+        {
+        }
+
+        enum Spells
+        {
+            SPELL_ARCANE_BOLT   = 154235,
+            SPELL_SUPERNOVA     = 157980,
+        };
+
+        void MovementInform(uint32 type, uint32 id) override
+        {
+            if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
+            {
+                switch (id)
+                {
+                    case MOVEMENT_INFO_POINT_01:
+                        me->SetFacingTo(4.62f);
+                        me->SetVisible(false);
+                        break;
+                    case MOVEMENT_INFO_POINT_02:
+                        me->SetFacingTo(1.24f);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        void JustEngagedWith(Unit* /*who*/) override
+        {
+            scheduler
+                .Schedule(8s, 10s, [this](TaskContext supernova)
+                {
+                    if (Unit* target = SelectTarget(SelectAggroTarget::SELECT_TARGET_MAXDISTANCE, 0))
+                        DoCast(target, SPELL_SUPERNOVA);
+                    supernova.Repeat(14s, 22s);
+                })
+                .Schedule(3s, [this](TaskContext arcane_bolt)
+                {
+                    DoCastVictim(SPELL_ARCANE_BOLT);
+                    arcane_bolt.Repeat(2s);
+                });
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return GetBattleForTheramoreAI<npc_kinndy_sparkshineAI>(creature);
+    }
+};
+
 class npc_pained : public CreatureScript
 {
     public:
@@ -195,7 +368,7 @@ class npc_pained : public CreatureScript
             {
                 switch (id)
                 {
-                    case 2:
+                    case MOVEMENT_INFO_POINT_02:
                         me->SetVisible(false);
                         instance->DoSendScenarioEvent(EVENT_THE_UNKNOWN_TAUREN);
                         break;
@@ -244,7 +417,7 @@ class npc_kalecgos_theramore : public CreatureScript
             {
                 switch (id)
                 {
-                    case 0:
+                    case MOVEMENT_INFO_POINT_01:
                         me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
                         scheduler.Schedule(2s, [this](TaskContext /*context*/)
                         {
@@ -362,30 +535,27 @@ class event_theramore_training : public CreatureScript
             {
                 if (param == 2)
                 {
-
-                    footmen[0]->SetTarget(ObjectGuid::Empty);
-                    footmen[0]->SetEmoteState(EMOTE_STATE_NONE);
-                    footmen[0]->SetFacingTo(2.60f);
-                    footmen[0]->SetRegenerateHealth(false);
-                    footmen[0]->SetHealth(footmen[0]->GetMaxHealth());
-                    footmen[0]->SetReactState(REACT_AGGRESSIVE);
-
-                    footmen[1]->SetTarget(ObjectGuid::Empty);
-                    footmen[1]->SetEmoteState(EMOTE_STATE_NONE);
-                    footmen[1]->SetFacingTo(2.60f);
-                    footmen[1]->SetRegenerateHealth(false);
-                    footmen[1]->SetHealth(footmen[1]->GetMaxHealth());
-                    footmen[1]->SetReactState(REACT_AGGRESSIVE);
+                    for (uint8 i = 0; i < 2; i++)
+                    {
+                        footmen[i]->SetTarget(ObjectGuid::Empty);
+                        footmen[i]->SetEmoteState(EMOTE_STATE_NONE);
+                        footmen[i]->SetFacingTo(2.60f);
+                        footmen[i]->SetRegenerateHealth(false);
+                        footmen[i]->SetHealth(footmen[0]->GetMaxHealth());
+                        footmen[i]->SetReactState(REACT_AGGRESSIVE);
+                    }
 
                     faithful->SetTarget(ObjectGuid::Empty);
                     faithful->SetFacingTo(2.60f);
                     faithful->SetReactState(REACT_AGGRESSIVE);
+                    faithful->SetPower(POWER_MANA, faithful->GetMaxPower(POWER_MANA));
 
                     arcanist->CastStop();
                     arcanist->CombatStop();
                     arcanist->SetTarget(ObjectGuid::Empty);
                     arcanist->SetFacingTo(2.60f);
                     arcanist->SetReactState(REACT_AGGRESSIVE);
+                    arcanist->SetPower(POWER_MANA, arcanist->GetMaxPower(POWER_MANA));
 
                     training->SetVisible(false);
 
@@ -577,6 +747,8 @@ class event_theramore_faithful : public CreatureScript
 void AddSC_battle_for_theramore()
 {
     new npc_jaina_theramore();
+    new npc_archmage_tervosh();
+    new npc_kinndy_sparkshine();
     new npc_pained();
     new npc_kalecgos_theramore();
     new event_theramore_training();

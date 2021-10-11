@@ -19,7 +19,10 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         CustomAI(Creature* creature, AI_Type type = AI_Type::Distance);
         virtual ~CustomAI() { }
 
+        void ReleaseFocus();
+
         virtual void Initialize();
+
         virtual float GetDistance() { return 20.f; };
 
         void JustSummoned(Creature* /*summon*/) override;

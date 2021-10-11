@@ -23,6 +23,8 @@
 
 #define FIRE_LOCATION           32
 
+#define NUMBER_OF_MEMBERS       10
+
 enum class BFTPhases
 {
     None,
@@ -47,7 +49,7 @@ enum BFTData
     DATA_KALECGOS,
     DATA_PAINED,
     DATA_PERITH_STORMHOOVE,
-    DATA_THERAMORE_OFFICER,
+    DATA_KNIGHT_OF_THERAMORE,
     DATA_HEDRIC_EVENCANE,
     DATA_RHONIN,
     DATA_VEREESA_WINDRUNNER,
@@ -75,7 +77,6 @@ enum BFTCreatures
     NPC_HEDRIC_EVENCANE                 = 58840,
     NPC_KNIGHT_OF_THERAMORE             = 59654,
     NPC_INVISIBLE_STALKER               = 32780,
-    NPC_THERAMORE_OFFICER               = 58913,
     NPC_THERAMORE_FOOTMAN               = 58612,
     NPC_UNMANNED_TANK                   = 58788,
     NPC_THERAMORE_FAITHFUL              = 59595,
@@ -137,6 +138,12 @@ enum BFTMisc
     // Sounds
     SOUND_FEARFUL_CROWD                 = 15003,
 
+    // Point Id
+    MOVEMENT_INFO_POINT_NONE            = 0,
+    MOVEMENT_INFO_POINT_01              = 89644940,
+    MOVEMENT_INFO_POINT_02              = 89644941,
+    MOVEMENT_INFO_POINT_03              = 89644942,
+
     // Events
     EVENT_FIND_JAINA                    = 65800,
     EVENT_THE_COUNCIL                   = 65801,
@@ -144,7 +151,7 @@ enum BFTMisc
     EVENT_THE_UNKNOWN_TAUREN            = 65803,
     EVENT_A_LITTLE_HELP                 = 65804,
     EVENT_RETRIEVE_JAINA                = 65805,
-    EVENT_MOTIVE_THE_TROOPS             = 65806,
+    EVENT_HORDE_WAVE_DEFEATED           = 65806,
 };
 
 enum BFTTalks
@@ -226,6 +233,11 @@ enum BFTTalks
     SAY_BATTLE_02         = 33,
     SAY_BATTLE_03         = 34,
     SAY_BATTLE_04         = 35,
+
+    SAY_BATTLE_ALERT      = 36,
+    SAY_BATTLE_CITADEL    = 37,
+    SAY_BATTLE_GATE       = 38,
+    SAY_BATTLE_DOCKS      = 39,
 };
 
 struct Location
@@ -237,7 +249,7 @@ struct Location
 
 Location const perithLocation[PERITH_LOCATION] =
 {
-    { DATA_THERAMORE_OFFICER,    { -3733.33f, -4422.51f, 30.51f, 3.92f }, { -3746.61f, -4435.87f, 30.55f, 3.17f } },
+    { DATA_KNIGHT_OF_THERAMORE,  { -3733.33f, -4422.51f, 30.51f, 3.92f }, { -3746.61f, -4435.87f, 30.55f, 3.17f } },
     { DATA_PAINED,               { -3734.16f, -4425.18f, 30.55f, 3.92f }, { -3746.69f, -4437.91f, 30.55f, 3.57f } },
     { DATA_PERITH_STORMHOOVE,    { -3731.74f, -4422.76f, 30.49f, 3.92f }, { -3744.75f, -4435.91f, 30.55f, 3.49f } }
 };
@@ -436,7 +448,7 @@ Position const KinndyPoint01    = { -3748.06f, -4442.12f, 30.55f, 1.24f };
 Position const KinndyPoint02    = { -3725.93f, -4543.47f, 25.82f, 0.11f };
 Position const JainaPoint01     = { -3751.32f, -4438.13f, 30.55f, 0.40f };
 Position const JainaPoint02     = { -3731.47f, -4547.05f, 27.11f, 0.25f };
-Position const JainaPoint03     = { -3612.43f, -4335.63f, 10.29f, 0.72f };
+Position const JainaPoint03     = { -3658.39f, -4372.87f,  9.35f, 0.69f };
 Position const PainedPoint01    = { -3747.93f, -4442.05f, 30.54f, 1.54f };
 Position const OfficerPoint01   = { -3748.43f, -4432.99f, 30.54f, 4.66f };
 Position const QuillPoint01     = { -3751.32f, -4438.13f, 31.26f, 3.33f };
@@ -448,6 +460,9 @@ Position const HedricPoint01    = { -3717.79f, -4522.24f, 25.82f, 5.16f };
 Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f };
 Position const ExplodingPoint01 = { -3648.24f, -4364.96f,  9.68f, 3.78f };
 Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f };
+Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };
+Position const CitadelPoint01   = { -3668.74f, -4511.64f, 10.09f, 1.54f };
+Position const DocksPoint01     = { -3826.84f, -4539.05f, 9.21f };
 
 template <class AI, class T>
 inline AI* GetBattleForTheramoreAI(T* obj)
