@@ -549,7 +549,7 @@ class npc_wyrmrest_defender : public CreatureScript
                     case SPELL_WYRMREST_DEFENDER_MOUNT:
                         Talk(WHISPER_MOUNTED, me->GetCharmerOrOwner());
                         me->SetImmuneToAll(false);
-                        me->AddUnitFlag(UNIT_FLAG_PVP_ATTACKABLE);
+                        me->AddUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED);
                         break;
                     // Both below are for checking low hp warning
                     case SPELL_DEFENDER_ON_LOW_HEALTH_EMOTE:
@@ -568,7 +568,7 @@ class npc_wyrmrest_defender : public CreatureScript
             {
                 if (player->GetQuestStatus(QUEST_DEFENDING_WYRMREST_TEMPLE) == QUEST_STATUS_INCOMPLETE)
                 {
-                    AddGossipItemFor(player, GOSSIP_ICON_CHAT, GOSSIP_ITEM_1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
+                    AddGossipItemFor(player, GossipOptionIcon::None, GOSSIP_ITEM_1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
                     SendGossipMenuFor(player, GOSSIP_TEXTID_DEF1, me->GetGUID());
                 }
                 else

@@ -24,6 +24,7 @@
 #include "CombatLogPackets.h"
 #include "Common.h"
 #include "Creature.h"
+#include "DB2Stores.h"
 #include "GameTime.h"
 #include "GridNotifiersImpl.h"
 #include "InstanceScenario.h"
@@ -144,7 +145,6 @@ void Object::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
     uint16 objectTypeMask = m_objectType;
     CreateObjectBits flags = m_updateFlag;
 
-    /** lower flag1 **/
     if (target == this)                                      // building packet for yourself
     {
         flags.ThisIsYou = true;
@@ -160,6 +160,7 @@ void Object::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
         case HighGuid::Corpse:
         case HighGuid::DynamicObject:
         case HighGuid::AreaTrigger:
+        case HighGuid::SceneObject:
         case HighGuid::Conversation:
             updateType = UPDATETYPE_CREATE_OBJECT2;
             break;
@@ -619,11 +620,11 @@ void Object::BuildMovementUpdate(ByteBuffer* data, CreateObjectBits flags) const
     //        *data << ObjectGuid(ReplaceObject);
     //}
 
-    //if (flags.SceneObject)
-    //{
-    //    data->WriteBit(HasLocalScriptData);
-    //    data->WriteBit(HasPetBattleFullUpdate);
-    //    data->FlushBits();
+    if (flags.SceneObject)
+    {
+        data->WriteBit(false);                                          // HasLocalScriptData
+        data->WriteBit(false);                                          // HasPetBattleFullUpdate
+        data->FlushBits();
 
     //    if (HasLocalScriptData)
     //    {
@@ -727,25 +728,26 @@ void Object::BuildMovementUpdate(ByteBuffer* data, CreateObjectBits flags) const
     //        data->WriteBit(CanAwardXP);
     //        data->FlushBits();
     //    }
-    //}
+    }
 
     if (flags.ActivePlayer)
     {
-        bool HasSceneInstanceIDs = false;
+        Player const* player = ToPlayer();
+
+        bool HasSceneInstanceIDs = !player->GetSceneMgr().GetSceneTemplateByInstanceMap().empty();
         bool HasRuneState = ToUnit()->GetPowerIndex(POWER_RUNES) != MAX_POWERS;
 
         data->WriteBit(HasSceneInstanceIDs);
         data->WriteBit(HasRuneState);
         data->FlushBits();
-        //if (HasSceneInstanceIDs)
-        //{
-        //    *data << uint32(SceneInstanceIDs.size());
-        //    for (std::size_t i = 0; i < SceneInstanceIDs.size(); ++i)
-        //        *data << uint32(SceneInstanceIDs[i]);
-        //}
+        if (HasSceneInstanceIDs)
+        {
+            *data << uint32(player->GetSceneMgr().GetSceneTemplateByInstanceMap().size());
+            for (auto const& itr : player->GetSceneMgr().GetSceneTemplateByInstanceMap())
+                *data << uint32(itr.first);
+        }
         if (HasRuneState)
         {
-            Player const* player = ToPlayer();
             float baseCd = float(player->GetRuneBaseCooldown());
             uint32 maxRunes = uint32(player->GetMaxPower(POWER_RUNES));
 
@@ -2487,9 +2489,9 @@ ReputationRank WorldObject::GetReactionTo(WorldObject const* target) const
 
     Unit const* unit = ToUnit();
     Unit const* targetUnit = target->ToUnit();
-    if (unit && unit->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE))
+    if (unit && unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
     {
-        if (targetUnit && targetUnit->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE))
+        if (targetUnit && targetUnit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
         {
             if (selfPlayerOwner && targetPlayerOwner)
             {
@@ -2628,7 +2630,7 @@ bool WorldObject::IsNeutralToAll() const
     return my_faction->IsNeutralToAll();
 }
 
-void WorldObject::CastSpell(SpellCastTargets const& targets, uint32 spellId, CastSpellExtraArgs const& args /*= { }*/)
+void WorldObject::CastSpell(CastSpellTargetArg const& targets, uint32 spellId, CastSpellExtraArgs const& args /*= { }*/)
 {
     SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId, args.CastDifficulty != DIFFICULTY_NONE ? args.CastDifficulty : GetMap()->GetDifficultyID());
     if (!info)
@@ -2637,37 +2639,18 @@ void WorldObject::CastSpell(SpellCastTargets const& targets, uint32 spellId, Cas
         return;
     }
 
-    Spell* spell = new Spell(this, info, args.TriggerFlags, args.OriginalCaster);
+    if (!targets.Targets)
+    {
+        TC_LOG_ERROR("entities.unit", "CastSpell: Invalid target passed to spell cast %u by %s", spellId, GetGUID().ToString().c_str());
+        return;
+    }
+
+    Spell* spell = new Spell(this, info, args.TriggerFlags, args.OriginalCaster, args.OriginalCastId);
     for (auto const& pair : args.SpellValueOverrides)
         spell->SetSpellValue(pair.first, pair.second);
 
     spell->m_CastItem = args.CastItem;
-    spell->prepare(targets, args.TriggeringAura);
-}
-
-void WorldObject::CastSpell(WorldObject* target, uint32 spellId, CastSpellExtraArgs const& args /*= { }*/)
-{
-    SpellCastTargets targets;
-    if (target)
-    {
-        if (Unit* unitTarget = target->ToUnit())
-            targets.SetUnitTarget(unitTarget);
-        else if (GameObject* goTarget = target->ToGameObject())
-            targets.SetGOTarget(goTarget);
-        else
-        {
-            TC_LOG_ERROR("entities.unit", "CastSpell: Invalid target %s passed to spell cast by %s", target->GetGUID().ToString().c_str(), GetGUID().ToString().c_str());
-            return;
-        }
-    }
-    CastSpell(targets, spellId, args);
-}
-
-void WorldObject::CastSpell(Position const& dest, uint32 spellId, CastSpellExtraArgs const& args /*= { }*/)
-{
-    SpellCastTargets targets;
-    targets.SetDst(dest);
-    CastSpell(targets, spellId, args);
+    spell->prepare(*targets.Targets, args.TriggeringAura);
 }
 
 // function based on function Unit::CanAttack from 13850 client
@@ -2718,30 +2701,30 @@ bool WorldObject::IsValidAttackTarget(WorldObject const* target, SpellInfo const
     }
 
     // check flags
-    if (unitTarget && unitTarget->HasUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_TAXI_FLIGHT | UNIT_FLAG_NOT_ATTACKABLE_1 | UNIT_FLAG_UNK_16)))
+    if (unitTarget && unitTarget->HasUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_TAXI_FLIGHT | UNIT_FLAG_NOT_ATTACKABLE_1 | UNIT_FLAG_NON_ATTACKABLE_2)))
         return false;
 
     // ignore immunity flags when assisting
     if (!bySpell || (isPositiveSpell && !bySpell->HasAttribute(SPELL_ATTR6_ASSIST_IGNORE_IMMUNE_FLAG)))
     {
-        if (unit && !unit->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE) && unitTarget && unitTarget->IsImmuneToNPC())
+        if (unit && !unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unitTarget && unitTarget->IsImmuneToNPC())
             return false;
 
-        if (unitTarget && !unitTarget->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE) && unit && unit->IsImmuneToNPC())
+        if (unitTarget && !unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unit && unit->IsImmuneToNPC())
             return false;
 
         if (!bySpell || !bySpell->HasAttribute(SPELL_ATTR8_ATTACK_IGNORE_IMMUNE_TO_PC_FLAG))
         {
-            if (unit && unit->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE) && unitTarget && unitTarget->IsImmuneToPC())
+            if (unit && unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unitTarget && unitTarget->IsImmuneToPC())
                 return false;
 
-            if (unitTarget && unitTarget->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE) && unit && unit->IsImmuneToPC())
+            if (unitTarget && unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unit && unit->IsImmuneToPC())
                 return false;
         }
     }
 
     // CvC case - can attack each other only when one of them is hostile
-    if (unit && !unit->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE) && unitTarget && !unitTarget->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE))
+    if (unit && !unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unitTarget && !unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
         return IsHostileTo(target) || target->IsHostileTo(this);
 
     // PvP, PvC, CvP case
@@ -2749,8 +2732,8 @@ bool WorldObject::IsValidAttackTarget(WorldObject const* target, SpellInfo const
     if (IsFriendlyTo(target) || target->IsFriendlyTo(this))
         return false;
 
-    Player const* playerAffectingAttacker = unit && unit->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE) ? GetAffectingPlayer() : nullptr;
-    Player const* playerAffectingTarget = unitTarget && unitTarget->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE) ? target->GetAffectingPlayer() : nullptr;
+    Player const* playerAffectingAttacker = unit && unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) ? GetAffectingPlayer() : nullptr;
+    Player const* playerAffectingTarget = unitTarget && unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) ? target->GetAffectingPlayer() : nullptr;
 
     // Not all neutral creatures can be attacked (even some unfriendly faction does not react aggresive to you, like Sporaggar)
     if ((playerAffectingAttacker && !playerAffectingTarget) || (!playerAffectingAttacker && playerAffectingTarget))
@@ -2784,7 +2767,7 @@ bool WorldObject::IsValidAttackTarget(WorldObject const* target, SpellInfo const
 
     // PvP case - can't attack when attacker or target are in sanctuary
     // however, 13850 client doesn't allow to attack when one of the unit's has sanctuary flag and is pvp
-    if (unitTarget && unitTarget->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE) && unit && unit->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE) && (unitTarget->IsInSanctuary() || unit->IsInSanctuary()))
+    if (unitTarget && unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unit && unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && (unitTarget->IsInSanctuary() || unit->IsInSanctuary()))
         return false;
 
     // additional checks - only PvP case
@@ -2848,12 +2831,12 @@ bool WorldObject::IsValidAssistTarget(WorldObject const* target, SpellInfo const
         return false;
 
     // check flags for negative spells
-    if (isNegativeSpell && unitTarget && unitTarget->HasUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_TAXI_FLIGHT | UNIT_FLAG_NOT_ATTACKABLE_1 | UNIT_FLAG_UNK_16)))
+    if (isNegativeSpell && unitTarget && unitTarget->HasUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_TAXI_FLIGHT | UNIT_FLAG_NOT_ATTACKABLE_1 | UNIT_FLAG_NON_ATTACKABLE_2)))
         return false;
 
     if (isNegativeSpell || !bySpell || !bySpell->HasAttribute(SPELL_ATTR6_ASSIST_IGNORE_IMMUNE_FLAG))
     {
-        if (unit && unit->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE))
+        if (unit && unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
         {
             if (!bySpell || !bySpell->HasAttribute(SPELL_ATTR8_ATTACK_IGNORE_IMMUNE_TO_PC_FLAG))
                 if (unitTarget && unitTarget->IsImmuneToPC())
@@ -2871,10 +2854,10 @@ bool WorldObject::IsValidAssistTarget(WorldObject const* target, SpellInfo const
         return false;
 
     // PvP case
-    if (unitTarget && unitTarget->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE))
+    if (unitTarget && unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
     {
         Player const* targetPlayerOwner = target->GetAffectingPlayer();
-        if (unit && unit->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE))
+        if (unit && unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
         {
             Player const* selfPlayerOwner = GetAffectingPlayer();
             if (selfPlayerOwner && targetPlayerOwner)
@@ -2895,7 +2878,7 @@ bool WorldObject::IsValidAssistTarget(WorldObject const* target, SpellInfo const
     }
     // PvC case - player can assist creature only if has specific type flags
     // !target->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PVP_ATTACKABLE) &&
-    else if (unit && unit->HasUnitFlag(UNIT_FLAG_PVP_ATTACKABLE))
+    else if (unit && unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
     {
         if (!bySpell || !bySpell->HasAttribute(SPELL_ATTR6_ASSIST_IGNORE_IMMUNE_FLAG))
             if (unitTarget && !unitTarget->IsPvP())
@@ -3130,9 +3113,12 @@ void WorldObject::MovePositionToFirstCollision(Position &pos, float dist, float 
         return;
     }
 
+    float halfHeight = GetCollisionHeight() * 0.5f;
     UpdateAllowedPositionZ(destx, desty, destz);
     bool col = VMAP::VMapFactory::createOrGetVMapManager()->getObjectHitPos(PhasingHandler::GetTerrainMapId(GetPhaseShift(), GetMap(), pos.m_positionX, pos.m_positionY),
-        pos.m_positionX, pos.m_positionY, pos.m_positionZ, destx, desty, destz, destx, desty, destz, -0.5f);
+        pos.m_positionX, pos.m_positionY, pos.m_positionZ + halfHeight,
+        destx, desty, destz + halfHeight,
+        destx, desty, destz, -0.5f);
 
     // collision occured
     if (col)
@@ -3144,7 +3130,10 @@ void WorldObject::MovePositionToFirstCollision(Position &pos, float dist, float 
     }
 
     // check dynamic collision
-    col = GetMap()->getObjectHitPos(GetPhaseShift(), pos.m_positionX, pos.m_positionY, pos.m_positionZ, destx, desty, destz, destx, desty, destz, -0.5f);
+    col = GetMap()->getObjectHitPos(GetPhaseShift(),
+        pos.m_positionX, pos.m_positionY, pos.m_positionZ + halfHeight,
+        destx, desty, destz + halfHeight,
+        destx, desty, destz, -0.5f);
 
     // Collided with a gameobject
     if (col)
@@ -3342,10 +3331,9 @@ float WorldObject::GetFloorZ() const
 
 float WorldObject::GetMapWaterOrGroundLevel(float x, float y, float z, float* ground/* = nullptr*/) const
 {
-    if (Unit const* unit = ToUnit())
-        return GetMap()->GetWaterOrGroundLevel(GetPhaseShift(), x, y, z, ground, !unit->HasAuraType(SPELL_AURA_WATER_WALK), GetCollisionHeight());
-
-    return z;
+    return GetMap()->GetWaterOrGroundLevel(GetPhaseShift(), x, y, z, ground,
+        isType(TYPEMASK_UNIT) ? !static_cast<Unit const*>(this)->HasAuraType(SPELL_AURA_WATER_WALK) : false,
+        GetCollisionHeight());
 }
 
 float WorldObject::GetMapHeight(float x, float y, float z, bool vmap/* = true*/, float distanceToSearch/* = DEFAULT_HEIGHT_SEARCH*/) const

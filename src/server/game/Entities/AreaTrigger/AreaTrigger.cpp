@@ -359,6 +359,17 @@ void AreaTrigger::UpdateTargetList()
             break;
     }
 
+    if (GetTemplate())
+    {
+        if (ConditionContainer const* conditions = sConditionMgr->GetConditionsForAreaTrigger(GetTemplate()->Id.Id, GetTemplate()->Id.IsServerSide))
+        {
+            targetList.erase(std::remove_if(targetList.begin(), targetList.end(), [conditions](Unit* target)
+            {
+                return !sConditionMgr->IsObjectMeetToConditions(target, *conditions);
+            }), targetList.end());
+        }
+    }
+
     HandleUnitEnterExit(targetList);
 }
 
@@ -660,7 +671,8 @@ void AreaTrigger::DoActions(Unit* unit)
                 switch (action.ActionType)
                 {
                     case AREATRIGGER_ACTION_CAST:
-                        caster->CastSpell(unit, action.Param, true);
+                        caster->CastSpell(unit, action.Param, CastSpellExtraArgs(TRIGGERED_FULL_MASK)
+                            .SetOriginalCastId(m_areaTriggerData->CreatingEffectGUID->IsCast() ? *m_areaTriggerData->CreatingEffectGUID : ObjectGuid::Empty));
                         break;
                     case AREATRIGGER_ACTION_ADDAURA:
                         caster->AddAura(action.Param, unit);

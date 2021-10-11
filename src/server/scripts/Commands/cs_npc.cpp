@@ -27,17 +27,20 @@ EndScriptData */
 #include "CreatureAI.h"
 #include "CreatureGroups.h"
 #include "DatabaseEnv.h"
+#include "DB2Stores.h"
+#include "FollowMovementGenerator.h"
 #include "GameTime.h"
 #include "Language.h"
 #include "Log.h"
 #include "Map.h"
+#include "MotionMaster.h"
+#include "MovementDefines.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Pet.h"
 #include "PhasingHandler.h"
 #include "Player.h"
 #include "RBAC.h"
-#include "TargetedMovementGenerator.h"                      // for HandleNpcUnFollowCommand
 #include "Transport.h"
 #include "World.h"
 #include "WorldSession.h"
@@ -123,7 +126,7 @@ EnumName<UnitFlags> const unitFlags[MAX_UNIT_FLAGS] =
     CREATE_NAMED_ENUM(UNIT_FLAG_SERVER_CONTROLLED),
     CREATE_NAMED_ENUM(UNIT_FLAG_NON_ATTACKABLE),
     CREATE_NAMED_ENUM(UNIT_FLAG_REMOVE_CLIENT_CONTROL),
-    CREATE_NAMED_ENUM(UNIT_FLAG_PVP_ATTACKABLE),
+    CREATE_NAMED_ENUM(UNIT_FLAG_PLAYER_CONTROLLED),
     CREATE_NAMED_ENUM(UNIT_FLAG_RENAME),
     CREATE_NAMED_ENUM(UNIT_FLAG_PREPARATION),
     CREATE_NAMED_ENUM(UNIT_FLAG_UNK_6),
@@ -136,7 +139,7 @@ EnumName<UnitFlags> const unitFlags[MAX_UNIT_FLAGS] =
     CREATE_NAMED_ENUM(UNIT_FLAG_SILENCED),
     CREATE_NAMED_ENUM(UNIT_FLAG_CANNOT_SWIM),
     CREATE_NAMED_ENUM(UNIT_FLAG_UNK_15),
-    CREATE_NAMED_ENUM(UNIT_FLAG_UNK_16),
+    CREATE_NAMED_ENUM(UNIT_FLAG_NON_ATTACKABLE_2),
     CREATE_NAMED_ENUM(UNIT_FLAG_PACIFIED),
     CREATE_NAMED_ENUM(UNIT_FLAG_STUNNED),
     CREATE_NAMED_ENUM(UNIT_FLAG_IN_COMBAT),
@@ -144,7 +147,7 @@ EnumName<UnitFlags> const unitFlags[MAX_UNIT_FLAGS] =
     CREATE_NAMED_ENUM(UNIT_FLAG_DISARMED),
     CREATE_NAMED_ENUM(UNIT_FLAG_CONFUSED),
     CREATE_NAMED_ENUM(UNIT_FLAG_FLEEING),
-    CREATE_NAMED_ENUM(UNIT_FLAG_PLAYER_CONTROLLED),
+    CREATE_NAMED_ENUM(UNIT_FLAG_POSSESSED),
     CREATE_NAMED_ENUM(UNIT_FLAG_NOT_SELECTABLE),
     CREATE_NAMED_ENUM(UNIT_FLAG_SKINNABLE),
     CREATE_NAMED_ENUM(UNIT_FLAG_MOUNT),
@@ -383,13 +386,11 @@ public:
             data.spawnId = guid;
             data.id = id;
             data.spawnPoint.Relocate(chr->GetTransOffsetX(), chr->GetTransOffsetY(), chr->GetTransOffsetZ(), chr->GetTransOffsetO());
-            /// @todo: add phases
-
-            Creature* creature = trans->CreateNPCPassenger(guid, &data);
-
-            creature->SaveToDB(trans->GetGOInfo()->moTransport.SpawnMap, { map->GetDifficultyID() });
-
-            sObjectMgr->AddCreatureToGrid(guid, &data);
+            if (Creature* creature = trans->CreateNPCPassenger(guid, &data))
+            {
+                creature->SaveToDB(trans->GetGOInfo()->moTransport.SpawnMap, { map->GetDifficultyID() });
+                sObjectMgr->AddCreatureToGrid(guid, &data);
+            }
             return true;
         }
 
@@ -1370,7 +1371,7 @@ public:
         return true;
     }
 
-    //npc unfollow handling
+    // npc unfollow handling
     static bool HandleNpcUnFollowCommand(ChatHandler* handler, char const* /*args*/)
     {
         Player* player = handler->GetSession()->GetPlayer();
@@ -1383,26 +1384,24 @@ public:
             return false;
         }
 
-        if (/*creature->GetMotionMaster()->empty() ||*/
-            creature->GetMotionMaster()->GetCurrentMovementGeneratorType() != FOLLOW_MOTION_TYPE)
+        MovementGenerator* movement = creature->GetMotionMaster()->GetMovementGenerator([player](MovementGenerator const* a) -> bool
+        {
+            if (a->GetMovementGeneratorType() == FOLLOW_MOTION_TYPE)
+            {
+                FollowMovementGenerator const* followMovement = dynamic_cast<FollowMovementGenerator const*>(a);
+                return followMovement && followMovement->GetTarget() == player;
+            }
+            return false;
+        });
+
+        if (!movement)
         {
             handler->PSendSysMessage(LANG_CREATURE_NOT_FOLLOW_YOU, creature->GetName().c_str());
             handler->SetSentErrorMessage(true);
             return false;
         }
 
-        FollowMovementGenerator<Creature> const* mgen = static_cast<FollowMovementGenerator<Creature> const*>((creature->GetMotionMaster()->top()));
-
-        if (mgen->GetTarget() != player)
-        {
-            handler->PSendSysMessage(LANG_CREATURE_NOT_FOLLOW_YOU, creature->GetName().c_str());
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
-        // reset movement
-        creature->GetMotionMaster()->MovementExpired(true);
-
+        creature->GetMotionMaster()->Remove(movement);
         handler->PSendSysMessage(LANG_CREATURE_NOT_FOLLOW_YOU_NOW, creature->GetName().c_str());
         return true;
     }

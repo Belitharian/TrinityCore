@@ -22,6 +22,8 @@
  */
 
 #include "ScriptMgr.h"
+#include "AreaTrigger.h"
+#include "AreaTriggerAI.h"
 #include "DB2Stores.h"
 #include "Group.h"
 #include "Player.h"
@@ -44,11 +46,19 @@ enum PaladinSpells
     SPELL_PALADIN_BLESSING_OF_LOWER_CITY_SHAMAN  = 37881,
     SPELL_PALADIN_BLINDING_LIGHT_EFFECT          = 105421,
     SPELL_PALADIN_CONCENTRACTION_AURA            = 19746,
+    SPELL_PALADIN_CONSECRATED_GROUND_PASSIVE     = 204054,
+    SPELL_PALADIN_CONSECRATED_GROUND_SLOW        = 204242,
+    SPELL_PALADIN_CONSECRATION                   = 26573,
+    SPELL_PALADIN_CONSECRATION_DAMAGE            = 81297,
+    SPELL_PALADIN_CONSECRATION_PROTECTION_AURA   = 188370,
     SPELL_PALADIN_DIVINE_PURPOSE_PROC            = 90174,
     SPELL_PALADIN_DIVINE_STEED_HUMAN             = 221883,
+    SPELL_PALADIN_DIVINE_STEED_DWARF             = 276111,
     SPELL_PALADIN_DIVINE_STEED_DRAENEI           = 221887,
+    SPELL_PALADIN_DIVINE_STEED_DARK_IRON_DWARF   = 276112,
     SPELL_PALADIN_DIVINE_STEED_BLOODELF          = 221886,
     SPELL_PALADIN_DIVINE_STEED_TAUREN            = 221885,
+    SPELL_PALADIN_DIVINE_STEED_ZANDALARI_TROLL   = 294133,
     SPELL_PALADIN_DIVINE_STORM_DAMAGE            = 224239,
     SPELL_PALADIN_ENDURING_LIGHT                 = 40471,
     SPELL_PALADIN_ENDURING_JUDGEMENT             = 40472,
@@ -59,6 +69,7 @@ enum PaladinSpells
     SPELL_PALADIN_FORBEARANCE                    = 25771,
     SPELL_PALADIN_GUARDIAN_OF_ANCIENT_KINGS      = 86659,
     SPELL_PALADIN_HAMMER_OF_JUSTICE              = 853,
+    SPELL_PALADIN_HAMMER_OF_THE_RIGHTEOUS_AOE    = 88263,
     SPELL_PALADIN_HAND_OF_SACRIFICE              = 6940,
     SPELL_PALADIN_HOLY_MENDING                   = 64891,
     SPELL_PALADIN_HOLY_POWER_ARMOR               = 28790,
@@ -278,6 +289,64 @@ class spell_pal_blinding_light : public SpellScript
     }
 };
 
+// 26573 - Consecration
+class spell_pal_consecration : public AuraScript
+{
+    PrepareAuraScript(spell_pal_consecration);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo
+        ({
+            SPELL_PALADIN_CONSECRATION_DAMAGE,
+            // validate for areatrigger_pal_consecration
+            SPELL_PALADIN_CONSECRATION_PROTECTION_AURA,
+            SPELL_PALADIN_CONSECRATED_GROUND_PASSIVE,
+            SPELL_PALADIN_CONSECRATED_GROUND_SLOW
+        });
+    }
+
+    void HandleEffectPeriodic(AuraEffect const* /*aurEff*/)
+    {
+        if (AreaTrigger* at = GetTarget()->GetAreaTrigger(SPELL_PALADIN_CONSECRATION))
+            GetTarget()->CastSpell(at->GetPosition(), SPELL_PALADIN_CONSECRATION_DAMAGE);
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_pal_consecration::HandleEffectPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
+    }
+};
+
+// 26573 - Consecration
+//  9228 - AreaTriggerId
+struct areatrigger_pal_consecration : AreaTriggerAI
+{
+    areatrigger_pal_consecration(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger) { }
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        if (Unit* caster = at->GetCaster())
+        {
+            // 243597 is also being cast as protection, but CreateObject is not sent, either serverside areatrigger for this aura or unused - also no visual is seen
+            if (unit == caster && caster->IsPlayer() && caster->ToPlayer()->GetPrimarySpecialization() == TALENT_SPEC_PALADIN_PROTECTION)
+                caster->CastSpell(caster, SPELL_PALADIN_CONSECRATION_PROTECTION_AURA);
+
+            if (caster->IsValidAttackTarget(unit))
+                if (caster->HasAura(SPELL_PALADIN_CONSECRATED_GROUND_PASSIVE))
+                    caster->CastSpell(unit, SPELL_PALADIN_CONSECRATED_GROUND_SLOW);
+        }
+    }
+
+    void OnUnitExit(Unit* unit) override
+    {
+        if (at->GetCasterGuid() == unit->GetGUID())
+            unit->RemoveAurasDueToSpell(SPELL_PALADIN_CONSECRATION_PROTECTION_AURA, at->GetCasterGuid());
+
+        unit->RemoveAurasDueToSpell(SPELL_PALADIN_CONSECRATED_GROUND_SLOW, at->GetCasterGuid());
+    }
+};
+
 // 196926 - Crusader Might
 class spell_pal_crusader_might : public AuraScript
 {
@@ -355,9 +424,12 @@ class spell_pal_divine_steed : public SpellScript
         return ValidateSpellInfo(
         {
             SPELL_PALADIN_DIVINE_STEED_HUMAN,
+            SPELL_PALADIN_DIVINE_STEED_DWARF,
             SPELL_PALADIN_DIVINE_STEED_DRAENEI,
+            SPELL_PALADIN_DIVINE_STEED_DARK_IRON_DWARF,
             SPELL_PALADIN_DIVINE_STEED_BLOODELF,
-            SPELL_PALADIN_DIVINE_STEED_TAUREN
+            SPELL_PALADIN_DIVINE_STEED_TAUREN,
+            SPELL_PALADIN_DIVINE_STEED_ZANDALARI_TROLL
         });
     }
 
@@ -369,17 +441,26 @@ class spell_pal_divine_steed : public SpellScript
         switch (caster->getRace())
         {
             case RACE_HUMAN:
-            case RACE_DWARF:
                 spellId = SPELL_PALADIN_DIVINE_STEED_HUMAN;
                 break;
+            case RACE_DWARF:
+                spellId = SPELL_PALADIN_DIVINE_STEED_DWARF;
+                break;
             case RACE_DRAENEI:
+            case RACE_LIGHTFORGED_DRAENEI:
                 spellId = SPELL_PALADIN_DIVINE_STEED_DRAENEI;
+                break;
+            case RACE_DARK_IRON_DWARF:
+                spellId = SPELL_PALADIN_DIVINE_STEED_DARK_IRON_DWARF;
                 break;
             case RACE_BLOODELF:
                 spellId = SPELL_PALADIN_DIVINE_STEED_BLOODELF;
                 break;
             case RACE_TAUREN:
                 spellId = SPELL_PALADIN_DIVINE_STEED_TAUREN;
+                break;
+            case RACE_ZANDALARI_TROLL:
+                spellId = SPELL_PALADIN_DIVINE_STEED_ZANDALARI_TROLL;
                 break;
             default:
                 break;
@@ -504,6 +585,32 @@ class spell_pal_glyph_of_holy_light : public SpellScript
     void Register() override
     {
         OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_pal_glyph_of_holy_light::FilterTargets, EFFECT_0, TARGET_UNIT_DEST_AREA_ALLY);
+    }
+};
+
+// 53595 - Hammer of the Righteous
+struct spell_pal_hammer_of_the_righteous : public SpellScript
+{
+    PrepareSpellScript(spell_pal_hammer_of_the_righteous);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo
+        ({
+            SPELL_PALADIN_CONSECRATION_PROTECTION_AURA,
+            SPELL_PALADIN_HAMMER_OF_THE_RIGHTEOUS_AOE
+        });
+    }
+
+    void HandleAoEHit(SpellEffIndex /*effIndex*/)
+    {
+        if (GetCaster()->HasAura(SPELL_PALADIN_CONSECRATION_PROTECTION_AURA))
+            GetCaster()->CastSpell(GetHitUnit(), SPELL_PALADIN_HAMMER_OF_THE_RIGHTEOUS_AOE);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_pal_hammer_of_the_righteous::HandleAoEHit, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
     }
 };
 
@@ -1084,6 +1191,8 @@ void AddSC_paladin_spell_scripts()
     RegisterSpellScript(spell_pal_blessing_of_protection);
     RegisterSpellScript(spell_pal_blinding_light);
     RegisterAuraScript(spell_pal_crusader_might);
+    RegisterAuraScript(spell_pal_consecration);
+    RegisterAreaTriggerAI(areatrigger_pal_consecration);
     RegisterSpellScript(spell_pal_divine_shield);
     RegisterSpellScript(spell_pal_divine_steed);
     RegisterSpellScript(spell_pal_divine_storm);
@@ -1091,6 +1200,7 @@ void AddSC_paladin_spell_scripts()
     RegisterSpellScript(spell_pal_glyph_of_holy_light);
     new spell_pal_grand_crusader();
     new spell_pal_hand_of_sacrifice();
+    RegisterSpellScript(spell_pal_hammer_of_the_righteous);
     RegisterSpellScript(spell_pal_moment_of_glory);
     RegisterSpellScript(spell_pal_judgement);
     RegisterSpellScript(spell_pal_holy_shock);

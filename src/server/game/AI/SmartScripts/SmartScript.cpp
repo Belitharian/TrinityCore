@@ -74,7 +74,7 @@ bool SmartScript::IsSmart(Creature* c, bool silent)
         return false;
 
     bool smart = true;
-    if (c && c->GetAIName() != "SmartAI")
+    if (!dynamic_cast<SmartAI*>(c->AI()))
         smart = false;
 
     if (!smart && !silent)
@@ -90,7 +90,7 @@ bool SmartScript::IsSmart(GameObject* g, bool silent)
         return false;
 
     bool smart = true;
-    if (g && g->GetAIName() != "SmartGameObjectAI")
+    if (!dynamic_cast<SmartGameObjectAI*>(g->AI()))
         smart = false;
 
     if (!smart && !silent)
@@ -593,7 +593,9 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
 
                             if (me->GetDistance(target) > spellInfo->GetMaxRange(true) ||
                                 me->GetDistance(target) < spellInfo->GetMinRange(true) ||
-                                !me->IsWithinLOSInMap(target) || !hasPower)
+                                !me->IsWithinLOSInMap(target) ||
+                                !hasPower ||
+                                me->HasUnitFlag(UNIT_FLAG_SILENCED))
                                 allowMove = true;
 
                             ENSURE_AI(SmartAI, me->AI())->SetCombatMove(allowMove);
@@ -1553,7 +1555,7 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
 
                     for (uint32 i = 0; i < MAX_EQUIPMENT_ITEMS; ++i)
                         if (!e.action.equip.mask || (e.action.equip.mask & (1 << i)))
-                            npc->SetVirtualItem(0, slot[i].ItemId, slot[i].AppearanceModId, slot[i].ItemVisual);
+                            npc->SetVirtualItem(i, slot[i].ItemId, slot[i].AppearanceModId, slot[i].ItemVisual);
                 }
             }
             break;
@@ -1640,10 +1642,12 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
             float attackAngle = float(e.action.setRangedMovement.angle) / 180.0f * float(M_PI);
 
             for (WorldObject* target : targets)
+            {
                 if (Creature* creature = target->ToCreature())
                     if (IsSmart(creature) && creature->GetVictim())
                         if (ENSURE_AI(SmartAI, creature->AI())->CanCombatMove())
                             creature->GetMotionMaster()->MoveChase(creature->GetVictim(), attackDistance, attackAngle);
+            }
 
             break;
         }
@@ -2321,16 +2325,16 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
                     target->ToUnit()->RemoveAllGameObjects();
             break;
         }
-        case SMART_ACTION_STOP_MOTION:
+        case SMART_ACTION_REMOVE_MOVEMENT:
         {
             for (WorldObject* const target : targets)
             {
                 if (IsUnit(target))
                 {
-                    if (e.action.stopMotion.stopMovement)
+                    if (e.action.removeMovement.movementType && e.action.removeMovement.movementType < MAX_MOTION_TYPE)
+                        target->ToUnit()->GetMotionMaster()->Remove(MovementGeneratorType(e.action.removeMovement.movementType));
+                    if (e.action.removeMovement.forced)
                         target->ToUnit()->StopMoving();
-                    if (e.action.stopMotion.movementExpired)
-                        target->ToUnit()->GetMotionMaster()->MovementExpired();
                 }
             }
             break;
@@ -2429,7 +2433,7 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
                 if (Player* playerTarget = target->ToPlayer())
                 {
                     Conversation* conversation = Conversation::CreateConversation(e.action.conversation.id, playerTarget,
-                        *playerTarget, { playerTarget->GetGUID() }, nullptr);
+                        *playerTarget, playerTarget->GetGUID(), nullptr);
                     if (!conversation)
                         TC_LOG_WARN("scripts.ai", "SmartScript::ProcessAction:: SMART_ACTION_CREATE_CONVERSATION: id %u, baseObject %s, target %s - failed to create conversation",
                             e.action.conversation.id, !baseObject ? "" : baseObject->GetName().c_str(), playerTarget->GetName().c_str());

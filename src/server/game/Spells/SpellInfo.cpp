@@ -1072,8 +1072,7 @@ SpellEffectInfo::StaticData SpellEffectInfo::_data[TOTAL_SPELL_EFFECTS] =
     {EFFECT_IMPLICIT_TARGET_EXPLICIT, TARGET_OBJECT_TYPE_UNIT}, // 285 SPELL_EFFECT_MODIFY_KEYSTONE_2
 };
 
-SpellInfo::SpellInfo(SpellNameEntry const* spellName, ::Difficulty difficulty, SpellInfoLoadHelper const& data,
-    std::vector<SpellLabelEntry const*> const& labels, SpellVisualVector&& visuals)
+SpellInfo::SpellInfo(SpellNameEntry const* spellName, ::Difficulty difficulty, SpellInfoLoadHelper const& data)
     : Id(spellName->ID), Difficulty(difficulty)
 {
     _effects.reserve(32);
@@ -1118,8 +1117,6 @@ SpellInfo::SpellInfo(SpellNameEntry const* spellName, ::Difficulty difficulty, S
         ContentTuningId = _misc->ContentTuningID;
         ShowFutureSpellPlayerConditionID = _misc->ShowFutureSpellPlayerConditionID;
     }
-
-    _visuals = std::move(visuals);
 
     // SpellScalingEntry
     if (SpellScalingEntry const* _scaling = data.Scaling)
@@ -1210,7 +1207,7 @@ SpellInfo::SpellInfo(SpellNameEntry const* spellName, ::Difficulty difficulty, S
         ChannelInterruptFlags2 = SpellAuraInterruptFlags2(_interrupt->ChannelInterruptFlags[1]);
     }
 
-    for (SpellLabelEntry const* label : labels)
+    for (SpellLabelEntry const* label : data.Labels)
         Labels.insert(label->LabelID);
 
     // SpellLevelsEntry
@@ -1230,6 +1227,8 @@ SpellInfo::SpellInfo(SpellNameEntry const* spellName, ::Difficulty difficulty, S
         std::copy(std::begin(_reagents->Reagent), std::end(_reagents->Reagent), Reagent.begin());
         std::copy(std::begin(_reagents->ReagentCount), std::end(_reagents->ReagentCount), ReagentCount.begin());
     }
+
+    ReagentsCurrency = data.ReagentsCurrency;
 
     // SpellShapeshiftEntry
     if (SpellShapeshiftEntry const* _shapeshift = data.Shapeshift)
@@ -1255,6 +1254,8 @@ SpellInfo::SpellInfo(SpellNameEntry const* spellName, ::Difficulty difficulty, S
         std::copy(std::begin(_totem->RequiredTotemCategoryID), std::end(_totem->RequiredTotemCategoryID), TotemCategory.begin());
         std::copy(std::begin(_totem->Totem), std::end(_totem->Totem), Totem.begin());
     }
+
+    _visuals = data.Visuals;
 }
 
 SpellInfo::SpellInfo(SpellNameEntry const* spellName, ::Difficulty difficulty, std::vector<SpellEffectEntry> const& effects)
@@ -4336,6 +4337,8 @@ bool _isPositiveEffectImpl(SpellInfo const* spellInfo, SpellEffectInfo const& ef
             {
                 case 61987: // Avenging Wrath Marker
                 case 61988: // Divine Shield exclude aura
+                case 72410: // Rune of Blood, Saurfang, Icecrown Citadel
+                case 71204: // Touch of Insignificance, Lady Deathwhisper, Icecrown Citadel
                     return false;
                 case 30877: // Tag Murloc
                 case 61716: // Rabbit Costume
@@ -4414,6 +4417,8 @@ bool _isPositiveEffectImpl(SpellInfo const* spellInfo, SpellEffectInfo const& ef
                 case SPELL_AURA_SCHOOL_HEAL_ABSORB:
                 case SPELL_AURA_CHANNEL_DEATH_ITEM:
                 case SPELL_AURA_EMPATHY:
+                case SPELL_AURA_MOD_SPELL_DAMAGE_FROM_CASTER:
+                case SPELL_AURA_PREVENTS_FLEEING:
                     return false;
                 default:
                     break;
@@ -4547,6 +4552,7 @@ bool _isPositiveEffectImpl(SpellInfo const* spellInfo, SpellEffectInfo const& ef
             case SPELL_AURA_MOD_CHARGE_COOLDOWN:
             case SPELL_AURA_MOD_POWER_COST_SCHOOL:
             case SPELL_AURA_MOD_POWER_COST_SCHOOL_PCT:
+            case SPELL_AURA_MOD_MECHANIC_DAMAGE_TAKEN_PERCENT:
                 if (bp > 0)
                     return false;
                 break;

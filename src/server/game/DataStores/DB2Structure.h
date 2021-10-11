@@ -479,6 +479,8 @@ struct BattlePetSpeciesEntry
     int32 CardUIModelSceneID;
     int32 LoadoutUIModelSceneID;
     int32 CovenantID;
+
+    EnumFlag<BattlePetSpeciesFlags> GetFlags() const { return static_cast<BattlePetSpeciesFlags>(Flags); }
 };
 
 struct BattlePetSpeciesStateEntry
@@ -3318,6 +3320,14 @@ struct SpellReagentsEntry
     int32 SpellID;
     int32 Reagent[MAX_SPELL_REAGENTS];
     int16 ReagentCount[MAX_SPELL_REAGENTS];
+};
+
+struct SpellReagentsCurrencyEntry
+{
+    uint32 ID;
+    int32 SpellID;
+    uint16 CurrencyTypesID;
+    uint16 CurrencyCount;
 };
 
 struct SpellScalingEntry

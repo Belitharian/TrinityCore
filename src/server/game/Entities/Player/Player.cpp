@@ -164,6 +164,7 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     m_combatExitTime = 0;
     m_regenTimer = 0;
     m_regenTimerCount = 0;
+    m_foodEmoteTimerCount = 0;
     m_weaponChangeTimer = 0;
 
     m_zoneUpdateId = uint32(-1);
@@ -201,6 +202,8 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
 
     m_trade = nullptr;
 
+    m_createTime = 0;
+    m_createMode = PlayerCreateMode::Normal;
     m_cinematic = 0;
 
     m_movie = 0;
@@ -431,8 +434,6 @@ bool Player::Create(ObjectGuid::LowType guidlow, WorldPackets::Character::Charac
     for (uint8 i = 0; i < PLAYER_SLOTS_COUNT; i++)
         m_items[i] = nullptr;
 
-    Relocate(info->positionX, info->positionY, info->positionZ, info->orientation);
-
     ChrClassesEntry const* cEntry = sChrClassesStore.LookupEntry(createInfo->Class);
     if (!cEntry)
     {
@@ -448,8 +449,32 @@ bool Player::Create(ObjectGuid::LowType guidlow, WorldPackets::Character::Charac
         return false;
     }
 
-    SetMap(sMapMgr->CreateMap(info->mapId, this));
+    PlayerInfo::CreatePosition const& position = createInfo->UseNPE && info->createPositionNPE ? info->createPositionNPE.get() : info->createPosition;
+
+    m_createTime = GameTime::GetGameTime();
+    m_createMode = createInfo->UseNPE && info->createPositionNPE ? PlayerCreateMode::NPE : PlayerCreateMode::Normal;
+
+    Relocate(position.Loc);
+
+    SetMap(sMapMgr->CreateMap(position.Loc.GetMapId(), this));
+
+    if (position.TransportGuid)
+    {
+        if (Transport* transport = HashMapHolder<Transport>::Find(ObjectGuid::Create<HighGuid::Transport>(*position.TransportGuid)))
+        {
+            transport->AddPassenger(this);
+            m_movementInfo.transport.pos.Relocate(position.Loc);
+            float x, y, z, o;
+            position.Loc.GetPosition(x, y, z, o);
+            transport->CalculatePassengerPosition(x, y, z, &o);
+            Relocate(x, y, z, o);
+        }
+    }
+
     UpdatePositionData();
+
+    // set initial homebind position
+    SetHomebind(*this, GetAreaId());
 
     uint8 powertype = cEntry->DisplayPower;
 
@@ -472,7 +497,7 @@ bool Player::Create(ObjectGuid::LowType guidlow, WorldPackets::Character::Charac
     if (sWorld->getIntConfig(CONFIG_GAME_TYPE) == REALM_TYPE_PVP || sWorld->getIntConfig(CONFIG_GAME_TYPE) == REALM_TYPE_RPPVP)
     {
         AddPvpFlag(UNIT_BYTE2_FLAG_PVP);
-        AddUnitFlag(UNIT_FLAG_PVP_ATTACKABLE);
+        AddUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED);
     }
 
     AddUnitFlag2(UNIT_FLAG2_REGENERATE_POWER);
@@ -1677,6 +1702,7 @@ bool Player::IsImmunedToSpellEffect(SpellInfo const* spellInfo, SpellEffectInfo 
 void Player::RegenerateAll()
 {
     m_regenTimerCount += m_regenTimer;
+    m_foodEmoteTimerCount += m_regenTimer;
 
     for (Powers power = POWER_MANA; power < MAX_POWERS; power = Powers(power + 1))
         if (power != POWER_RUNES)
@@ -1713,6 +1739,37 @@ void Player::RegenerateAll()
     }
 
     m_regenTimer = 0;
+
+    // Handles the emotes for drinking and eating.
+    // According to sniffs there is a background timer going on that repeats independed from the time window where the aura applies.
+    // That's why we dont need to reset the timer on apply. In sniffs I have seen that the first call for the spell visual is totally random, then after
+    // 5 seconds over and over again which confirms my theory that we have a independed timer.
+    if (m_foodEmoteTimerCount >= 5000)
+    {
+        std::vector<AuraEffect*> auraList;
+        AuraEffectList const& ModRegenAuras = GetAuraEffectsByType(SPELL_AURA_MOD_REGEN);
+        AuraEffectList const& ModPowerRegenAuras = GetAuraEffectsByType(SPELL_AURA_MOD_POWER_REGEN);
+
+        auraList.reserve(ModRegenAuras.size() + ModPowerRegenAuras.size());
+        auraList.insert(auraList.end(), ModRegenAuras.begin(), ModRegenAuras.end());
+        auraList.insert(auraList.end(), ModPowerRegenAuras.begin(), ModPowerRegenAuras.end());
+
+        for (auto itr = auraList.begin(); itr != auraList.end(); ++itr)
+        {
+            // Food emote comes above drinking emote if we have to decide (mage regen food for example)
+            if ((*itr)->GetBase()->HasEffectType(SPELL_AURA_MOD_REGEN) && (*itr)->GetSpellInfo()->HasAuraInterruptFlag(SpellAuraInterruptFlags::Standing))
+            {
+                SendPlaySpellVisualKit(SPELL_VISUAL_KIT_FOOD, 0, 0);
+                break;
+            }
+            else if ((*itr)->GetBase()->HasEffectType(SPELL_AURA_MOD_POWER_REGEN) && (*itr)->GetSpellInfo()->HasAuraInterruptFlag(SpellAuraInterruptFlags::Standing))
+            {
+                SendPlaySpellVisualKit(SPELL_VISUAL_KIT_DRINK, 0, 0);
+                break;
+            }
+        }
+        m_foodEmoteTimerCount -= 5000;
+    }
 }
 
 void Player::Regenerate(Powers power)
@@ -2553,7 +2610,7 @@ void Player::InitStatsForLevel(bool reapplyMods)
         UNIT_FLAG_STUNNED        | UNIT_FLAG_IN_COMBAT    | UNIT_FLAG_DISARMED         |
         UNIT_FLAG_CONFUSED       | UNIT_FLAG_FLEEING      | UNIT_FLAG_NOT_SELECTABLE   |
         UNIT_FLAG_SKINNABLE      | UNIT_FLAG_MOUNT        | UNIT_FLAG_TAXI_FLIGHT      ));
-    AddUnitFlag(UNIT_FLAG_PVP_ATTACKABLE);   // must be set
+    AddUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED);   // must be set
 
     AddUnitFlag2(UNIT_FLAG2_REGENERATE_POWER);// must be set
 
@@ -14557,16 +14614,6 @@ void Player::PrepareGossipMenu(WorldObject* source, uint32 menuId /*= 0*/, bool 
                     if (!isDead())
                         canTalk = false;
                     break;
-                case GOSSIP_OPTION_VENDOR:
-                {
-                    VendorItemData const* vendorItems = creature->GetVendorItems();
-                    if (!vendorItems || vendorItems->Empty())
-                    {
-                        TC_LOG_ERROR("sql.sql", "Creature %s (%s DB GUID: " UI64FMTD ") has UNIT_NPC_FLAG_VENDOR set but has an empty trading item list.", creature->GetName().c_str(), creature->GetGUID().ToString().c_str(), creature->GetSpawnId());
-                        canTalk = false;
-                    }
-                    break;
-                }
                 case GOSSIP_OPTION_LEARNDUALSPEC:
                     canTalk = false;
                     break;
@@ -14590,6 +14637,7 @@ void Player::PrepareGossipMenu(WorldObject* source, uint32 menuId /*= 0*/, bool 
                     canTalk = false;
                     break;
                 case GOSSIP_OPTION_GOSSIP:
+                case GOSSIP_OPTION_VENDOR:
                 case GOSSIP_OPTION_TRAINER:
                 case GOSSIP_OPTION_SPIRITGUIDE:
                 case GOSSIP_OPTION_INNKEEPER:
@@ -14745,7 +14793,8 @@ void Player::OnGossipSelect(WorldObject* source, uint32 optionIndex, uint32 menu
             break;
         case GOSSIP_OPTION_SPIRITHEALER:
             if (isDead())
-                source->ToCreature()->CastSpell(source->ToCreature(), 17251, GetGUID());
+                source->ToCreature()->CastSpell(source->ToCreature(), 17251, CastSpellExtraArgs(TRIGGERED_FULL_MASK)
+                    .SetOriginalCaster(GetGUID()));
             break;
         case GOSSIP_OPTION_QUESTGIVER:
             PrepareQuestMenu(guid);
@@ -15764,7 +15813,7 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
     // cast spells after mark quest complete (some spells have quest completed state requirements in spell_area data)
     if (quest->GetRewSpell() > 0)
     {
-        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(quest->GetRewSpell(), GetMap()->GetDifficultyID());
+        SpellInfo const* spellInfo = sSpellMgr->AssertSpellInfo(quest->GetRewSpell(), GetMap()->GetDifficultyID());
         Unit* caster = this;
         if (questGiver && questGiver->isType(TYPEMASK_UNIT) && !quest->HasFlag(QUEST_FLAGS_PLAYER_CAST_ON_COMPLETE) && !spellInfo->HasTargetType(TARGET_UNIT_CASTER))
             if (Unit* unit = questGiver->ToUnit())
@@ -15780,7 +15829,7 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
                 if (!ConditionMgr::IsPlayerMeetingCondition(this, playerCondition))
                     continue;
 
-            SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(displaySpell.SpellId, GetMap()->GetDifficultyID());
+            SpellInfo const* spellInfo = sSpellMgr->AssertSpellInfo(displaySpell.SpellId, GetMap()->GetDifficultyID());
             Unit* caster = this;
             if (questGiver && questGiver->isType(TYPEMASK_UNIT) && !quest->HasFlag(QUEST_FLAGS_PLAYER_CAST_ON_COMPLETE) && !spellInfo->HasTargetType(TARGET_UNIT_CASTER))
                 if (Unit* unit = questGiver->ToUnit())
@@ -17701,7 +17750,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder* holder)
     struct PlayerLoadData
     {
         // "SELECT c.guid, account, name, race, class, gender, level, xp, money, inventorySlots, bankSlots, restState, playerFlags, playerFlagsEx, "
-        // "position_x, position_y, position_z, map, orientation, taximask, cinematic, totaltime, leveltime, rest_bonus, logout_time, is_logout_resting, resettalents_cost, "
+        // "position_x, position_y, position_z, map, orientation, taximask, createTime, createMode, cinematic, totaltime, leveltime, rest_bonus, logout_time, is_logout_resting, resettalents_cost, "
         // "resettalents_time, primarySpecialization, trans_x, trans_y, trans_z, trans_o, transguid, extra_flags, stable_slots, at_login, zone, online, death_expire_time, taxi_path, dungeonDifficulty, "
         // "totalKills, todayKills, yesterdayKills, chosenTitle, watchedFaction, drunk, "
         // "health, power1, power2, power3, power4, power5, power6, instance_id, activeTalentGroup, lootSpecId, exploredZones, knownTitles, actionBars, raidDifficulty, legacyRaidDifficulty, fishingSteps, "
@@ -17728,6 +17777,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder* holder)
         uint16 map;
         float orientation;
         std::string taximask;
+        time_t createTime;
+        PlayerCreateMode createMode;
         uint8 cinematic;
         uint32 totaltime;
         uint32 leveltime;
@@ -17796,6 +17847,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder* holder)
             map = fields[i++].GetUInt16();
             orientation = fields[i++].GetFloat();
             taximask = fields[i++].GetString();
+            createTime = fields[i++].GetInt64();
+            createMode = PlayerCreateMode(fields[i++].GetInt8());
             cinematic = fields[i++].GetUInt8();
             totaltime = fields[i++].GetUInt32();
             leveltime = fields[i++].GetUInt32();
@@ -17943,6 +17996,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder* holder)
     SetPlayerFlags(fields.playerFlags);
     SetPlayerFlagsEx(fields.playerFlagsEx);
     SetWatchedFactionIndex(fields.watchedFaction);
+
+    m_atLoginFlags = fields.at_login;
 
     if (!GetSession()->ValidateAppearance(Races(getRace()), Classes(getClass()), fields.gender, MakeChrCustomizationChoiceRange(customizations)))
     {
@@ -18234,19 +18289,11 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder* holder)
                 map = sMapMgr->CreateMap(mapId, this);
             }
         }
-        else
-        {
-            TC_LOG_ERROR("entities.player", "Player::LoadFromDB: Player '%s' (%s) Map: %u, X: %f, Y: %f, Z: %f, O: %f. Areatrigger not found.",
-                m_name.c_str(), guid.ToString().c_str(), mapId, GetPositionX(), GetPositionY(), GetPositionZ(), GetOrientation());
-            RelocateToHomebind();
-            map = nullptr;
-        }
     }
 
     if (!map)
     {
-        mapId = info->mapId;
-        Relocate(info->positionX, info->positionY, info->positionZ, 0.0f);
+        RelocateToHomebind();
         map = sMapMgr->CreateMap(mapId, this);
         if (!map)
         {
@@ -18286,6 +18333,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder* holder)
 
     SetDrunkValue(newDrunkValue);
 
+    m_createTime = fields.createTime;
+    m_createMode = fields.createMode;
     m_cinematic = fields.cinematic;
     m_Played_time[PLAYED_TIME_TOTAL] = fields.totaltime;
     m_Played_time[PLAYED_TIME_LEVEL] = fields.leveltime;
@@ -18304,8 +18353,6 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder* holder)
             GetGUID().ToString().c_str(), MAX_PET_STABLES, uint32(m_stableSlots));
         m_stableSlots = MAX_PET_STABLES;
     }
-
-    m_atLoginFlags = fields.at_login;
 
     if (HasAtLoginFlag(AT_LOGIN_RENAME))
     {
@@ -20246,22 +20293,47 @@ bool Player::_LoadHomeBind(PreparedQueryResult result)
         }
     }
 
-    if (!ok)
+    auto saveHomebindToDb = [&]()
     {
-        m_homebindMapId = info->mapId;
-        m_homebindAreaId = info->areaId;
-        m_homebindX = info->positionX;
-        m_homebindY = info->positionY;
-        m_homebindZ = info->positionZ;
-
         CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_PLAYER_HOMEBIND);
         stmt->setUInt64(0, GetGUID().GetCounter());
         stmt->setUInt16(1, m_homebindMapId);
         stmt->setUInt16(2, m_homebindAreaId);
-        stmt->setFloat (3, m_homebindX);
-        stmt->setFloat (4, m_homebindY);
-        stmt->setFloat (5, m_homebindZ);
+        stmt->setFloat(3, m_homebindX);
+        stmt->setFloat(4, m_homebindY);
+        stmt->setFloat(5, m_homebindZ);
         CharacterDatabase.Execute(stmt);
+    };
+
+    if (!ok && HasAtLoginFlag(AT_LOGIN_FIRST))
+    {
+        PlayerInfo::CreatePosition const& createPosition = m_createMode == PlayerCreateMode::NPE && info->createPositionNPE ? info->createPositionNPE.get() : info->createPosition;
+
+        m_homebindMapId = createPosition.Loc.GetMapId();
+        createPosition.Loc.GetPosition(m_homebindX, m_homebindY, m_homebindZ);
+        if (createPosition.TransportGuid)
+            if (Transport* transport = HashMapHolder<Transport>::Find(ObjectGuid::Create<HighGuid::Transport>(*createPosition.TransportGuid)))
+                transport->CalculatePassengerPosition(m_homebindX, m_homebindY, m_homebindZ);
+
+        m_homebindAreaId = sMapMgr->GetAreaId(PhasingHandler::GetEmptyPhaseShift(), m_homebindMapId, m_homebindX, m_homebindY, m_homebindZ);
+
+        saveHomebindToDb();
+        ok = true;
+    }
+
+    if (!ok)
+    {
+        WorldSafeLocsEntry const* loc = sObjectMgr->GetDefaultGraveyard(GetTeam());
+        if (!loc && getRace() == RACE_PANDAREN_NEUTRAL)
+            loc = sObjectMgr->GetWorldSafeLoc(3295); // The Wandering Isle, Starting Area GY
+
+        ASSERT(loc, "Missing fallback graveyard location for faction %u", uint32(GetTeamId()));
+
+        m_homebindMapId = loc->Loc.GetMapId();
+        m_homebindAreaId = sMapMgr->GetAreaId(PhasingHandler::GetEmptyPhaseShift(), loc->Loc);
+        loc->Loc.GetPosition(m_homebindX, m_homebindY, m_homebindZ);
+
+        saveHomebindToDb();
     }
 
     TC_LOG_DEBUG("entities.player", "Player::_LoadHomeBind: Setting home position (MapID: %u, AreaID: %u, X: %f, Y: %f, Z: %f) of player '%s' (%s)",
@@ -20355,6 +20427,8 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
         std::ostringstream ss;
         ss << m_taxi;
         stmt->setString(index++, ss.str());
+        stmt->setInt64(index++, m_createTime);
+        stmt->setInt8(index++, AsUnderlyingType(m_createMode));
         stmt->setUInt8(index++, m_cinematic);
         stmt->setUInt32(index++, m_Played_time[PLAYED_TIME_TOTAL]);
         stmt->setUInt32(index++, m_Played_time[PLAYED_TIME_LEVEL]);
@@ -20369,7 +20443,6 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
         stmt->setUInt16(index++, (uint16)m_ExtraFlags);
         stmt->setUInt8(index++,  m_stableSlots);
         stmt->setUInt16(index++, (uint16)m_atLoginFlags);
-        stmt->setUInt16(index++, GetZoneId());
         stmt->setInt64(index++, m_deathExpireTime);
 
         ss.str("");
@@ -20594,7 +20667,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
         stmt->setUInt32(index++, GetHonorLevel());
         stmt->setUInt8(index++, m_activePlayerData->RestInfo[REST_TYPE_HONOR].StateID);
         stmt->setFloat(index++, finiteAlways(_restMgr->GetRestBonus(REST_TYPE_HONOR)));
-        stmt->setUInt32(index++, realm.Build);
+        stmt->setUInt32(index++, sRealmList->GetMinorMajorBugfixVersionForBuild(realm.Build));
 
         // Index
         stmt->setUInt64(index, GetGUID().GetCounter());
@@ -22744,9 +22817,18 @@ bool Player::ActivateTaxiPathTo(uint32 taxi_path_id, uint32 spellid /*= 0*/)
     return ActivateTaxiPathTo(nodes, nullptr, spellid);
 }
 
+void Player::FinishTaxiFlight()
+{
+    if (!IsInFlight())
+        return;
+
+    GetMotionMaster()->Remove(FLIGHT_MOTION_TYPE);
+    m_taxi.ClearTaxiDestinations(); // not destinations, clear source node
+}
+
 void Player::CleanupAfterTaxiFlight()
 {
-    m_taxi.ClearTaxiDestinations();        // not destinations, clear source node
+    m_taxi.ClearTaxiDestinations(); // not destinations, clear source node
     Dismount();
     RemoveUnitFlag(UnitFlags(UNIT_FLAG_REMOVE_CLIENT_CONTROL | UNIT_FLAG_TAXI_FLIGHT));
 }
@@ -22827,29 +22909,15 @@ void Player::InitDataForForm(bool reapplyMods)
 
 void Player::InitDisplayIds()
 {
-    PlayerInfo const* info = sObjectMgr->GetPlayerInfo(getRace(), getClass());
-    if (!info)
+    ChrModelEntry const* model = sDB2Manager.GetChrModel(getRace(), GetNativeSex());
+    if (!model)
     {
-        TC_LOG_ERROR("entities.player", "Player::InitDisplayIds: Player '%s' (%s) has incorrect race/class pair. Can't init display ids.", GetName().c_str(), GetGUID().ToString().c_str());
+        TC_LOG_ERROR("entities.player", "Player::InitDisplayIds: Player '%s' (%s) has incorrect race/gender pair. Can't init display ids.", GetName().c_str(), GetGUID().ToString().c_str());
         return;
     }
 
-    Gender gender = GetNativeSex();
-    switch (gender)
-    {
-        case GENDER_FEMALE:
-            SetDisplayId(info->displayId_f);
-            SetNativeDisplayId(info->displayId_f);
-            break;
-        case GENDER_MALE:
-            SetDisplayId(info->displayId_m);
-            SetNativeDisplayId(info->displayId_m);
-            break;
-        default:
-            TC_LOG_ERROR("entities.player", "Player::InitDisplayIds: Player '%s' (%s) has invalid gender %u", GetName().c_str(), GetGUID().ToString().c_str(), uint32(gender));
-            break;
-    }
-
+    SetDisplayId(model->DisplayID);
+    SetNativeDisplayId(model->DisplayID);
     SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::StateAnimID), sDB2Manager.GetEmptyAnimStateID());
 }
 
@@ -23732,16 +23800,6 @@ void Player::ReportedAfkBy(Player* reporter)
     reporter->SendDirectMessage(reportAfkResult.Write());
 }
 
-WorldLocation Player::GetStartPosition() const
-{
-    PlayerInfo const* info = sObjectMgr->GetPlayerInfo(getRace(), getClass());
-    ASSERT(info);
-    uint32 mapId = info->mapId;
-    if (getClass() == CLASS_DEATH_KNIGHT && HasSpell(50977))
-        mapId = 0;
-    return WorldLocation(mapId, info->positionX, info->positionY, info->positionZ, 0);
-}
-
 uint8 Player::GetStartLevel(uint8 race, uint8 playerClass, Optional<int32> characterTemplateId) const
 {
     uint8 startLevel = sWorld->getIntConfig(CONFIG_START_PLAYER_LEVEL);
@@ -24004,6 +24062,7 @@ template void Player::UpdateVisibilityOf(Corpse*        target, UpdateData& data
 template void Player::UpdateVisibilityOf(GameObject*    target, UpdateData& data, std::set<Unit*>& visibleNow);
 template void Player::UpdateVisibilityOf(DynamicObject* target, UpdateData& data, std::set<Unit*>& visibleNow);
 template void Player::UpdateVisibilityOf(AreaTrigger*   target, UpdateData& data, std::set<Unit*>& visibleNow);
+template void Player::UpdateVisibilityOf(SceneObject*   target, UpdateData& data, std::set<Unit*>& visibleNow);
 template void Player::UpdateVisibilityOf(Conversation*  target, UpdateData& data, std::set<Unit*>& visibleNow);
 
 void Player::UpdateObjectVisibility(bool forced)
@@ -24328,6 +24387,8 @@ void Player::SendInitialPacketsAfterAddToMap()
         else
             ClearQuestSharingInfo();
     }
+
+    GetSceneMgr().TriggerDelayedScenes();
 }
 
 void Player::SendUpdateToOutOfRangeGroupMembers()
@@ -24842,10 +24903,11 @@ uint32 Player::GetBattlegroundQueueJoinTime(BattlegroundQueueTypeId bgQueueTypeI
     return 0;
 }
 
-bool Player::InBattlegroundQueue() const
+bool Player::InBattlegroundQueue(bool ignoreArena) const
 {
     for (uint8 i = 0; i < PLAYER_MAX_BATTLEGROUND_QUEUES; ++i)
-        if (m_bgBattlegroundQueueID[i].bgQueueTypeId != BATTLEGROUND_QUEUE_NONE)
+        if (m_bgBattlegroundQueueID[i].bgQueueTypeId != BATTLEGROUND_QUEUE_NONE
+            && (!ignoreArena || m_bgBattlegroundQueueID[i].bgQueueTypeId.BattlemasterListId != BATTLEGROUND_AA))
             return true;
     return false;
 }
@@ -25161,11 +25223,7 @@ void Player::SummonIfPossible(bool agree)
         return;
 
     // stop taxi flight at summon
-    if (IsInFlight())
-    {
-        GetMotionMaster()->MovementExpired();
-        CleanupAfterTaxiFlight();
-    }
+    FinishTaxiFlight();
 
     // drop flag at summon
     // this code can be reached only when GM is summoning player who carries flag, because player should be immune to summoning spells when he carries flag
@@ -25536,7 +25594,8 @@ void Player::ResurrectUsingRequestDataImpl()
     SetPower(POWER_LUNAR_POWER, 0);
 
     if (uint32 aura = resurrectAura)
-        CastSpell(this, aura, resurrectGUID);
+        CastSpell(this, aura, CastSpellExtraArgs(TRIGGERED_FULL_MASK)
+            .SetOriginalCaster(resurrectGUID));
 
     SpawnCorpseBones();
 }
@@ -25562,13 +25621,9 @@ void Player::SetClientControl(Unit* target, bool allowMove)
 void Player::SetMover(Unit* target)
 {
     m_unitMovedByMe->m_playerMovingMe = nullptr;
-    if (m_unitMovedByMe->GetTypeId() == TYPEID_UNIT)
-        m_unitMovedByMe->GetMotionMaster()->Initialize();
 
     m_unitMovedByMe = target;
     m_unitMovedByMe->m_playerMovingMe = this;
-    if (m_unitMovedByMe->GetTypeId() == TYPEID_UNIT)
-        m_unitMovedByMe->GetMotionMaster()->Initialize();
 
     WorldPackets::Movement::MoveSetActiveMover packet;
     packet.MoverGUID = target->GetGUID();

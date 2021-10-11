@@ -407,7 +407,7 @@ public:
 
                 if (!HasProtected)
                 {
-                    me->GetMotionMaster()->Clear(false);
+                    me->GetMotionMaster()->Clear();
                     me->GetMotionMaster()->MoveIdle();
 
                     // All members of raid must get this buff
@@ -475,7 +475,8 @@ public:
                 {
                     summoned->CastSpell(summoned, SPELL_DOOMFIRE_SPAWN, false);
 
-                    summoned->CastSpell(summoned, SPELL_DOOMFIRE, me->GetGUID());
+                    summoned->CastSpell(summoned, SPELL_DOOMFIRE, CastSpellExtraArgs(TRIGGERED_FULL_MASK)
+                        .SetOriginalCaster(me->GetGUID()));
 
                     if (Unit* DoomfireSpirit = ObjectAccessor::GetUnit(*me, DoomfireSpiritGUID))
                     {
@@ -494,7 +495,7 @@ public:
             switch (actionId)
             {
                 case ACTION_ENRAGE:
-                    me->GetMotionMaster()->Clear(false);
+                    me->GetMotionMaster()->Clear();
                     me->GetMotionMaster()->MoveIdle();
                     Enraged = true;
                     Talk(SAY_ENRAGE);

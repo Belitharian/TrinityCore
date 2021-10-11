@@ -500,7 +500,7 @@ public:
                     DummyEntryCheckPredicate pred;
                     summons.DoAction(ACTION_DELAYED_DESPAWN, pred);
                     Talk(SAY_END_P_TWO);
-                    me->GetMotionMaster()->Clear(false);
+                    me->GetMotionMaster()->Clear();
                     me->StopMoving();
                     if (me->GetPositionZ() > 300.0f)
                         events.ScheduleEvent(EVENT_DELAY_MOVE_TO_DESTROY_P, 5*IN_MILLISECONDS, 0, PHASE_TWO);
@@ -2029,7 +2029,8 @@ class spell_scion_of_eternity_arcane_barrage : public SpellScriptLoader
             void TriggerDamageSpellFromPlayer()
             {
                 if (Player* hitTarget = GetHitPlayer())
-                    hitTarget->CastSpell(hitTarget, SPELL_ARCANE_BARRAGE_DAMAGE, GetCaster()->GetGUID());
+                    hitTarget->CastSpell(hitTarget, SPELL_ARCANE_BARRAGE_DAMAGE, CastSpellExtraArgs(TRIGGERED_FULL_MASK)
+                        .SetOriginalCaster(GetCaster()->GetGUID()));
             }
 
             void Register() override
