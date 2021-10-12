@@ -15,8 +15,6 @@ void CustomAI::ReleaseFocus()
 
 void CustomAI::Initialize()
 {
-    me->SetCombatReach(10.f);
-
     if (type == AI_Type::Distance)
     {
         scheduler.SetValidator([this]

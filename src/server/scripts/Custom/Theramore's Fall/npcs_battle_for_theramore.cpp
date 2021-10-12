@@ -429,7 +429,7 @@ class npc_theramore_officier : public CreatureScript
                 {
                     if (EnemiesInRange(8.0f) >= 3)
                     {
-                        DoCastAOE(SPELL_DIVINE_STORM);
+                        DoCast(SPELL_DIVINE_STORM);
                         divine_storm.Repeat(12s, 25s);
                     }
                     else
@@ -678,7 +678,7 @@ class npc_theramore_faithful : public CreatureScript
                 {
                     if (EnemiesInRange(10.f) >= 2)
                     {
-                        DoCastAOE(SPELL_PSYCHIC_SCREAM);
+                        DoCast(SPELL_PSYCHIC_SCREAM);
                         psychic_scream.Repeat(10s, 25s);
                     }
                     else

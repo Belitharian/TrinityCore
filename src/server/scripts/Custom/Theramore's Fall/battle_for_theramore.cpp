@@ -63,7 +63,7 @@ class npc_jaina_theramore : public CreatureScript
                     me->StopMoving();
                     me->SetReactState(REACT_PASSIVE);
                     me->GetMotionMaster()->Clear();
-                    me->GetMotionMaster()->MoveRotate(duration, urand(0, 1) ? ROTATE_DIRECTION_LEFT : ROTATE_DIRECTION_RIGHT);
+                    me->GetMotionMaster()->MoveRotate(MOVEMENT_INFO_POINT_NONE, duration, urand(0, 1) ? ROTATE_DIRECTION_LEFT : ROTATE_DIRECTION_RIGHT);
 
                     scheduler.Schedule(Milliseconds(duration), [this](TaskContext glacial_ray)
                     {
