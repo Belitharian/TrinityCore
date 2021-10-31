@@ -55,8 +55,6 @@ private:
     StorageType m_storage;
 };
 
-TC_COMMON_API void stripLineInvisibleChars(std::string &src);
-
 TC_COMMON_API int64 MoneyStringToMoney(std::string const& moneyString);
 
 TC_COMMON_API struct tm* localtime_r(time_t const* time, struct tm *result);
@@ -351,6 +349,8 @@ std::array<uint8, Size> HexStrToByteArray(std::string const& str, bool reverse =
 
 TC_COMMON_API bool StringToBool(std::string const& str);
 TC_COMMON_API float DegToRad(float degrees);
+
+TC_COMMON_API bool StringContainsStringI(std::string const& haystack, std::string const& needle);
 
 // simple class for not-modifyable list
 template <typename T>

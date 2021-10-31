@@ -25,6 +25,7 @@
 #include "CinematicMgr.h"
 #include "ClientConfigPackets.h"
 #include "Common.h"
+#include "Conversation.h"
 #include "Corpse.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
@@ -483,6 +484,9 @@ void WorldSession::HandleAreaTriggerOpcode(WorldPackets::AreaTrigger::AreaTrigge
 
     if (player->isDebugAreaTriggers)
         ChatHandler(player->GetSession()).PSendSysMessage(packet.Entered ? LANG_DEBUG_AREATRIGGER_ENTERED : LANG_DEBUG_AREATRIGGER_LEFT, packet.AreaTriggerID);
+
+    if (!sConditionMgr->IsObjectMeetingNotGroupedConditions(CONDITION_SOURCE_TYPE_AREATRIGGER_CLIENT_TRIGGERED, atEntry->ID, player))
+        return;
 
     if (sScriptMgr->OnAreaTrigger(player, atEntry, packet.Entered))
         return;
@@ -1160,4 +1164,10 @@ void WorldSession::HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& 
 {
     if (_player->PlayerTalkClass->GetInteractionData().SourceGuid == closeInteraction.SourceGuid)
         _player->PlayerTalkClass->GetInteractionData().Reset();
+}
+
+void WorldSession::HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted)
+{
+    if (Conversation* convo = ObjectAccessor::GetConversation(*_player, conversationLineStarted.ConversationGUID))
+        sScriptMgr->OnConversationLineStarted(convo, conversationLineStarted.LineID, _player);
 }

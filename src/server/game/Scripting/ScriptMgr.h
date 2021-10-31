@@ -828,6 +828,9 @@ class TC_GAME_API ConversationScript : public ScriptObject
 
         // Called when Conversation is created but not added to Map yet.
         virtual void OnConversationCreate(Conversation* /*conversation*/, Unit* /*creator*/) { }
+
+        // Called when player sends CMSG_CONVERSATION_LINE_STARTED with valid conversation guid
+        virtual void OnConversationLineStarted(Conversation* /*conversation*/, uint32 /*lineId*/, Player* /*sender*/) { }
 };
 
 class TC_GAME_API SceneScript : public ScriptObject
@@ -897,6 +900,12 @@ class TC_GAME_API ScriptMgr
         {
             _script_loader_callback = script_loader_callback;
         }
+
+    public: /* Updating script ids */
+        /// Inform the ScriptMgr that an entity has a changed script id
+        void NotifyScriptIDUpdate();
+        /// Synchronize all scripts with their current ids
+        void SyncScripts();
 
     public: /* Script contexts */
         /// Set the current script context, which allows the ScriptMgr
@@ -986,10 +995,12 @@ class TC_GAME_API ScriptMgr
 
     public: /* CreatureScript */
 
+        bool CanCreateCreatureAI(uint32 scriptId) const;
         CreatureAI* GetCreatureAI(Creature* creature);
 
     public: /* GameObjectScript */
 
+        bool CanCreateGameObjectAI(uint32 scriptId) const;
         GameObjectAI* GetGameObjectAI(GameObject* go);
 
     public: /* AreaTriggerScript */
@@ -1127,11 +1138,13 @@ class TC_GAME_API ScriptMgr
 
     public: /* AreaTriggerEntityScript */
 
+        bool CanCreateAreaTriggerAI(uint32 scriptId) const;
         AreaTriggerAI* GetAreaTriggerAI(AreaTrigger* areaTrigger);
 
     public: /* ConversationScript */
 
         void OnConversationCreate(Conversation* conversation, Unit* creator);
+        void OnConversationLineStarted(Conversation* conversation, uint32 lineId, Player* sender);
 
     public: /* SceneScript */
 
@@ -1148,6 +1161,7 @@ class TC_GAME_API ScriptMgr
 
     private:
         uint32 _scriptCount;
+        bool _scriptIdUpdated;
 
         ScriptLoaderCallbackType _script_loader_callback;
 

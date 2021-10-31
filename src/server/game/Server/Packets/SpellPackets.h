@@ -743,9 +743,9 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             ObjectGuid Source;
-            ObjectGuid Target; // Exclusive with TargetPosition
+            ObjectGuid Target;
             ObjectGuid Transport; // Used when Target = Empty && (SpellVisual::Flags & 0x400) == 0
-            TaggedPosition<Position::XYZ> TargetPosition; // Exclusive with Target
+            TaggedPosition<Position::XYZ> TargetPosition; // Overrides missile destination for SpellVisual::SpellVisualMissileSetID
             uint32 SpellVisualID = 0;
             float TravelSpeed = 0.0f;
             uint16 HitReason = 0;
@@ -768,6 +768,18 @@ namespace WorldPackets
             int32 KitType = 0;
             uint32 Duration = 0;
             bool MountedVisual = false;
+        };
+
+        class SpellVisualLoadScreen final : public ServerPacket
+        {
+        public:
+            SpellVisualLoadScreen(int32 spellVisualKitId, int32 delay) : ServerPacket(SMSG_SPELL_VISUAL_LOAD_SCREEN, 4 + 4),
+                SpellVisualKitID(spellVisualKitId), Delay(delay) { }
+
+            WorldPacket const* Write() override;
+
+            int32 SpellVisualKitID = 0;
+            int32 Delay = 0;
         };
 
         class CancelCast final : public ClientPacket

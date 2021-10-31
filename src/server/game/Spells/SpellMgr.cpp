@@ -1191,13 +1191,13 @@ void SpellMgr::LoadSpellTargetPositions()
         MapEntry const* mapEntry = sMapStore.LookupEntry(st.target_mapId);
         if (!mapEntry)
         {
-            TC_LOG_ERROR("sql.sql", "Spell (Id: %u, EffectIndex: %u) is using a non-existant MapID (ID: %u).", spellId, effIndex, st.target_mapId);
+            TC_LOG_ERROR("sql.sql", "Spell (Id: %u, EffectIndex: %u) is using a non-existant MapID (ID: %u).", spellId, uint32(effIndex), st.target_mapId);
             continue;
         }
 
         if (st.target_X == 0 && st.target_Y == 0 && st.target_Z == 0)
         {
-            TC_LOG_ERROR("sql.sql", "Spell (Id: %u, EffectIndex: %u): target coordinates not provided.", spellId, effIndex);
+            TC_LOG_ERROR("sql.sql", "Spell (Id: %u, EffectIndex: %u): target coordinates not provided.", spellId, uint32(effIndex));
             continue;
         }
 
@@ -1210,7 +1210,7 @@ void SpellMgr::LoadSpellTargetPositions()
 
         if (effIndex >= spellInfo->GetEffects().size())
         {
-            TC_LOG_ERROR("sql.sql", "Spell (Id: %u, EffectIndex: %u) listed in `spell_target_position` does not have an effect at index %u.", spellId, effIndex, effIndex);
+            TC_LOG_ERROR("sql.sql", "Spell (Id: %u, EffectIndex: %u) listed in `spell_target_position` does not have an effect at index %u.", spellId, uint32(effIndex), uint32(effIndex));
             continue;
         }
 
@@ -1228,7 +1228,7 @@ void SpellMgr::LoadSpellTargetPositions()
         }
         else
         {
-            TC_LOG_ERROR("sql.sql", "Spell (Id: %u, effIndex: %u) listed in `spell_target_position` does not have a target TARGET_DEST_DB (17).", spellId, effIndex);
+            TC_LOG_ERROR("sql.sql", "Spell (Id: %u, effIndex: %u) listed in `spell_target_position` does not have a target TARGET_DEST_DB (17).", spellId, uint32(effIndex));
             continue;
         }
 
@@ -1618,7 +1618,8 @@ void SpellMgr::LoadSpellProcs()
                         if (!spellEffectInfo.IsAura())
                             continue;
 
-                        if (spellEffectInfo.ApplyAuraName == SPELL_AURA_ADD_PCT_MODIFIER || spellEffectInfo.ApplyAuraName == SPELL_AURA_ADD_FLAT_MODIFIER)
+                        if (spellEffectInfo.ApplyAuraName == SPELL_AURA_ADD_PCT_MODIFIER || spellEffectInfo.ApplyAuraName == SPELL_AURA_ADD_FLAT_MODIFIER
+                            || spellEffectInfo.ApplyAuraName == SPELL_AURA_ADD_PCT_MODIFIER_BY_SPELL_LABEL || spellEffectInfo.ApplyAuraName == SPELL_AURA_ADD_FLAT_MODIFIER_BY_SPELL_LABEL)
                         {
                             found = true;
                             break;
@@ -2533,7 +2534,7 @@ void SpellMgr::LoadSpellInfoStore()
         loadData[{ interrupts->SpellID, Difficulty(interrupts->DifficultyID) }].Interrupts = interrupts;
 
     for (SpellLabelEntry const* label : sSpellLabelStore)
-        loadData[{ label->LabelID, DIFFICULTY_NONE }].Labels.push_back(label);
+        loadData[{ label->SpellID, DIFFICULTY_NONE }].Labels.push_back(label);
 
     for (SpellLevelsEntry const* levels : sSpellLevelsStore)
         loadData[{ levels->SpellID, Difficulty(levels->DifficultyID) }].Levels = levels;

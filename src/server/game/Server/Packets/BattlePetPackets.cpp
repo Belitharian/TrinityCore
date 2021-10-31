@@ -33,7 +33,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::BattlePet::BattlePet cons
     data << pet.Guid;
     data << uint32(pet.Species);
     data << uint32(pet.CreatureID);
-    data << uint32(pet.CollarID);
+    data << uint32(pet.DisplayID);
     data << uint16(pet.Breed);
     data << uint16(pet.Level);
     data << uint16(pet.Exp);
@@ -45,7 +45,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::BattlePet::BattlePet cons
     data << uint8(pet.Quality);
     data.WriteBits(pet.Name.size(), 7);
     data.WriteBit(pet.OwnerInfo.is_initialized());
-    data.WriteBit(pet.Name.empty()); // NoRename
+    data.WriteBit(false); // NoRename
     data.FlushBits();
 
     data.WriteString(pet.Name);
@@ -116,13 +116,14 @@ void WorldPackets::BattlePet::BattlePetModifyName::Read()
 
     if (hasDeclinedNames)
     {
+        DeclinedName.emplace();
         uint8 declinedNameLengths[MAX_DECLINED_NAME_CASES];
 
-        for (uint8 i = 0; i < 5; ++i)
+        for (uint8 i = 0; i < MAX_DECLINED_NAME_CASES; ++i)
             declinedNameLengths[i] = _worldPacket.ReadBits(7);
 
-        for (uint8 i = 0; i < 5; ++i)
-            Declined.name[i] = _worldPacket.ReadString(declinedNameLengths[i]);
+        for (uint8 i = 0; i < MAX_DECLINED_NAME_CASES; ++i)
+            DeclinedName->name[i] = _worldPacket.ReadString(declinedNameLengths[i]);
     }
 
     Name = _worldPacket.ReadString(nameLength);

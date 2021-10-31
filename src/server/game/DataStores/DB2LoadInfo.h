@@ -890,6 +890,22 @@ struct BroadcastTextLoadInfo
     }
 };
 
+struct BroadcastTextDurationLoadInfo
+{
+    static DB2LoadInfo const* Instance()
+    {
+        static DB2FieldMeta const fields[] =
+        {
+            { false, FT_INT, "ID" },
+            { true, FT_INT, "BroadcastTextID" },
+            { true, FT_INT, "Locale" },
+            { true, FT_INT, "Duration" },
+        };
+        static DB2LoadInfo const loadInfo(&fields[0], std::extent<decltype(fields)>::value, BroadcastTextDurationMeta::Instance(), HOTFIX_SEL_BROADCAST_TEXT_DURATION);
+        return &loadInfo;
+    }
+};
+
 struct CfgRegionsLoadInfo
 {
     static DB2LoadInfo const* Instance()
@@ -3286,7 +3302,7 @@ struct ItemSparseLoadInfo
             { false, FT_STRING, "Display" },
             { true, FT_INT, "ExpansionID" },
             { false, FT_FLOAT, "DmgVariance" },
-            { true, FT_INT, "InstanceBound" },
+            { true, FT_INT, "LimitCategory" },
             { false, FT_INT, "DurationInInventory" },
             { false, FT_FLOAT, "QualityModifier" },
             { false, FT_INT, "BagFamily" },
@@ -3330,10 +3346,10 @@ struct ItemSparseLoadInfo
             { false, FT_SHORT, "ItemNameDescriptionID" },
             { false, FT_SHORT, "RequiredTransmogHoliday" },
             { false, FT_SHORT, "RequiredHoliday" },
-            { false, FT_SHORT, "LimitCategory" },
             { false, FT_SHORT, "GemProperties" },
             { false, FT_SHORT, "SocketMatchEnchantmentId" },
             { false, FT_SHORT, "TotemCategoryID" },
+            { false, FT_SHORT, "InstanceBound" },
             { false, FT_SHORT, "ZoneBound1" },
             { false, FT_SHORT, "ZoneBound2" },
             { false, FT_SHORT, "ItemSet" },

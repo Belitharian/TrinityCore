@@ -151,13 +151,6 @@ void EscortAI::MovementInform(uint32 type, uint32 id)
     }
 }
 
-///@todo investigate whether if its necessary to handle anything on charm
-/*
-void EscortAI::OnCharmed(bool apply)
-{
-}
-*/
-
 void EscortAI::UpdateAI(uint32 diff)
 {
     // Waypoint Updating
@@ -307,6 +300,8 @@ void EscortAI::Start(bool isActiveAttacker /* = true*/, bool run /* = false */, 
         return;
     }
 
+    _running = run;
+
     if (!_manualPath && resetWaypoints)
         FillPointMovementListForCreature();
 
@@ -318,7 +313,6 @@ void EscortAI::Start(bool isActiveAttacker /* = true*/, bool run /* = false */, 
 
     // set variables
     _activeAttacker = isActiveAttacker;
-    _running = run;
     _playerGUID = playerGUID;
     _escortQuest = quest;
     _instantRespawn = instantRespawn;
@@ -350,11 +344,13 @@ void EscortAI::Start(bool isActiveAttacker /* = true*/, bool run /* = false */, 
 
 void EscortAI::SetRun(bool on)
 {
-    if (on && !_running)
-        me->SetWalk(false);
-    else if (!on && _running)
-        me->SetWalk(true);
+    if (on == _running)
+        return;
 
+    for (auto& node : _path.nodes)
+        node.moveType = on ? WAYPOINT_MOVE_TYPE_RUN : WAYPOINT_MOVE_TYPE_WALK;
+
+    me->SetWalk(!on);
     _running = on;
 }
 

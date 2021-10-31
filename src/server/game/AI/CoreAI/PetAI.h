@@ -30,7 +30,7 @@ class TC_GAME_API PetAI : public CreatureAI
 {
     public:
 
-        explicit PetAI(Creature* c);
+        explicit PetAI(Creature* c, uint32 scriptId = {});
 
         void UpdateAI(uint32) override;
         static int32 Permissible(Creature const* creature);
@@ -50,8 +50,6 @@ class TC_GAME_API PetAI : public CreatureAI
         void MoveInLineOfSight(Unit* /*who*/) override { } // CreatureAI interferes with returning pets
         void MoveInLineOfSight_Safe(Unit* /*who*/) { } // CreatureAI interferes with returning pets
         void EnterEvadeMode(EvadeReason /*why*/) override { } // For fleeing, pets don't use this type of Evade mechanic
-
-        void OnCharmed(bool /*apply*/) override;
 
     private:
         bool _needToStop(void);

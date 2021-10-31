@@ -23,7 +23,7 @@
 class TC_GAME_API PassiveAI : public CreatureAI
 {
     public:
-        explicit PassiveAI(Creature* c);
+        explicit PassiveAI(Creature* c, uint32 scriptId = {});
 
         void MoveInLineOfSight(Unit*) override { }
         void AttackStart(Unit*) override { }
@@ -35,7 +35,7 @@ class TC_GAME_API PassiveAI : public CreatureAI
 class TC_GAME_API PossessedAI : public CreatureAI
 {
     public:
-        explicit PossessedAI(Creature* c);
+        explicit PossessedAI(Creature* c, uint32 scriptId = {});
 
         void MoveInLineOfSight(Unit*) override { }
         void AttackStart(Unit* target) override;
@@ -45,21 +45,19 @@ class TC_GAME_API PossessedAI : public CreatureAI
         void JustDied(Unit*) override;
         void KilledUnit(Unit* victim) override;
 
-        void OnCharmed(bool /*apply*/) override;
-
         static int32 Permissible(Creature const* /*creature*/) { return PERMIT_BASE_NO; }
 };
 
 class TC_GAME_API NullCreatureAI : public CreatureAI
 {
     public:
-        explicit NullCreatureAI(Creature* c);
+        explicit NullCreatureAI(Creature* c, uint32 scriptId = {});
 
         void MoveInLineOfSight(Unit*) override { }
         void AttackStart(Unit*) override { }
         void UpdateAI(uint32) override { }
         void EnterEvadeMode(EvadeReason /*why*/) override { }
-        void OnCharmed(bool /*apply*/) override { }
+        void OnCharmed(bool /*isNew*/) override { }
 
         static int32 Permissible(Creature const* creature);
 };
@@ -67,7 +65,7 @@ class TC_GAME_API NullCreatureAI : public CreatureAI
 class TC_GAME_API CritterAI : public PassiveAI
 {
     public:
-        explicit CritterAI(Creature* c) : PassiveAI(c) { }
+        using PassiveAI::PassiveAI;
 
         void DamageTaken(Unit* done_by, uint32& /*damage*/) override;
         void EnterEvadeMode(EvadeReason why) override;
@@ -78,7 +76,8 @@ class TC_GAME_API CritterAI : public PassiveAI
 class TC_GAME_API TriggerAI : public NullCreatureAI
 {
     public:
-        explicit TriggerAI(Creature* c) : NullCreatureAI(c) { }
+        using NullCreatureAI::NullCreatureAI;
+
         void IsSummonedBy(Unit* summoner) override;
 
         static int32 Permissible(Creature const* creature);

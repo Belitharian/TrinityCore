@@ -156,7 +156,6 @@ struct InstanceTemplate
 {
     uint32 Parent;
     uint32 ScriptId;
-    bool AllowMount;
 };
 
 typedef std::unordered_map<uint16, InstanceTemplate> InstanceTemplateContainer;
@@ -1032,7 +1031,33 @@ class TC_GAME_API ObjectMgr
 
         typedef std::unordered_map<uint32, PointOfInterest> PointOfInterestContainer;
 
-        typedef std::vector<std::string> ScriptNameContainer;
+        class ScriptNameContainer
+        {
+        public:
+            struct Entry
+            {
+                uint32 Id;
+                bool IsScriptDatabaseBound;
+            };
+
+        private:
+            using NameMap = std::map<std::string, Entry>;
+
+            NameMap NameToIndex;
+            std::vector<NameMap::const_iterator> IndexToName;
+
+        public:
+            ScriptNameContainer();
+
+            void reserve(size_t capacity);
+            uint32 insert(std::string const& scriptName, bool isScriptNameBound = true);
+            size_t size() const;
+            NameMap::const_iterator find(size_t index) const;
+            NameMap::const_iterator find(std::string const& name) const;
+            NameMap::const_iterator end() const;
+
+            std::unordered_set<std::string> GetAllDBScriptNames() const;
+        };
 
         typedef std::map<uint32, uint32> CharacterConversionMap;
 
@@ -1060,6 +1085,7 @@ class TC_GAME_API ObjectMgr
         ItemTemplate const* GetItemTemplate(uint32 entry) const;
         ItemTemplateContainer const& GetItemTemplateStore() const { return _itemTemplateStore; }
 
+        InstanceTemplateContainer const& GetInstanceTemplates() const { return _instanceTemplateStore; }
         InstanceTemplate const* GetInstanceTemplate(uint32 mapId) const;
 
         PetLevelInfo const* GetPetLevelInfo(uint32 creature_id, uint8 level) const;
@@ -1587,10 +1613,10 @@ class TC_GAME_API ObjectMgr
         bool RemoveVendorItem(uint32 entry, uint32 item, uint8 type, bool persist = true); // for event
         bool IsVendorItemValid(uint32 vendor_entry, VendorItem const& vItem, Player* player = nullptr, std::set<uint32>* skip_vendors = nullptr, uint32 ORnpcflag = 0) const;
 
-        void LoadScriptNames();
-        ScriptNameContainer const& GetAllScriptNames() const;
+        std::unordered_set<std::string> GetAllDBScriptNames() const;
         std::string const& GetScriptName(uint32 id) const;
-        uint32 GetScriptId(std::string const& name);
+        bool IsScriptDatabaseBound(uint32 id) const;
+        uint32 GetScriptId(std::string const& name, bool isDatabaseBound = true);
 
         Trinity::IteratorPair<SpellClickInfoContainer::const_iterator> GetSpellClickInfoMapBounds(uint32 creature_id) const
         {

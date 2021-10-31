@@ -878,6 +878,18 @@ void Map::Update(uint32 t_diff)
             for (Unit* unit : toVisit)
                 VisitNearbyCellsOf(unit, grid_object_update, world_object_update);
         }
+
+        { // Update any creatures that own auras the player has applications of
+            std::unordered_set<Unit*> toVisit;
+            for (std::pair<uint32, AuraApplication*> pair : player->GetAppliedAuras())
+            {
+                if (Unit* caster = pair.second->GetBase()->GetCaster())
+                    if (caster->GetTypeId() != TYPEID_PLAYER && !caster->IsWithinDistInMap(player, GetVisibilityRange(), false))
+                        toVisit.insert(caster);
+            }
+            for (Unit* unit : toVisit)
+                VisitNearbyCellsOf(unit, grid_object_update, world_object_update);
+        }
     }
 
     // non-player active objects, increasing iterator in the loop in case of object removal
@@ -1765,7 +1777,7 @@ void Map::RemoveAllPlayers()
             {
                 // this is happening for bg
                 TC_LOG_ERROR("maps", "Map::UnloadAll: player %s is still in map %u during unload, this should not happen!", player->GetName().c_str(), GetId());
-                player->TeleportTo(player->m_homebindMapId, player->m_homebindX, player->m_homebindY, player->m_homebindZ, player->GetOrientation());
+                player->TeleportTo(player->m_homebind);
             }
         }
     }
@@ -3426,6 +3438,7 @@ bool Map::SpawnGroupSpawn(uint32 groupId, bool ignoreRespawn, bool force, std::v
         return false;
     }
 
+    SetSpawnGroupActive(groupId, true); // start processing respawns for the group
     for (auto& pair : sObjectMgr->GetSpawnDataForGroup(groupId))
     {
         SpawnData const* data = pair.second;
@@ -3476,7 +3489,6 @@ bool Map::SpawnGroupSpawn(uint32 groupId, bool ignoreRespawn, bool force, std::v
                 return false;
         }
     }
-    SetSpawnGroupActive(groupId, true); // start processing respawns for the group
     return true;
 }
 

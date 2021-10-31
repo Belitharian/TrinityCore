@@ -917,20 +917,38 @@ bool LFGMgr::CheckGroupRoles(LfgRolesMap& groles)
 */
 void LFGMgr::MakeNewGroup(LfgProposal const& proposal)
 {
-    GuidList players;
+    GuidList players, tankPlayers, healPlayers, dpsPlayers;
     GuidList playersToTeleport;
 
     for (LfgProposalPlayerContainer::const_iterator it = proposal.players.begin(); it != proposal.players.end(); ++it)
     {
         ObjectGuid guid = it->first;
         if (guid == proposal.leader)
-            players.push_front(guid);
-        else
             players.push_back(guid);
+        else
+            switch (it->second.role & ~PLAYER_ROLE_LEADER)
+            {
+                case PLAYER_ROLE_TANK:
+                    tankPlayers.push_back(guid);
+                    break;
+                case PLAYER_ROLE_HEALER:
+                    healPlayers.push_back(guid);
+                    break;
+                case PLAYER_ROLE_DAMAGE:
+                    dpsPlayers.push_back(guid);
+                    break;
+                default:
+                    ASSERT(false, "Invalid LFG role %u", it->second.role);
+                    break;
+            }
 
         if (proposal.isNew || GetGroup(guid) != proposal.group)
             playersToTeleport.push_back(guid);
     }
+
+    players.splice(players.end(), tankPlayers);
+    players.splice(players.end(), healPlayers);
+    players.splice(players.end(), dpsPlayers);
 
     // Set the dungeon difficulty
     LFGDungeonData const* dungeon = GetLFGDungeon(proposal.dungeonId);
@@ -963,8 +981,14 @@ void LFGMgr::MakeNewGroup(LfgProposal const& proposal)
         grp->SetLfgRoles(pguid, proposal.players.find(pguid)->second.role);
 
         // Add the cooldown spell if queued for a random dungeon
-        if (dungeon->type == LFG_TYPE_RANDOM)
-            player->CastSpell(player, LFG_SPELL_DUNGEON_COOLDOWN, false);
+        LfgDungeonSet const& dungeons = GetSelectedDungeons(player->GetGUID());
+        if (!dungeons.empty())
+        {
+            uint32 rDungeonId = (*dungeons.begin());
+            LFGDungeonData const* dungeon = GetLFGDungeon(rDungeonId);
+            if (dungeon && dungeon->type == LFG_TYPE_RANDOM)
+                player->CastSpell(player, LFG_SPELL_DUNGEON_COOLDOWN, false);
+        }
     }
 
     ASSERT(grp);
@@ -1329,7 +1353,7 @@ void LFGMgr::TeleportPlayer(Player* player, bool out, bool fromOpcode /*= false*
         error = LFG_TELEPORT_RESULT_EXHAUSTION;
     else if (player->GetVehicle())
         error = LFG_TELEPORT_RESULT_ON_TRANSPORT;
-    else if (!player->GetCharmGUID().IsEmpty())
+    else if (!player->GetCharmedGUID().IsEmpty())
         error = LFG_TELEPORT_RESULT_IMMUNE_TO_SUMMONS;
     else if (player->HasAura(9454)) // check Freeze debuff
         error = LFG_TELEPORT_RESULT_NO_RETURN_LOCATION;

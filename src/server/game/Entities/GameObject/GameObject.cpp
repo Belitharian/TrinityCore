@@ -89,6 +89,7 @@ WorldPacket GameObjectTemplate::BuildQueryData(LocaleConstant loc) const
     stats.ContentTuningId = ContentTuningId;
 
     queryTemp.Write();
+    queryTemp.ShrinkToFit();
     return queryTemp.Move();
 }
 
@@ -526,7 +527,10 @@ void GameObject::Update(uint32 diff)
         if (m_despawnDelay > diff)
             m_despawnDelay -= diff;
         else
+        {
+            m_despawnDelay = 0;
             DespawnOrUnsummon(0ms, m_despawnRespawnTime);
+        }
     }
 
     switch (m_lootState)
@@ -882,8 +886,17 @@ void GameObject::Update(uint32 diff)
             //! The GetOwnerGUID() check is mostly for compatibility with hacky scripts - 99% of the time summoning should be done trough spells.
             if (GetSpellId() || !GetOwnerGUID().IsEmpty())
             {
-                SetRespawnTime(0);
-                Delete();
+                //Don't delete spell spawned chests, which are not consumed on loot
+                if (m_respawnTime > 0 && GetGoType() == GAMEOBJECT_TYPE_CHEST && !GetGOInfo()->IsDespawnAtAction())
+                {
+                    UpdateObjectVisibility();
+                    SetLootState(GO_READY);
+                }
+                else
+                {
+                    SetRespawnTime(0);
+                    Delete();
+                }
                 return;
             }
 
@@ -965,7 +978,7 @@ void GameObject::AddUniqueUse(Player* player)
     m_unique_users.insert(player->GetGUID());
 }
 
-void GameObject::DespawnOrUnsummon(Milliseconds const& delay, Seconds const& forceRespawnTime)
+void GameObject::DespawnOrUnsummon(Milliseconds delay, Seconds forceRespawnTime)
 {
     if (delay > 0ms)
     {
@@ -977,9 +990,11 @@ void GameObject::DespawnOrUnsummon(Milliseconds const& delay, Seconds const& for
     }
     else
     {
-        uint32 const respawnDelay = (forceRespawnTime > 0s) ? forceRespawnTime.count() : m_respawnDelayTime;
-        if (m_goData && respawnDelay)
+        if (m_goData)
+        {
+            uint32 const respawnDelay = (forceRespawnTime > 0s) ? forceRespawnTime.count() : m_goData->spawntimesecs;
             SaveRespawnTime(respawnDelay);
+        }
         Delete();
     }
 }
@@ -2403,9 +2418,9 @@ void GameObject::SetDestructibleState(GameObjectDestructibleState state, WorldOb
             EventInform(m_goInfo->destructibleBuilding.DestroyedEvent, attackerOrHealer);
             AI()->Destroyed(attackerOrHealer, m_goInfo->destructibleBuilding.DestroyedEvent);
 
-            if (attackerOrHealer && attackerOrHealer->GetTypeId() == TYPEID_PLAYER)
-                if (Battleground* bg = attackerOrHealer->ToPlayer()->GetBattleground())
-                    bg->DestroyGate(attackerOrHealer->ToPlayer(), this);
+            if (Player* player = attackerOrHealer ? attackerOrHealer->GetCharmerOrOwnerPlayerOrPlayerItself() : nullptr)
+                if (Battleground* bg = player->GetBattleground())
+                    bg->DestroyGate(player, this);
 
             RemoveFlag(GO_FLAG_DAMAGED);
             AddFlag(GO_FLAG_DESTROYED);

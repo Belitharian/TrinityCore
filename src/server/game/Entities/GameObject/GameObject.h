@@ -120,6 +120,7 @@ class TC_GAME_API GameObject : public WorldObject, public GridObject<GameObject>
         void SetWorldRotationAngles(float z_rot, float y_rot, float x_rot);
         void SetWorldRotation(float qx, float qy, float qz, float qw);
         void SetParentRotation(QuaternionData const& rotation);      // transforms(rotates) transport's path
+        QuaternionData const& GetWorldRotation() const { return m_worldRotation; }
         int64 GetPackedWorldRotation() const { return m_packedRotation; }
 
         // overwrite WorldObject function for proper name localization
@@ -164,7 +165,7 @@ class TC_GAME_API GameObject : public WorldObject, public GridObject<GameObject>
         void SetSpawnedByDefault(bool b) { m_spawnedByDefault = b; }
         uint32 GetRespawnDelay() const { return m_respawnDelayTime; }
         void Refresh();
-        void DespawnOrUnsummon(Milliseconds const& delay = 0ms, Seconds const& forceRespawnTime = 0s);
+        void DespawnOrUnsummon(Milliseconds delay = 0ms, Seconds forceRespawnTime = 0s);
         void Delete();
         void SendGameObjectDespawn();
         void getFishLoot(Loot* loot, Player* loot_owner);

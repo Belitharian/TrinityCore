@@ -1296,13 +1296,13 @@ void Spell::SelectImplicitCasterDestTargets(SpellEffectInfo const& spellEffectIn
             break;
         case TARGET_DEST_HOME:
             if (Player* playerCaster = m_caster->ToPlayer())
-                dest = SpellDestination(playerCaster->m_homebindX, playerCaster->m_homebindY, playerCaster->m_homebindZ, playerCaster->GetOrientation(), playerCaster->m_homebindMapId);
+                dest = SpellDestination(playerCaster->m_homebind);
             break;
         case TARGET_DEST_DB:
             if (SpellTargetPosition const* st = sSpellMgr->GetSpellTargetPosition(m_spellInfo->Id, spellEffectInfo.EffectIndex))
             {
                 /// @todo fix this check
-                if (m_spellInfo->HasEffect(SPELL_EFFECT_TELEPORT_UNITS) || m_spellInfo->HasEffect(SPELL_EFFECT_BIND))
+                if (m_spellInfo->HasEffect(SPELL_EFFECT_TELEPORT_UNITS) || m_spellInfo->HasEffect(SPELL_EFFECT_TELEPORT_WITH_SPELL_VISUAL_KIT_LOADING_SCREEN) || m_spellInfo->HasEffect(SPELL_EFFECT_BIND))
                     dest = SpellDestination(st->target_X, st->target_Y, st->target_Z, st->target_Orientation, (int32)st->target_mapId);
                 else if (st->target_mapId == m_caster->GetMapId())
                     dest = SpellDestination(st->target_X, st->target_Y, st->target_Z, st->target_Orientation);
@@ -2634,18 +2634,16 @@ void Spell::TargetInfo::DoDamageAndTriggers(Spell* spell)
     if (_spellHitTarget)
     {
         //AI functions
-        if (_spellHitTarget->GetTypeId() == TYPEID_UNIT)
-        {
-            if (_spellHitTarget->ToCreature()->IsAIEnabled)
+        if (Creature* cHitTarget = _spellHitTarget->ToCreature())
+            if (CreatureAI* hitTargetAI = cHitTarget->AI())
             {
                 if (spell->m_caster->GetTypeId() == TYPEID_GAMEOBJECT)
-                    _spellHitTarget->ToCreature()->AI()->SpellHit(spell->m_caster->ToGameObject(), spell->m_spellInfo);
+                    hitTargetAI->SpellHit(spell->m_caster->ToGameObject(), spell->m_spellInfo);
                 else
-                    _spellHitTarget->ToCreature()->AI()->SpellHit(spell->m_caster->ToUnit(), spell->m_spellInfo);
+                    hitTargetAI->SpellHit(spell->m_caster->ToUnit(), spell->m_spellInfo);
             }
-        }
 
-        if (spell->m_caster->GetTypeId() == TYPEID_UNIT && spell->m_caster->ToCreature()->IsAIEnabled)
+        if (spell->m_caster->GetTypeId() == TYPEID_UNIT && spell->m_caster->ToCreature()->IsAIEnabled())
             spell->m_caster->ToCreature()->AI()->SpellHitTarget(_spellHitTarget, spell->m_spellInfo);
         else if (spell->m_caster->GetTypeId() == TYPEID_GAMEOBJECT && spell->m_caster->ToGameObject()->AI())
             spell->m_caster->ToGameObject()->AI()->SpellHitTarget(_spellHitTarget, spell->m_spellInfo);
@@ -2694,7 +2692,7 @@ void Spell::GOTargetInfo::DoTargetSpellHit(Spell* spell, SpellEffectInfo const& 
             go->AI()->SpellHit(spell->m_caster->ToUnit(), spell->m_spellInfo);
     }
 
-    if (spell->m_caster->GetTypeId() == TYPEID_UNIT && spell->m_caster->ToCreature()->IsAIEnabled)
+    if (spell->m_caster->GetTypeId() == TYPEID_UNIT && spell->m_caster->ToCreature()->IsAIEnabled())
         spell->m_caster->ToCreature()->AI()->SpellHitTarget(go, spell->m_spellInfo);
     else if (spell->m_caster->GetTypeId() == TYPEID_GAMEOBJECT && spell->m_caster->ToGameObject()->AI())
         spell->m_caster->ToGameObject()->AI()->SpellHitTarget(go, spell->m_spellInfo);
@@ -3153,8 +3151,8 @@ void Spell::prepare(SpellCastTargets const& targets, AuraEffect const* triggered
     // exception are only channeled spells that have no casttime and SPELL_ATTR5_CAN_CHANNEL_WHEN_MOVING
     // (even if they are interrupted on moving, spells with almost immediate effect get to have their effect processed before movement interrupter kicks in)
     // don't cancel spells which are affected by a SPELL_AURA_CAST_WHILE_WALKING effect
-    if (((m_spellInfo->IsChanneled() || m_casttime) && m_caster->GetTypeId() == TYPEID_PLAYER && !(m_caster->ToPlayer()->IsCharmed() && m_caster->ToPlayer()->GetCharmerGUID().IsCreature()) && m_caster->ToPlayer()->isMoving() &&
-        m_spellInfo->InterruptFlags.HasFlag(SpellInterruptFlags::Movement)) && !m_caster->ToPlayer()->HasAuraTypeWithAffectMask(SPELL_AURA_CAST_WHILE_WALKING, m_spellInfo))
+    if (((m_spellInfo->IsChanneled() || m_casttime) && m_caster->GetTypeId() == TYPEID_PLAYER && !(m_caster->ToUnit()->IsCharmed() && m_caster->ToUnit()->GetCharmerGUID().IsCreature()) && m_caster->ToUnit()->isMoving() &&
+        m_spellInfo->InterruptFlags.HasFlag(SpellInterruptFlags::Movement)) && !m_caster->ToUnit()->CanCastSpellWhileMoving(m_spellInfo))
     {
         // 1. Has casttime, 2. Or doesn't have flag to allow movement during channel
         if (m_casttime || !m_spellInfo->IsMoveAllowedChannel())
@@ -3316,8 +3314,8 @@ void Spell::_cast(bool skipCheck)
             if (Unit* target = m_targets.GetUnitTarget())
                 for (Unit* controlled : playerCaster->m_Controlled)
                     if (Creature* cControlled = controlled->ToCreature())
-                        if (cControlled->IsAIEnabled)
-                            cControlled->AI()->OwnerAttacked(target);
+                        if (CreatureAI* controlledAI = cControlled->AI())
+                            controlledAI->OwnerAttacked(target);
     }
 
     SetExecutedCurrently(true);
@@ -3563,7 +3561,7 @@ void Spell::_cast(bool skipCheck)
 
     // Call CreatureAI hook OnSuccessfulSpellCast
     if (Creature* caster = m_originalCaster->ToCreature())
-        if (caster->IsAIEnabled)
+        if (caster->IsAIEnabled())
             caster->AI()->OnSuccessfulSpellCast(GetSpellInfo());
 }
 
@@ -3843,9 +3841,9 @@ void Spell::update(uint32 difftime)
     // check if the player caster has moved before the spell finished
     // with the exception of spells affected with SPELL_AURA_CAST_WHILE_WALKING effect
     if ((m_caster->GetTypeId() == TYPEID_PLAYER && m_timer != 0) &&
-        m_caster->ToPlayer()->isMoving() && (m_spellInfo->InterruptFlags.HasFlag(SpellInterruptFlags::Movement)) &&
-        (!m_spellInfo->HasEffect(SPELL_EFFECT_STUCK) || !m_caster->ToPlayer()->HasUnitMovementFlag(MOVEMENTFLAG_FALLING_FAR)) &&
-        !m_caster->ToPlayer()->HasAuraTypeWithAffectMask(SPELL_AURA_CAST_WHILE_WALKING, m_spellInfo))
+        m_caster->ToUnit()->isMoving() && (m_spellInfo->InterruptFlags.HasFlag(SpellInterruptFlags::Movement)) &&
+        (!m_spellInfo->HasEffect(SPELL_EFFECT_STUCK) || !m_caster->ToUnit()->HasUnitMovementFlag(MOVEMENTFLAG_FALLING_FAR)) &&
+        !m_caster->ToUnit()->CanCastSpellWhileMoving(m_spellInfo))
     {
         // don't cancel for melee, autorepeat, triggered and instant spells
         if (!m_spellInfo->IsNextMeleeSwingSpell() && !IsAutoRepeat() && !IsTriggered() && !(IsChannelActive() && m_spellInfo->IsMoveAllowedChannel()))
@@ -3853,7 +3851,7 @@ void Spell::update(uint32 difftime)
             // if charmed by creature, trust the AI not to cheat and allow the cast to proceed
             // @todo this is a hack, "creature" movesplines don't differentiate turning/moving right now
             // however, checking what type of movement the spline is for every single spline would be really expensive
-            if (!m_caster->ToPlayer()->GetCharmerGUID().IsCreature())
+            if (!m_caster->ToUnit()->GetCharmerGUID().IsCreature())
                 cancel();
         }
     }
@@ -3934,7 +3932,7 @@ void Spell::finish(bool ok)
     // Unsummon summon as possessed creatures on spell cancel
     if (m_spellInfo->IsChanneled() && unitCaster->GetTypeId() == TYPEID_PLAYER)
     {
-        if (Unit* charm = unitCaster->GetCharm())
+        if (Unit* charm = unitCaster->GetCharmed())
             if (charm->GetTypeId() == TYPEID_UNIT
                 && charm->ToCreature()->HasUnitTypeMask(UNIT_MASK_PUPPET)
                 && charm->m_unitData->CreatedBySpell == int32(m_spellInfo->Id))
@@ -5268,7 +5266,9 @@ SpellCastResult Spell::CheckCast(bool strict, int32* param1 /*= nullptr*/, int32
         // cancel autorepeat spells if cast start when moving
         // (not wand currently autorepeat cast delayed to moving stop anyway in spell update code)
         // Do not cancel spells which are affected by a SPELL_AURA_CAST_WHILE_WALKING effect
-        if (unitCaster->GetTypeId() == TYPEID_PLAYER && unitCaster->ToPlayer()->isMoving() && (!unitCaster->IsCharmed() || !unitCaster->GetCharmerGUID().IsCreature()) && !unitCaster->HasAuraTypeWithAffectMask(SPELL_AURA_CAST_WHILE_WALKING, m_spellInfo))
+        if (unitCaster->GetTypeId() == TYPEID_PLAYER && unitCaster->ToPlayer()->isMoving()
+            && (!unitCaster->IsCharmed() || !unitCaster->GetCharmerGUID().IsCreature())
+            && !unitCaster->CanCastSpellWhileMoving(m_spellInfo))
         {
             // skip stuck spell to allow use it in falling case and apply spell limitations at movement
             if ((!unitCaster->HasUnitMovementFlag(MOVEMENTFLAG_FALLING_FAR) || !m_spellInfo->HasEffect(SPELL_EFFECT_STUCK)) &&
@@ -5784,7 +5784,7 @@ SpellCastResult Spell::CheckCast(bool strict, int32* param1 /*= nullptr*/, int32
                         /* fallthrough */
                     // intentional, check both GetPetGUID() and GetCharmGUID for SUMMON_CATEGORY_PET
                     case SUMMON_CATEGORY_PUPPET:
-                        if (!unitCaster->GetCharmGUID().IsEmpty())
+                        if (!unitCaster->GetCharmedGUID().IsEmpty())
                             return SPELL_FAILED_ALREADY_HAVE_CHARM;
                         break;
                 }
@@ -5821,7 +5821,7 @@ SpellCastResult Spell::CheckCast(bool strict, int32* param1 /*= nullptr*/, int32
                         return SPELL_FAILED_ALREADY_HAVE_SUMMON;
                 }
 
-                if (!unitCaster->GetCharmGUID().IsEmpty())
+                if (!unitCaster->GetCharmedGUID().IsEmpty())
                     return SPELL_FAILED_ALREADY_HAVE_CHARM;
                 break;
             }
@@ -6021,7 +6021,7 @@ SpellCastResult Spell::CheckCast(bool strict, int32* param1 /*= nullptr*/, int32
                     if (!m_spellInfo->HasAttribute(SPELL_ATTR1_DISMISS_PET) && !unitCaster->GetPetGUID().IsEmpty())
                         return SPELL_FAILED_ALREADY_HAVE_SUMMON;
 
-                    if (!unitCaster->GetCharmGUID().IsEmpty())
+                    if (!unitCaster->GetCharmedGUID().IsEmpty())
                         return SPELL_FAILED_ALREADY_HAVE_CHARM;
                 }
 
@@ -6054,14 +6054,6 @@ SpellCastResult Spell::CheckCast(bool strict, int32* param1 /*= nullptr*/, int32
 
                 if (unitCaster->IsInWater() && m_spellInfo->HasAura(SPELL_AURA_MOD_INCREASE_MOUNTED_FLIGHT_SPEED))
                     return SPELL_FAILED_ONLY_ABOVEWATER;
-
-                // Ignore map check if spell have AreaId. AreaId already checked and this prevent special mount spells
-                bool allowMount = !unitCaster->GetMap()->IsDungeon() || unitCaster->GetMap()->IsBattlegroundOrArena();
-                InstanceTemplate const* it = sObjectMgr->GetInstanceTemplate(unitCaster->GetMapId());
-                if (it)
-                    allowMount = it->AllowMount;
-                if (unitCaster->GetTypeId() == TYPEID_PLAYER && !allowMount && !m_spellInfo->RequiredAreasID)
-                    return SPELL_FAILED_NO_MOUNTS_ALLOWED;
 
                 if (unitCaster->IsInDisallowedMountForm())
                 {

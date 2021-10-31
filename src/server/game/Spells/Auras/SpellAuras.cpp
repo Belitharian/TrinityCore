@@ -469,11 +469,11 @@ m_lastProcAttemptTime(std::chrono::steady_clock::now() - Seconds(10)), m_lastPro
     // m_casterLevel = cast item level/caster level, caster level should be saved to db, confirmed with sniffs
 }
 
-AuraScript* Aura::GetScriptByName(std::string const& scriptName) const
+AuraScript* Aura::GetScriptByType(std::type_info const& type) const
 {
-    for (auto itr = m_loadedScripts.begin(); itr != m_loadedScripts.end(); ++itr)
-        if ((*itr)->_GetScriptName()->compare(scriptName) == 0)
-            return *itr;
+    for (AuraScript* loadedScript : m_loadedScripts)
+        if (typeid(*loadedScript) == type)
+            return loadedScript;
     return nullptr;
 }
 
@@ -1543,6 +1543,10 @@ void Aura::HandleAuraSpecificMods(AuraApplication const* aurApp, Unit* caster, b
 
 bool Aura::CanBeAppliedOn(Unit* target)
 {
+    for (uint32 label : GetSpellInfo()->Labels)
+        if (target->HasAuraTypeWithMiscvalue(SPELL_AURA_SUPPRESS_ITEM_PASSIVE_EFFECT_BY_SPELL_LABEL, label))
+            return false;
+
     // unit not in world or during remove from world
     if (!target->IsInWorld() || target->IsDuringRemoveFromWorld())
     {
@@ -1715,6 +1719,11 @@ bool Aura::IsProcOnCooldown(std::chrono::steady_clock::time_point now) const
 void Aura::AddProcCooldown(std::chrono::steady_clock::time_point cooldownEnd)
 {
     m_procCooldown = cooldownEnd;
+}
+
+void Aura::ResetProcCooldown()
+{
+    m_procCooldown = std::chrono::steady_clock::now();
 }
 
 void Aura::PrepareProcToTrigger(AuraApplication* aurApp, ProcEventInfo& eventInfo, std::chrono::steady_clock::time_point now)

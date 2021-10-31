@@ -142,7 +142,6 @@ void Object::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
 
     uint8 updateType = UPDATETYPE_CREATE_OBJECT;
     uint8 objectType = m_objectTypeId;
-    uint16 objectTypeMask = m_objectType;
     CreateObjectBits flags = m_updateFlag;
 
     if (target == this)                                      // building packet for yourself
@@ -150,7 +149,6 @@ void Object::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
         flags.ThisIsYou = true;
         flags.ActivePlayer = true;
         objectType = TYPEID_ACTIVE_PLAYER;
-        objectTypeMask |= TYPEMASK_ACTIVE_PLAYER;
     }
 
     switch (GetGUID().GetHigh())
@@ -650,8 +648,8 @@ void Object::BuildMovementUpdate(ByteBuffer* data, CreateObjectBits flags) const
     //            {
     //                *data << ObjectGuid(Players[i].Pets[j].BattlePetGUID);
     //                *data << int32(Players[i].Pets[j].SpeciesID);
+    //                *data << int32(Players[i].Pets[j].CreatureID);
     //                *data << int32(Players[i].Pets[j].DisplayID);
-    //                *data << int32(Players[i].Pets[j].CollarID);
     //                *data << int16(Players[i].Pets[j].Level);
     //                *data << int16(Players[i].Pets[j].Xp);
     //                *data << int32(Players[i].Pets[j].CurHealth);
@@ -2705,20 +2703,20 @@ bool WorldObject::IsValidAttackTarget(WorldObject const* target, SpellInfo const
         return false;
 
     // ignore immunity flags when assisting
-    if (!bySpell || (isPositiveSpell && !bySpell->HasAttribute(SPELL_ATTR6_ASSIST_IGNORE_IMMUNE_FLAG)))
+    if (unit && unitTarget && !(isPositiveSpell && bySpell->HasAttribute(SPELL_ATTR6_ASSIST_IGNORE_IMMUNE_FLAG)))
     {
-        if (unit && !unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unitTarget && unitTarget->IsImmuneToNPC())
+        if (!unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unitTarget->IsImmuneToNPC())
             return false;
 
-        if (unitTarget && !unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unit && unit->IsImmuneToNPC())
+        if (!unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unit->IsImmuneToNPC())
             return false;
 
         if (!bySpell || !bySpell->HasAttribute(SPELL_ATTR8_ATTACK_IGNORE_IMMUNE_TO_PC_FLAG))
         {
-            if (unit && unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unitTarget && unitTarget->IsImmuneToPC())
+            if (unit->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unitTarget->IsImmuneToPC())
                 return false;
 
-            if (unitTarget && unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unit && unit->IsImmuneToPC())
+            if (unitTarget->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED) && unit->IsImmuneToPC())
                 return false;
         }
     }

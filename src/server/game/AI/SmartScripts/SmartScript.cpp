@@ -303,7 +303,7 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
                 else if (IsPlayer(target) && me)
                 {
                     Unit* templastInvoker = GetLastInvoker();
-                    sCreatureTextMgr->SendChat(me, uint8(e.action.talk.textGroupID), IsPlayer(templastInvoker) ? templastInvoker : nullptr, CHAT_MSG_ADDON, LANG_ADDON, TEXT_RANGE_NORMAL, 0, TEAM_OTHER, false, target->ToPlayer());
+                    sCreatureTextMgr->SendChat(me, uint8(e.action.talk.textGroupID), IsPlayer(templastInvoker) ? templastInvoker : nullptr, CHAT_MSG_ADDON, LANG_ADDON, TEXT_RANGE_NORMAL, 0, SoundKitPlayType::Normal, TEAM_OTHER, false, target->ToPlayer());
                 }
                 TC_LOG_DEBUG("scripts.ai", "SmartScript::ProcessAction:: SMART_ACTION_SIMPLE_TALK: talker: %s (%s), textGroupId: %u",
                     target->GetName().c_str(), target->GetGUID().ToString().c_str(), uint8(e.action.talk.textGroupID));
@@ -614,6 +614,39 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
             }
             break;
         }
+        case SMART_ACTION_SELF_CAST:
+        {
+            if (targets.empty())
+                break;
+
+            if (e.action.cast.targetsLimit)
+                Trinity::Containers::RandomResize(targets, e.action.cast.targetsLimit);
+
+            TriggerCastFlags triggerFlags = TRIGGERED_NONE;
+            if (e.action.cast.castFlags & SMARTCAST_TRIGGERED)
+            {
+                if (e.action.cast.triggerFlags)
+                    triggerFlags = TriggerCastFlags(e.action.cast.triggerFlags);
+                else
+                    triggerFlags = TRIGGERED_FULL_MASK;
+            }
+
+            for (WorldObject* target : targets)
+            {
+                Unit* uTarget = target->ToUnit();
+                if (!uTarget)
+                    continue;
+
+                if (!(e.action.cast.castFlags & SMARTCAST_AURA_NOT_PRESENT) || !uTarget->HasAura(e.action.cast.spell))
+                {
+                    if (e.action.cast.castFlags & SMARTCAST_INTERRUPT_PREVIOUS)
+                        uTarget->InterruptNonMeleeSpells(false);
+
+                    uTarget->CastSpell(uTarget, e.action.cast.spell, triggerFlags);
+                }
+            }
+            break;
+        }
         case SMART_ACTION_INVOKER_CAST:
         {
             Unit* tempLastInvoker = GetLastInvoker(unit);
@@ -623,7 +656,7 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
             if (targets.empty())
                 break;
 
-            if (e.action.cast.targetsLimit > 0 && targets.size() > e.action.cast.targetsLimit)
+            if (e.action.cast.targetsLimit)
                 Trinity::Containers::RandomResize(targets, e.action.cast.targetsLimit);
 
             for (WorldObject* target : targets)
@@ -1031,32 +1064,24 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
         }
         case SMART_ACTION_SET_IN_COMBAT_WITH_ZONE:
         {
-            for (WorldObject* target : targets)
+            if (me && me->IsAIEnabled())
             {
-                if (IsCreature(target))
-                {
-                    Creature* creature = target->ToCreature();
-                    if (creature->IsAIEnabled)
-                        creature->AI()->DoZoneInCombat();
-                    TC_LOG_DEBUG("scripts.ai", "SmartScript::ProcessAction: SMART_ACTION_SET_IN_COMBAT_WITH_ZONE: Creature %s, target: %s", me->GetGUID().ToString().c_str(), target->GetGUID().ToString().c_str());
-                }
+                me->AI()->DoZoneInCombat();
+                TC_LOG_DEBUG("scripts.ai", "SmartScript::ProcessAction: SMART_ACTION_SET_IN_COMBAT_WITH_ZONE: Creature %s", me->GetGUID().ToString().c_str());
             }
             break;
         }
         case SMART_ACTION_CALL_FOR_HELP:
         {
-            for (WorldObject* target : targets)
+            if (me)
             {
-                if (IsCreature(target))
+                me->CallForHelp(float(e.action.callHelp.range));
+                if (e.action.callHelp.withEmote)
                 {
-                    target->ToCreature()->CallForHelp(float(e.action.callHelp.range));
-                    if (e.action.callHelp.withEmote)
-                    {
-                        Trinity::BroadcastTextBuilder builder(me, CHAT_MSG_MONSTER_EMOTE, BROADCAST_TEXT_CALL_FOR_HELP, me->getGender());
-                        sCreatureTextMgr->SendChatPacket(me, builder, CHAT_MSG_MONSTER_EMOTE);
-                    }
-                    TC_LOG_DEBUG("scripts.ai", "SmartScript::ProcessAction: SMART_ACTION_CALL_FOR_HELP: Creature %s, target: %s", me->GetGUID().ToString().c_str(), target->GetGUID().ToString().c_str());
+                    Trinity::BroadcastTextBuilder builder(me, CHAT_MSG_MONSTER_EMOTE, BROADCAST_TEXT_CALL_FOR_HELP, me->getGender());
+                    sCreatureTextMgr->SendChatPacket(me, builder, CHAT_MSG_MONSTER_EMOTE);
                 }
+                TC_LOG_DEBUG("scripts.ai", "SmartScript::ProcessAction: SMART_ACTION_CALL_FOR_HELP: Creature %s", me->GetGUID().ToString().c_str());
             }
             break;
         }

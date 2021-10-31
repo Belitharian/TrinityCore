@@ -123,7 +123,7 @@ void WorldSession::HandlePetStopAttack(WorldPackets::Pet::PetStopAttack& packet)
         return;
     }
 
-    if (pet != GetPlayer()->GetPet() && pet != GetPlayer()->GetCharm())
+    if (pet != GetPlayer()->GetPet() && pet != GetPlayer()->GetCharmed())
     {
         TC_LOG_ERROR("entities.pet", "HandlePetStopAttack: %s isn't a pet or charmed creature of player %s",
             packet.PetGUID.ToString().c_str(), GetPlayer()->GetName().c_str());
@@ -202,7 +202,7 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
                         if (pet->GetVictim())
                             pet->AttackStop();
 
-                        if (pet->GetTypeId() != TYPEID_PLAYER && pet->ToCreature()->IsAIEnabled)
+                        if (pet->GetTypeId() != TYPEID_PLAYER && pet->ToCreature()->IsAIEnabled())
                         {
                             charmInfo->SetIsCommandAttack(true);
                             charmInfo->SetIsAtStay(false);
@@ -373,9 +373,8 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
                     if (pet->GetVictim() != unit_target)
                     {
                         pet->GetMotionMaster()->Clear();
-                        if (pet->ToCreature()->IsAIEnabled)
+                        if (CreatureAI* AI = pet->ToCreature()->AI())
                         {
-                            CreatureAI* AI = pet->ToCreature()->AI();
                             if (PetAI* petAI = dynamic_cast<PetAI*>(AI))
                                 petAI->_AttackStart(unit_target); // force victim switch
                             else
@@ -617,7 +616,7 @@ void WorldSession::HandlePetSpellAutocastOpcode(WorldPackets::Pet::PetSpellAutoc
         return;
     }
 
-    if (pet != _player->GetGuardianPet() && pet != _player->GetCharm())
+    if (pet != _player->GetGuardianPet() && pet != _player->GetCharmed())
     {
         TC_LOG_ERROR("entities.pet", "WorldSession::HandlePetSpellAutocastOpcode: %s isn't pet of player %s (%s).",
             packet.PetGUID.ToString().c_str(), GetPlayer()->GetName().c_str(), GetPlayer()->GetGUID().ToString().c_str());
@@ -668,7 +667,7 @@ void WorldSession::HandlePetCastSpellOpcode(WorldPackets::Spells::PetCastSpell& 
     }
 
     // This opcode is also sent from charmed and possessed units (players and creatures)
-    if (caster != _player->GetGuardianPet() && caster != _player->GetCharm())
+    if (caster != _player->GetGuardianPet() && caster != _player->GetCharmed())
     {
         TC_LOG_ERROR("spells.pet", "WorldSession::HandlePetCastSpellOpcode: %s isn't pet of player %s (%s).", petCastSpell.PetGUID.ToString().c_str(), GetPlayer()->GetName().c_str(), GetPlayer()->GetGUID().ToString().c_str());
         return;

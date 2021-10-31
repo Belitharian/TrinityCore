@@ -30,7 +30,7 @@
 #include "ScriptMgr.h"
 #include "Vehicle.h"
 
-SmartAI::SmartAI(Creature* creature) : CreatureAI(creature), mIsCharmed(false), mFollowCreditType(0), mFollowArrivedTimer(0), mFollowCredit(0), mFollowArrivedEntry(0), mFollowDist(0.f), mFollowAngle(0.f),
+SmartAI::SmartAI(Creature* creature, uint32 scriptId) : CreatureAI(creature, scriptId), mIsCharmed(false), mFollowCreditType(0), mFollowArrivedTimer(0), mFollowCredit(0), mFollowArrivedEntry(0), mFollowDist(0.f), mFollowAngle(0.f),
     _escortState(SMART_ESCORT_NONE), _escortNPCFlags(0), _escortInvokerCheckTimer(1000), _currentWaypointNode(0), _waypointReached(false), _waypointPauseTimer(0), _waypointPauseForced(false), _repeatWaypointPath(false),
     _OOCReached(false), _waypointPathEnded(false), mRun(true), mEvadeDisabled(false), mCanAutoAttack(true), mCanCombatMove(true), mInvincibilityHpLevel(0), mDespawnTime(0), mDespawnState(0), mConditionsTimer(0),
     _gossipReturn(false), mEscortQuestID(0)
@@ -663,28 +663,34 @@ void SmartAI::PassengerBoarded(Unit* who, int8 seatId, bool apply)
     GetScript()->ProcessEventsFor(apply ? SMART_EVENT_PASSENGER_BOARDED : SMART_EVENT_PASSENGER_REMOVED, who, uint32(seatId), 0, apply);
 }
 
-void SmartAI::OnCharmed(bool apply)
+void SmartAI::OnCharmed(bool /*isNew*/)
 {
-    if (apply) // do this before we change charmed state, as charmed state might prevent these things from processing
+    bool const charmed = me->IsCharmed();
+    if (charmed) // do this before we change charmed state, as charmed state might prevent these things from processing
     {
         if (HasEscortState(SMART_ESCORT_ESCORTING | SMART_ESCORT_PAUSED | SMART_ESCORT_RETURNING))
             EndPath(true);
     }
 
-    mIsCharmed = apply;
+    mIsCharmed = charmed;
 
-    if (!apply && !me->IsInEvadeMode())
+    if (!charmed && !me->IsInEvadeMode())
     {
         if (_repeatWaypointPath)
             StartPath(mRun, GetScript()->GetPathId(), true);
         else
             me->SetWalk(!mRun);
 
-        if (Unit* charmer = me->GetCharmer())
-            AttackStart(charmer);
+        if (!me->LastCharmerGUID.IsEmpty())
+        {
+            if (!me->HasReactState(REACT_PASSIVE))
+                if (Unit* lastCharmer = ObjectAccessor::GetUnit(*me, me->LastCharmerGUID))
+                    me->EngageWithTarget(lastCharmer);
+            me->LastCharmerGUID.Clear();
+        }
     }
 
-    GetScript()->ProcessEventsFor(SMART_EVENT_CHARMED, nullptr, 0, 0, apply);
+    GetScript()->ProcessEventsFor(SMART_EVENT_CHARMED, nullptr, 0, 0, charmed);
 }
 
 void SmartAI::DoAction(int32 param)
@@ -711,8 +717,13 @@ ObjectGuid SmartAI::GetGUID(int32 /*id*/) const
 
 void SmartAI::SetRun(bool run)
 {
+    if (run == mRun)
+        return;
+
     me->SetWalk(!run);
     mRun = run;
+    for (auto& node : _path.nodes)
+        node.moveType = run ? WAYPOINT_MOVE_TYPE_RUN : WAYPOINT_MOVE_TYPE_WALK;
 }
 
 void SmartAI::SetDisableGravity(bool fly)

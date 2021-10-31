@@ -30,7 +30,8 @@ enum BattlePetMisc
     MAX_PET_BATTLE_SLOTS                = 3,
     DEFAULT_MAX_BATTLE_PETS_PER_SPECIES = 3,
     BATTLE_PET_CAGE_ITEM_ID             = 82800,
-    DEFAULT_SUMMON_BATTLE_PET_SPELL     = 118301
+    DEFAULT_SUMMON_BATTLE_PET_SPELL     = 118301,
+    SPELL_VISUAL_UNCAGE_PET             = 222
 };
 
 enum class BattlePetBreedQuality : uint8
@@ -127,6 +128,7 @@ public:
         void CalculateStats();
 
         WorldPackets::BattlePet::BattlePet PacketInfo;
+        std::unique_ptr<::DeclinedName> DeclinedName;
         BattlePetSaveInfo SaveInfo = BATTLE_PET_UNCHANGED;
     };
 
@@ -136,14 +138,16 @@ public:
 
     static uint16 RollPetBreed(uint32 species);
     static BattlePetBreedQuality GetDefaultPetQuality(uint32 species);
+    static uint32 SelectPetDisplay(BattlePetSpeciesEntry const* speciesEntry);
 
     void LoadFromDB(PreparedQueryResult pets, PreparedQueryResult slots);
     void SaveToDB(LoginDatabaseTransaction& trans);
 
     BattlePet* GetPet(ObjectGuid guid);
-    void AddPet(uint32 species, uint32 creatureId, uint16 breed, BattlePetBreedQuality quality, uint16 level = 1);
+    void AddPet(uint32 species, uint32 display, uint16 breed, BattlePetBreedQuality quality, uint16 level = 1);
     void RemovePet(ObjectGuid guid);
     void ClearFanfare(ObjectGuid guid);
+    void ModifyName(ObjectGuid guid, std::string const& name, DeclinedName* declinedName);
     bool IsPetInSlot(ObjectGuid guid);
 
     uint8 GetPetCount(uint32 species) const;

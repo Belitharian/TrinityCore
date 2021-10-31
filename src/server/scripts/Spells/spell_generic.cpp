@@ -1503,6 +1503,118 @@ class spell_gen_elune_candle : public SpellScript
     }
 };
 
+// 50051 - Ethereal Pet Aura
+enum EtherealPet
+{
+    NPC_ETHEREAL_SOUL_TRADER        = 27914,
+
+    SAY_STEAL_ESSENCE               = 1,
+    SAY_CREATE_TOKEN                = 2,
+
+    SPELL_PROC_TRIGGER_ON_KILL_AURA = 50051,
+    SPELL_ETHEREAL_PET_AURA         = 50055,
+    SPELL_CREATE_TOKEN              = 50063,
+    SPELL_STEAL_ESSENCE_VISUAL      = 50101
+};
+
+// 50051 - Ethereal Pet Aura
+class spell_ethereal_pet_aura : public AuraScript
+{
+    PrepareAuraScript(spell_ethereal_pet_aura);
+
+    bool CheckProc(ProcEventInfo& eventInfo)
+    {
+        uint32 levelDiff = std::abs(GetTarget()->getLevel() - eventInfo.GetProcTarget()->getLevel());
+        return levelDiff <= 9;
+    }
+
+    void HandleProc(AuraEffect* /*aurEff*/, ProcEventInfo& eventInfo)
+    {
+        PreventDefaultAction();
+
+        std::list<TempSummon*> minionList;
+        GetUnitOwner()->GetAllMinionsByEntry(minionList, NPC_ETHEREAL_SOUL_TRADER);
+        for (Creature* minion : minionList)
+        {
+            if (minion->IsAIEnabled())
+            {
+                minion->AI()->Talk(SAY_STEAL_ESSENCE);
+                minion->CastSpell(eventInfo.GetProcTarget(), SPELL_STEAL_ESSENCE_VISUAL);
+            }
+        }
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_ethereal_pet_aura::CheckProc);
+        OnEffectProc += AuraEffectProcFn(spell_ethereal_pet_aura::HandleProc, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
+    }
+};
+
+// 50052 - Ethereal Pet onSummon
+class spell_ethereal_pet_onsummon : public SpellScript
+{
+    PrepareSpellScript(spell_ethereal_pet_onsummon);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_PROC_TRIGGER_ON_KILL_AURA });
+    }
+
+    void HandleScriptEffect(SpellEffIndex /*effIndex*/)
+    {
+        Unit* target = GetHitUnit();
+        target->CastSpell(target, SPELL_PROC_TRIGGER_ON_KILL_AURA, true);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_ethereal_pet_onsummon::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+// 50055 - Ethereal Pet Aura Remove
+class spell_ethereal_pet_aura_remove : public SpellScript
+{
+    PrepareSpellScript(spell_ethereal_pet_aura_remove);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_ETHEREAL_PET_AURA });
+    }
+
+    void HandleScriptEffect(SpellEffIndex /*effIndex*/)
+    {
+        GetHitUnit()->RemoveAurasDueToSpell(SPELL_ETHEREAL_PET_AURA);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_ethereal_pet_aura_remove::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+// 50101 - Ethereal Pet OnKill Steal Essence
+class spell_steal_essence_visual : public AuraScript
+{
+    PrepareAuraScript(spell_steal_essence_visual);
+
+    void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        if (Unit* caster = GetCaster())
+        {
+            caster->CastSpell(caster, SPELL_CREATE_TOKEN, true);
+            if (Creature* soulTrader = caster->ToCreature())
+                soulTrader->AI()->Talk(SAY_CREATE_TOKEN);
+        }
+    }
+
+    void Register() override
+    {
+        AfterEffectRemove += AuraEffectRemoveFn(spell_steal_essence_visual::HandleRemove, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
 enum FishingSpells
 {
     SPELL_FISHING_NO_FISHING_POLE   = 131476,
@@ -4023,6 +4135,96 @@ class spell_gen_impatient_mind : public AuraScript
     }
 };
 
+enum DefenderOfAzerothData
+{
+    SPELL_DEATH_GATE_TELEPORT_STORMWIND = 316999,
+    SPELL_DEATH_GATE_TELEPORT_ORGRIMMAR = 317000,
+
+    QUEST_DEFENDER_OF_AZEROTH_ALLIANCE  = 58902,
+    QUEST_DEFENDER_OF_AZEROTH_HORDE     = 58903,
+
+    NPC_NAZGRIM                         = 161706,
+    NPC_TROLLBANE                       = 161707,
+    NPC_WHITEMANE                       = 161708,
+    NPC_MOGRAINE                        = 161709,
+};
+
+struct BindLocation
+{
+    BindLocation(uint32 mapId, float x, float y, float z, float o, uint32 areaId)
+        : Loc(mapId, x, y, z, o), AreaId(areaId) { }
+    WorldLocation Loc;
+    uint32 AreaId;
+};
+
+BindLocation const StormwindInnLoc(0, -8868.1f, 675.82f, 97.9f, 5.164778709411621093f, 5148);
+BindLocation const OrgrimmarInnLoc(1, 1573.18f, -4441.62f, 16.06f, 1.818284034729003906f, 8618);
+
+class spell_defender_of_azeroth_death_gate_selector : public SpellScript
+{
+    PrepareSpellScript(spell_defender_of_azeroth_death_gate_selector);
+
+    bool Validate(SpellInfo const* /*spell*/) override
+    {
+        return ValidateSpellInfo(
+        {
+            SPELL_DEATH_GATE_TELEPORT_STORMWIND,
+            SPELL_DEATH_GATE_TELEPORT_ORGRIMMAR
+        });
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/)
+    {
+        Player* player = GetHitUnit()->ToPlayer();
+        if (!player)
+            return;
+
+        if (player->GetQuestStatus(QUEST_DEFENDER_OF_AZEROTH_ALLIANCE) == QUEST_STATUS_NONE && player->GetQuestStatus(QUEST_DEFENDER_OF_AZEROTH_HORDE) == QUEST_STATUS_NONE)
+            return;
+
+        BindLocation bindLoc = player->GetTeam() == ALLIANCE ? StormwindInnLoc : OrgrimmarInnLoc;
+        player->SetHomebind(bindLoc.Loc, bindLoc.AreaId);
+        player->SendBindPointUpdate();
+        player->SendPlayerBound(player->GetGUID(), bindLoc.AreaId);
+
+        player->CastSpell(player, player->GetTeam() == ALLIANCE ? SPELL_DEATH_GATE_TELEPORT_STORMWIND : SPELL_DEATH_GATE_TELEPORT_ORGRIMMAR);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_defender_of_azeroth_death_gate_selector::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+class spell_defender_of_azeroth_speak_with_mograine : public SpellScript
+{
+    PrepareSpellScript(spell_defender_of_azeroth_speak_with_mograine);
+
+    void HandleDummy(SpellEffIndex /*effIndex*/)
+    {
+        if (!GetCaster())
+            return;
+
+        Player* player = GetCaster()->ToPlayer();
+        if (!player)
+            return;
+
+        if (Creature* nazgrim = GetHitUnit()->FindNearestCreature(NPC_NAZGRIM, 10.0f))
+            nazgrim->HandleEmoteCommand(EMOTE_ONESHOT_POINT, player);
+        if (Creature* trollbane = GetHitUnit()->FindNearestCreature(NPC_TROLLBANE, 10.0f))
+            trollbane->HandleEmoteCommand(EMOTE_ONESHOT_POINT, player);
+        if (Creature* whitemane = GetHitUnit()->FindNearestCreature(NPC_WHITEMANE, 10.0f))
+            whitemane->HandleEmoteCommand(EMOTE_ONESHOT_POINT, player);
+
+        // @TODO: spawntracking - show death gate for casting player
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_defender_of_azeroth_speak_with_mograine::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
 void AddSC_generic_spell_scripts()
 {
     RegisterAuraScript(spell_gen_absorb0_hitlimit1);
@@ -4061,6 +4263,10 @@ void AddSC_generic_spell_scripts()
     RegisterSpellScript(spell_gen_ds_flush_knockback);
     RegisterSpellScript(spell_gen_dungeon_credit);
     RegisterSpellScript(spell_gen_elune_candle);
+    RegisterAuraScript(spell_ethereal_pet_aura);
+    RegisterSpellScript(spell_ethereal_pet_onsummon);
+    RegisterSpellScript(spell_ethereal_pet_aura_remove);
+    RegisterAuraScript(spell_steal_essence_visual);
     RegisterSpellScript(spell_gen_fishing);
     RegisterSpellScript(spell_gen_gadgetzan_transporter_backfire);
     RegisterAuraScript(spell_gen_gift_of_naaru);
@@ -4142,4 +4348,6 @@ void AddSC_generic_spell_scripts()
     RegisterSpellScript(spell_gen_azgalor_rain_of_fire_hellfire_citadel);
     RegisterAuraScript(spell_gen_face_rage);
     RegisterAuraScript(spell_gen_impatient_mind);
+    RegisterSpellScript(spell_defender_of_azeroth_death_gate_selector);
+    RegisterSpellScript(spell_defender_of_azeroth_speak_with_mograine);
 }

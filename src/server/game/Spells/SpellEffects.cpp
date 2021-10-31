@@ -96,7 +96,7 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectNULL,                                     // 12 SPELL_EFFECT_PORTAL
     &Spell::EffectTeleportToReturnPoint,                    // 13 SPELL_EFFECT_TELEPORT_TO_RETURN_POINT
     &Spell::EffectNULL,                                     // 14 SPELL_EFFECT_INCREASE_CURRENCY_CAP
-    &Spell::EffectNULL,                                     // 15 SPELL_EFFECT_TELEPORT_WITH_SPELL_VISUAL_KIT_LOADING_SCREEN
+    &Spell::EffectTeleportUnitsWithVisualLoadingScreen,     // 15 SPELL_EFFECT_TELEPORT_WITH_SPELL_VISUAL_KIT_LOADING_SCREEN
     &Spell::EffectQuestComplete,                            // 16 SPELL_EFFECT_QUEST_COMPLETE
     &Spell::EffectWeaponDmg,                                // 17 SPELL_EFFECT_WEAPON_DAMAGE_NOSCHOOL
     &Spell::EffectResurrect,                                // 18 SPELL_EFFECT_RESURRECT
@@ -544,46 +544,6 @@ void Spell::EffectDummy()
 
     if (!unitTarget && !gameObjTarget && !itemTarget)
         return;
-
-    // selection by spell family
-    switch (m_spellInfo->SpellFamilyName)
-    {
-        case SPELLFAMILY_PALADIN:
-            switch (m_spellInfo->Id)
-            {
-                case 31789:                                 // Righteous Defense (step 1)
-                {
-                    // Clear targets for eff 1
-                    for (auto ihit = m_UniqueTargetInfo.begin(); ihit != m_UniqueTargetInfo.end(); ++ihit)
-                        ihit->EffectMask &= ~(1 << 1);
-
-                    // not empty (checked), copy
-                    Unit::AttackerSet attackers = unitTarget->getAttackers();
-
-                    // remove invalid attackers
-                    for (Unit::AttackerSet::iterator aItr = attackers.begin(); aItr != attackers.end();)
-                        if (!(*aItr)->IsValidAttackTarget(m_caster))
-                            attackers.erase(aItr++);
-                        else
-                            ++aItr;
-
-                    // selected from list 3
-                    uint32 maxTargets = std::min<uint32>(3, attackers.size());
-                    for (uint32 i = 0; i < maxTargets; ++i)
-                    {
-                        Unit* attacker = Trinity::Containers::SelectRandomContainerElement(attackers);
-                        AddUnitTarget(attacker, 1 << 1);
-                        attackers.erase(attacker);
-                    }
-
-                    // now let next effect cast spell at each target.
-                    return;
-                }
-            }
-            break;
-        default:
-            break;
-    }
 
     // pet auras
     if (m_caster->GetTypeId() == TYPEID_PLAYER)
@@ -1035,6 +995,62 @@ void Spell::EffectTeleportUnits()
             return;
         }
     }
+}
+
+class DelayedSpellTeleportEvent : public BasicEvent
+{
+public:
+    explicit DelayedSpellTeleportEvent(Unit* target, WorldLocation const& targetDest, uint32 options, uint32 spellId)
+        : _target(target), _targetDest(targetDest), _options(options), _spellId(spellId){ }
+
+    bool Execute(uint64 /*e_time*/, uint32 /*p_time*/) override
+    {
+        if (_targetDest.GetMapId() == _target->GetMapId())
+            _target->NearTeleportTo(_targetDest, (_options & TELE_TO_SPELL) != 0);
+        else if (Player* player = _target->ToPlayer())
+            player->TeleportTo(_targetDest, _options);
+        else
+            TC_LOG_ERROR("spells", "Spell::EffectTeleportUnitsWithVisualLoadingScreen - spellId %u attempted to teleport creature to a different map.", _spellId);
+
+        return true;
+    }
+
+private:
+    Unit* _target;
+    WorldLocation _targetDest;
+    uint32 _options;
+    uint32 _spellId;
+};
+
+void Spell::EffectTeleportUnitsWithVisualLoadingScreen()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    if (!unitTarget)
+        return;
+
+    // If not exist data for dest location - return
+    if (!m_targets.HasDst())
+    {
+        TC_LOG_ERROR("spells", "Spell::EffectTeleportUnitsWithVisualLoadingScreen - does not have a destination for spellId %u.", m_spellInfo->Id);
+        return;
+    }
+
+    // Init dest coordinates
+    WorldLocation targetDest(*destTarget);
+    if (targetDest.GetMapId() == MAPID_INVALID)
+        targetDest.m_mapId = unitTarget->GetMapId();
+
+    if (!targetDest.GetOrientation() && m_targets.GetUnitTarget())
+        targetDest.SetOrientation(m_targets.GetUnitTarget()->GetOrientation());
+
+    if (effectInfo->MiscValueB)
+        if (Player* playerTarget = unitTarget->ToPlayer())
+            playerTarget->SendDirectMessage(WorldPackets::Spells::SpellVisualLoadScreen(effectInfo->MiscValueB, effectInfo->MiscValue).Write());
+
+    unitTarget->m_Events.AddEventAtOffset(new DelayedSpellTeleportEvent(unitTarget, targetDest, unitTarget == m_caster ? TELE_TO_SPELL : 0, m_spellInfo->Id),
+        Milliseconds(effectInfo->MiscValue));
 }
 
 void Spell::EffectApplyAura()
@@ -2122,10 +2138,25 @@ void Spell::EffectLearnSpell()
 
     Player* player = unitTarget->ToPlayer();
 
-    uint32 spellToLearn = (m_spellInfo->Id == 483 || m_spellInfo->Id == 55884) ? damage : effectInfo->TriggerSpell;
-    player->LearnSpell(spellToLearn, false);
+    if (m_CastItem && !effectInfo->TriggerSpell)
+    {
+        for (ItemEffectEntry const* itemEffect : m_CastItem->GetEffects())
+        {
+            if (itemEffect->TriggerType != ITEM_SPELLTRIGGER_LEARN_SPELL_ID)
+                continue;
 
-    TC_LOG_DEBUG("spells", "Spell: %s has learned spell %u from %s", player->GetGUID().ToString().c_str(), spellToLearn, m_caster->GetGUID().ToString().c_str());
+            player->LearnSpell(itemEffect->SpellID, false);
+
+            if (BattlePetSpeciesEntry const* speciesEntry = sSpellMgr->GetBattlePetSpecies(uint32(itemEffect->SpellID)))
+                player->GetSession()->GetBattlePetMgr()->AddPet(speciesEntry->ID, BattlePetMgr::SelectPetDisplay(speciesEntry), BattlePetMgr::RollPetBreed(speciesEntry->ID), BattlePetMgr::GetDefaultPetQuality(speciesEntry->ID));
+        }
+    }
+
+    if (effectInfo->TriggerSpell)
+    {
+        player->LearnSpell(effectInfo->TriggerSpell, false);
+        TC_LOG_DEBUG("spells", "Spell: %s has learned spell %u from %s", player->GetGUID().ToString().c_str(), effectInfo->TriggerSpell, m_caster->GetGUID().ToString().c_str());
+    }
 }
 
 void Spell::EffectDispel()
@@ -3462,7 +3493,7 @@ void Spell::EffectSanctuary()
     {
         // in dungeons (or for nonplayers), reset this unit on all enemies' threat lists
         for (auto const& pair : unitTarget->GetThreatManager().GetThreatenedByMeList())
-            pair.second->SetThreat(0.0f);
+            pair.second->ScaleThreat(0.0f);
     }
 
     // makes spells cast before this time fizzle
@@ -3595,7 +3626,7 @@ void Spell::EffectStuck()
         return;
     }
 
-    player->TeleportTo(player->m_homebindMapId, player->m_homebindX, player->m_homebindY, player->m_homebindZ, player->GetOrientation(), TELE_TO_SPELL);
+    player->TeleportTo(player->m_homebind, TELE_TO_SPELL);
 
     // Stuck spell trigger Hearthstone cooldown
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(8690, GetCastDifficulty());
@@ -5348,12 +5379,11 @@ void Spell::EffectBind()
     player->SetHomebind(homeLoc, areaId);
     player->SendBindPointUpdate();
 
-    TC_LOG_DEBUG("spells", "EffectBind: New homebind X: %f, Y: %f, Z: %f, MapId: %u, AreaId: %u",
-        homeLoc.GetPositionX(), homeLoc.GetPositionY(), homeLoc.GetPositionZ(), homeLoc.GetMapId(), areaId);
+    TC_LOG_DEBUG("spells", "EffectBind: New homebind X: %f, Y: %f, Z: %f O: %f, MapId: %u, AreaId: %u",
+        homeLoc.GetPositionX(), homeLoc.GetPositionY(), homeLoc.GetPositionZ(), homeLoc.GetOrientation(), homeLoc.GetMapId(), areaId);
 
     // zone update
-    WorldPackets::Misc::PlayerBound packet(m_caster->GetGUID(), areaId);
-    player->SendDirectMessage(packet.Write());
+    player->SendPlayerBound(m_caster->GetGUID(), areaId);
 }
 
 void Spell::EffectTeleportToReturnPoint()
@@ -5655,46 +5685,42 @@ void Spell::EffectUncageBattlePet()
     if (!m_CastItem || !m_caster || m_caster->GetTypeId() != TYPEID_PLAYER)
         return;
 
-    Player* plr = m_caster->ToPlayer();
-
-    // are we allowed to learn battle pets without it?
-    /*if (plr->HasPlayerFlag(PLAYER_FLAGS_PET_BATTLES_UNLOCKED))
-        return; // send some error*/
-
     uint32 speciesId = m_CastItem->GetModifier(ITEM_MODIFIER_BATTLE_PET_SPECIES_ID);
     uint16 breed = m_CastItem->GetModifier(ITEM_MODIFIER_BATTLE_PET_BREED_DATA) & 0xFFFFFF;
     uint8 quality = (m_CastItem->GetModifier(ITEM_MODIFIER_BATTLE_PET_BREED_DATA) >> 24) & 0xFF;
     uint16 level = m_CastItem->GetModifier(ITEM_MODIFIER_BATTLE_PET_LEVEL);
-    uint32 creatureId = m_CastItem->GetModifier(ITEM_MODIFIER_BATTLE_PET_DISPLAY_ID);
+    uint32 displayId = m_CastItem->GetModifier(ITEM_MODIFIER_BATTLE_PET_DISPLAY_ID);
 
     BattlePetSpeciesEntry const* speciesEntry = sBattlePetSpeciesStore.LookupEntry(speciesId);
     if (!speciesEntry)
         return;
 
+    Player* plr = m_caster->ToPlayer();
     BattlePetMgr* battlePetMgr = plr->GetSession()->GetBattlePetMgr();
     if (!battlePetMgr)
         return;
 
-    // TODO: This means if you put your highest lvl pet into cage, you won't be able to uncage it again which is probably wrong.
-    // We will need to store maxLearnedLevel somewhere to avoid this behaviour.
     if (battlePetMgr->GetMaxPetLevel() < level)
     {
-        battlePetMgr->SendError(BATTLEPETRESULT_TOO_HIGH_LEVEL_TO_UNCAGE, creatureId); // or speciesEntry.CreatureID
+        battlePetMgr->SendError(BATTLEPETRESULT_TOO_HIGH_LEVEL_TO_UNCAGE, speciesEntry->CreatureID);
         SendCastResult(SPELL_FAILED_CANT_ADD_BATTLE_PET);
         return;
     }
 
     if (battlePetMgr->HasMaxPetCount(speciesEntry))
     {
-        battlePetMgr->SendError(BATTLEPETRESULT_CANT_HAVE_MORE_PETS_OF_THAT_TYPE, creatureId); // or speciesEntry.CreatureID
+        battlePetMgr->SendError(BATTLEPETRESULT_CANT_HAVE_MORE_PETS_OF_THAT_TYPE, speciesEntry->CreatureID);
         SendCastResult(SPELL_FAILED_CANT_ADD_BATTLE_PET);
         return;
     }
 
-    battlePetMgr->AddPet(speciesId, creatureId, breed, BattlePetBreedQuality(quality), level);
+    battlePetMgr->AddPet(speciesId, displayId, breed, BattlePetBreedQuality(quality), level);
 
-    if (!plr->HasSpell(speciesEntry->SummonSpellID))
-        plr->LearnSpell(speciesEntry->SummonSpellID, false);
+    if (speciesEntry->SummonSpellID)
+        if (!plr->HasSpell(speciesEntry->SummonSpellID))
+            plr->LearnSpell(speciesEntry->SummonSpellID, false);
+
+    plr->SendPlaySpellVisual(plr, SPELL_VISUAL_UNCAGE_PET, 0, 0, 0.f, false);
 
     plr->DestroyItem(m_CastItem->GetBagSlot(), m_CastItem->GetSlot(), true);
     m_CastItem = nullptr;

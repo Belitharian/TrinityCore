@@ -87,7 +87,7 @@ void WorldSession::HandleMoveWorldportAck()
     if (!newMap || newMap->CannotEnter(GetPlayer()))
     {
         TC_LOG_ERROR("network", "Map %d (%s) could not be created for %s (%s), porting player to homebind", loc.GetMapId(), newMap ? newMap->GetMapName() : "Unknown", GetPlayer()->GetGUID().ToString().c_str(), GetPlayer()->GetName().c_str());
-        GetPlayer()->TeleportTo(GetPlayer()->m_homebindMapId, GetPlayer()->m_homebindX, GetPlayer()->m_homebindY, GetPlayer()->m_homebindZ, GetPlayer()->GetOrientation());
+        GetPlayer()->TeleportTo(GetPlayer()->m_homebind);
         return;
     }
 
@@ -112,7 +112,7 @@ void WorldSession::HandleMoveWorldportAck()
             GetPlayer()->GetName().c_str(), GetPlayer()->GetGUID().ToString().c_str(), loc.GetMapId(), newMap ? newMap->GetMapName() : "Unknown");
         GetPlayer()->ResetMap();
         GetPlayer()->SetMap(oldMap);
-        GetPlayer()->TeleportTo(GetPlayer()->m_homebindMapId, GetPlayer()->m_homebindX, GetPlayer()->m_homebindY, GetPlayer()->m_homebindZ, GetPlayer()->GetOrientation());
+        GetPlayer()->TeleportTo(GetPlayer()->m_homebind);
         return;
     }
 
@@ -173,7 +173,6 @@ void WorldSession::HandleMoveWorldportAck()
         }
     }
 
-    bool allowMount = !mEntry->IsDungeon() || mEntry->IsBattlegroundOrArena();
     if (mInstance)
     {
         // check if this instance has a reset time and send it to player if so
@@ -193,14 +192,7 @@ void WorldSession::HandleMoveWorldportAck()
         // check if instance is valid
         if (!GetPlayer()->CheckInstanceValidity(false))
             GetPlayer()->m_InstanceValid = false;
-
-        // instance mounting is handled in InstanceTemplate
-        allowMount = mInstance->AllowMount;
     }
-
-    // mount allow check
-    if (!allowMount)
-        _player->RemoveAurasByType(SPELL_AURA_MOUNTED);
 
     // update zone immediately, otherwise leave channel will cause crash in mtmap
     uint32 newzone, newarea;

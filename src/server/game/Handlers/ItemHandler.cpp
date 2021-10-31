@@ -1201,15 +1201,13 @@ void WorldSession::HandleUseCritterItem(WorldPackets::Item::UseCritterItem& useC
     if (!item)
         return;
 
-    if (item->GetBonus()->EffectCount < 2)
-        return;
+    for (ItemEffectEntry const* itemEffect : item->GetEffects())
+   {
+        if (itemEffect->TriggerType != ITEM_SPELLTRIGGER_LEARN_SPELL_ID)
+            continue;
 
-    int32 spellToLearn = item->GetEffect(1)->SpellID;
-
-    if (BattlePetSpeciesEntry const* entry = sSpellMgr->GetBattlePetSpecies(uint32(spellToLearn)))
-    {
-        GetBattlePetMgr()->AddPet(entry->ID, entry->CreatureID, BattlePetMgr::RollPetBreed(entry->ID), BattlePetMgr::GetDefaultPetQuality(entry->ID));
-        _player->UpdateCriteria(CriteriaType::UniquePetsOwned);
+        if (BattlePetSpeciesEntry const* speciesEntry = sSpellMgr->GetBattlePetSpecies(uint32(itemEffect->SpellID)))
+            GetBattlePetMgr()->AddPet(speciesEntry->ID, BattlePetMgr::SelectPetDisplay(speciesEntry), BattlePetMgr::RollPetBreed(speciesEntry->ID), BattlePetMgr::GetDefaultPetQuality(speciesEntry->ID));
     }
 
     _player->DestroyItem(item->GetBagSlot(), item->GetSlot(), true);

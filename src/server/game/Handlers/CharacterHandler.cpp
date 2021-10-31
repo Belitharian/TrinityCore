@@ -1162,7 +1162,7 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder* holder)
         if (at)
             pCurrChar->TeleportTo(at->target_mapId, at->target_X, at->target_Y, at->target_Z, pCurrChar->GetOrientation());
         else
-            pCurrChar->TeleportTo(pCurrChar->m_homebindMapId, pCurrChar->m_homebindX, pCurrChar->m_homebindY, pCurrChar->m_homebindZ, pCurrChar->GetOrientation());
+            pCurrChar->TeleportTo(pCurrChar->m_homebind);
     }
 
     ObjectAccessor::AddObject(pCurrChar);
@@ -1236,7 +1236,7 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder* holder)
     });
 
     // setting Ghost+speed if dead
-    if (pCurrChar->m_deathState != ALIVE)
+    if (pCurrChar->m_deathState == DEAD)
     {
         // not blizz like, we must correctly save and load player instead...
         if (pCurrChar->getRace() == RACE_NIGHTELF && !pCurrChar->HasAura(20584))

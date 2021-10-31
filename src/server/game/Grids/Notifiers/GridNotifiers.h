@@ -930,7 +930,7 @@ namespace Trinity
             bool operator()(Unit* u) const
             {
                 if (u->IsAlive() && u->IsInCombat() && !i_obj->IsHostileTo(u) && i_obj->IsWithinDistInMap(u, i_range) &&
-                    (u->isFeared() || u->IsCharmed() || u->isFrozen() || u->HasUnitState(UNIT_STATE_STUNNED) || u->HasUnitState(UNIT_STATE_CONFUSED)))
+                    (u->IsFeared() || u->IsCharmed() || u->HasRootAura() || u->HasUnitState(UNIT_STATE_STUNNED) || u->HasUnitState(UNIT_STATE_CONFUSED)))
                 {
                     return true;
                 }
@@ -1236,8 +1236,7 @@ namespace Trinity
                 if (!u->IsWithinLOSInMap(i_enemy))
                     return;
 
-                if (u->GetAI() && u->IsAIEnabled)
-                    u->GetAI()->AttackStart(i_enemy);
+                u->EngageWithTarget(i_enemy);
             }
         private:
             Unit* const i_funit;
