@@ -82,6 +82,9 @@ void CustomAI::AttackStart(Unit* who)
 
     if (me->Attack(who, true))
     {
+        if (type == AI_Type::None)
+            return;
+
         if (type != AI_Type::Distance)
             DoStartMovement(who);
         else
@@ -129,6 +132,13 @@ void CustomAI::UpdateAI(uint32 diff)
 bool CustomAI::CanAIAttack(Unit const* who) const
 {
     return who->IsAlive() && me->IsValidAttackTarget(who)
+        && !who->HasAuraType(SPELL_AURA_EFFECT_IMMUNITY)
+        && !who->HasAuraType(SPELL_AURA_STATE_IMMUNITY)
+        && !who->HasAuraType(SPELL_AURA_SCHOOL_IMMUNITY)
+        && !who->HasAuraType(SPELL_AURA_DAMAGE_IMMUNITY)
+        && !who->HasAuraType(SPELL_AURA_DISPEL_IMMUNITY)
+        && !who->HasAuraType(SPELL_AURA_MOD_FEAR)
+        && !who->HasAuraType(SPELL_AURA_MOD_FEAR_2)
         && !who->HasBreakableByDamageCrowdControlAura()
         && ScriptedAI::CanAIAttack(who);
 }

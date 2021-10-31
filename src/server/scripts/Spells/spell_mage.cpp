@@ -849,8 +849,17 @@ class spell_mage_prismatic_barrier : public AuraScript
     void CalculateAmount(AuraEffect const* /*aurEff*/, int32& amount, bool& canBeRecalculated)
     {
         canBeRecalculated = false;
+
         if (Unit* caster = GetCaster())
+        {
             amount += int32(caster->SpellBaseHealingBonusDone(GetSpellInfo()->GetSchoolMask()) * 7.0f);
+
+            if (Creature* creature = caster->ToCreature())
+            {
+                uint32 health = creature->GetMaxHealth();
+                amount = int32(health * 0.20f);
+            }
+        }
     }
 
     void Register() override

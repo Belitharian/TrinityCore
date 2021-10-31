@@ -17,9 +17,9 @@
 #define HEDRIC_PATH_01          7
 
 #define PERITH_LOCATION         3
-#define IMAGES_LOCATION         2
 #define ARCHMAGES_LOCATION      6
-#define ACTORS_RELOCATION       10
+#define ACTORS_RELOCATION       9
+#define BARRIERS_LOCATION       2
 
 #define FIRE_LOCATION           32
 
@@ -35,9 +35,15 @@ enum class BFTPhases
     Evacuation,
     ALittleHelp,
     Preparation,
+    Preparation_Rhonin,
     TheBattle,
     TheBattle_RetrieveJaina,
     TheBattle_Survive,
+    HelpTheWounded,
+    HelpTheWounded_Extinguish,
+    WaitForAmara,
+    WaitForAmara_JoinJaina,
+    WaitForAmara_WaitAmara,
 };
 
 enum BFTData
@@ -47,6 +53,7 @@ enum BFTData
     DATA_ARCHMAGE_TERVOSH,
     DATA_KINNDY_SPARKSHINE,
     DATA_KALECGOS,
+    DATA_KALECGOS_DRAGON,
     DATA_PAINED,
     DATA_PERITH_STORMHOOVE,
     DATA_KNIGHT_OF_THERAMORE,
@@ -74,6 +81,7 @@ enum BFTCreatures
     NPC_JAINA_PROUDMOORE                = 64560,
     NPC_RHONIN                          = 64564,
     NPC_KALECGOS                        = 64565,
+    NPC_KALECGOS_DRAGON                 = 500014,
     NPC_HEDRIC_EVENCANE                 = 58840,
     NPC_KNIGHT_OF_THERAMORE             = 59654,
     NPC_INVISIBLE_STALKER               = 32780,
@@ -81,6 +89,7 @@ enum BFTCreatures
     NPC_UNMANNED_TANK                   = 58788,
     NPC_THERAMORE_FAITHFUL              = 59595,
     NPC_THERAMORE_ARCANIST              = 59596,
+    NPC_THERAMORE_OFFICER               = 58913,
     NPC_THERAMORE_CITIZEN_MALE          = 143773,
     NPC_THERAMORE_CITIZEN_FEMALE        = 143776,
 
@@ -99,7 +108,8 @@ enum BFTCreatures
     NPC_AMARA_LEESON                    = 500008,
     NPC_THADER_WINDERMERE               = 500009,
     NPC_THALEN_SONGWEAVER               = 500010,
-    NPC_LADY_JAINA_PROUMOORE_IMAGE      = 500012,
+    NPC_THERAMORE_WOUNDED_TROOP         = 500012,
+    NPC_THERAMORE_FIRE_CREDIT           = 500013,
 
     NPC_EVENT_THERAMORE_TRAINING        = 550000,
     NPC_EVENT_THERAMORE_FAITHFUL        = 550001,
@@ -113,12 +123,18 @@ enum BFTMisc
     SPELL_CAMERA_SHAKE_VOLCANO          = 246439,
     SPELL_REPAIR                        = 262554,
     SPELL_TELEPORT_DUMMY                = 51347,
+    SPELL_KILL_CREDIT                   = 347365,
+    SPELL_PORTAL_CHANNELING_01          = 286636,
+    SPELL_PORTAL_CHANNELING_02          = 287432,
+    SPELL_PORTAL_CHANNELING_03          = 288451,
+    SPELL_RUNIC_SHIELD                  = 346057,
 
     // GameObjects
     GOB_MYSTIC_BARRIER                  = 323860,
     GOB_PORTAL_TO_STORMWIND             = 353823,
     GOB_PORTAL_TO_DALARAN               = 323842,
     GOB_PORTAL_TO_ORGRIMMAR             = 353822,
+    GOB_REFRESHMENT                     = 186812,
 
     // Criteria Trees
     CRITERIA_TREE_FIND_JAINA            = 1000000,
@@ -130,10 +146,17 @@ enum BFTMisc
     CRITERIA_TREE_A_LITTLE_HELP         = 1000010,
     CRITERIA_TREE_MEET_JAINA            = 1000010,
     CRITERIA_TREE_PREPARATION           = 1000012,
+    CRITERIA_TREE_TALK_TO_RHONIN        = 1000014,
     CRITERIA_TREE_REPAIR_TANKS          = 1000015,
     CRITERIA_TREE_THE_BATTLE            = 1000017,
     CRITERIA_TREE_RETRIEVE_JAINA        = 1000018,
-    CRITERIA_TREE_SURVIVE_THE_BATTLE    = 1000019,
+    CRITERIA_TREE_SURVIVE_THE_BATTLE    = 1000020,
+    CRITERIA_TREE_HELP_THE_WOUNDED      = 1000021,
+    CRITERIA_TREE_HELP_WOUNDED_TROOP    = 1000022,
+    CRITERIA_TREE_EXTINGUISH_FIRES      = 1000023,
+    CRITERIA_TREE_WAIT_ARCHMAGE_LEESON  = 1000024,
+    CRITERIA_TREE_JOIN_JAINA            = 1000025,
+    CRITERIA_TREE_ARCHMAGE_LEESON       = 1000026,
 
     // Sounds
     SOUND_FEARFUL_CROWD                 = 15003,
@@ -151,7 +174,9 @@ enum BFTMisc
     EVENT_THE_UNKNOWN_TAUREN            = 65803,
     EVENT_A_LITTLE_HELP                 = 65804,
     EVENT_RETRIEVE_JAINA                = 65805,
-    EVENT_HORDE_WAVE_DEFEATED           = 65806,
+    EVENT_JOIN_JAINA                    = 65806,
+    EVENT_WAIT_ARCHMAGE_LESSON          = 65807,
+    EVENT_RETRIEVE_RHONIN               = 65808,
 };
 
 enum BFTTalks
@@ -238,6 +263,10 @@ enum BFTTalks
     SAY_BATTLE_CITADEL    = 37,
     SAY_BATTLE_GATE       = 38,
     SAY_BATTLE_DOCKS      = 39,
+
+    SAY_SPELL_01          = 40,
+    SAY_BLIZZARD_01       = 41,
+    SAY_SLAY_01           = 42,
 };
 
 struct Location
@@ -271,7 +300,6 @@ Location const actorsRelocation[ACTORS_RELOCATION] =
     { DATA_ARCHMAGE_TERVOSH,     { 0.f, 0.f, 0.f, 0.f }, { -3808.72f, -4541.01f, 10.68f, 3.09f } },
     { DATA_HEDRIC_EVENCANE,      { 0.f, 0.f, 0.f, 0.f }, { -3661.38f, -4376.67f,  9.35f, 0.69f } },
     { DATA_RHONIN,               { 0.f, 0.f, 0.f, 0.f }, { -3677.44f, -4521.55f, 10.21f, 0.50f } },
-    { DATA_VEREESA_WINDRUNNER,   { 0.f, 0.f, 0.f, 0.f }, { -3833.79f, -4545.92f,  9.22f, 0.75f } },
     { DATA_THALEN_SONGWEAVER,    { 0.f, 0.f, 0.f, 0.f }, { -3652.05f, -4365.66f,  9.53f, 0.69f } },
     { DATA_TARI_COGG,            { 0.f, 0.f, 0.f, 0.f }, { -3786.33f, -4256.64f,  6.52f, 1.59f } },
     { DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3649.58f, -4369.21f,  9.57f, 0.69f } },
@@ -438,17 +466,12 @@ Position const FireLocation[FIRE_LOCATION]
     { -3793.71f, -4471.57f, 14.37f, 0.00f }
 };
 
-Position const JainaImageLocation[IMAGES_LOCATION] =
-{
-    { -3671.27f, -4531.04f, 16.79f, 1.31f },
-    { -3844.96f, -4540.73f, 16.79f, 0.22f }
-};
-
 Position const KinndyPoint01    = { -3748.06f, -4442.12f, 30.55f, 1.24f };
 Position const KinndyPoint02    = { -3725.93f, -4543.47f, 25.82f, 0.11f };
 Position const JainaPoint01     = { -3751.32f, -4438.13f, 30.55f, 0.40f };
 Position const JainaPoint02     = { -3731.47f, -4547.05f, 27.11f, 0.25f };
 Position const JainaPoint03     = { -3658.39f, -4372.87f,  9.35f, 0.69f };
+Position const JainaPoint04     = { -3636.94f, -4355.86f,  7.44f, 0.69f };
 Position const PainedPoint01    = { -3747.93f, -4442.05f, 30.54f, 1.54f };
 Position const OfficerPoint01   = { -3748.43f, -4432.99f, 30.54f, 4.66f };
 Position const QuillPoint01     = { -3751.32f, -4438.13f, 31.26f, 3.33f };
@@ -461,8 +484,11 @@ Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f };
 Position const ExplodingPoint01 = { -3648.24f, -4364.96f,  9.68f, 3.78f };
 Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f };
 Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };
+Position const ThaderPoint01    = { -3748.02f, -4352.87f, 10.59f, 4.74f };
+Position const TariPoint01      = { -3749.91f, -4354.15f, 10.61f, 5.44f };
+Position const TablePoint01     = { -3748.03f, -4355.03f, 10.98f, 2.18f };
 Position const CitadelPoint01   = { -3668.74f, -4511.64f, 10.09f, 1.54f };
-Position const DocksPoint01     = { -3826.84f, -4539.05f, 9.21f };
+Position const DocksPoint01     = { -3826.84f, -4539.05f,  9.21f, 5.96f };
 
 template <class AI, class T>
 inline AI* GetBattleForTheramoreAI(T* obj)

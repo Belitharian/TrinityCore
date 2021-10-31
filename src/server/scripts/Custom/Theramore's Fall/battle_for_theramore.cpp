@@ -21,103 +21,83 @@ class npc_jaina_theramore : public CreatureScript
 
     struct npc_jaina_theramoreAI : public CustomAI
     {
-        npc_jaina_theramoreAI(Creature* creature) : CustomAI(creature)
+        npc_jaina_theramoreAI(Creature* creature) : CustomAI(creature, AI_Type::Melee)
         {
             Initialize();
         }
 
         enum Spells
         {
-            SPELL_FROST_BARRIER     = 69787,
-            SPELL_ICE_LANCE_VOLLEY  = 70464,
-            SPELL_ICE_SHARD         = 290621,
-            SPELL_RING_OF_FROST     = 285459,
-            SPELL_GLACIAL_RAY       = 288345
+            SPELL_BLIZZARD              = 284968,
+            SPELL_WONDROUS_RADIANCE     = 227410,
+            SPELL_FIREBALL              = 20678,
+            SPELL_FIREBLAST             = 20679,
+            SPELL_FROST_BARRIER         = 69787
         };
 
         void Initialize()
         {
             instance = me->GetInstanceScript();
-            healthLow = false;
         }
 
         InstanceScript* instance;
-        bool healthLow;
 
         void Reset() override
         {
             Initialize();
-
-            me->SetReactState(REACT_AGGRESSIVE);
-            me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
-        }
-
-        void OnSuccessfulSpellCast(SpellInfo const* spell) override
-        {
-            switch (spell->Id)
-            {
-                case SPELL_GLACIAL_RAY:
-                {
-                    int32 duration = spell->GetDuration();
-
-                    me->StopMoving();
-                    me->SetReactState(REACT_PASSIVE);
-                    me->GetMotionMaster()->Clear();
-                    me->GetMotionMaster()->MoveRotate(MOVEMENT_INFO_POINT_NONE, duration, urand(0, 1) ? ROTATE_DIRECTION_LEFT : ROTATE_DIRECTION_RIGHT);
-
-                    scheduler.Schedule(Milliseconds(duration), [this](TaskContext glacial_ray)
-                    {
-                        me->SetReactState(REACT_AGGRESSIVE);
-                        me->GetMotionMaster()->Clear();
-                        me->GetMotionMaster()->MoveChase(me->GetVictim());
-                    });
-
-                    break;
-                }
-            }
         }
 
         void DamageTaken(Unit* attacker, uint32& damage) override
         {
-            if (HealthBelowPct(20))
+            if (HealthBelowPct(20)
+                && !me->HasAura(SPELL_FROST_BARRIER))
             {
-                if (!me->HasAura(SPELL_FROST_BARRIER))
-                {
-                    me->CastStop();
-                    DoCast(SPELL_FROST_BARRIER);
-                }
+                me->CastStop();
+                DoCast(SPELL_FROST_BARRIER);
             }
-            else if (!healthLow && HealthBelowPct(30))
-            {
-                healthLow = true;
+        }
 
-                scheduler.Schedule(5ms, [attacker, this](TaskContext ice_lance)
-                {
-                    CastSpellExtraArgs args(SPELLVALUE_BASE_POINT0, 360000);
-                    me->CastStop();
-                    me->CastSpell(attacker, SPELL_ICE_LANCE_VOLLEY, args);
-                    ice_lance.Repeat(8s, 14s);
-                });
-            }
+        void KilledUnit(Unit* /*victim*/) override
+        {
+            if (roll_chance_i(15))
+                Talk(SAY_SLAY_01);
         }
 
         void JustEngagedWith(Unit* who) override
         {
             scheduler
-                .Schedule(5ms, [this](TaskContext ice_shard)
+                .Schedule(5ms, [this](TaskContext fireball)
                 {
-                    DoCastVictim(SPELL_ICE_SHARD);
-                    ice_shard.Repeat(2s);
+                    if (roll_chance_i(20))
+                        Talk(SAY_SPELL_01);
+                    DoCastVictim(SPELL_FIREBALL);
+                    fireball.Repeat(2s, 8s);
                 })
-                .Schedule(8s, [this](TaskContext ice_shard)
+                .Schedule(3s, [this](TaskContext fireblast)
                 {
-                    DoCast(SPELL_GLACIAL_RAY);
-                    ice_shard.Repeat(2min);
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                        DoCast(target, SPELL_FIREBLAST);
+                    fireblast.Repeat(8s, 14s);
                 })
-                .Schedule(15s, [this](TaskContext ring_of_frost)
+                .Schedule(8s, [this](TaskContext blizzard)
                 {
-                    DoCast(SPELL_RING_OF_FROST);
-                    ring_of_frost.Repeat(1min);
+                    if (roll_chance_i(10))
+                        Talk(SAY_BLIZZARD_01);
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                        DoCast(target, SPELL_BLIZZARD);
+                    blizzard.Repeat(14s, 22s);
+                })
+                .Schedule(10s, [this](TaskContext wondrous_radiance)
+                {
+                    CastSpellExtraArgs args(true);
+                    args.AddSpellBP0(1E8);
+
+                    me->CastStop();
+
+                    for (auto threat : me->GetThreatManager().GetUnsortedThreatList())
+                        DoCast(threat->GetVictim(), SPELL_WONDROUS_RADIANCE, args);
+
+                    wondrous_radiance.Repeat(25s, 32s);
                 });
         }
 
@@ -165,6 +145,9 @@ class npc_jaina_theramore : public CreatureScript
                         case BFTPhases::TheBattle:
                             instance->DoSendScenarioEvent(EVENT_RETRIEVE_JAINA);
                             break;
+                        case BFTPhases::WaitForAmara:
+                            instance->DoSendScenarioEvent(EVENT_JOIN_JAINA);
+                            break;
                         default:
                             break;
                     }
@@ -194,19 +177,17 @@ class npc_archmage_tervosh : public CreatureScript
 
         enum Spells
         {
-            SPELL_FIREBALL          = 358226,
-            SPELL_FLAMESTRIKE       = 330347,
-            SPELL_BLAZING_BARRIER   = 255714,
-            SPELL_SCORCH            = 358238,
-            SPELL_CONFLAGRATION     = 226757
+            SPELL_FIREBALL              = 358226,
+            SPELL_FLAMESTRIKE           = 330347,
+            SPELL_BLAZING_BARRIER       = 295238,
+            SPELL_SCORCH                = 358238,
+            SPELL_CONFLAGRATION         = 226757
         };
 
         void MovementInform(uint32 type, uint32 id) override
         {
             if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
             {
-                printf("type: %u ; id: %u\n", type, id);
-
                 switch (id)
                 {
                     case MOVEMENT_INFO_POINT_01:
@@ -244,7 +225,7 @@ class npc_archmage_tervosh : public CreatureScript
 
         void JustEngagedWith(Unit* /*who*/) override
         {
-            DoCast(SPELL_BLAZING_BARRIER);
+            DoCastSelf(SPELL_BLAZING_BARRIER);
 
             scheduler
                 .Schedule(30s, [this](TaskContext blazing_barrier)
@@ -300,8 +281,8 @@ class npc_kinndy_sparkshine : public CreatureScript
 
         enum Spells
         {
-            SPELL_ARCANE_BOLT   = 154235,
-            SPELL_SUPERNOVA     = 157980,
+            SPELL_ARCANE_BOLT           = 154235,
+            SPELL_SUPERNOVA             = 157980,
         };
 
         void MovementInform(uint32 type, uint32 id) override

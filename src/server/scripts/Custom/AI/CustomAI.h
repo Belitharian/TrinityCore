@@ -9,6 +9,7 @@
 
 enum class AI_Type
 {
+    None,
     Melee,
     Distance
 };

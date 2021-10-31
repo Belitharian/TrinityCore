@@ -1,6 +1,7 @@
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
 #include "GameObject.h"
+#include "GridNotifiersImpl.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
 #include "MotionMaster.h"
@@ -121,162 +122,6 @@ class npc_theramore_citizen : public CreatureScript
     }
 };
 
-class npc_rhonin : public CreatureScript
-{
-    public:
-    npc_rhonin() : CreatureScript("npc_rhonin")
-    {
-    }
-
-    struct npc_rhoninAI : public CustomAI
-    {
-        enum Misc
-        {
-            GOSSIP_MENU_DEFAULT = 65001,
-        };
-
-        npc_rhoninAI(Creature* creature) : CustomAI(creature)
-        {
-            instance = creature->GetInstanceScript();
-        }
-
-        InstanceScript* instance;
-
-        bool GossipHello(Player* player) override
-        {
-            player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
-            player->SendPreparedGossip(me);
-            return true;
-        }
-
-        bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
-        {
-            ClearGossipMenuFor(player);
-
-            switch (gossipListId)
-            {
-                case 0:
-                    me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                    KillRewarder(player, me, false).Reward(me->GetEntry());
-                    break;
-            }
-
-            CloseGossipMenuFor(player);
-            return true;
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetBattleForTheramoreAI<npc_rhoninAI>(creature);
-    }
-};
-
-class npc_thader_windermere : public CreatureScript
-{
-    public:
-    npc_thader_windermere() : CreatureScript("npc_thader_windermere")
-    {
-    }
-
-    struct npc_thader_windermereAI : public CustomAI
-    {
-        enum Misc
-        {
-            GOSSIP_MENU_DEFAULT = 65002,
-        };
-
-        npc_thader_windermereAI(Creature* creature) : CustomAI(creature)
-        {
-        }
-
-        bool GossipHello(Player* player) override
-        {
-            player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
-            player->SendPreparedGossip(me);
-            return true;
-        }
-
-        bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
-        {
-            ClearGossipMenuFor(player);
-
-            switch (gossipListId)
-            {
-                case 0:
-                    me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                    KillRewarder(player, me, false).Reward(me->GetEntry());
-                    break;
-            }
-
-            CloseGossipMenuFor(player);
-            return true;
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetBattleForTheramoreAI<npc_thader_windermereAI>(creature);
-    }
-};
-
-class npc_arcanic_image : public CreatureScript
-{
-    public:
-    npc_arcanic_image() : CreatureScript("npc_arcanic_image")
-    {
-    }
-
-    struct npc_arcanic_imageAI : public CustomAI
-    {
-        enum Spells
-        {
-            SPELL_ARCANE_BOMB       = 304027,
-            SPELL_TRANSPARENCY_50   = 44816
-        };
-
-
-        npc_arcanic_imageAI(Creature* creature) : CustomAI(creature)
-        {
-            SetCombatMovement(false);
-        }
-
-        void Reset() override
-        {
-            me->AddAura(SPELL_TRANSPARENCY_50, me);
-        }
-
-        void JustEngagedWith(Unit* who) override
-        {
-            scheduler.Schedule(5ms, [this](TaskContext arcane_bomb)
-            {
-                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
-                {
-                    if (Creature* tempSumm = me->SummonTrigger(target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), 0.0f, 15 * IN_MILLISECONDS))
-                    {
-                        tempSumm->SetFaction(me->GetFaction());
-                        tempSumm->SetOwnerGUID(me->GetGUID());
-
-                        PhasingHandler::InheritPhaseShift(tempSumm, me);
-
-                        CastSpellExtraArgs args;
-                        args.AddSpellBP0(65000);
-
-                        tempSumm->CastSpell(target, SPELL_ARCANE_BOMB, args);
-                    }
-                }
-
-                arcane_bomb.Repeat(8s);
-            });
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetBattleForTheramoreAI<npc_arcanic_imageAI>(creature);
-    }
-};
-
 class npc_unmanned_tank : public CreatureScript
 {
     public:
@@ -314,7 +159,7 @@ struct npc_theramore_troopAI : public CustomAI
 
     enum Misc
     {
-        NPC_THERAMORE_TROOPS_CREDIT = 500011
+        NPC_THERAMORE_TROOPS_CREDIT = 500011,
     };
 
     InstanceScript* instance;
@@ -325,6 +170,13 @@ struct npc_theramore_troopAI : public CustomAI
         BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
         if (phase != BFTPhases::Preparation)
             return;
+
+        for (uint8 i = 0; i < 5; i++)
+        {
+            KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
+        }
+
+        return;
 
         if (!emoteReceived && emoteId == TEXT_EMOTE_FORTHEALLIANCE)
         {
@@ -343,6 +195,261 @@ struct npc_theramore_troopAI : public CustomAI
             if (me->IsWithinDist(ref->GetVictim(), distance))
                 ++count;
         return count;
+    }
+};
+
+class npc_rhonin : public CreatureScript
+{
+    public:
+    npc_rhonin() : CreatureScript("npc_rhonin")
+    {
+    }
+
+    struct npc_rhoninAI : public npc_theramore_troopAI
+    {
+        enum Misc
+        {
+            GOSSIP_MENU_DEFAULT         = 65001,
+        };
+
+        enum Spells
+        {
+            SPELL_PRISMATIC_BARRIER     = 235450,
+            SPELL_ARCANE_PROJECTILES    = 166995,
+            SPELL_ARCANE_EXPLOSION      = 210479,
+            SPELL_ARCANE_BLAST          = 291316,
+            SPELL_ARCANE_BARRAGE        = 291318,
+            SPELL_EVOCATION             = 243070,
+            SPELL_TIME_WARP             = 342242,
+            SPELL_ARCANE_CAST_INSTANT   = 135030,
+        };
+
+        npc_rhoninAI(Creature* creature) : npc_theramore_troopAI(creature, AI_Type::Distance), arcaneCharges(0)
+        {
+            instance = creature->GetInstanceScript();
+        }
+
+        InstanceScript* instance;
+        uint8 arcaneCharges;
+
+        float GetDistance() override
+        {
+            return 15.f;
+        }
+
+        bool GossipHello(Player* player) override
+        {
+            player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
+            player->SendPreparedGossip(me);
+            return true;
+        }
+
+        bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
+        {
+            ClearGossipMenuFor(player);
+
+            switch (gossipListId)
+            {
+                case 0:
+                    me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                    DoCast(SPELL_ARCANE_CAST_INSTANT);
+                    KillRewarder(player, me, false).Reward(me->GetEntry());
+                    break;
+            }
+
+            CloseGossipMenuFor(player);
+            return true;
+        }
+
+        void OnSuccessfulSpellCast(SpellInfo const* spell) override
+        {
+            switch (spell->Id)
+            {
+                case SPELL_ARCANE_BLAST:
+                    arcaneCharges++;
+                    if (roll_chance_i(20))
+                    {
+                        me->CastStop();
+                        me->AddAura(SPELL_TIME_WARP, me);
+                        DoCastVictim(SPELL_ARCANE_PROJECTILES);
+                    }
+                    break;
+                case SPELL_ARCANE_BARRAGE:
+                    arcaneCharges = 0;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        void JustEngagedWith(Unit* who) override
+        {
+            DoCastSelf(SPELL_PRISMATIC_BARRIER,
+                       CastSpellExtraArgs(SPELLVALUE_BASE_POINT0, 256E3));
+
+            scheduler
+                .Schedule(1s, [this](TaskContext arcane_blast)
+                {
+                    if (arcaneCharges < 4)
+                        DoCastVictim(SPELL_ARCANE_BLAST);
+                    else
+                        DoCastVictim(SPELL_ARCANE_BARRAGE);
+                    arcane_blast.Repeat(2800ms);
+                })
+                .Schedule(3s, [this](TaskContext evocation)
+                {
+                    if (me->GetPowerPct(POWER_MANA) < 20)
+                    {
+                        DoCast(SPELL_EVOCATION);
+                        evocation.Repeat(3min);
+                    }
+                    else
+                        evocation.Repeat(3s);
+                })
+                .Schedule(5s, [this](TaskContext arcane_explosion)
+                {
+                    if (EnemiesInRange(9.f) >= 3)
+                    {
+                        me->CastStop();
+                        DoCast(SPELL_ARCANE_EXPLOSION);
+                        arcane_explosion.Repeat(14s, 18s);
+                    }
+                    else
+                        arcane_explosion.Repeat(1s);
+                });
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return GetBattleForTheramoreAI<npc_rhoninAI>(creature);
+    }
+};
+
+class npc_thader_windermere : public CreatureScript
+{
+    public:
+    npc_thader_windermere() : CreatureScript("npc_thader_windermere")
+    {
+    }
+
+    struct npc_thader_windermereAI : public CustomAI
+    {
+        enum Misc
+        {
+            GOSSIP_MENU_DEFAULT = 65002,
+        };
+
+        npc_thader_windermereAI(Creature* creature) : CustomAI(creature)
+        {
+            instance = creature->GetInstanceScript();
+        }
+
+        InstanceScript* instance;
+
+        bool GossipHello(Player* player) override
+        {
+            player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
+            player->SendPreparedGossip(me);
+            return true;
+        }
+
+        bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
+        {
+            ClearGossipMenuFor(player);
+
+            switch (gossipListId)
+            {
+                case 0:
+                    me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                    KillRewarder(player, me, false).Reward(me->GetEntry());
+                    scheduler.Schedule(2s, [this](TaskContext context)
+                    {
+                        switch (context.GetRepeatCounter())
+                        {
+                            case 0:
+                                me->CastSpell(me, SPELL_PORTAL_CHANNELING_03);
+                                context.Repeat(2s);
+                                break;
+                            case 1:
+                                if (Creature* tari = instance->GetCreature(DATA_TARI_COGG))
+                                    tari->CastSpell(tari, SPELL_PORTAL_CHANNELING_01);
+                                context.Repeat(2s);
+                                break;
+                            case 2:
+                                if (GameObject* barrier = GetClosestGameObjectWithEntry(me, GOB_MYSTIC_BARRIER, 15.f))
+                                    barrier->UseDoorOrButton();
+                                context.CancelAll();
+                                break;
+                        }
+                    });
+                    break;
+            }
+
+            CloseGossipMenuFor(player);
+            return true;
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return GetBattleForTheramoreAI<npc_thader_windermereAI>(creature);
+    }
+};
+
+class npc_arcanic_image : public CreatureScript
+{
+    public:
+    npc_arcanic_image() : CreatureScript("npc_arcanic_image")
+    {
+    }
+
+    struct npc_arcanic_imageAI : public CustomAI
+    {
+        enum Spells
+        {
+            SPELL_ARCANE_BOMB       = 304027,
+            SPELL_TRANSPARENCY_50   = 44816
+        };
+
+        npc_arcanic_imageAI(Creature* creature) : CustomAI(creature, AI_Type::None)
+        {
+            SetCombatMovement(false);
+        }
+
+        void Reset() override
+        {
+            me->AddAura(SPELL_TRANSPARENCY_50, me);
+        }
+
+        void JustEngagedWith(Unit* who) override
+        {
+            scheduler.Schedule(5ms, [this](TaskContext arcane_bomb)
+            {
+                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                {
+                    if (Creature* trigger = me->SummonCreature(WORLD_TRIGGER, target->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 15 * IN_MILLISECONDS))
+                    {
+                        trigger->SetFaction(me->GetFaction());
+                        trigger->SetOwnerGUID(me->GetGUID());
+
+                        PhasingHandler::InheritPhaseShift(trigger, me);
+
+                        CastSpellExtraArgs args;
+                        args.AddSpellBP0(65000);
+
+                        trigger->CastSpell(target, SPELL_ARCANE_BOMB, args);
+                    }
+                }
+
+                arcane_bomb.Repeat(8s);
+            });
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return GetBattleForTheramoreAI<npc_arcanic_imageAI>(creature);
     }
 };
 
@@ -527,12 +634,23 @@ class npc_theramore_arcanist : public CreatureScript
             SPELL_ARCANE_BLAST      = 270543,
             SPELL_ARCANE_EXPLOSION  = 277012,
             SPELL_ARCANE_MISSILES   = 191293,
-            SPELL_ARCANE_HASTE      = 50182,
+            SPELL_MAGE_ARMOR        = 183079,
+            SPELL_ARCANE_HASTE      = 50182
         };
 
         float GetDistance() override
         {
             return 35.f;
+        }
+
+        void Reset() override
+        {
+            npc_theramore_troopAI::Reset();
+
+            scheduler.Schedule(1s, [this](TaskContext /*context*/)
+            {
+                DoCastSelf(SPELL_MAGE_ARMOR);
+            });
         }
 
         void JustEngagedWith(Unit* who) override
@@ -543,7 +661,7 @@ class npc_theramore_arcanist : public CreatureScript
                 .Schedule(1ms, [this](TaskContext arcane_blast)
                 {
                     DoCastVictim(SPELL_ARCANE_BLAST);
-                    arcane_blast.Repeat(2600ms);
+                    arcane_blast.Repeat(2300ms);
                 })
                 .Schedule(3s, 5s, [this](TaskContext arcane_explosion)
                 {
@@ -562,10 +680,11 @@ class npc_theramore_arcanist : public CreatureScript
                         DoCast(victim, SPELL_ARCANE_MISSILES);
                     arcane_missiles.Repeat(8s, 12s);
                 })
-                .Schedule(6s, 10s, [this](TaskContext arcane_haste)
+                .Schedule(1s, [this](TaskContext arcane_haste)
                 {
-                    DoCast(SPELL_ARCANE_HASTE);
-                    arcane_haste.Repeat(1min, 1.2min);
+                    if (!me->HasAura(SPELL_ARCANE_HASTE))
+                        DoCast(SPELL_ARCANE_HASTE);
+                    arcane_haste.Repeat(2s);
                 });
         }
     };
@@ -573,6 +692,141 @@ class npc_theramore_arcanist : public CreatureScript
     CreatureAI* GetAI(Creature* creature) const override
     {
         return new npc_theramore_arcanistAI(creature);
+    }
+};
+
+class npc_wounded_theramore_troop : public CreatureScript
+{
+    public:
+    npc_wounded_theramore_troop() : CreatureScript("npc_wounded_theramore_troop")
+    {
+    }
+
+    struct npc_wounded_theramore_troopAI : public npc_theramore_troopAI
+    {
+        npc_wounded_theramore_troopAI(Creature* creature) : npc_theramore_troopAI(creature, AI_Type::None),
+            preventClick(false)
+        {
+        }
+
+        enum Spells
+        {
+            SPELL_TELEPORT_TROOP = 69074
+        };
+
+        bool preventClick;
+
+        void SpellHit(Unit* caster, SpellInfo const* spellInfo) override
+        {
+            if (spellInfo->Id != SPELL_TELEPORT_TROOP)
+                return;
+
+            BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+            if (phase != BFTPhases::HelpTheWounded && phase != BFTPhases::HelpTheWounded_Extinguish)
+            {
+                if (preventClick)
+                    return;
+
+                if (Player* player = caster->ToPlayer())
+                {
+                    KillRewarder(player, me, false).Reward(NPC_THERAMORE_WOUNDED_TROOP);
+                }
+
+                me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+                me->DespawnOrUnsummon();
+
+                preventClick = true;
+            }
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_wounded_theramore_troopAI(creature);
+    }
+};
+
+class npc_amara_leeson : public CreatureScript
+{
+    public:
+    npc_amara_leeson() : CreatureScript("npc_amara_leeson")
+    {
+    }
+
+    struct npc_amara_leesonAI : public npc_theramore_troopAI
+    {
+        npc_amara_leesonAI(Creature* creature) : npc_theramore_troopAI(creature, AI_Type::Distance)
+        {
+        }
+
+        enum Spells
+        {
+            SPELL_FIREBALL              = 20678,
+            SPELL_BLAZING_BARRIER       = 295238,
+            SPELL_PRISMATIC_BARRIER     = 235450,
+            SPELL_ICE_BARRIER           = 198094,
+            SPELL_BLINK                 = 295236,
+            SPELL_DRAGON_BREATH         = 295240,
+            SPELL_GREATER_PYROBLAST     = 295231,
+            SPELL_SCORCH                = 301075
+        };
+
+        float GetDistance() override
+        {
+            return 15.f;
+        }
+
+        void JustEngagedWith(Unit* who) override
+        {
+            DoCastSelf(SPELL_BLAZING_BARRIER, true);
+            DoCastSelf(SPELL_PRISMATIC_BARRIER, true);
+            DoCastSelf(SPELL_ICE_BARRIER, true);
+
+            scheduler
+                .Schedule(1ms, [this](TaskContext fireball)
+                {
+                    DoCastVictim(SPELL_FIREBALL);
+                    fireball.Repeat(1600ms);
+                })
+                .Schedule(2s, [this](TaskContext scorch)
+                {
+                    DoCastVictim(SPELL_SCORCH);
+                    scorch.Repeat(3s);
+                })
+                .Schedule(4s, [this](TaskContext blink)
+                {
+                    if (EnemiesInRange(20.f) >= 5)
+                    {
+                        me->CastStop();
+                        DoCast(SPELL_BLINK);
+                        blink.Repeat(24s, 32s);
+                    }
+                    else
+                        blink.Repeat(1s);
+                })
+                .Schedule(5s, [this](TaskContext dragon_breath)
+                {
+                    if (EnemiesInRange(12.f) >= 3)
+                    {
+                        me->CastStop();
+                        DoCast(SPELL_DRAGON_BREATH);
+                        dragon_breath.Repeat(24s, 32s);
+                    }
+                    else
+                        dragon_breath.Repeat(1s);
+                })
+                .Schedule(8s, [this](TaskContext greater_pyroblast)
+                {
+                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                        DoCast(target, SPELL_GREATER_PYROBLAST);
+                    greater_pyroblast.Repeat(14s, 18s);
+                });
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_amara_leesonAI(creature);
     }
 };
 
@@ -595,7 +849,8 @@ class npc_theramore_faithful : public CreatureScript
             SPELL_HEAL                  = 332706,
             SPELL_FLASH_HEAL            = 314655,
             SPELL_RENEW                 = 294342,
-            SPELL_PRAYER_OF_HEALING     = 220118,
+            SPELL_PRAYER_OF_HEALING     = 266969,
+            SPELL_POWER_WORD_FORTITUDE  = 267528,
             SPELL_POWER_WORD_SHIELD     = 318158,
             SPELL_PAIN_SUPPRESSION      = 69910,
             SPELL_PSYCHIC_SCREAM        = 65543,
@@ -635,6 +890,21 @@ class npc_theramore_faithful : public CreatureScript
             return 20.f;
         }
 
+        void Reset() override
+        {
+            npc_theramore_troopAI::Reset();
+
+            scheduler.Schedule(1s, 5s, [this](TaskContext fortitude)
+            {
+                CastSpellExtraArgs args(true);
+                args.SetTriggerFlags(TRIGGERED_IGNORE_SET_FACING);
+
+                if (Unit* target = SelectRandomFriendlyMissingBuff(SPELL_POWER_WORD_FORTITUDE))
+                    DoCast(target, SPELL_POWER_WORD_FORTITUDE, args);
+                fortitude.Repeat(5s, 8s);
+            });
+        }
+
         void JustEngagedWith(Unit* /*who*/) override
         {
             StartCombatRoutine();
@@ -651,7 +921,13 @@ class npc_theramore_faithful : public CreatureScript
                 .Schedule(1s, 2s, [this](TaskContext power_word_shield)
                 {
                     if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 80))
-                        DoCast(target, SPELL_POWER_WORD_SHIELD);
+                    {
+                        CastSpellExtraArgs args;
+                        args.AddSpellBP0(target->CountPctFromMaxHealth(50));
+
+                        me->CastStop();
+                        DoCast(target, SPELL_POWER_WORD_SHIELD, args);
+                    }
                     power_word_shield.Repeat(8s);
                 })
                 .Schedule(5s, 7s, [this](TaskContext renew)
@@ -662,16 +938,14 @@ class npc_theramore_faithful : public CreatureScript
                 })
                 .Schedule(12s, 14s, [this](TaskContext prayer_of_healing)
                 {
+                    me->CastStop();
                     DoCastSelf(SPELL_PRAYER_OF_HEALING);
                     prayer_of_healing.Repeat(25s);
                 })
                 .Schedule(1s, 3s, [this](TaskContext heal)
                 {
                     if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
-                    {
-                        me->CastStop();
                         DoCast(target, SPELL_HEAL);
-                    }
                     heal.Repeat(5s, 8s);
                 })
                 .Schedule(1s, 3s, [this](TaskContext psychic_scream)
@@ -687,12 +961,19 @@ class npc_theramore_faithful : public CreatureScript
                 .Schedule(1s, 8s, [this](TaskContext flash_heal)
                 {
                     if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 40))
-                    {
-                        me->CastStop();
                         DoCast(target, SPELL_FLASH_HEAL);
-                    }
                     flash_heal.Repeat(2s);
                 });
+        }
+
+        private:
+
+        Unit* SelectRandomFriendlyMissingBuff(uint32 spell)
+        {
+            std::list<Creature*> list = DoFindFriendlyMissingBuff(spell);
+            if (list.empty())
+                return nullptr;
+            return Trinity::Containers::SelectRandomContainerElement(list);
         }
     };
 
@@ -737,6 +1018,11 @@ struct npc_theramore_hordeAI : public CustomAI
         }
     }
 
+    void JustEngagedWith(Unit* /*who*/) override
+    {
+        me->CallAssistance();
+    }
+
     protected:
 
     uint32 EnemiesInRange(float distance)
@@ -759,7 +1045,7 @@ class npc_roknah_hag : public CreatureScript
     struct npc_roknah_hagAI : public npc_theramore_hordeAI
     {
         npc_roknah_hagAI(Creature* creature) : npc_theramore_hordeAI(creature, AI_Type::Distance),
-            closeTarget(false), iceblock(false)
+            closeTarget(false), iceblock(false), icicle(0)
         {
         }
 
@@ -769,9 +1055,17 @@ class npc_roknah_hag : public CreatureScript
             GROUP_FLEE
         };
 
+        uint32 Icicles[5] =
+        {
+            214130,
+            214127,
+            214126,
+            214125,
+            214124,
+        };
+
         enum Spells
         {
-            SPELL_BLIZZARD      = 284968,
             SPELL_BLINK         = 284877,
             SPELL_CONE_OF_COLD  = 292294,
             SPELL_EBONBOLT      = 284752,
@@ -780,11 +1074,34 @@ class npc_roknah_hag : public CreatureScript
             SPELL_FROSTBOLT     = 284703,
             SPELL_GLACIAL_SPIKE = 284840,
             SPELL_ICE_BLOCK     = 290049,
-            SPELL_ICE_BARRIER   = 284882
+            SPELL_ICE_BARRIER   = 198094,
+            SPELL_ICICLES       = 205473,
         };
 
         bool closeTarget;
         bool iceblock;
+        uint8 icicle;
+
+        void OnSuccessfulSpellCast(SpellInfo const* spell) override
+        {
+            switch (spell->Id)
+            {
+                case SPELL_GLACIAL_SPIKE:
+                    icicle = 0;
+                    me->RemoveAurasDueToSpell(SPELL_ICICLES);
+                    for (uint8 i = 0; i < 5; i++)
+                        me->RemoveAurasDueToSpell(Icicles[i]);
+                    break;
+                case SPELL_FROSTBOLT:
+                case SPELL_FROST_NOVA:
+                case SPELL_EBONBOLT:
+                case SPELL_FLURRY:
+                    DoCastSelf(SPELL_ICICLES, true);
+                    DoCastSelf(Icicles[icicle], true);
+                    icicle++;
+                    break;
+            }
+        }
 
         void DamageTaken(Unit* /*attacker*/, uint32& damage) override
         {
@@ -807,20 +1124,13 @@ class npc_roknah_hag : public CreatureScript
             }
         }
 
-        void JustEngagedWith(Unit* /*who*/) override
+        void JustEngagedWith(Unit* who) override
         {
+            npc_theramore_hordeAI::JustEngagedWith(who);
+
             DoCastSelf(SPELL_ICE_BARRIER);
 
             scheduler
-                .Schedule(5s, 8s, GROUP_NORMAL, [this](TaskContext blizzard)
-                {
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM))
-                    {
-                        me->CastStop();
-                        DoCast(target, SPELL_BLIZZARD);
-                    }
-                    blizzard.Repeat(35s, 50s);
-                })
                 .Schedule(13s, 18s, GROUP_NORMAL, [this](TaskContext cone_of_cold)
                 {
                     if (EnemiesInRange(12.0f) > 2)
@@ -848,11 +1158,14 @@ class npc_roknah_hag : public CreatureScript
                     DoCastVictim(SPELL_FROSTBOLT);
                     frostbolt.Repeat(2s);
                 })
-                .Schedule(20s, 25s, GROUP_NORMAL, [this](TaskContext glacial_spike)
+                .Schedule(5s, GROUP_NORMAL, [this](TaskContext glacial_spike)
                 {
-                    if (Unit* target = SelectTarget(SELECT_TARGET_MAXDISTANCE))
-                        DoCast(target, SPELL_GLACIAL_SPIKE);
-                    glacial_spike.Repeat(30s, 45s);
+                    if (Aura* aura = me->GetAura(SPELL_ICICLES))
+                    {
+                        if (aura->GetStackAmount() >= 5)
+                            DoCastVictim(SPELL_GLACIAL_SPIKE);
+                    }
+                    glacial_spike.Repeat(1s);
                 });
         }
 
@@ -929,6 +1242,8 @@ class npc_roknah_grunt : public CreatureScript
 
         void JustEngagedWith(Unit* who) override
         {
+            npc_theramore_hordeAI::JustEngagedWith(who);
+
             scheduler
                 .Schedule(5ms, [this](TaskContext hammer_stun)
                 {
@@ -1030,8 +1345,10 @@ class npc_roknah_loasinger : public CreatureScript
             }
         }
 
-        void JustEngagedWith(Unit* /*who*/) override
+        void JustEngagedWith(Unit* who) override
         {
+            npc_theramore_hordeAI::JustEngagedWith(who);
+
             scheduler
                 .Schedule(8s, 14s, [this](TaskContext chain_lightning)
                 {
@@ -1061,7 +1378,7 @@ class npc_roknah_loasinger : public CreatureScript
                 {
                     if (EnemiesInRange(8.0f) >= 3)
                     {
-                        DoCastAOE(SPELL_EARTHQUAKE);
+                        DoCast(SPELL_EARTHQUAKE);
                         earthquake.Repeat(10s, 13s);
                     }
                     else
@@ -1156,8 +1473,10 @@ class npc_roknah_felcaster : public CreatureScript
             return 18.f;
         }
 
-        void JustEngagedWith(Unit* /*who*/) override
+        void JustEngagedWith(Unit* who) override
         {
+            npc_theramore_hordeAI::JustEngagedWith(who);
+
             if (roll_chance_i(30))
                 DoCastSelf(SPELL_SUMMON_FELHUNTER);
 
@@ -1249,7 +1568,7 @@ class spell_theramore_light_of_dawn : public SpellScript
         SPELL_LIGHT_OF_DAWN = 295712
     };
 
-    void HandleDummy(SpellEffIndex effIndex)
+    void HandleDummy(SpellEffIndex /*effIndex*/)
     {
         if (Unit* target = GetHitUnit())
         {
@@ -1262,6 +1581,100 @@ class spell_theramore_light_of_dawn : public SpellScript
     void Register() override
     {
         OnEffectHitTarget += SpellEffectFn(spell_theramore_light_of_dawn::HandleDummy, EFFECT_1, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// Greater Pyroblast - 295231
+class spell_theramore_greater_pyroblast : public SpellScript
+{
+    PrepareSpellScript(spell_theramore_greater_pyroblast);
+
+    void HandleDamages(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        Unit* victim = GetHitUnit();
+        if (caster && victim)
+        {
+            int32 pct = GetSpellInfo()->GetEffect(EFFECT_1).BasePoints;
+            int32 damage = victim->CountPctFromMaxHealth(pct);
+            Unit::DealDamage(caster, victim, damage);
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_theramore_greater_pyroblast::HandleDamages, EFFECT_0, SPELL_EFFECT_DAMAGE_FROM_MAX_HEALTH_PCT);
+    }
+};
+
+// 	Bucket Lands - 42339
+class spell_theramore_throw_bucket : public SpellScript
+{
+    PrepareSpellScript(spell_theramore_throw_bucket);
+
+    enum Spells
+    {
+        SPELL_WATER_CHANNEL_COSMETIC = 287567
+    };
+
+    void HandleDummy(SpellEffIndex effIndex)
+    {
+        Unit* caster = GetCaster();
+        const WorldLocation* destination = GetHitDest();
+        if (caster && destination)
+        {
+            float radius = GetSpellInfo()->GetEffect(effIndex).CalcRadius();
+            float x = destination->GetPositionX();
+            float y = destination->GetPositionY();
+            float z = destination->GetPositionZ();
+
+            if (Creature* trigger = caster->SummonTrigger(x, y, z, 0.0f, 5 * IN_MILLISECONDS))
+            {
+                std::list<Creature*> fires;
+                trigger->GetCreatureListWithEntryInGrid(fires, NPC_THERAMORE_FIRE_CREDIT, radius);
+
+                for (Creature* fire : fires)
+                {
+                    if (!fire->HasAura(SPELL_COSMETIC_LARGE_FIRE))
+                        continue;
+
+                    if (Player* player = caster->ToPlayer())
+                    {
+                        KillRewarder(player, fire, false).Reward(NPC_THERAMORE_FIRE_CREDIT);
+                    }
+
+                    fire->DespawnOrUnsummon();
+                }
+            }
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_theramore_throw_bucket::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 295238 - Blazing Barrier
+// 198094 - Ice Barrier
+class spell_theramore_barrier : public AuraScript
+{
+    PrepareAuraScript(spell_theramore_barrier);
+
+    void CalculateAmount(AuraEffect const* /*aurEff*/, int32& amount, bool& canBeRecalculated)
+    {
+        canBeRecalculated = false;
+
+        if (Unit* caster = GetCaster())
+        {
+            uint32 health = caster->GetMaxHealth();
+            amount = int32(health * 0.20f);
+        }
+    }
+
+    void Register() override
+    {
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_theramore_barrier::CalculateAmount, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB);
     }
 };
 
@@ -1327,7 +1740,7 @@ class at_blizzard_theramore : public AreaTriggerEntityScript
                         {
                             target->CastStop();
                             target->GetMotionMaster()->Clear();
-                            target->GetMotionMaster()->MoveFleeing(tempSumm, 1 * IN_MILLISECONDS);
+                            target->GetMotionMaster()->MoveFleeing(tempSumm, 3 * IN_MILLISECONDS);
                         }
                     }
                 }
@@ -1354,12 +1767,18 @@ void AddSC_npcs_battle_for_theramore()
     new npc_theramore_footman();
     new npc_theramore_faithful();
     new npc_theramore_arcanist();
+    new npc_wounded_theramore_troop();
+    new npc_amara_leeson();
     new npc_roknah_hag();
     new npc_roknah_grunt();
     new npc_roknah_loasinger();
     new npc_roknah_felcaster();
 
     RegisterSpellScript(spell_theramore_light_of_dawn);
+    RegisterSpellScript(spell_theramore_greater_pyroblast);
+    RegisterSpellScript(spell_theramore_throw_bucket);
+
+    RegisterAuraScript(spell_theramore_barrier);
 
     new at_blizzard_theramore();
 }

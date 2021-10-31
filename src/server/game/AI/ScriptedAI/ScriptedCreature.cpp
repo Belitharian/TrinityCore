@@ -416,6 +416,16 @@ std::list<Creature*> ScriptedAI::DoFindFriendlyCC(float range)
     return list;
 }
 
+std::list<Creature*> ScriptedAI::DoFindFriendlyMissingBuff(uint32 uiSpellid)
+{
+    std::list<Creature*> list;
+    Trinity::FriendlyCreatureMissingBuff u_check(me, uiSpellid);
+    Trinity::CreatureListSearcher<Trinity::FriendlyCreatureMissingBuff> searcher(me, list, u_check);
+    Cell::VisitAllObjects(me, searcher, SIZE_OF_GRIDS);
+
+    return list;
+}
+
 std::list<Creature*> ScriptedAI::DoFindFriendlyMissingBuff(float range, uint32 uiSpellid)
 {
     std::list<Creature*> list;
