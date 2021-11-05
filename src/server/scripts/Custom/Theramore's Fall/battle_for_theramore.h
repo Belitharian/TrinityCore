@@ -18,12 +18,14 @@
 
 #define PERITH_LOCATION         3
 #define ARCHMAGES_LOCATION      6
-#define ACTORS_RELOCATION       9
+#define ACTORS_RELOCATION       11
 #define BARRIERS_LOCATION       2
 
 #define FIRE_LOCATION           32
 
 #define NUMBER_OF_MEMBERS       10
+
+#define KALECGOS_CIRCLE_RADIUS  95.f
 
 enum class BFTPhases
 {
@@ -40,6 +42,7 @@ enum class BFTPhases
     TheBattle_RetrieveJaina,
     TheBattle_Survive,
     HelpTheWounded,
+    HelpTheWounded_RejoinJaina,
     HelpTheWounded_Extinguish,
     WaitForAmara,
     WaitForAmara_JoinJaina,
@@ -128,9 +131,11 @@ enum BFTMisc
     SPELL_PORTAL_CHANNELING_02          = 287432,
     SPELL_PORTAL_CHANNELING_03          = 288451,
     SPELL_RUNIC_SHIELD                  = 346057,
+    SPELL_FROST_BREATH                  = 300548,
 
     // GameObjects
-    GOB_MYSTIC_BARRIER                  = 323860,
+    GOB_MYSTIC_BARRIER_01               = 323860,
+    GOB_MYSTIC_BARRIER_02               = 323862,
     GOB_PORTAL_TO_STORMWIND             = 353823,
     GOB_PORTAL_TO_DALARAN               = 323842,
     GOB_PORTAL_TO_ORGRIMMAR             = 353822,
@@ -152,11 +157,12 @@ enum BFTMisc
     CRITERIA_TREE_RETRIEVE_JAINA        = 1000018,
     CRITERIA_TREE_SURVIVE_THE_BATTLE    = 1000020,
     CRITERIA_TREE_HELP_THE_WOUNDED      = 1000021,
-    CRITERIA_TREE_HELP_WOUNDED_TROOP    = 1000022,
-    CRITERIA_TREE_EXTINGUISH_FIRES      = 1000023,
-    CRITERIA_TREE_WAIT_ARCHMAGE_LEESON  = 1000024,
-    CRITERIA_TREE_JOIN_JAINA            = 1000025,
-    CRITERIA_TREE_ARCHMAGE_LEESON       = 1000026,
+    CRITERIA_TREE_REJOIN_JAINA          = 1000022,
+    CRITERIA_TREE_HELP_WOUNDED_TROOP    = 1000023,
+    CRITERIA_TREE_EXTINGUISH_FIRES      = 1000024,
+    CRITERIA_TREE_WAIT_ARCHMAGE_LEESON  = 1000025,
+    CRITERIA_TREE_JOIN_JAINA            = 1000026,
+    CRITERIA_TREE_ARCHMAGE_LEESON       = 1000027,
 
     // Sounds
     SOUND_FEARFUL_CROWD                 = 15003,
@@ -168,15 +174,16 @@ enum BFTMisc
     MOVEMENT_INFO_POINT_03              = 89644942,
 
     // Events
-    EVENT_FIND_JAINA                    = 65800,
+    EVENT_FIND_JAINA_01                 = 65800,    // Find Jaina - Tower
     EVENT_THE_COUNCIL                   = 65801,
     EVENT_WAITING                       = 65802,
     EVENT_THE_UNKNOWN_TAUREN            = 65803,
-    EVENT_A_LITTLE_HELP                 = 65804,
-    EVENT_RETRIEVE_JAINA                = 65805,
-    EVENT_JOIN_JAINA                    = 65806,
-    EVENT_WAIT_ARCHMAGE_LESSON          = 65807,
-    EVENT_RETRIEVE_RHONIN               = 65808,
+    EVENT_FIND_JAINA_02                 = 65804,    // Find Jaina - Citadel
+    EVENT_FIND_JAINA_03                 = 65805,    // Find Jaina - Gate before the battle
+    EVENT_FIND_JAINA_04                 = 65806,    // Find Jaina - Gate after the battle
+    EVENT_FIND_JAINA_05                 = 65807,    // Find Jaina - After wounded / fires
+    EVENT_WAIT_ARCHMAGE_LESSON          = 65808,
+    EVENT_RETRIEVE_RHONIN               = 65809,
 };
 
 enum BFTTalks
@@ -258,15 +265,21 @@ enum BFTTalks
     SAY_BATTLE_02         = 33,
     SAY_BATTLE_03         = 34,
     SAY_BATTLE_04         = 35,
-
+    
     SAY_BATTLE_ALERT      = 36,
     SAY_BATTLE_CITADEL    = 37,
     SAY_BATTLE_GATE       = 38,
     SAY_BATTLE_DOCKS      = 39,
 
-    SAY_SPELL_01          = 40,
-    SAY_BLIZZARD_01       = 41,
-    SAY_SLAY_01           = 42,
+    SAY_POST_BATTLE_01    = 43,
+    SAY_POST_BATTLE_02    = 2,
+    SAY_POST_BATTLE_03    = 44,
+
+    SAY_JAINA_SPELL_01    = 40,
+    SAY_JAINA_BLIZZARD_01 = 41,
+    SAY_JAINA_SLAY_01     = 42,
+
+    SAY_KALECGOS_SPELL_01 = 0,
 };
 
 struct Location
@@ -303,7 +316,9 @@ Location const actorsRelocation[ACTORS_RELOCATION] =
     { DATA_THALEN_SONGWEAVER,    { 0.f, 0.f, 0.f, 0.f }, { -3652.05f, -4365.66f,  9.53f, 0.69f } },
     { DATA_TARI_COGG,            { 0.f, 0.f, 0.f, 0.f }, { -3786.33f, -4256.64f,  6.52f, 1.59f } },
     { DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3649.58f, -4369.21f,  9.57f, 0.69f } },
-    { DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3778.19f, -4256.27f,  6.51f, 1.53f } }
+    { DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3778.19f, -4256.27f,  6.51f, 1.53f } },
+    { DATA_KALECGOS_DRAGON,      { 0.f, 0.f, 0.f, 0.f }, { -3717.96f, -4356.52f, 90.82f, 0.00f } },
+    { DATA_KALECGOS,             { 0.f, 0.f, 0.f, 0.f }, { -3730.39f, -4550.39f, 27.11f, 0.54f } }
 };
 
 Position const TervoshPath01[TERVOSH_PATH_01] =
@@ -489,6 +504,7 @@ Position const TariPoint01      = { -3749.91f, -4354.15f, 10.61f, 5.44f };
 Position const TablePoint01     = { -3748.03f, -4355.03f, 10.98f, 2.18f };
 Position const CitadelPoint01   = { -3668.74f, -4511.64f, 10.09f, 1.54f };
 Position const DocksPoint01     = { -3826.84f, -4539.05f,  9.21f, 5.96f };
+Position const TheramorePoint01 = { -3753.48f, -4444.54f, 55.23f, 0.00f };
 
 template <class AI, class T>
 inline AI* GetBattleForTheramoreAI(T* obj)

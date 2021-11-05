@@ -60,7 +60,7 @@ class npc_jaina_theramore : public CreatureScript
         void KilledUnit(Unit* /*victim*/) override
         {
             if (roll_chance_i(15))
-                Talk(SAY_SLAY_01);
+                Talk(SAY_JAINA_SLAY_01);
         }
 
         void JustEngagedWith(Unit* who) override
@@ -69,7 +69,7 @@ class npc_jaina_theramore : public CreatureScript
                 .Schedule(5ms, [this](TaskContext fireball)
                 {
                     if (roll_chance_i(20))
-                        Talk(SAY_SPELL_01);
+                        Talk(SAY_JAINA_SPELL_01);
                     DoCastVictim(SPELL_FIREBALL);
                     fireball.Repeat(2s, 8s);
                 })
@@ -82,7 +82,7 @@ class npc_jaina_theramore : public CreatureScript
                 .Schedule(8s, [this](TaskContext blizzard)
                 {
                     if (roll_chance_i(10))
-                        Talk(SAY_BLIZZARD_01);
+                        Talk(SAY_JAINA_BLIZZARD_01);
                     if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
                         DoCast(target, SPELL_BLIZZARD);
                     blizzard.Repeat(14s, 22s);
@@ -137,16 +137,20 @@ class npc_jaina_theramore : public CreatureScript
                     switch (phase)
                     {
                         case BFTPhases::FindJaina:
-                            instance->DoSendScenarioEvent(EVENT_FIND_JAINA);
+                            instance->DoSendScenarioEvent(EVENT_FIND_JAINA_01);
                             break;
                         case BFTPhases::ALittleHelp:
-                            instance->DoSendScenarioEvent(EVENT_A_LITTLE_HELP);
+                            instance->DoSendScenarioEvent(EVENT_FIND_JAINA_02);
                             break;
                         case BFTPhases::TheBattle:
-                            instance->DoSendScenarioEvent(EVENT_RETRIEVE_JAINA);
+                            instance->DoSendScenarioEvent(EVENT_FIND_JAINA_03);
+                            break;
+                        case BFTPhases::HelpTheWounded:
+                        case BFTPhases::HelpTheWounded_Extinguish:
+                            instance->DoSendScenarioEvent(EVENT_FIND_JAINA_04);
                             break;
                         case BFTPhases::WaitForAmara:
-                            instance->DoSendScenarioEvent(EVENT_JOIN_JAINA);
+                            instance->DoSendScenarioEvent(EVENT_FIND_JAINA_05);
                             break;
                         default:
                             break;

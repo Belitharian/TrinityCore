@@ -41,6 +41,8 @@ const ObjectData gameobjectData[] =
     { GOB_PORTAL_TO_STORMWIND,  DATA_PORTAL_TO_STORMWIND    },
     { GOB_PORTAL_TO_DALARAN,    DATA_PORTAL_TO_DALARAN      },
     { GOB_PORTAL_TO_ORGRIMMAR,  DATA_PORTAL_TO_ORGRIMMAR    },
+    { GOB_MYSTIC_BARRIER_01,    DATA_MYSTIC_BARRIER_01      },
+    { GOB_MYSTIC_BARRIER_02,    DATA_MYSTIC_BARRIER_02      },
     { 0,                        0                           }   // END
 };
 
@@ -77,6 +79,68 @@ class HordeDoorsEvent : public BasicEvent
     const float maxPosX = -3772.15f;
 };
 
+class KalecgosSpellEvent : public BasicEvent
+{
+    public:
+    KalecgosSpellEvent(Creature* owner) : owner(owner)
+    {
+        owner->SetReactState(REACT_PASSIVE);
+    }
+
+    bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
+    {
+        if (roll_chance_i(20))
+            owner->AI()->Talk(SAY_KALECGOS_SPELL_01);
+
+        owner->CastSpell(owner, SPELL_FROST_BREATH);
+        owner->GetThreatManager().RemoveMeFromThreatLists();
+        owner->m_Events.AddEvent(this, eventTime + urand(8 * IN_MILLISECONDS, 10 * IN_MILLISECONDS));
+        return false;
+    }
+
+    private:
+    Creature* owner;
+};
+
+class KalecgosLoopEvent : public BasicEvent
+{
+    public:
+    KalecgosLoopEvent(Creature* owner) : owner(owner), stage(0), m_loopTime(0.f)
+    {
+        owner->SetCanFly(true);
+        owner->SetDisableGravity(true);
+        owner->SetSpeed(MOVE_RUN, 25.f);
+
+        float perimeter = 2.f * float(M_PI) * KALECGOS_CIRCLE_RADIUS;
+        m_loopTime = (perimeter / owner->GetSpeed(MOVE_RUN)) * IN_MILLISECONDS;
+
+        owner->GetMotionMaster()->MoveCirclePath(TheramorePoint01.GetPositionX(), TheramorePoint01.GetPositionY(), TheramorePoint01.GetPositionZ(), KALECGOS_CIRCLE_RADIUS, false, 16);
+    }
+
+    bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
+    {
+        switch (stage)
+        {
+            case 0:
+                stage++;
+                owner->m_Events.AddEvent(this, eventTime + m_loopTime);
+                return false;
+            case 1:
+                owner->GetMotionMaster()->MoveCirclePath(TheramorePoint01.GetPositionX(), TheramorePoint01.GetPositionY(), TheramorePoint01.GetPositionZ(), KALECGOS_CIRCLE_RADIUS, true, 16);
+                stage = 0;
+                owner->m_Events.AddEvent(this, eventTime + 2 * IN_MILLISECONDS);
+                return false;
+        }
+
+        return true;
+    }
+
+    private:
+    Creature* owner;
+    uint8 stage;
+    float m_loopTime;
+};
+
 class scenario_battle_for_theramore : public InstanceMapScript
 {
     public:
@@ -92,7 +156,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
             SetHeaders(DataHeader);
             LoadObjectData(creatureData, gameobjectData);
 
-            EnsureSpellsTimer = 1 * IN_MILLISECONDS;
+            auraTimer = 1 * IN_MILLISECONDS;
         }
 
         enum Invokers
@@ -157,11 +221,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
             WAVE_DOORS,
             WAVE_DOCKS,
             WAVE_CITADEL,
-            WAVE_DOORS,
             WAVE_DOCKS,
+            WAVE_DOORS
         };
 
-        uint32 EnsureSpellsTimer;
+        uint32 auraTimer;
 
         uint32 GetData(uint32 dataId) const override
         {
@@ -186,7 +250,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     ClosePortal(DATA_PORTAL_TO_STORMWIND);
                     GetTervosh()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
                     GetKinndy()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-                    GetKalecgos()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                    GetKalec()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
                     if (Creature* jaina = GetCreature(DATA_JAINA_PROUDMOORE))
                     {
                         jaina->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
@@ -221,13 +285,16 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 // Step 4 : The Unknow Tauren
                 case CRITERIA_TREE_UNKNOW_TAUREN:
                 {
-                    for (Creature* citizen : citizens)
+                    for (ObjectGuid guid : citizens)
                     {
-                        if (Creature* faithful = citizen->FindNearestCreature(NPC_THERAMORE_FAITHFUL, 10.f))
-                            continue;
-                        if (citizen->GetEntry() == NPC_ALLIANCE_PEASANT)
-                            continue;
-                        citizen->SetNpcFlags(UNIT_NPC_FLAG_GOSSIP);
+                        if (Creature* citizen = instance->GetCreature(guid))
+                        {
+                            if (Creature* faithful = citizen->FindNearestCreature(NPC_THERAMORE_FAITHFUL, 10.f))
+                                continue;
+                            if (citizen->GetEntry() == NPC_ALLIANCE_PEASANT)
+                                continue;
+                            citizen->SetNpcFlags(UNIT_NPC_FLAG_GOSSIP);
+                        }
                     }
                     if (Creature* kinndy = GetKinndy())
                     {
@@ -247,17 +314,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 {
                     if (Creature* jaina = GetJaina())
                     {
+                        for (ObjectGuid guid : citizens)
+                        {
+                            if (Creature* citizen = instance->GetCreature(guid))
+                                citizen->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                        }
+
                         jaina->NearTeleportTo(JainaPoint02);
                         jaina->SetHomePosition(JainaPoint02);
                         jaina->AI()->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
-
-                        citizens.clear();
-
-                        jaina->GetCreatureListWithEntryInGrid(citizens, NPC_THERAMORE_CITIZEN_FEMALE);
-                        jaina->GetCreatureListWithEntryInGrid(citizens, NPC_THERAMORE_CITIZEN_MALE);
-
-                        for (Creature* citizen : citizens)
-                            citizen->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
                     }
                     if (Creature* tervosh = GetTervosh())
                     {
@@ -270,7 +335,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         kinndy->NearTeleportTo(KinndyPoint02);
                         kinndy->SetHomePosition(KinndyPoint02);
                     }
-                    if (Creature* kalecgos = GetKalecgos())
+                    if (Creature* kalecgos = GetKalec())
                     {
                         kalecgos->NearTeleportTo(KalecgosPoint01);
                         kalecgos->SetHomePosition(KalecgosPoint01);
@@ -298,30 +363,39 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         if (TempSummon* trigger = instance->SummonCreature(NPC_THERAMORE_FIRE_CREDIT, pos))
                             trigger->CastSpell(trigger, SPELL_COSMETIC_LARGE_FIRE);
                     }
-                    for (Creature* dummy : dummies)
+                    for (ObjectGuid guid : dummies)
                     {
-                        dummy->AI()->DoAction(2U);
-                    }
-                    for (Creature* tank : tanks)
-                    {
-                        tank->SetNpcFlags(UNIT_NPC_FLAG_SPELLCLICK);
-                        tank->SetRegenerateHealth(false);
-                        tank->SetHealth((float)tank->GetHealth() * frand(0.15f, 0.60f));
-                    }
-                    for (Creature* citizen : citizens)
-                    {
-                        citizen->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                        if (roll_chance_i(60))
-                            citizen->SetVisible(false);
-                        else
+                        if (Creature* dummy = instance->GetCreature(guid))
                         {
-                            citizen->RemoveAllAuras();
-                            citizen->SetRegenerateHealth(false);
-                            citizen->SetHealth(0U);
-                            citizen->SetStandState(UNIT_STAND_STATE_DEAD);
-                            citizen->AddUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
-                            citizen->AddUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
-                            citizen->SetImmuneToAll(true);
+                            dummy->AI()->DoAction(2U);
+                        }
+                    }
+                    for (ObjectGuid guid : tanks)
+                    {
+                        if (Creature* tank = instance->GetCreature(guid))
+                        {
+                            tank->SetNpcFlags(UNIT_NPC_FLAG_SPELLCLICK);
+                            tank->SetRegenerateHealth(false);
+                            tank->SetHealth((float)tank->GetHealth() * frand(0.15f, 0.60f));
+                        }
+                    }
+                    for (ObjectGuid guid : citizens)
+                    {
+                        if (Creature* citizen = instance->GetCreature(guid))
+                        {
+                            citizen->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                            if (roll_chance_i(60))
+                                citizen->SetVisible(false);
+                            else
+                            {
+                                citizen->RemoveAllAuras();
+                                citizen->SetRegenerateHealth(false);
+                                citizen->SetHealth(0U);
+                                citizen->SetStandState(UNIT_STAND_STATE_DEAD);
+                                citizen->AddUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
+                                citizen->AddUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
+                                citizen->SetImmuneToAll(true);
+                            }
                         }
                     }
                     SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Preparation);
@@ -339,14 +413,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 // Step 7 : Preparation - Tanks events
                 case CRITERIA_TREE_REPAIR_TANKS:
                 {
-                    for (Creature* tank : tanks)
+                    for (ObjectGuid guid : tanks)
                     {
-                        if (Creature* fire = tank->FindNearestCreature(NPC_THERAMORE_FIRE_CREDIT, 5.f))
-                            fire->DespawnOrUnsummon();
+                        if (Creature* tank = instance->GetCreature(guid))
+                        {
+                            if (Creature* fire = tank->FindNearestCreature(NPC_THERAMORE_FIRE_CREDIT, 5.f))
+                                fire->DespawnOrUnsummon();
 
-                        tank->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-                        tank->SetRegenerateHealth(true);
-                        tank->SetHealth(tank->GetMaxHealth());
+                            tank->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+                            tank->SetRegenerateHealth(true);
+                            tank->SetHealth(tank->GetMaxHealth());
+                        }
                     }
                     break;
                 }            
@@ -359,12 +436,23 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
                         jaina->SetBoundingRadius(20.f);
                         jaina->AI()->Talk(SAY_BATTLE_01);
+                        jaina->SetRegenerateHealth(false);
 
                         if (GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_ORGRIMMAR, PortalPoint02, QuaternionData::QuaternionData(), 0))
                             portal->m_Events.AddEvent(new HordeDoorsEvent(portal), portal->m_Events.CalculateTime(15 * IN_MILLISECONDS));
                     }
-                    SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, GetRhonin());
-                    SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, GetKalecgos());
+                    if (Creature* rhonin = GetRhonin())
+                    {
+                        SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, rhonin);
+
+                        rhonin->SetRegenerateHealth(false);
+                    }
+                    if (Creature* kalecgos = GetKalecgos())
+                    {
+                        SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, kalecgos);
+
+                        kalecgos->SetRegenerateHealth(false);
+                    }
                     SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle_Survive);
                     events.ScheduleEvent(91, 10s);
                     events.ScheduleEvent(92, 1s);
@@ -375,6 +463,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 {
                     if (Creature* jaina = GetJaina())
                     {
+                        SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, jaina);
+
                         jaina->NearTeleportTo(JainaPoint03);
                         jaina->SetHomePosition(JainaPoint03);
                     }
@@ -398,39 +488,58 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         thader->NearTeleportTo(ThaderPoint01);
                         thader->SetHomePosition(ThaderPoint01);
                     }
-                    for (GameObject* barrier : barriers)
+                    if (Creature* kalecgos = GetKalecgos())
                     {
-                        barrier->ResetDoorOrButton();
+                        SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, kalecgos);
+
+                        kalecgos->m_Events.KillAllEvents(true);
+                        kalecgos->GetMotionMaster()->Clear();
+                        kalecgos->GetMotionMaster()->MoveIdle();
+                        kalecgos->SetVisible(false);
                     }
-                    for (Creature* troop : troops)
+                    for (ObjectGuid guid : troops)
                     {
-                        if (troop->IsFormationLeader())
-                            continue;
-
-                        if (roll_chance_i(60))
+                        if (Creature* troop = instance->GetCreature(guid))
                         {
-                            troop->SetVisible(false);
-                            if (Creature* wounded = troop->SummonCreature(NPC_THERAMORE_WOUNDED_TROOP, troop->GetPosition(), TempSummonType::TEMPSUMMON_MANUAL_DESPAWN))
-                            {
-                                uint32 health = troop->GetMaxHealth();
-                                Powers power = troop->GetPowerType();
+                            if (troop->IsFormationLeader())
+                                continue;
 
-                                wounded->SetPowerType(power);
-                                wounded->SetPower(power, troop->GetPower(power));
-                                wounded->SetRegenerateHealth(false);
-                                wounded->SetMaxHealth(health);
-                                wounded->SetHealth(health * frand(0.15f, 0.20f));
-                                wounded->SetStandState(UNIT_STAND_STATE_SLEEP);
-                                wounded->SetDisplayId(troop->GetDisplayId());
+                            if (roll_chance_i(60))
+                            {
+                                troop->SetVisible(false);
+                                if (Creature* wounded = troop->SummonCreature(NPC_THERAMORE_WOUNDED_TROOP, troop->GetPosition(), TempSummonType::TEMPSUMMON_MANUAL_DESPAWN))
+                                {
+                                    uint32 health = troop->GetMaxHealth();
+                                    Powers power = troop->GetPowerType();
+
+                                    wounded->SetPowerType(power);
+                                    wounded->SetPower(power, troop->GetPower(power));
+                                    wounded->SetRegenerateHealth(false);
+                                    wounded->SetMaxHealth(health);
+                                    wounded->SetHealth(health * frand(0.15f, 0.20f));
+                                    wounded->SetStandState(UNIT_STAND_STATE_SLEEP);
+                                    wounded->SetDisplayId(troop->GetDisplayId());
+                                    wounded->SetImmuneToNPC(true);
+
+                                }
                             }
                         }
                     }
+                    GetBarrier01()->ResetDoorOrButton();
+                    GetBarrier02()->ResetDoorOrButton();
+                    SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, GetRhonin());
                     SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::HelpTheWounded);
                     break;
                 }
                 // Step 10 : Help the wounded - Parent
                 case CRITERIA_TREE_HELP_THE_WOUNDED:
+                    DoRemoveAurasDueToSpellOnPlayers(SPELL_RUNIC_SHIELD);
                     SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::WaitForAmara);
+                    break;
+                // Step 10 : Help the wounded - Rejoin Lady Jaina Proudmoore after the attack
+                case CRITERIA_TREE_REJOIN_JAINA:
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::HelpTheWounded_RejoinJaina);
+                    events.ScheduleEvent(122, 2s);
                     break;
                 // Step 10 : Help the wounded - Help teleporting the wounded troops
                 case CRITERIA_TREE_HELP_WOUNDED_TROOP:
@@ -468,27 +577,28 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     break;
                 case NPC_EVENT_THERAMORE_TRAINING:
                 case NPC_EVENT_THERAMORE_FAITHFUL:
-                    dummies.push_back(creature);
+                    dummies.push_back(creature->GetGUID());
                     break;
                 case NPC_THERAMORE_CITIZEN_FEMALE:
                 case NPC_THERAMORE_CITIZEN_MALE:
-                    citizens.push_back(creature);
+                    citizens.push_back(creature->GetGUID());
                     if (phase == BFTPhases::Evacuation)
                         break;
                     creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
                     break;
                 case NPC_ALLIANCE_PEASANT:
-                    citizens.push_back(creature);
+                    creature->SetImmuneToNPC(true);
+                    citizens.push_back(creature->GetGUID());
                     break;
                 case NPC_UNMANNED_TANK:
                     creature->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-                    tanks.push_back(creature);
+                    tanks.push_back(creature->GetGUID());
                     break;
                 case NPC_THERAMORE_FOOTMAN:
                 case NPC_THERAMORE_ARCANIST:
                 case NPC_THERAMORE_FAITHFUL:
                 case NPC_THERAMORE_OFFICER:
-                    troops.push_back(creature);
+                    troops.push_back(creature->GetGUID());
                     break;
             }
         }
@@ -501,9 +611,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
             switch (go->GetEntry())
             {
-                case GOB_MYSTIC_BARRIER:
-                    barriers.push_back(go);
-                    break;
                 case GOB_PORTAL_TO_DALARAN:
                 case GOB_PORTAL_TO_STORMWIND:
                 case GOB_PORTAL_TO_ORGRIMMAR:
@@ -572,12 +679,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     Next(8s);
                     break;
                 case 8:
-                    Talk(GetKalecgos(), SAY_REUNION_7);
-                    SetTarget(GetKalecgos());
+                    Talk(GetKalec(), SAY_REUNION_7);
+                    SetTarget(GetKalec());
                     Next(6s);
                     break;
                 case 9:
-                    Talk(GetKalecgos(), SAY_REUNION_8);
+                    Talk(GetKalec(), SAY_REUNION_8);
                     Next(9s);
                     break;
                 case 10:
@@ -594,8 +701,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     Next(6s);
                     break;
                 case 13:
-                    Talk(GetKalecgos(), SAY_REUNION_11);
-                    SetTarget(GetKalecgos());
+                    Talk(GetKalec(), SAY_REUNION_11);
+                    SetTarget(GetKalec());
                     Next(4s);
                     break;
                 case 14:
@@ -609,8 +716,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     Next(6s);
                     break;
                 case 16:
-                    Talk(GetKalecgos(), SAY_REUNION_14);
-                    SetTarget(GetKalecgos());
+                    Talk(GetKalec(), SAY_REUNION_14);
+                    SetTarget(GetKalec());
                     Next(7s);
                     break;
                 case 17:
@@ -619,17 +726,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     Next(4s);
                     break;
                 case 18:
-                    Talk(GetKalecgos(), SAY_REUNION_16);
-                    SetTarget(GetKalecgos());
+                    Talk(GetKalec(), SAY_REUNION_16);
+                    SetTarget(GetKalec());
                     Next(4s);
                     break;
                 case 19:
-                    Talk(GetKalecgos(), SAY_REUNION_17);
+                    Talk(GetKalec(), SAY_REUNION_17);
                     Next(4s);
                     break;
                 case 20:
                     ClearTarget();
-                    if (Creature* kalecgos = GetKalecgos())
+                    if (Creature* kalecgos = GetKalec())
                     {
                         kalecgos->SetSpeedRate(MOVE_WALK, 1.6f);
                         kalecgos->SetControlled(false, UNIT_STATE_ROOT);
@@ -1049,11 +1156,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     Next(4600ms);
                     break;
                 case 90:
-                    GetKalecgos()->SetVisible(false);
                     for (uint8 i = 0; i < ACTORS_RELOCATION; i++)
                     {
                         if (Creature* creature = GetCreature(actorsRelocation[i].dataId))
                         {
+                            creature->GetMotionMaster()->Clear();
+                            creature->GetMotionMaster()->MoveIdle();
+                            creature->NearTeleportTo(actorsRelocation[i].destination);
+                            creature->SetHomePosition(actorsRelocation[i].destination);
+                            creature->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                            creature->SetSheath(SHEATH_STATE_MELEE);
+
                             switch (creature->GetEntry())
                             {
                                 case NPC_AMARA_LEESON:
@@ -1072,17 +1185,16 @@ class scenario_battle_for_theramore : public InstanceMapScript
                                     creature->RemoveAllAuras();
                                     break;
                                 case NPC_JAINA_PROUDMOORE:
-                                    barriers[1]->UseDoorOrButton();
+                                    GetBarrier01()->UseDoorOrButton();
                                     TeleportPlayers(GetJaina(), actorsRelocation[i].destination, 15.0f);
                                     break;
+                                case NPC_KALECGOS_DRAGON:
+                                    creature->m_Events.AddEvent(new KalecgosLoopEvent(creature), creature->m_Events.CalculateTime(1 * IN_MILLISECONDS));
+                                    break;
+                                case NPC_KALECGOS:
+                                    creature->SetVisible(false);
+                                    break;
                             }
-
-                            creature->GetMotionMaster()->Clear();
-                            creature->GetMotionMaster()->MoveIdle();
-                            creature->NearTeleportTo(actorsRelocation[i].destination);
-                            creature->SetHomePosition(actorsRelocation[i].destination);
-                            creature->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-                            creature->SetSheath(SHEATH_STATE_MELEE);
                         }
                     }
                     break;
@@ -1121,9 +1233,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     Next(1s);
                     break;
                 case 94:
-                    barriers[1]->ResetDoorOrButton();
-                    if (Creature* trigger = barriers[1]->SummonCreature(WORLD_TRIGGER, ExplodingPoint01, TEMPSUMMON_TIMED_DESPAWN, 2s))
-                        trigger->CastSpell(trigger, SPELL_BIG_EXPLOSION);
+                    if (GameObject* barrier = GetBarrier01())
+                    {
+                        barrier->ResetDoorOrButton();
+                        if (Creature* trigger = barrier->SummonCreature(WORLD_TRIGGER, ExplodingPoint01, TEMPSUMMON_TIMED_DESPAWN, 2s))
+                            trigger->CastSpell(trigger, SPELL_BIG_EXPLOSION);
+                    }
                     Next(1s);
                     break;
                 case 95:
@@ -1179,8 +1294,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         thalen->SetHomePosition(ThalenPoint02);
                         thalen->CastSpell(thalen, SPELL_TIED_UP, true);
                     }
+                    if (Creature* kalecgos = GetKalecgos())
+                    {
+                        kalecgos->m_Events.AddEvent(new KalecgosSpellEvent(kalecgos), kalecgos->m_Events.CalculateTime(2 * IN_MILLISECONDS));
+                    }
                     GetJaina()->CastSpell(actorsRelocation[0].destination, SPELL_TELEPORT);
-                    Next(5s);
+                    Next(2s);
                     break;
 
                 #pragma endregion
@@ -1250,49 +1369,83 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 #pragma region HELP_THE_WOUNDED
 
                 case 122:
-
+                    if (Creature* jaina = GetJaina())
+                    {
+                        if (Creature* hedric = GetHedric())
+                        {
+                            jaina->SetTarget(hedric->GetGUID());
+                            hedric->SetTarget(jaina->GetGUID());
+                        }
+                    }
+                    Next(800ms);
+                    break;
+                case 123:
+                    GetJaina()->AI()->Talk(SAY_POST_BATTLE_01);
+                    Next(2s);
+                    break;
+                case 124:
+                    GetHedric()->AI()->Talk(SAY_POST_BATTLE_02);
+                    Next(4s);
+                    break;
+                case 125:
+                    GetJaina()->AI()->Talk(SAY_POST_BATTLE_03);
                     break;
 
                 #pragma endregion
             }
 
-            // Ensure spells are cast each second
-            if (EnsureSpellsTimer <= diff)
+            // Ensure aura are active each second
+            if (auraTimer <= diff)
             {
-                EnsurePlayersHaveBucket(BFTPhases::Preparation_Rhonin, SPELL_RUNIC_SHIELD);
-                EnsurePlayersHaveBucket(BFTPhases::HelpTheWounded, SPELL_WATER_BUCKET);
-                EnsureSpellsTimer = 1 * IN_MILLISECONDS;
+                if (phase >= BFTPhases::Preparation_Rhonin && phase < BFTPhases::HelpTheWounded)
+                {
+                    EnsurePlayersHaveBucket(SPELL_RUNIC_SHIELD);
+                }
+
+                if (phase >= BFTPhases::HelpTheWounded && phase < BFTPhases::HelpTheWounded_Extinguish)
+                {
+                    EnsurePlayersHaveBucket(SPELL_WATER_BUCKET);
+                }
+
+                auraTimer = 1 * IN_MILLISECONDS;
             }
-            else EnsureSpellsTimer -= diff;
+            else auraTimer -= diff;
         }
 
         EventMap events;
         BFTPhases phase;
+        uint32 wavesInvoker;
         uint32 eventId;
         uint8 archmagesIndex;
-        std::vector<GameObject*> barriers;
-        std::vector<Creature*> citizens;
-        std::vector<Creature*> dummies;
-        std::vector<Creature*> tanks;
-        std::list<Creature*> troops;
-        std::list<TempSummon*> hordes;
-
-        ObjectGuid hordeMembers[NUMBER_OF_MEMBERS];
         uint8 waves;
-        uint32 wavesInvoker;
+        std::vector<ObjectGuid> citizens;
+        std::vector<ObjectGuid> dummies;
+        std::vector<ObjectGuid> tanks;
+        std::vector<ObjectGuid> troops;
+        std::list<TempSummon*> hordes;
+        ObjectGuid hordeMembers[NUMBER_OF_MEMBERS];
 
-        Creature* GetJaina()    { return GetCreature(DATA_JAINA_PROUDMOORE); }
-        Creature* GetKinndy()   { return GetCreature(DATA_KINNDY_SPARKSHINE); }
-        Creature* GetTervosh()  { return GetCreature(DATA_ARCHMAGE_TERVOSH); }
-        Creature* GetKalecgos() { return GetCreature(DATA_KALECGOS); }
-        Creature* GetPained()   { return GetCreature(DATA_PAINED); }
-        Creature* GetPerith()   { return GetCreature(DATA_PERITH_STORMHOOVE); }
-        Creature* GetKnight()   { return GetCreature(DATA_KNIGHT_OF_THERAMORE); }
-        Creature* GetHedric()   { return GetCreature(DATA_HEDRIC_EVENCANE); }
-        Creature* GetRhonin()   { return GetCreature(DATA_RHONIN); }
-        Creature* GetVereesa()  { return GetCreature(DATA_VEREESA_WINDRUNNER); }
-        Creature* GetThalen()   { return GetCreature(DATA_THALEN_SONGWEAVER); }
-        Creature* GetAmara()    { return GetCreature(DATA_AMARA_LEESON); }
+        // Accesseurs
+        #pragma region ACCESSORS
+
+        Creature* GetJaina()        { return GetCreature(DATA_JAINA_PROUDMOORE); }
+        Creature* GetKinndy()       { return GetCreature(DATA_KINNDY_SPARKSHINE); }
+        Creature* GetTervosh()      { return GetCreature(DATA_ARCHMAGE_TERVOSH); }
+        Creature* GetKalec()        { return GetCreature(DATA_KALECGOS); }
+        Creature* GetKalecgos()     { return GetCreature(DATA_KALECGOS_DRAGON); }
+        Creature* GetPained()       { return GetCreature(DATA_PAINED); }
+        Creature* GetPerith()       { return GetCreature(DATA_PERITH_STORMHOOVE); }
+        Creature* GetKnight()       { return GetCreature(DATA_KNIGHT_OF_THERAMORE); }
+        Creature* GetHedric()       { return GetCreature(DATA_HEDRIC_EVENCANE); }
+        Creature* GetRhonin()       { return GetCreature(DATA_RHONIN); }
+        Creature* GetVereesa()      { return GetCreature(DATA_VEREESA_WINDRUNNER); }
+        Creature* GetThalen()       { return GetCreature(DATA_THALEN_SONGWEAVER); }
+        Creature* GetAmara()        { return GetCreature(DATA_AMARA_LEESON); }
+
+        GameObject* GetBarrier01()  { return GetGameObject(DATA_MYSTIC_BARRIER_01); }
+        GameObject* GetBarrier02()  { return GetGameObject(DATA_MYSTIC_BARRIER_02); }
+
+        #pragma endregion
 
         void Talk(Creature* creature, uint8 id)
         {
@@ -1491,11 +1644,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
             }
         }
 
-        void EnsurePlayersHaveBucket(BFTPhases activePhase, uint32 entry)
+        void EnsurePlayersHaveBucket(uint32 entry)
         {
-            if (phase != activePhase)
-                return;
-
             Map::PlayerList const& players = instance->GetPlayers();
             if (players.isEmpty())
                 return;

@@ -68,6 +68,8 @@ class npc_theramore_citizen : public CreatureScript
             {
                 case 0:
                 {
+                    KillRewarder(player, me, false).Reward(NPC_THERAMORE_CITIZEN_CREDIT);
+
                     me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
                     me->SetEmoteState(EMOTE_STATE_NONE);
                     scheduler.Schedule(5ms, [this, player](TaskContext context)
@@ -87,10 +89,6 @@ class npc_theramore_citizen : public CreatureScript
                                 me->SetTarget(ObjectGuid::Empty);
                                 if (Creature* stalker = GetClosestCreatureWithEntry(me, NPC_INVISIBLE_STALKER, 35.f))
                                     me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, stalker->GetPosition());
-                                context.Repeat(1s);
-                                break;
-                            case 3:
-                                KillRewarder(player, me, false).Reward(NPC_THERAMORE_CITIZEN_CREDIT);
                                 break;
                             default:
                                 break;
@@ -150,6 +148,53 @@ class npc_unmanned_tank : public CreatureScript
     }
 };
 
+class npc_wounded_theramore_troop : public CreatureScript
+{
+    public:
+    npc_wounded_theramore_troop() : CreatureScript("npc_wounded_theramore_troop")
+    {
+    }
+
+    struct npc_wounded_theramore_troopAI : public ScriptedAI
+    {
+        npc_wounded_theramore_troopAI(Creature* creature) : ScriptedAI(creature),
+            preventClick(false)
+        {
+        }
+
+        enum Spells
+        {
+            SPELL_TELEPORT_TROOP = 69074
+        };
+
+        bool preventClick;
+
+        void SpellHit(Unit* caster, SpellInfo const* spellInfo) override
+        {
+            if (spellInfo->Id != SPELL_TELEPORT_TROOP)
+                return;
+
+            if (preventClick)
+                return;
+
+            if (Player* player = caster->ToPlayer())
+            {
+                KillRewarder(player, me, false).Reward(NPC_THERAMORE_WOUNDED_TROOP);
+            }
+
+            me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+            me->DespawnOrUnsummon();
+
+            preventClick = true;
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_wounded_theramore_troopAI(creature);
+    }
+};
+
 struct npc_theramore_troopAI : public CustomAI
 {
     npc_theramore_troopAI(Creature* creature, AI_Type type) : CustomAI(creature, type), emoteReceived(false)
@@ -168,21 +213,19 @@ struct npc_theramore_troopAI : public CustomAI
     void ReceiveEmote(Player* player, uint32 emoteId) override
     {
         BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-        if (phase != BFTPhases::Preparation)
-            return;
-
-        for (uint8 i = 0; i < 5; i++)
+        if (phase == BFTPhases::Preparation || phase == BFTPhases::Preparation_Rhonin)
         {
-            KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
-        }
+            for (uint8 i = 0; i < 5; i++)
+            {
+                KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
+            }
 
-        return;
-
-        if (!emoteReceived && emoteId == TEXT_EMOTE_FORTHEALLIANCE)
-        {
-            me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
-            KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
-            emoteReceived = true;
+            if (!emoteReceived && emoteId == TEXT_EMOTE_FORTHEALLIANCE)
+            {
+                me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
+                KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
+                emoteReceived = true;
+            }
         }
     }
 
@@ -252,6 +295,7 @@ class npc_rhonin : public CreatureScript
             {
                 case 0:
                     me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                    instance->DoCastSpellOnPlayers(SPELL_RUNIC_SHIELD);
                     DoCast(SPELL_ARCANE_CAST_INSTANT);
                     KillRewarder(player, me, false).Reward(me->GetEntry());
                     break;
@@ -369,15 +413,15 @@ class npc_thader_windermere : public CreatureScript
                         {
                             case 0:
                                 me->CastSpell(me, SPELL_PORTAL_CHANNELING_03);
-                                context.Repeat(2s);
+                                context.Repeat(1s);
                                 break;
                             case 1:
                                 if (Creature* tari = instance->GetCreature(DATA_TARI_COGG))
                                     tari->CastSpell(tari, SPELL_PORTAL_CHANNELING_01);
-                                context.Repeat(2s);
+                                context.Repeat(1800ms);
                                 break;
                             case 2:
-                                if (GameObject* barrier = GetClosestGameObjectWithEntry(me, GOB_MYSTIC_BARRIER, 15.f))
+                                if (GameObject* barrier = instance->GetGameObject(DATA_MYSTIC_BARRIER_02))
                                     barrier->UseDoorOrButton();
                                 context.CancelAll();
                                 break;
@@ -394,62 +438,6 @@ class npc_thader_windermere : public CreatureScript
     CreatureAI* GetAI(Creature* creature) const override
     {
         return GetBattleForTheramoreAI<npc_thader_windermereAI>(creature);
-    }
-};
-
-class npc_arcanic_image : public CreatureScript
-{
-    public:
-    npc_arcanic_image() : CreatureScript("npc_arcanic_image")
-    {
-    }
-
-    struct npc_arcanic_imageAI : public CustomAI
-    {
-        enum Spells
-        {
-            SPELL_ARCANE_BOMB       = 304027,
-            SPELL_TRANSPARENCY_50   = 44816
-        };
-
-        npc_arcanic_imageAI(Creature* creature) : CustomAI(creature, AI_Type::None)
-        {
-            SetCombatMovement(false);
-        }
-
-        void Reset() override
-        {
-            me->AddAura(SPELL_TRANSPARENCY_50, me);
-        }
-
-        void JustEngagedWith(Unit* who) override
-        {
-            scheduler.Schedule(5ms, [this](TaskContext arcane_bomb)
-            {
-                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
-                {
-                    if (Creature* trigger = me->SummonCreature(WORLD_TRIGGER, target->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 15 * IN_MILLISECONDS))
-                    {
-                        trigger->SetFaction(me->GetFaction());
-                        trigger->SetOwnerGUID(me->GetGUID());
-
-                        PhasingHandler::InheritPhaseShift(trigger, me);
-
-                        CastSpellExtraArgs args;
-                        args.AddSpellBP0(65000);
-
-                        trigger->CastSpell(target, SPELL_ARCANE_BOMB, args);
-                    }
-                }
-
-                arcane_bomb.Repeat(8s);
-            });
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetBattleForTheramoreAI<npc_arcanic_imageAI>(creature);
     }
 };
 
@@ -692,57 +680,6 @@ class npc_theramore_arcanist : public CreatureScript
     CreatureAI* GetAI(Creature* creature) const override
     {
         return new npc_theramore_arcanistAI(creature);
-    }
-};
-
-class npc_wounded_theramore_troop : public CreatureScript
-{
-    public:
-    npc_wounded_theramore_troop() : CreatureScript("npc_wounded_theramore_troop")
-    {
-    }
-
-    struct npc_wounded_theramore_troopAI : public npc_theramore_troopAI
-    {
-        npc_wounded_theramore_troopAI(Creature* creature) : npc_theramore_troopAI(creature, AI_Type::None),
-            preventClick(false)
-        {
-        }
-
-        enum Spells
-        {
-            SPELL_TELEPORT_TROOP = 69074
-        };
-
-        bool preventClick;
-
-        void SpellHit(Unit* caster, SpellInfo const* spellInfo) override
-        {
-            if (spellInfo->Id != SPELL_TELEPORT_TROOP)
-                return;
-
-            BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-            if (phase != BFTPhases::HelpTheWounded && phase != BFTPhases::HelpTheWounded_Extinguish)
-            {
-                if (preventClick)
-                    return;
-
-                if (Player* player = caster->ToPlayer())
-                {
-                    KillRewarder(player, me, false).Reward(NPC_THERAMORE_WOUNDED_TROOP);
-                }
-
-                me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-                me->DespawnOrUnsummon();
-
-                preventClick = true;
-            }
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_wounded_theramore_troopAI(creature);
     }
 };
 
@@ -1612,11 +1549,6 @@ class spell_theramore_throw_bucket : public SpellScript
 {
     PrepareSpellScript(spell_theramore_throw_bucket);
 
-    enum Spells
-    {
-        SPELL_WATER_CHANNEL_COSMETIC = 287567
-    };
-
     void HandleDummy(SpellEffIndex effIndex)
     {
         Unit* caster = GetCaster();
@@ -1761,7 +1693,6 @@ void AddSC_npcs_battle_for_theramore()
     new npc_theramore_citizen();
     new npc_rhonin();
     new npc_thader_windermere();
-    new npc_arcanic_image();
     new npc_unmanned_tank();
     new npc_theramore_officier();
     new npc_theramore_footman();
