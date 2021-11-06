@@ -15044,7 +15044,7 @@ bool Player::CanSeeStartQuest(Quest const* quest)
         SatisfyQuestSkill(quest, false) && SatisfyQuestExclusiveGroup(quest, false) && SatisfyQuestReputation(quest, false) &&
         SatisfyQuestDependentQuests(quest, false) &&
         SatisfyQuestDay(quest, false) && SatisfyQuestWeek(quest, false) &&
-        SatisfyQuestMonth(quest, false) && SatisfyQuestSeasonal(quest, false))
+        SatisfyQuestMonth(quest, false) && SatisfyQuestSeasonal(quest, false) && SatisfyQuestExpansion(quest, false))
     {
         return int32(getLevel() + sWorld->getIntConfig(CONFIG_QUEST_HIGH_LEVEL_HIDE_DIFF)) >= GetQuestMinLevel(quest);
     }
@@ -15061,7 +15061,7 @@ bool Player::CanTakeQuest(Quest const* quest, bool msg)
         && SatisfyQuestDependentQuests(quest, msg) && SatisfyQuestTimed(quest, msg)
         && SatisfyQuestDay(quest, msg) && SatisfyQuestWeek(quest, msg)
         && SatisfyQuestMonth(quest, msg) && SatisfyQuestSeasonal(quest, msg)
-        && SatisfyQuestConditions(quest, msg);
+        && SatisfyQuestConditions(quest, msg) && SatisfyQuestExpansion(quest, msg);
 }
 
 bool Player::CanAddQuest(Quest const* quest, bool msg) const
@@ -15912,23 +15912,32 @@ bool Player::SatisfyQuestSkill(Quest const* qInfo, bool msg) const
 
 bool Player::SatisfyQuestLevel(Quest const* qInfo, bool msg) const
 {
+    return SatisfyQuestMinLevel(qInfo, msg) && SatisfyQuestMaxLevel(qInfo, msg);
+}
+
+bool Player::SatisfyQuestMinLevel(Quest const* qInfo, bool msg) const
+{
     if (getLevel() < GetQuestMinLevel(qInfo))
     {
         if (msg)
         {
             SendCanTakeQuestResponse(QUEST_ERR_FAILED_LOW_LEVEL);
-            TC_LOG_DEBUG("misc", "Player::SatisfyQuestLevel: Sent QUEST_ERR_FAILED_LOW_LEVEL (QuestID: %u) because player '%s' (%s) doesn't have the required (min) level.",
+            TC_LOG_DEBUG("misc", "Player::SatisfyQuestMinLevel: Sent QUEST_ERR_FAILED_LOW_LEVEL (QuestID: %u) because player '%s' (%s) doesn't have the required (min) level.",
                 qInfo->GetQuestId(), GetName().c_str(), GetGUID().ToString().c_str());
         }
         return false;
     }
+    return true;
+}
 
+bool Player::SatisfyQuestMaxLevel(Quest const* qInfo, bool msg) const
+{
     if (qInfo->GetMaxLevel() > 0 && getLevel() > qInfo->GetMaxLevel())
     {
         if (msg)
         {
             SendCanTakeQuestResponse(QUEST_ERR_NONE); // There doesn't seem to be a specific response for too high player level
-            TC_LOG_DEBUG("misc", "Player::SatisfyQuestLevel: Sent QUEST_ERR_FAILED_LOW_LEVEL (QuestID: %u) because player '%s' (%s) doesn't have the required (max) level.",
+            TC_LOG_DEBUG("misc", "Player::SatisfyQuestMaxLevel: Sent QUEST_ERR_FAILED_LOW_LEVEL (QuestID: %u) because player '%s' (%s) doesn't have the required (max) level.",
                 qInfo->GetQuestId(), GetName().c_str(), GetGUID().ToString().c_str());
         }
         return false;
@@ -16104,20 +16113,6 @@ bool Player::SatisfyQuestReputation(Quest const* qInfo, bool msg)
         return false;
     }
 
-    /** @todo 6.x investigate if it's still needed
-    // ReputationObjective2 does not seem to be an objective requirement but a requirement
-    // to be able to accept the quest
-    uint32 fIdObj = qInfo->GetRepObjectiveFaction2();
-    if (fIdObj && GetReputationMgr().GetReputation(fIdObj) >= qInfo->GetRepObjectiveValue2())
-    {
-        if (msg)
-        {
-            SendCanTakeQuestResponse(QUEST_ERR_NONE);
-            TC_LOG_DEBUG("misc", "SatisfyQuestReputation: Sent QUEST_ERR_NONE (questId: %u) because player does not have required reputation (ReputationObjective2).", qInfo->GetQuestId());
-        }
-        return false;
-    }**/
-
     return true;
 }
 
@@ -16261,6 +16256,20 @@ bool Player::SatisfyQuestSeasonal(Quest const* qInfo, bool /*msg*/) const
     return itr->second.find(qInfo->GetQuestId()) == itr->second.end();
 }
 
+bool Player::SatisfyQuestExpansion(Quest const* qInfo, bool msg) const
+{
+    if (GetSession()->GetExpansion() < qInfo->GetExpansion())
+    {
+        if (msg)
+            SendCanTakeQuestResponse(QUEST_ERR_FAILED_EXPANSION);
+
+        TC_LOG_DEBUG("misc", "Player::SatisfyQuestExpansion: Sent QUEST_ERR_FAILED_EXPANSION (QuestID: %u) because player '%s' (%s) does not have required expansion.",
+            qInfo->GetQuestId(), GetName().c_str(), GetGUID().ToString().c_str());
+        return false;
+    }
+    return true;
+}
+
 bool Player::SatisfyQuestMonth(Quest const* qInfo, bool /*msg*/) const
 {
     if (!qInfo->IsMonthly() || m_monthlyquests.empty())
@@ -16377,17 +16386,7 @@ bool Player::CanShareQuest(uint32 quest_id) const
     if (qInfo && qInfo->HasFlag(QUEST_FLAGS_SHARABLE))
     {
         QuestStatusMap::const_iterator itr = m_QuestStatus.find(quest_id);
-        if (itr != m_QuestStatus.end())
-        {
-            // in pool and not currently available (wintergrasp weekly, dalaran weekly) - can't share
-            if (sPoolMgr->IsPartOfAPool<Quest>(quest_id) && !sPoolMgr->IsSpawnedObject<Quest>(quest_id))
-            {
-                SendPushToPartyResponse(this, QUEST_PUSH_NOT_DAILY);
-                return false;
-            }
-
-            return true;
-        }
+        return (itr != m_QuestStatus.end());
     }
     return false;
 }
@@ -17374,14 +17373,23 @@ void Player::SendQuestConfirmAccept(Quest const* quest, Player* receiver) const
     receiver->SendDirectMessage(packet.Write());
 }
 
-void Player::SendPushToPartyResponse(Player const* player, QuestPushReason reason) const
+void Player::SendPushToPartyResponse(Player const* player, QuestPushReason reason, Quest const* quest /*= nullptr*/) const
 {
     if (player)
     {
-        WorldPackets::Quest::QuestPushResultResponse data;
-        data.SenderGUID = player->GetGUID();
-        data.Result = reason; // valid values: 0-13
-        SendDirectMessage(data.Write());
+        WorldPackets::Quest::QuestPushResultResponse response;
+        response.SenderGUID = player->GetGUID();
+        response.Result = AsUnderlyingType(reason);
+        if (quest)
+        {
+            response.QuestTitle = quest->GetLogTitle();
+            LocaleConstant localeConstant = GetSession()->GetSessionDbLocaleIndex();
+            if (localeConstant != LOCALE_enUS)
+                if (QuestTemplateLocale const* questTemplateLocale = sObjectMgr->GetQuestLocale(quest->GetQuestId()))
+                    ObjectMgr::GetLocaleString(questTemplateLocale->LogTitle, localeConstant, response.QuestTitle);
+        }
+
+        SendDirectMessage(response.Write());
     }
 }
 
@@ -17704,7 +17712,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder* holder)
         // "position_x, position_y, position_z, map, orientation, taximask, createTime, createMode, cinematic, totaltime, leveltime, rest_bonus, logout_time, is_logout_resting, resettalents_cost, "
         // "resettalents_time, primarySpecialization, trans_x, trans_y, trans_z, trans_o, transguid, extra_flags, stable_slots, at_login, zone, online, death_expire_time, taxi_path, dungeonDifficulty, "
         // "totalKills, todayKills, yesterdayKills, chosenTitle, watchedFaction, drunk, "
-        // "health, power1, power2, power3, power4, power5, power6, instance_id, activeTalentGroup, lootSpecId, exploredZones, knownTitles, actionBars, raidDifficulty, legacyRaidDifficulty, fishingSteps, "
+        // "health, power1, power2, power3, power4, power5, power6, power7, instance_id, activeTalentGroup, lootSpecId, exploredZones, knownTitles, actionBars, raidDifficulty, legacyRaidDifficulty, fishingSteps, "
         // "honor, honorLevel, honorRestState, honorRestBonus, numRespecs "
         // "FROM characters c LEFT JOIN character_fishingsteps cfs ON c.guid = cfs.guid WHERE c.guid = ?", CONNECTION_ASYNC);
 
@@ -21488,7 +21496,7 @@ void Player::_SaveStats(CharacterDatabaseTransaction& trans) const
     stmt->setUInt32(index++, GetMaxHealth());
 
     for (uint8 i = 0; i < MAX_POWERS_PER_CLASS; ++i)
-        stmt->setUInt32(index++, GetMaxPower(Powers(i)));
+        stmt->setUInt32(index++, m_unitData->MaxPower[i]);
 
     for (uint8 i = 0; i < MAX_STATS; ++i)
         stmt->setUInt32(index++, GetStat(Stats(i)));

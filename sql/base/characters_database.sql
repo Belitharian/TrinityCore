@@ -1632,6 +1632,7 @@ CREATE TABLE `character_stats` (
   `maxpower4` int(10) unsigned NOT NULL DEFAULT '0',
   `maxpower5` int(10) unsigned NOT NULL DEFAULT '0',
   `maxpower6` int(10) unsigned NOT NULL DEFAULT '0',
+  `maxpower7` int(10) unsigned NOT NULL DEFAULT '0',
   `strength` int(10) unsigned NOT NULL DEFAULT '0',
   `agility` int(10) unsigned NOT NULL DEFAULT '0',
   `stamina` int(10) unsigned NOT NULL DEFAULT '0',
@@ -1843,6 +1844,7 @@ CREATE TABLE `characters` (
   `power4` int(10) unsigned NOT NULL DEFAULT '0',
   `power5` int(10) unsigned NOT NULL DEFAULT '0',
   `power6` int(10) unsigned NOT NULL DEFAULT '0',
+  `power7` int(10) unsigned NOT NULL DEFAULT '0',
   `latency` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `activeTalentGroup` tinyint(3) unsigned NOT NULL DEFAULT '0',
   `lootSpecId` int(10) unsigned NOT NULL DEFAULT '0',
@@ -2506,62 +2508,6 @@ CREATE TABLE `guild_eventlog` (
 LOCK TABLES `guild_eventlog` WRITE;
 /*!40000 ALTER TABLE `guild_eventlog` DISABLE KEYS */;
 /*!40000 ALTER TABLE `guild_eventlog` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
--- Table structure for table `guild_finder_applicant`
---
-
-DROP TABLE IF EXISTS `guild_finder_applicant`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `guild_finder_applicant` (
-  `guildId` bigint(20) unsigned NOT NULL DEFAULT '0',
-  `playerGuid` bigint(20) unsigned NOT NULL DEFAULT '0',
-  `availability` tinyint(3) unsigned DEFAULT '0',
-  `classRole` tinyint(3) unsigned DEFAULT '0',
-  `interests` tinyint(3) unsigned DEFAULT '0',
-  `comment` varchar(255) DEFAULT NULL,
-  `submitTime` bigint(20) DEFAULT NULL,
-  PRIMARY KEY (`guildId`,`playerGuid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `guild_finder_applicant`
---
-
-LOCK TABLES `guild_finder_applicant` WRITE;
-/*!40000 ALTER TABLE `guild_finder_applicant` DISABLE KEYS */;
-/*!40000 ALTER TABLE `guild_finder_applicant` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
--- Table structure for table `guild_finder_guild_settings`
---
-
-DROP TABLE IF EXISTS `guild_finder_guild_settings`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `guild_finder_guild_settings` (
-  `guildId` bigint(20) unsigned NOT NULL,
-  `availability` tinyint(3) unsigned NOT NULL DEFAULT '0',
-  `classRoles` tinyint(3) unsigned NOT NULL DEFAULT '0',
-  `interests` tinyint(3) unsigned NOT NULL DEFAULT '0',
-  `level` tinyint(3) unsigned NOT NULL DEFAULT '1',
-  `listed` tinyint(3) unsigned NOT NULL DEFAULT '0',
-  `comment` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`guildId`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `guild_finder_guild_settings`
---
-
-LOCK TABLES `guild_finder_guild_settings` WRITE;
-/*!40000 ALTER TABLE `guild_finder_guild_settings` DISABLE KEYS */;
-/*!40000 ALTER TABLE `guild_finder_guild_settings` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -3725,7 +3671,9 @@ INSERT INTO `updates` VALUES
 ('2021_10_02_00_characters.sql','31CEACE4E9A4BE58A659A2BDE4A7C51D2DB8AC41','ARCHIVED','2021-10-02 21:21:37',0),
 ('2021_10_02_01_characters.sql','F97B956F3B5F909294CA399F75B5795A07C4D8EC','ARCHIVED','2021-10-02 21:47:38',0),
 ('2021_10_15_00_characters.sql','906FECD65CBA7C406969F45FDF28DDEF8AAF8715','ARCHIVED','2021-10-15 10:11:47',0),
-('2021_10_16_00_characters.sql','B5A31BB6FBC34512767475EDF13099DEC948EBB7','RELEASED','2021-10-16 01:12:20',0);
+('2021_10_16_00_characters.sql','B5A31BB6FBC34512767475EDF13099DEC948EBB7','RELEASED','2021-10-16 01:12:20',0),
+('2021_11_02_00_characters.sql','A3C0A6DA70CC70803C80685E4E2ED6255156520A','RELEASED','2021-11-02 18:11:13',0),
+('2021_11_04_00_characters.sql','ED533235ADAD174F91A6B8E51D1046243B78B46D','RELEASED','2021-11-04 21:53:04',0);
 /*!40000 ALTER TABLE `updates` ENABLE KEYS */;
 UNLOCK TABLES;
 

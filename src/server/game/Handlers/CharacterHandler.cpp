@@ -40,7 +40,6 @@
 #include "GitRevision.h"
 #include "Group.h"
 #include "Guild.h"
-#include "GuildFinderMgr.h"
 #include "GuildMgr.h"
 #include "Item.h"
 #include "Language.h"
@@ -963,7 +962,6 @@ void WorldSession::HandleCharDeleteOpcode(WorldPackets::Character::CharDelete& c
             sLog->outCharDump(dump.c_str(), accountId, charDelete.Guid.GetCounter(), name.c_str());
     }
 
-    sGuildFinderMgr->RemoveAllMembershipRequestsFromPlayer(charDelete.Guid);
     sCalendarMgr->RemoveAllPlayerEventsAndInvites(charDelete.Guid);
     Player::DeleteFromDB(charDelete.Guid, accountId);
 
@@ -1437,11 +1435,9 @@ void WorldSession::SendFeatureSystemStatus()
     features.BpayStoreEnabled = sWorld->getBoolConfig(CONFIG_FEATURE_SYSTEM_BPAY_STORE_ENABLED);
     features.IsMuted = !CanSpeak();
 
-    SendPacket(features.Write());
+    features.TextToSpeechFeatureEnabled = false;
 
-    WorldPackets::System::FeatureSystemStatus2 features2;
-    features2.TextToSpeechFeatureEnabled = false;
-    SendPacket(features2.Write());
+    SendPacket(features.Write());
 }
 
 void WorldSession::HandleSetFactionAtWar(WorldPackets::Character::SetFactionAtWar& packet)
