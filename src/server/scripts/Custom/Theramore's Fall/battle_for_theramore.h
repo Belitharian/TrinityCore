@@ -7,19 +7,21 @@
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader    "BFT"
 
-#define TERVOSH_PATH_01         6
+#define TERVOSH_PATH_01          6
 #define TERVOSH_PATH_02         10
 #define TERVOSH_PATH_03         16
 #define KALECGOS_PATH_01        17
 #define KINNDY_PATH_01          16
 #define KINNDY_PATH_02          10
 #define OFFICER_PATH_01         10
-#define HEDRIC_PATH_01          7
+#define HEDRIC_PATH_01           7
+#define JAINA_PATH_01           24
 
-#define PERITH_LOCATION         3
-#define ARCHMAGES_LOCATION      6
+#define PERITH_LOCATION          3
+#define ARCHMAGES_LOCATION       6
+#define ARCHMAGES_RELOCATION     3
 #define ACTORS_RELOCATION       11
-#define BARRIERS_LOCATION       2
+#define BARRIERS_LOCATION        2
 
 #define FIRE_LOCATION           32
 
@@ -321,6 +323,13 @@ Location const actorsRelocation[ACTORS_RELOCATION] =
     { DATA_KALECGOS,             { 0.f, 0.f, 0.f, 0.f }, { -3730.39f, -4550.39f, 27.11f, 0.54f } }
 };
 
+Location const archmagesRelocation[ARCHMAGES_RELOCATION] =
+{
+    { DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3629.75f, -4462.69f, 13.62f, 0.58f } },
+    { DATA_TARI_COGG,            { 0.f, 0.f, 0.f, 0.f }, { -3629.33f, -4458.57f, 14.33f, 5.77f } },
+    { DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3618.42f, -4463.22f, 13.62f, 2.41f } }
+};
+
 Position const TervoshPath01[TERVOSH_PATH_01] =
 {
     { -3757.20f, -4446.58f, 30.55f, 1.42f },
@@ -445,6 +454,34 @@ Position const HedricPath01[HEDRIC_PATH_01]
     { -3716.85f, -4541.81f, 25.82f, 3.60f }
 };
 
+Position const JainaPath01[JAINA_PATH_01] =
+{
+    { -3661.13f, -4372.71f,  9.35f, 3.76f },
+    { -3663.74f, -4374.88f,  9.35f, 3.84f },
+    { -3669.37f, -4380.40f,  9.51f, 3.95f },
+    { -3673.05f, -4384.35f,  9.98f, 3.98f },
+    { -3674.91f, -4388.67f, 10.44f, 4.66f },
+    { -3674.43f, -4391.92f, 10.60f, 4.94f },
+    { -3672.68f, -4401.30f, 10.65f, 4.76f },
+    { -3672.45f, -4406.29f, 10.63f, 4.81f },
+    { -3670.06f, -4411.14f, 10.61f, 5.60f },
+    { -3666.06f, -4413.06f, 10.79f, 6.02f },
+    { -3660.17f, -4414.00f, 10.57f, 6.23f },
+    { -3654.43f, -4414.01f, 10.36f, 6.28f },
+    { -3648.35f, -4414.78f, 10.10f, 6.02f },
+    { -3641.69f, -4416.73f,  9.85f, 5.93f },
+    { -3633.88f, -4420.13f,  9.68f, 5.79f },
+    { -3626.89f, -4424.27f, 10.36f, 5.66f },
+    { -3620.94f, -4429.00f, 11.27f, 5.55f },
+    { -3617.26f, -4432.91f, 12.46f, 5.25f },
+    { -3615.86f, -4435.97f, 13.30f, 4.95f },
+    { -3615.46f, -4439.98f, 14.23f, 4.74f },
+    { -3615.17f, -4448.12f, 14.23f, 3.24f },
+    { -3624.34f, -4448.73f, 14.24f, 5.16f },
+    { -3621.47f, -4454.07f, 14.24f, 4.75f },
+    { -3619.56f, -4461.36f, 13.62f, 2.96f }
+};
+
 Position const FireLocation[FIRE_LOCATION]
 {
     { -3678.40f, -4371.85f, 11.68f, 2.03f },
@@ -481,6 +518,13 @@ Position const FireLocation[FIRE_LOCATION]
     { -3793.71f, -4471.57f, 14.37f, 0.00f }
 };
 
+Position const UnitLocation[ARCHMAGES_RELOCATION] =
+{
+    { -3615.08f, -4470.40f, 14.24f, 2.61f },
+    { -3609.72f, -4467.73f, 14.24f, 3.78f },
+    { -3619.52f, -4473.30f, 14.24f, 1.62f }
+};
+
 Position const KinndyPoint01    = { -3748.06f, -4442.12f, 30.55f, 1.24f };
 Position const KinndyPoint02    = { -3725.93f, -4543.47f, 25.82f, 0.11f };
 Position const JainaPoint01     = { -3751.32f, -4438.13f, 30.55f, 0.40f };
@@ -499,9 +543,7 @@ Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f };
 Position const ExplodingPoint01 = { -3648.24f, -4364.96f,  9.68f, 3.78f };
 Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f };
 Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };
-Position const ThaderPoint01    = { -3748.02f, -4352.87f, 10.59f, 4.74f };
-Position const TariPoint01      = { -3749.91f, -4354.15f, 10.61f, 5.44f };
-Position const TablePoint01     = { -3748.03f, -4355.03f, 10.98f, 2.18f };
+Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f };
 Position const CitadelPoint01   = { -3668.74f, -4511.64f, 10.09f, 1.54f };
 Position const DocksPoint01     = { -3826.84f, -4539.05f,  9.21f, 5.96f };
 Position const TheramorePoint01 = { -3753.48f, -4444.54f, 55.23f, 0.00f };

@@ -105,7 +105,7 @@ class KalecgosSpellEvent : public BasicEvent
 class KalecgosLoopEvent : public BasicEvent
 {
     public:
-    KalecgosLoopEvent(Creature* owner) : owner(owner), stage(0), m_loopTime(0.f)
+    KalecgosLoopEvent(Creature* owner) : owner(owner), m_loopTime(0.f)
     {
         owner->SetCanFly(true);
         owner->SetDisableGravity(true);
@@ -113,31 +113,17 @@ class KalecgosLoopEvent : public BasicEvent
 
         float perimeter = 2.f * float(M_PI) * KALECGOS_CIRCLE_RADIUS;
         m_loopTime = (perimeter / owner->GetSpeed(MOVE_RUN)) * IN_MILLISECONDS;
-
-        owner->GetMotionMaster()->MoveCirclePath(TheramorePoint01.GetPositionX(), TheramorePoint01.GetPositionY(), TheramorePoint01.GetPositionZ(), KALECGOS_CIRCLE_RADIUS, false, 16);
     }
 
     bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
     {
-        switch (stage)
-        {
-            case 0:
-                stage++;
-                owner->m_Events.AddEvent(this, eventTime + m_loopTime);
-                return false;
-            case 1:
-                owner->GetMotionMaster()->MoveCirclePath(TheramorePoint01.GetPositionX(), TheramorePoint01.GetPositionY(), TheramorePoint01.GetPositionZ(), KALECGOS_CIRCLE_RADIUS, true, 16);
-                stage = 0;
-                owner->m_Events.AddEvent(this, eventTime + 2 * IN_MILLISECONDS);
-                return false;
-        }
-
-        return true;
+        owner->GetMotionMaster()->MoveCirclePath(TheramorePoint01.GetPositionX(), TheramorePoint01.GetPositionY(), TheramorePoint01.GetPositionZ(), KALECGOS_CIRCLE_RADIUS, true, 16);
+        owner->m_Events.AddEvent(this, eventTime + m_loopTime);
+        return false;
     }
 
     private:
     Creature* owner;
-    uint8 stage;
     float m_loopTime;
 };
 
@@ -454,8 +440,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         kalecgos->SetRegenerateHealth(false);
                     }
                     SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle_Survive);
-                    events.ScheduleEvent(91, 10s);
-                    events.ScheduleEvent(92, 1s);
+                    #ifdef DEBUG
+                        events.ScheduleEvent(WAVE_01, 3s);
+                    #else
+                        events.ScheduleEvent(91, 10s);
+                        events.ScheduleEvent(92, 1s);
+                    #endif
                     break;
                 }
                 // Step 9 : The Battle - Parent
@@ -473,21 +463,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         portal->m_Events.KillAllEvents(true);
                         portal->Delete();
                     }
-                    if (Creature* tari = GetCreature(DATA_TARI_COGG))
-                    {
-                        tari->RemoveAllAuras();
-                        tari->NearTeleportTo(TariPoint01);
-                        tari->SetHomePosition(TariPoint01);
-                        tari->SetEmoteState(EMOTE_STATE_EAT);
-                        tari->SetStandState(UNIT_STAND_STATE_SIT);
-                        tari->SummonGameObject(GOB_REFRESHMENT, TablePoint01, QuaternionData::fromEulerAnglesZYX(TablePoint01.GetOrientation(), 0.f, 0.f), 0);
-                    }
-                    if (Creature* thader = GetCreature(DATA_THADER_WINDERMERE))
-                    {
-                        thader->RemoveAllAuras();
-                        thader->NearTeleportTo(ThaderPoint01);
-                        thader->SetHomePosition(ThaderPoint01);
-                    }
                     if (Creature* kalecgos = GetKalecgos())
                     {
                         SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, kalecgos);
@@ -497,9 +472,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         kalecgos->GetMotionMaster()->MoveIdle();
                         kalecgos->SetVisible(false);
                     }
-                    for (ObjectGuid guid : troops)
+                    for (GuidVector::iterator itr = troops.begin(); itr != troops.end(); itr++)
                     {
-                        if (Creature* troop = instance->GetCreature(guid))
+                        if (Creature* troop = instance->GetCreature(*itr))
                         {
                             if (troop->IsFormationLeader())
                                 continue;
@@ -521,7 +496,50 @@ class scenario_battle_for_theramore : public InstanceMapScript
                                     wounded->SetDisplayId(troop->GetDisplayId());
                                     wounded->SetImmuneToNPC(true);
 
+                                    // Supprime l'unité dans la liste avant que le erase soit exécuté
+                                    troops.erase(itr--);
                                 }
+                            }
+                        }
+                    }
+                    for (uint8 i = 0; i < ARCHMAGES_RELOCATION; i++)
+                    {
+                        if (Creature* creature = GetCreature(archmagesRelocation[i].dataId))
+                        {
+                            creature->NearTeleportTo(archmagesRelocation[i].destination);
+                            creature->SetHomePosition(archmagesRelocation[i].destination);
+
+                            switch (creature->GetEntry())
+                            {
+                                case NPC_TARI_COGG:
+                                    creature->RemoveAllAuras();
+                                    creature->SetEmoteState(EMOTE_STATE_EAT);
+                                    creature->SetStandState(UNIT_STAND_STATE_SIT);
+                                    creature->SummonGameObject(GOB_REFRESHMENT, TablePoint01, QuaternionData::fromEulerAnglesZYX(TablePoint01.GetOrientation(), 0.f, 0.f), 0);
+                                    break;
+                                case NPC_THADER_WINDERMERE:
+                                    creature->RemoveAllAuras();
+                                    break;
+                            }
+                        }
+                    }
+                    for (uint8 i = 0; i < ARCHMAGES_RELOCATION; i++)
+                    {
+                        ObjectGuid guid = Trinity::Containers::SelectRandomContainerElement(troops);
+                        if (Creature* creature = instance->GetCreature(guid))
+                        {
+                            creature->NearTeleportTo(UnitLocation[i]);
+                            creature->SetHomePosition(UnitLocation[i]);
+
+                            switch (i)
+                            {
+                                case 0:
+                                    creature->SetStandState(UNIT_STAND_STATE_SIT);
+                                    creature->SetEmoteState(EMOTE_STATE_EAT);
+                                    break;
+                                case 1:
+                                    creature->SetEmoteState(EMOTE_STATE_DRUNKWALK);
+                                    break;
                             }
                         }
                     }
@@ -1374,7 +1392,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         if (Creature* hedric = GetHedric())
                         {
                             jaina->SetTarget(hedric->GetGUID());
+                            jaina->SetEmoteState(EMOTE_STATE_STAND);
+
                             hedric->SetTarget(jaina->GetGUID());
+                            hedric->SetEmoteState(EMOTE_STATE_STAND);
                         }
                     }
                     Next(800ms);
@@ -1389,6 +1410,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     break;
                 case 125:
                     GetJaina()->AI()->Talk(SAY_POST_BATTLE_03);
+                    Next(2s);
+                    break;
+                case 126:
+                    ClearTarget();
+                    GetJaina()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, JainaPath01, JAINA_PATH_01);
+                    Next(2s);
+                    break;
+                case 127:
+                    GetHedric()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, JainaPath01, JAINA_PATH_01);
                     break;
 
                 #pragma endregion
@@ -1418,10 +1448,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
         uint32 eventId;
         uint8 archmagesIndex;
         uint8 waves;
-        std::vector<ObjectGuid> citizens;
-        std::vector<ObjectGuid> dummies;
-        std::vector<ObjectGuid> tanks;
-        std::vector<ObjectGuid> troops;
+        GuidVector citizens;
+        GuidVector dummies;
+        GuidVector tanks;
+        GuidVector troops;
         std::list<TempSummon*> hordes;
         ObjectGuid hordeMembers[NUMBER_OF_MEMBERS];
 

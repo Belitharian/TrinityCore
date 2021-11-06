@@ -110,6 +110,18 @@ class npc_jaina_theramore : public CreatureScript
                     case MOVEMENT_INFO_POINT_01:
                         instance->DoSendScenarioEvent(EVENT_THE_COUNCIL);
                         break;
+                    case MOVEMENT_INFO_POINT_02:
+                        me->StopMoving();
+                        me->GetMotionMaster()->Clear();
+                        me->GetMotionMaster()->MoveIdle();
+                        me->SetFacingTo(2.65f);
+                        if (Creature* hedric = instance->GetCreature(DATA_HEDRIC_EVENCANE))
+                        {
+                            hedric->StopMoving();
+                            hedric->GetMotionMaster()->Clear();
+                            hedric->GetMotionMaster()->MoveIdle();
+                        }
+                        break;
                     default:
                         break;
                 }
