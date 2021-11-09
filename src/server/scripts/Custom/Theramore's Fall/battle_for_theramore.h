@@ -19,7 +19,7 @@
 
 #define PERITH_LOCATION          3
 #define ARCHMAGES_LOCATION       6
-#define ARCHMAGES_RELOCATION     3
+#define ARCHMAGES_RELOCATION     6
 #define ACTORS_RELOCATION       11
 #define BARRIERS_LOCATION        2
 
@@ -44,7 +44,6 @@ enum class BFTPhases
     TheBattle_RetrieveJaina,
     TheBattle_Survive,
     HelpTheWounded,
-    HelpTheWounded_RejoinJaina,
     HelpTheWounded_Extinguish,
     WaitForAmara,
     WaitForAmara_JoinJaina,
@@ -159,7 +158,7 @@ enum BFTMisc
     CRITERIA_TREE_RETRIEVE_JAINA        = 1000018,
     CRITERIA_TREE_SURVIVE_THE_BATTLE    = 1000020,
     CRITERIA_TREE_HELP_THE_WOUNDED      = 1000021,
-    CRITERIA_TREE_REJOIN_JAINA          = 1000022,
+    CRITERIA_TREE_FOLLOW_JAINA          = 1000022,
     CRITERIA_TREE_HELP_WOUNDED_TROOP    = 1000023,
     CRITERIA_TREE_EXTINGUISH_FIRES      = 1000024,
     CRITERIA_TREE_WAIT_ARCHMAGE_LEESON  = 1000025,
@@ -276,6 +275,19 @@ enum BFTTalks
     SAY_POST_BATTLE_01    = 43,
     SAY_POST_BATTLE_02    = 2,
     SAY_POST_BATTLE_03    = 44,
+    SAY_POST_BATTLE_04    = 4,
+    SAY_POST_BATTLE_05    = 45,
+    SAY_POST_BATTLE_06    = 5,
+    SAY_POST_BATTLE_07    = 46,
+    SAY_POST_BATTLE_08    = 6,
+    SAY_POST_BATTLE_09    = 47,
+    SAY_POST_BATTLE_10    = 48,
+    SAY_POST_BATTLE_11    = 7,
+    SAY_POST_BATTLE_12    = 49,
+    SAY_POST_BATTLE_13    = 50,
+    SAY_POST_BATTLE_14    = 8,
+    SAY_POST_BATTLE_15    = 51,
+
 
     SAY_JAINA_SPELL_01    = 40,
     SAY_JAINA_BLIZZARD_01 = 41,
@@ -327,7 +339,10 @@ Location const archmagesRelocation[ARCHMAGES_RELOCATION] =
 {
     { DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3629.75f, -4462.69f, 13.62f, 0.58f } },
     { DATA_TARI_COGG,            { 0.f, 0.f, 0.f, 0.f }, { -3629.33f, -4458.57f, 14.33f, 5.77f } },
-    { DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3618.42f, -4463.22f, 13.62f, 2.41f } }
+    { DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3618.39f, -4457.64f, 13.62f, 3.74f } },
+    { DATA_RHONIN,               { 0.f, 0.f, 0.f, 0.f }, { -3624.61f, -4456.55f, 13.62f, 4.12f } },
+    { DATA_KINNDY_SPARKSHINE,    { 0.f, 0.f, 0.f, 0.f }, { -3618.42f, -4463.22f, 13.62f, 2.41f } },
+    { DATA_ARCHMAGE_TERVOSH,     { 0.f, 0.f, 0.f, 0.f }, { -3626.40f, -4453.89f, 14.24f, 0.44f } }
 };
 
 Position const TervoshPath01[TERVOSH_PATH_01] =
@@ -522,7 +537,10 @@ Position const UnitLocation[ARCHMAGES_RELOCATION] =
 {
     { -3615.08f, -4470.40f, 14.24f, 2.61f },
     { -3609.72f, -4467.73f, 14.24f, 3.78f },
-    { -3619.52f, -4473.30f, 14.24f, 1.62f }
+    { -3619.52f, -4473.30f, 14.24f, 1.62f },
+    { -3616.88f, -4451.98f, 14.24f, 3.78f },
+    { -3618.41f, -4453.12f, 14.24f, 0.69f },
+    { -3613.38f, -4458.41f, 13.62f, 5.84f }
 };
 
 Position const KinndyPoint01    = { -3748.06f, -4442.12f, 30.55f, 1.24f };
@@ -540,6 +558,7 @@ Position const PortalPoint01    = { -3712.42f, -4539.62f, 25.82f, 3.59f };
 Position const PortalPoint02    = { -3783.17f, -4205.77f,  7.60f, 4.71f };
 Position const HedricPoint01    = { -3717.79f, -4522.24f, 25.82f, 5.16f };
 Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f };
+Position const HedricPoint03    = { -3625.58f, -4447.94f, 14.24f, 5.40f };
 Position const ExplodingPoint01 = { -3648.24f, -4364.96f,  9.68f, 3.78f };
 Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f };
 Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };

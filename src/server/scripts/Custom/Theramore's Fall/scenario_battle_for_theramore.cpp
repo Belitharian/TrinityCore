@@ -260,10 +260,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     for (uint8 i = 0; i < PERITH_LOCATION; i++)
                     {
                         if (Creature* creature = GetCreature(perithLocation[i].dataId))
+                        {
                             creature->NearTeleportTo(perithLocation[i].position);
+                            if (creature->GetEntry() == NPC_KNIGHT_OF_THERAMORE)
+                            {
+                                creature->SetSheath(SHEATH_STATE_UNARMED);
+                                creature->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
+                            }
+                        }
                     }
-                    GetKnight()->SetSheath(SHEATH_STATE_UNARMED);
-                    GetKnight()->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
                     SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::UnknownTauren);
                     events.ScheduleEvent(25, 1s);
                     break;
@@ -451,12 +456,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 // Step 9 : The Battle - Parent
                 case CRITERIA_TREE_SURVIVE_THE_BATTLE:
                 {
+                    SpawnWoundedTroops();
                     if (Creature* jaina = GetJaina())
                     {
                         SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, jaina);
 
                         jaina->NearTeleportTo(JainaPoint03);
                         jaina->SetHomePosition(JainaPoint03);
+                        jaina->SetSheath(SHEATH_STATE_UNARMED);
                     }
                     if (GameObject* portal = GetGameObject(DATA_PORTAL_TO_ORGRIMMAR))
                     {
@@ -472,57 +479,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         kalecgos->GetMotionMaster()->MoveIdle();
                         kalecgos->SetVisible(false);
                     }
-                    for (GuidVector::iterator itr = troops.begin(); itr != troops.end(); itr++)
-                    {
-                        if (Creature* troop = instance->GetCreature(*itr))
-                        {
-                            if (troop->IsFormationLeader())
-                                continue;
-
-                            if (roll_chance_i(60))
-                            {
-                                troop->SetVisible(false);
-                                if (Creature* wounded = troop->SummonCreature(NPC_THERAMORE_WOUNDED_TROOP, troop->GetPosition(), TempSummonType::TEMPSUMMON_MANUAL_DESPAWN))
-                                {
-                                    uint32 health = troop->GetMaxHealth();
-                                    Powers power = troop->GetPowerType();
-
-                                    wounded->SetPowerType(power);
-                                    wounded->SetPower(power, troop->GetPower(power));
-                                    wounded->SetRegenerateHealth(false);
-                                    wounded->SetMaxHealth(health);
-                                    wounded->SetHealth(health * frand(0.15f, 0.20f));
-                                    wounded->SetStandState(UNIT_STAND_STATE_SLEEP);
-                                    wounded->SetDisplayId(troop->GetDisplayId());
-                                    wounded->SetImmuneToNPC(true);
-
-                                    // Supprime l'unité dans la liste avant que le erase soit exécuté
-                                    troops.erase(itr--);
-                                }
-                            }
-                        }
-                    }
-                    for (uint8 i = 0; i < ARCHMAGES_RELOCATION; i++)
-                    {
-                        if (Creature* creature = GetCreature(archmagesRelocation[i].dataId))
-                        {
-                            creature->NearTeleportTo(archmagesRelocation[i].destination);
-                            creature->SetHomePosition(archmagesRelocation[i].destination);
-
-                            switch (creature->GetEntry())
-                            {
-                                case NPC_TARI_COGG:
-                                    creature->RemoveAllAuras();
-                                    creature->SetEmoteState(EMOTE_STATE_EAT);
-                                    creature->SetStandState(UNIT_STAND_STATE_SIT);
-                                    creature->SummonGameObject(GOB_REFRESHMENT, TablePoint01, QuaternionData::fromEulerAnglesZYX(TablePoint01.GetOrientation(), 0.f, 0.f), 0);
-                                    break;
-                                case NPC_THADER_WINDERMERE:
-                                    creature->RemoveAllAuras();
-                                    break;
-                            }
-                        }
-                    }
                     for (uint8 i = 0; i < ARCHMAGES_RELOCATION; i++)
                     {
                         ObjectGuid guid = Trinity::Containers::SelectRandomContainerElement(troops);
@@ -530,6 +486,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         {
                             creature->NearTeleportTo(UnitLocation[i]);
                             creature->SetHomePosition(UnitLocation[i]);
+                            creature->SetSheath(SHEATH_STATE_UNARMED);
+                            creature->SetStandState(UNIT_STAND_STATE_STAND);
+                            creature->SetEmoteState(EMOTE_STATE_NONE);
+                            creature->RemoveAllAuras();
 
                             switch (i)
                             {
@@ -538,8 +498,31 @@ class scenario_battle_for_theramore : public InstanceMapScript
                                     creature->SetEmoteState(EMOTE_STATE_EAT);
                                     break;
                                 case 1:
-                                    creature->SetEmoteState(EMOTE_STATE_DRUNKWALK);
+                                    creature->SetEmoteState(EMOTE_STATE_WADRUNKSTAND);
                                     break;
+                                case 3:
+                                case 4:
+                                    creature->SetEmoteState(EMOTE_STATE_TALK);
+                                    break;
+                            }
+                        }
+
+                        if (Creature* creature = GetCreature(archmagesRelocation[i].dataId))
+                        {
+                            creature->NearTeleportTo(archmagesRelocation[i].destination);
+                            creature->SetHomePosition(archmagesRelocation[i].destination);
+                            creature->SetSheath(SHEATH_STATE_UNARMED);
+                            creature->RemoveAllAuras();
+
+                            if (creature->GetEntry() == NPC_TARI_COGG)
+                            {
+                                creature->SetEmoteState(EMOTE_STATE_EAT);
+                                creature->SetStandState(UNIT_STAND_STATE_SIT);
+                                creature->SummonGameObject(GOB_REFRESHMENT, TablePoint01, QuaternionData::fromEulerAnglesZYX(TablePoint01.GetOrientation(), 0.f, 0.f), 0);
+                            }
+                            else if (creature->GetEntry() == NPC_KINNDY_SPARKSHINE)
+                            {
+                                creature->SetEmoteState(EMOTE_STATE_CRY);
                             }
                         }
                     }
@@ -547,6 +530,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     GetBarrier02()->ResetDoorOrButton();
                     SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, GetRhonin());
                     SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::HelpTheWounded);
+                    events.ScheduleEvent(122, 3s);
                     break;
                 }
                 // Step 10 : Help the wounded - Parent
@@ -555,9 +539,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::WaitForAmara);
                     break;
                 // Step 10 : Help the wounded - Rejoin Lady Jaina Proudmoore after the attack
-                case CRITERIA_TREE_REJOIN_JAINA:
-                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::HelpTheWounded_RejoinJaina);
-                    events.ScheduleEvent(122, 2s);
+                case CRITERIA_TREE_FOLLOW_JAINA:
+                    events.ScheduleEvent(128, 3s);
                     break;
                 // Step 10 : Help the wounded - Help teleporting the wounded troops
                 case CRITERIA_TREE_HELP_WOUNDED_TROOP:
@@ -1386,6 +1369,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 // Help the wounded
                 #pragma region HELP_THE_WOUNDED
 
+                // PART I
                 case 122:
                     if (Creature* jaina = GetJaina())
                     {
@@ -1410,15 +1394,93 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     break;
                 case 125:
                     GetJaina()->AI()->Talk(SAY_POST_BATTLE_03);
-                    Next(2s);
+                    Next(4s);
                     break;
                 case 126:
                     ClearTarget();
                     GetJaina()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, JainaPath01, JAINA_PATH_01);
-                    Next(2s);
+                    Next(1500ms);
                     break;
                 case 127:
                     GetHedric()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, JainaPath01, JAINA_PATH_01);
+                    break;
+
+                // PART II
+                case 128:
+                    if (Creature* jaina = GetJaina())
+                    {
+                        if (Creature* kinndy = GetKinndy())
+                        {
+                            jaina->SetTarget(kinndy->GetGUID());
+                            kinndy->SetTarget(jaina->GetGUID());
+                        }
+                    }
+                    Next(800ms);
+                    break;
+                case 129:
+                    GetKinndy()->AI()->Talk(SAY_POST_BATTLE_04);
+                    Next(5s);
+                    break;
+                case 130:
+                    GetJaina()->AI()->Talk(SAY_POST_BATTLE_05);
+                    Next(7s);
+                    break;
+                case 131:
+                    if (Creature* kinndy = GetKinndy())
+                    {
+                        kinndy->AI()->Talk(SAY_POST_BATTLE_06);
+                        kinndy->SetEmoteState(EMOTE_STATE_NONE);
+                    }
+                    Next(4s);
+                    break;
+                case 132:
+                    GetJaina()->AI()->Talk(SAY_POST_BATTLE_07);
+                    Next(4s);
+                    break;
+                case 133:
+                    GetKinndy()->AI()->Talk(SAY_POST_BATTLE_08);
+                    Next(3s);
+                    break;
+                case 134:
+                    GetJaina()->AI()->Talk(SAY_POST_BATTLE_09);
+                    Next(13s);
+                    break;
+                case 135:
+                    GetJaina()->AI()->Talk(SAY_POST_BATTLE_10);
+                    Next(7s);
+                    break;
+                case 136:
+                    GetKinndy()->AI()->Talk(SAY_POST_BATTLE_11);
+                    Next(8s);
+                    break;
+                case 137:
+                    GetJaina()->AI()->Talk(SAY_POST_BATTLE_12);
+                    Next(6s);
+                    break;
+                case 138:
+                    GetJaina()->AI()->Talk(SAY_POST_BATTLE_13);
+                    Next(12s);
+                    break;
+                case 139:
+                    GetKinndy()->AI()->Talk(SAY_POST_BATTLE_14);
+                    Next(3s);
+                    break;
+                case 140:
+                    GetJaina()->AI()->Talk(SAY_POST_BATTLE_15);
+                    Next(3s);
+                    break;
+                case 141:
+                    if (Creature* jaina = GetJaina())
+                    {
+                        if (Creature* kinndy = GetKinndy())
+                        {
+                            jaina->SetTarget(ObjectGuid::Empty);
+                            kinndy->SetTarget(ObjectGuid::Empty);
+
+                            jaina->SetFacingTo(3.15f);
+                            kinndy->SetFacingTo(2.73f);
+                        }
+                    }
                     break;
 
                 #pragma endregion
@@ -1703,6 +1765,41 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
                 for (Creature* c : results)
                     c->DespawnOrUnsummon();
+            }
+        }
+
+        void SpawnWoundedTroops()
+        {
+            GuidVector::iterator itr = troops.begin();
+            while (itr != troops.end())
+            {
+                if (Creature* troop = instance->GetCreature(*itr))
+                {
+                    if (!troop->IsFormationLeader() && roll_chance_i(60))
+                    {
+                        troop->SetVisible(false);
+                        if (Creature* wounded = troop->SummonCreature(NPC_THERAMORE_WOUNDED_TROOP, troop->GetPosition(), TempSummonType::TEMPSUMMON_MANUAL_DESPAWN))
+                        {
+                            uint32 health = troop->GetMaxHealth();
+                            Powers power = troop->GetPowerType();
+
+                            wounded->SetPowerType(power);
+                            wounded->SetPower(power, troop->GetPower(power));
+                            wounded->SetRegenerateHealth(false);
+                            wounded->SetMaxHealth(health);
+                            wounded->SetHealth(health * frand(0.15f, 0.20f));
+                            wounded->SetStandState(UNIT_STAND_STATE_SLEEP);
+                            wounded->SetDisplayId(troop->GetDisplayId());
+                            wounded->SetImmuneToNPC(true);
+
+                            itr = troops.erase(itr);
+                        }
+                    }
+                    else
+                    {
+                        itr++;
+                    }
+                }
             }
         }
 

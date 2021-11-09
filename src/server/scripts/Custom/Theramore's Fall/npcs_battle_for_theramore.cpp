@@ -6,6 +6,7 @@
 #include "KillRewarder.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
+#include "PassiveAI.h"
 #include "PhasingHandler.h"
 #include "Player.h"
 #include "ScriptMgr.h"
@@ -732,7 +733,7 @@ class npc_amara_leeson : public CreatureScript
                 })
                 .Schedule(4s, [this](TaskContext blink)
                 {
-                    if (EnemiesInRange(20.f) >= 5)
+                    if (EnemiesInRange(20.f) >= 3)
                     {
                         me->CastStop();
                         DoCast(SPELL_BLINK);
@@ -755,7 +756,10 @@ class npc_amara_leeson : public CreatureScript
                 .Schedule(8s, [this](TaskContext greater_pyroblast)
                 {
                     if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                    {
+                        me->CastStop();
                         DoCast(target, SPELL_GREATER_PYROBLAST);
+                    }
                     greater_pyroblast.Repeat(14s, 18s);
                 });
         }
@@ -778,6 +782,7 @@ class npc_theramore_faithful : public CreatureScript
     {
         npc_theramore_faithfulAI(Creature* creature) : npc_theramore_troopAI(creature, AI_Type::Distance), ascension(false)
         {
+            instance = creature->GetInstanceScript();
         }
 
         enum Spells
@@ -794,6 +799,7 @@ class npc_theramore_faithful : public CreatureScript
         };
 
         bool ascension;
+        InstanceScript* instance;
 
         void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
         {
@@ -833,12 +839,16 @@ class npc_theramore_faithful : public CreatureScript
 
             scheduler.Schedule(1s, 5s, [this](TaskContext fortitude)
             {
-                CastSpellExtraArgs args(true);
-                args.SetTriggerFlags(TRIGGERED_IGNORE_SET_FACING);
+                BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+                if (phase < BFTPhases::HelpTheWounded)
+                {
+                    CastSpellExtraArgs args(true);
+                    args.SetTriggerFlags(TRIGGERED_IGNORE_SET_FACING);
 
-                if (Unit* target = SelectRandomFriendlyMissingBuff(SPELL_POWER_WORD_FORTITUDE))
-                    DoCast(target, SPELL_POWER_WORD_FORTITUDE, args);
-                fortitude.Repeat(5s, 8s);
+                    if (Unit* target = SelectRandomFriendlyMissingBuff(SPELL_POWER_WORD_FORTITUDE))
+                        DoCast(target, SPELL_POWER_WORD_FORTITUDE, args);
+                    fortitude.Repeat(5s, 8s);
+                }
             });
         }
 
@@ -1272,7 +1282,7 @@ class npc_roknah_loasinger : public CreatureScript
 
         void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
         {
-            if (HealthBelowPct(40))
+            if (HealthBelowPct(40) && !me->HasAura(SPELL_ASTRAL_SHIFT))
             {
                 scheduler.Schedule(1ms, [this](TaskContext astral_shift)
                 {

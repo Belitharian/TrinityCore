@@ -32,7 +32,8 @@ class npc_jaina_theramore : public CreatureScript
             SPELL_WONDROUS_RADIANCE     = 227410,
             SPELL_FIREBALL              = 20678,
             SPELL_FIREBLAST             = 20679,
-            SPELL_FROST_BARRIER         = 69787
+            SPELL_FROST_BARRIER         = 69787,
+            SPELL_FROSTBOLT_COSMETIC    = 237649
         };
 
         void Initialize()
@@ -54,6 +55,16 @@ class npc_jaina_theramore : public CreatureScript
             {
                 me->CastStop();
                 DoCast(SPELL_FROST_BARRIER);
+            }
+        }
+
+        void SpellHitTarget(Unit* target, SpellInfo const* spellInfo)
+        {
+            if (target->GetEntry() == NPC_THERAMORE_FIRE_CREDIT
+                && spellInfo->Id == SPELL_FROSTBOLT_COSMETIC)
+            {
+                if (Creature* credit = target->ToCreature())
+                    credit->DespawnOrUnsummon();
             }
         }
 
@@ -114,13 +125,17 @@ class npc_jaina_theramore : public CreatureScript
                         me->StopMoving();
                         me->GetMotionMaster()->Clear();
                         me->GetMotionMaster()->MoveIdle();
-                        me->SetFacingTo(2.65f);
+                        me->SetFacingTo(3.13f);
                         if (Creature* hedric = instance->GetCreature(DATA_HEDRIC_EVENCANE))
                         {
                             hedric->StopMoving();
+                            hedric->SetSheath(SHEATH_STATE_UNARMED);
+                            hedric->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
                             hedric->GetMotionMaster()->Clear();
-                            hedric->GetMotionMaster()->MoveIdle();
+                            hedric->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HedricPoint03, true, HedricPoint03.GetOrientation());
+                            hedric->SetFacingTo(4.99f);
                         }
+                        instance->DoSendScenarioEvent(EVENT_FIND_JAINA_04);
                         break;
                     default:
                         break;
@@ -131,6 +146,18 @@ class npc_jaina_theramore : public CreatureScript
         void MoveInLineOfSight(Unit* who) override
         {
             ScriptedAI::MoveInLineOfSight(who);
+
+            BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+            if (phase == BFTPhases::HelpTheWounded)
+            {
+                if (who->IsWithinDist(me, 4.f) && who->GetEntry() == NPC_THERAMORE_FIRE_CREDIT)
+                {
+                    CastSpellExtraArgs args(true);
+                    args.SetTriggerFlags(TRIGGERED_CAST_DIRECTLY);
+
+                    DoCast(who, SPELL_FROSTBOLT_COSMETIC, args);
+                }
+            }
 
             if (me->IsEngaged())
                 return;
@@ -145,7 +172,6 @@ class npc_jaina_theramore : public CreatureScript
 
                 if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 4.f))
                 {
-                    BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
                     switch (phase)
                     {
                         case BFTPhases::FindJaina:
@@ -156,10 +182,6 @@ class npc_jaina_theramore : public CreatureScript
                             break;
                         case BFTPhases::TheBattle:
                             instance->DoSendScenarioEvent(EVENT_FIND_JAINA_03);
-                            break;
-                        case BFTPhases::HelpTheWounded:
-                        case BFTPhases::HelpTheWounded_Extinguish:
-                            instance->DoSendScenarioEvent(EVENT_FIND_JAINA_04);
                             break;
                         case BFTPhases::WaitForAmara:
                             instance->DoSendScenarioEvent(EVENT_FIND_JAINA_05);
@@ -748,6 +770,7 @@ void AddSC_battle_for_theramore()
     new npc_kinndy_sparkshine();
     new npc_pained();
     new npc_kalecgos_theramore();
+
     new event_theramore_training();
     new event_theramore_faithful();
 }
