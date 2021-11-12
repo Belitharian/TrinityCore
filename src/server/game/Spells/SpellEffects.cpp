@@ -2147,10 +2147,17 @@ void Spell::EffectLearnSpell()
             if (itemEffect->TriggerType != ITEM_SPELLTRIGGER_LEARN_SPELL_ID)
                 continue;
 
-            player->LearnSpell(itemEffect->SpellID, false);
+            bool dependent = false;
 
             if (BattlePetSpeciesEntry const* speciesEntry = sSpellMgr->GetBattlePetSpecies(uint32(itemEffect->SpellID)))
+            {
                 player->GetSession()->GetBattlePetMgr()->AddPet(speciesEntry->ID, BattlePetMgr::SelectPetDisplay(speciesEntry), BattlePetMgr::RollPetBreed(speciesEntry->ID), BattlePetMgr::GetDefaultPetQuality(speciesEntry->ID));
+                // If the spell summons a battle pet, we fake that it has been learned and the battle pet is added
+                // marking as dependent prevents saving the spell to database (intended)
+                dependent = true;
+            }
+
+            player->LearnSpell(itemEffect->SpellID, dependent);
         }
     }
 
@@ -3441,9 +3448,6 @@ void Spell::EffectScriptEffect()
                     if (!unitTarget || unitTarget->GetTypeId() != TYPEID_UNIT)
                         return;
 
-                    if (roll_chance_i(50))                  // chance unknown, using 50
-                        return;
-
                     static uint32 const spellPlayer[5] =
                     {
                         45674,                            // Bigger!
@@ -3572,21 +3576,9 @@ void Spell::EffectDuel()
     target->SendDirectMessage(worldPacket);
 
     // create duel-info
-    DuelInfo* duel   = new DuelInfo;
-    duel->initiator  = caster;
-    duel->opponent   = target;
-    duel->startTime  = 0;
-    duel->startTimer = 0;
-    duel->isMounted  = (GetSpellInfo()->Id == 62875); // Mounted Duel
-    caster->duel     = duel;
-
-    DuelInfo* duel2   = new DuelInfo;
-    duel2->initiator  = caster;
-    duel2->opponent   = caster;
-    duel2->startTime  = 0;
-    duel2->startTimer = 0;
-    duel2->isMounted  = (GetSpellInfo()->Id == 62875); // Mounted Duel
-    target->duel      = duel2;
+    bool isMounted = (GetSpellInfo()->Id == 62875);
+    caster->duel = std::make_unique<DuelInfo>(target, caster, isMounted);
+    target->duel = std::make_unique<DuelInfo>(caster, caster, isMounted);
 
     caster->SetDuelArbiter(go->GetGUID());
     target->SetDuelArbiter(go->GetGUID());
@@ -4276,18 +4268,18 @@ void Spell::EffectKnockBack()
     if (speedxy < 0.01f && speedz < 0.01f)
         return;
 
-    float x, y;
+    Position origin;
     if (effectInfo->Effect == SPELL_EFFECT_KNOCK_BACK_DEST)
     {
         if (m_targets.HasDst())
-            destTarget->GetPosition(x, y);
+            origin = destTarget->GetPosition();
         else
             return;
     }
-    else //if (m_spellInfo->Effects[i].Effect == SPELL_EFFECT_KNOCK_BACK)
-        m_caster->GetPosition(x, y);
+    else //if (effectInfo->Effect == SPELL_EFFECT_KNOCK_BACK)
+        origin = m_caster->GetPosition();
 
-    unitTarget->KnockbackFrom(x, y, speedxy, speedz);
+    unitTarget->KnockbackFrom(origin, speedxy, speedz);
 }
 
 void Spell::EffectLeapBack()
@@ -5697,8 +5689,8 @@ void Spell::EffectUncageBattlePet()
     if (!speciesEntry)
         return;
 
-    Player* plr = m_caster->ToPlayer();
-    BattlePetMgr* battlePetMgr = plr->GetSession()->GetBattlePetMgr();
+    Player* player = m_caster->ToPlayer();
+    BattlePetMgr* battlePetMgr = player->GetSession()->GetBattlePetMgr();
     if (!battlePetMgr)
         return;
 
@@ -5718,13 +5710,9 @@ void Spell::EffectUncageBattlePet()
 
     battlePetMgr->AddPet(speciesId, displayId, breed, BattlePetBreedQuality(quality), level);
 
-    if (speciesEntry->SummonSpellID)
-        if (!plr->HasSpell(speciesEntry->SummonSpellID))
-            plr->LearnSpell(speciesEntry->SummonSpellID, false);
+    player->SendPlaySpellVisual(player, SPELL_VISUAL_UNCAGE_PET, 0, 0, 0.f, false);
 
-    plr->SendPlaySpellVisual(plr, SPELL_VISUAL_UNCAGE_PET, 0, 0, 0.f, false);
-
-    plr->DestroyItem(m_CastItem->GetBagSlot(), m_CastItem->GetSlot(), true);
+    player->DestroyItem(m_CastItem->GetBagSlot(), m_CastItem->GetSlot(), true);
     m_CastItem = nullptr;
 }
 

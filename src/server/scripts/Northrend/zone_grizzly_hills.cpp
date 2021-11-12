@@ -561,7 +561,7 @@ public:
 
     void JustEngagedWith(Unit* /*who*/) override
     {
-        _events.ScheduleEvent(EVENT_CHOP, Seconds(3), Seconds(6));
+        _events.ScheduleEvent(EVENT_CHOP, 3s, 6s);
     }
 
         void Reset() override
@@ -1012,7 +1012,7 @@ public:
             player->ExitVehicle();
             float horizontalSpeed = 3.0f;
             float verticalSpeed = 40.0f;
-            player->KnockbackFrom(caster->GetPositionX(), caster->GetPositionY(), horizontalSpeed, verticalSpeed);
+            player->KnockbackFrom(caster->GetPosition(), horizontalSpeed, verticalSpeed);
             caster->CastSpell(player, SPELL_PARACHUTE, true);
 
             std::list<Creature*> explosionBunnys;

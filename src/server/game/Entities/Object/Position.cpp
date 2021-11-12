@@ -62,25 +62,6 @@ Position Position::GetPositionWithOffset(Position const& offset) const
     return ret;
 }
 
-void Position::GetSinCos(const float x, const float y, float &vsin, float &vcos) const
-{
-    float dx = GetPositionX() - x;
-    float dy = GetPositionY() - y;
-
-    if (std::fabs(dx) < 0.001f && std::fabs(dy) < 0.001f)
-    {
-        float angle = (float)rand_norm()*static_cast<float>(2 * M_PI);
-        vcos = std::cos(angle);
-        vsin = std::sin(angle);
-    }
-    else
-    {
-        float dist = std::sqrt((dx*dx) + (dy*dy));
-        vcos = dx / dist;
-        vsin = dy / dist;
-    }
-}
-
 bool Position::IsWithinBox(Position const& center, float xradius, float yradius, float zradius) const
 {
     // rotate the WorldObject position instead of rotating the whole cube, that way we can make a simplified
