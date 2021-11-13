@@ -8,9 +8,9 @@ CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 
 void CustomAI::ReleaseFocus()
 {
-    me->ReleaseFocus(nullptr, false);   // remove spellcast focus
-    me->DoNotReacquireTarget();         // cancel delayed re-target
-    me->SetTarget(ObjectGuid::Empty);   // drop target - dead mobs shouldn't ever target things
+    //me->ReleaseFocus(nullptr, false);   // remove spellcast focus
+    //me->DoNotReacquireTarget();         // cancel delayed re-target
+    //me->SetTarget(ObjectGuid::Empty);   // drop target - dead mobs shouldn't ever target things
 }
 
 void CustomAI::Initialize()
@@ -137,8 +137,7 @@ bool CustomAI::CanAIAttack(Unit const* who) const
         && !who->HasAuraType(SPELL_AURA_SCHOOL_IMMUNITY)
         && !who->HasAuraType(SPELL_AURA_DAMAGE_IMMUNITY)
         && !who->HasAuraType(SPELL_AURA_DISPEL_IMMUNITY)
-        && !who->HasAuraType(SPELL_AURA_MOD_FEAR)
         && !who->HasAuraType(SPELL_AURA_MOD_FEAR_2)
-        && !who->HasBreakableByDamageCrowdControlAura()
+        && !who->HasBreakableByDamageCrowdControlAura(me)
         && ScriptedAI::CanAIAttack(who);
 }

@@ -7,10 +7,16 @@
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader    "BFT"
 
-#define TERVOSH_PATH_01          6
+#define DEBUG
+
+#define TERVOSH_PATH_01          5
 #define TERVOSH_PATH_02         10
 #define TERVOSH_PATH_03         16
 #define KALECGOS_PATH_01        17
+#define KALECGOS_PATH_02         5
+#define KALECGOS_PATH_03         5
+#define RHONIN_PATH_01           6
+#define AMARA_PATH_01            7
 #define KINNDY_PATH_01          16
 #define KINNDY_PATH_02          10
 #define OFFICER_PATH_01         10
@@ -48,6 +54,8 @@ enum class BFTPhases
     WaitForAmara,
     WaitForAmara_JoinJaina,
     WaitForAmara_WaitAmara,
+    RetrieveRhonin,
+    RetrieveRhonin_JoinRhonin,
 };
 
 enum BFTData
@@ -133,6 +141,7 @@ enum BFTMisc
     SPELL_PORTAL_CHANNELING_03          = 288451,
     SPELL_RUNIC_SHIELD                  = 346057,
     SPELL_FROST_BREATH                  = 300548,
+    SPELL_THERAMORE_EXPLOSION_SCENE     = 128446,
 
     // GameObjects
     GOB_MYSTIC_BARRIER_01               = 323860,
@@ -164,6 +173,7 @@ enum BFTMisc
     CRITERIA_TREE_WAIT_ARCHMAGE_LEESON  = 1000025,
     CRITERIA_TREE_JOIN_JAINA            = 1000026,
     CRITERIA_TREE_ARCHMAGE_LEESON       = 1000027,
+    CRITERIA_TREE_RETRIEVE_RHONIN       = 1000028,
 
     // Sounds
     SOUND_FEARFUL_CROWD                 = 15003,
@@ -288,6 +298,28 @@ enum BFTTalks
     SAY_POST_BATTLE_14    = 8,
     SAY_POST_BATTLE_15    = 51,
 
+    SAY_IRIS_WARN_01      = 6,
+    SAY_IRIS_WARN_02      = 52,
+    SAY_IRIS_WARN_03      = 7,
+    SAY_IRIS_WARN_04      = 53,
+    SAY_IRIS_WARN_05      = 8,
+    SAY_IRIS_WARN_06      = 54,
+    SAY_IRIS_WARN_07      = 55,
+    SAY_IRIS_WARN_08      = 9,
+    SAY_IRIS_WARN_09      = 2,
+    SAY_IRIS_WARN_10      = 0,
+    SAY_IRIS_WARN_11      = 56,
+
+    SAY_IRIS_XPLOSION_01  = 57,
+    SAY_IRIS_XPLOSION_02  = 3,
+    SAY_IRIS_XPLOSION_03  = 58,
+    SAY_IRIS_XPLOSION_04  = 4,
+    SAY_IRIS_XPLOSION_05  = 5,
+    SAY_IRIS_XPLOSION_06  = 6,
+    SAY_IRIS_XPLOSION_07  = 59,
+    SAY_IRIS_XPLOSION_08  = 7,
+    SAY_IRIS_XPLOSION_09  = 60,
+    SAY_IRIS_XPLOSION_10  = 8,
 
     SAY_JAINA_SPELL_01    = 40,
     SAY_JAINA_BLIZZARD_01 = 41,
@@ -351,8 +383,7 @@ Position const TervoshPath01[TERVOSH_PATH_01] =
     { -3756.53f, -4443.35f, 30.55f, 1.25f },
     { -3755.68f, -4441.48f, 30.55f, 0.97f },
     { -3753.32f, -4440.05f, 30.55f, 0.01f },
-    { -3751.34f, -4440.64f, 30.55f, 6.14f },
-    { -3749.14f, -4440.17f, 30.55f, 0.56f }
+    { -3751.34f, -4440.64f, 30.55f, 0.46f }
 };
 
 Position const TervoshPath02[TERVOSH_PATH_02] =
@@ -442,6 +473,45 @@ Position const KalecgosPath01[KALECGOS_PATH_01] =
     { -3694.77f, -4391.74f, 12.79f, 6.24f },
     { -3690.79f, -4391.58f, 11.52f, 0.11f },
     { -3685.71f, -4390.25f, 10.67f, 0.45f }
+};
+
+Position const KalecgosPath02[KALECGOS_PATH_02] =
+{
+    { -3615.43f, -4440.26f, 14.23f, 4.72f },
+    { -3615.46f, -4448.43f, 14.23f, 4.72f },
+    { -3622.92f, -4448.69f, 14.24f, 3.18f },
+    { -3621.39f, -4453.81f, 14.24f, 5.10f },
+    { -3621.30f, -4459.18f, 13.62f, 4.72f }
+};
+
+Position const KalecgosPath03[KALECGOS_PATH_03] =
+{
+    { -3621.30f, -4459.18f, 13.62f, 4.72f },
+    { -3621.39f, -4453.81f, 14.24f, 5.10f },
+    { -3622.92f, -4448.69f, 14.24f, 3.18f },
+    { -3615.46f, -4448.43f, 14.23f, 4.72f },
+    { -3615.43f, -4440.26f, 14.23f, 4.72f }
+};
+
+Position const RhoninPath01[RHONIN_PATH_01] =
+{
+    { -3622.97f, -4461.50f, 13.62f, 0.44f },
+    { -3621.30f, -4459.18f, 13.62f, 4.72f },
+    { -3621.39f, -4453.81f, 14.24f, 5.10f },
+    { -3622.92f, -4448.69f, 14.24f, 3.18f },
+    { -3615.46f, -4448.43f, 14.23f, 4.72f },
+    { -3615.43f, -4440.26f, 14.23f, 4.72f }
+};
+
+Position const AmaraPath01[AMARA_PATH_01] =
+{
+    { -3627.31f, -4460.97f, 13.62f, 0.32f },
+    { -3624.17f, -4459.42f, 13.62f, 0.44f },
+    { -3621.30f, -4459.18f, 13.62f, 4.72f },
+    { -3621.39f, -4453.81f, 14.24f, 5.10f },
+    { -3622.92f, -4448.69f, 14.24f, 3.18f },
+    { -3615.46f, -4448.43f, 14.23f, 4.72f },
+    { -3615.43f, -4440.26f, 14.23f, 4.72f }
 };
 
 Position const OfficerPath01[OFFICER_PATH_01] =
@@ -538,8 +608,8 @@ Position const UnitLocation[ARCHMAGES_RELOCATION] =
     { -3615.08f, -4470.40f, 14.24f, 2.61f },
     { -3609.72f, -4467.73f, 14.24f, 3.78f },
     { -3619.52f, -4473.30f, 14.24f, 1.62f },
-    { -3616.88f, -4451.98f, 14.24f, 3.78f },
-    { -3618.41f, -4453.12f, 14.24f, 0.69f },
+    { -3622.97f, -4467.49f, 14.24f, 0.16f },
+    { -3618.41f, -4453.12f, 14.24f, 3.47f },
     { -3613.38f, -4458.41f, 13.62f, 5.84f }
 };
 
@@ -549,6 +619,9 @@ Position const JainaPoint01     = { -3751.32f, -4438.13f, 30.55f, 0.40f };
 Position const JainaPoint02     = { -3731.47f, -4547.05f, 27.11f, 0.25f };
 Position const JainaPoint03     = { -3658.39f, -4372.87f,  9.35f, 0.69f };
 Position const JainaPoint04     = { -3636.94f, -4355.86f,  7.44f, 0.69f };
+Position const JainaPoint05     = { -3747.73f, -4447.16f, 64.91f, 3.83f };
+Position const RhoninPoint01    = { -3622.97f, -4461.50f, 13.62f, 0.44f };
+Position const RhoninPoint02    = { -3744.36f, -4453.88f, 64.98f, 5.41f };
 Position const PainedPoint01    = { -3747.93f, -4442.05f, 30.54f, 1.54f };
 Position const OfficerPoint01   = { -3748.43f, -4432.99f, 30.54f, 4.66f };
 Position const QuillPoint01     = { -3751.32f, -4438.13f, 31.26f, 3.33f };
@@ -556,6 +629,7 @@ Position const TervoshPoint01   = { -3720.83f, -4551.10f, 25.82f, 1.35f };
 Position const KalecgosPoint01  = { -3730.39f, -4550.39f, 27.11f, 0.54f };
 Position const PortalPoint01    = { -3712.42f, -4539.62f, 25.82f, 3.59f };
 Position const PortalPoint02    = { -3783.17f, -4205.77f,  7.60f, 4.71f };
+Position const PortalPoint03    = { -3750.82f, -4449.65f, 64.90f, 0.63f };
 Position const HedricPoint01    = { -3717.79f, -4522.24f, 25.82f, 5.16f };
 Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f };
 Position const HedricPoint03    = { -3625.58f, -4447.94f, 14.24f, 5.40f };

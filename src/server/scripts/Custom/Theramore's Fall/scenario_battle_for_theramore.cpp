@@ -6,6 +6,8 @@
 #include "Log.h"
 #include "Map.h"
 #include "MotionMaster.h"
+#include "ObjectMgr.h"
+#include "PhasingHandler.h"
 #include "Player.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
@@ -13,8 +15,6 @@
 #include "battle_for_theramore.h"
 
 #define CREATURE_DATA_SIZE 16
-
-#define DEBUG 1
 
 const ObjectData creatureData[CREATURE_DATA_SIZE] =
 {
@@ -194,7 +194,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
             SPELL_CHILLING_BLAST        = 337053,
             SPELL_TIED_UP               = 167469,
             SPELL_FROST_BREATH          = 300548,
-            SPELL_WATER_BUCKET          = 42336,
+            SPELL_WATER_BUCKET          = 42336
         };
 
         uint32 Waves[10] =
@@ -490,6 +490,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                             creature->SetStandState(UNIT_STAND_STATE_STAND);
                             creature->SetEmoteState(EMOTE_STATE_NONE);
                             creature->RemoveAllAuras();
+                            creature->Dismount();
 
                             switch (i)
                             {
@@ -500,13 +501,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
                                 case 1:
                                     creature->SetEmoteState(EMOTE_STATE_WADRUNKSTAND);
                                     break;
-                                case 3:
-                                case 4:
-                                    creature->SetEmoteState(EMOTE_STATE_TALK);
-                                    break;
                             }
                         }
-
                         if (Creature* creature = GetCreature(archmagesRelocation[i].dataId))
                         {
                             creature->NearTeleportTo(archmagesRelocation[i].destination);
@@ -535,8 +531,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 }
                 // Step 10 : Help the wounded - Parent
                 case CRITERIA_TREE_HELP_THE_WOUNDED:
+                    for (uint8 i = 128; i < 141; i++)
+                        events.CancelEvent(i);
                     DoRemoveAurasDueToSpellOnPlayers(SPELL_RUNIC_SHIELD);
                     SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::WaitForAmara);
+                    events.ScheduleEvent(141, 5ms);
                     break;
                 // Step 10 : Help the wounded - Rejoin Lady Jaina Proudmoore after the attack
                 case CRITERIA_TREE_FOLLOW_JAINA:
@@ -555,12 +554,37 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 // Step 11 : Wait for Archmage Leeson returns - Parent
                 case CRITERIA_TREE_WAIT_ARCHMAGE_LEESON:
                     break;
+                    // Step 11 : Wait for Archmage Leeson returns - Rejoin Lady Jaina Proudmoore
+                case CRITERIA_TREE_JOIN_JAINA:
+                {
+                    if (Creature* kalecgos = GetKalec())
+                    {
+                        kalecgos->NearTeleportTo(KalecgosPath02[0]);
+                        kalecgos->SetSpeedRate(MOVE_RUN, 0.85f);
+                    }
+                    if (Creature* rhonin = GetRhonin())
+                    {
+                        rhonin->SetSpeedRate(MOVE_RUN, 0.85f);
+                        rhonin->SetSpeedRate(MOVE_WALK, 0.85f);
+                        rhonin->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RhoninPoint01, true, RhoninPoint01.GetOrientation());
+                    }
+                    for (uint8 i = 0; i < CREATURE_DATA_SIZE; i++)
+                    {
+                        if (Creature* creature = GetCreature(creatureData[i].type))
+                            creature->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                    }
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::WaitForAmara_JoinJaina);
+                    events.ScheduleEvent(142, 500ms);
+                    break;
+                }
                 // Step 11 : Wait for Archmage Leeson returns - Wait for Archmage Leeson returns
                 case CRITERIA_TREE_ARCHMAGE_LEESON:
+                    events.ScheduleEvent(156, 1s);
                     break;
-                // Step 11 : Wait for Archmage Leeson returns - Rejoin Lady Jaina Proudmoore
-                case CRITERIA_TREE_JOIN_JAINA:
-                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::WaitForAmara_JoinJaina);
+                // Step 12 : Retrieve Rhonin - Parent
+                case CRITERIA_TREE_RETRIEVE_RHONIN:
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin_JoinRhonin);
+                    events.ScheduleEvent(161, 1s);
                     break;
             }
         }
@@ -635,7 +659,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 case 1:
                     if (Creature* tervosh = GetTervosh())
                     {
-                        tervosh->SetControlled(false, UNIT_STATE_ROOT);
                         tervosh->SetEmoteState(EMOTE_STAND_STATE_NONE);
                         tervosh->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, TervoshPath01, TERVOSH_PATH_01, true);
                     }
@@ -644,7 +667,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 case 2:
                     if (Creature* kinndy = GetKinndy())
                     {
-                        kinndy->SetControlled(false, UNIT_STATE_ROOT);
                         kinndy->SetWalk(true);
                         kinndy->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, KinndyPoint01, true, 1.09f);
                     }
@@ -740,7 +762,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     if (Creature* kalecgos = GetKalec())
                     {
                         kalecgos->SetSpeedRate(MOVE_WALK, 1.6f);
-                        kalecgos->SetControlled(false, UNIT_STATE_ROOT);
                         kalecgos->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, KalecgosPath01, KALECGOS_PATH_01, true);
                     }
                     Next(2s);
@@ -1407,16 +1428,22 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
                 // PART II
                 case 128:
-                    if (Creature* jaina = GetJaina())
-                    {
-                        if (Creature* kinndy = GetKinndy())
+                {
+                    #ifdef DEBUG
+                        events.ScheduleEvent(141, 2s);
+                    #else
+                        if (Creature* jaina = GetJaina())
                         {
-                            jaina->SetTarget(kinndy->GetGUID());
-                            kinndy->SetTarget(jaina->GetGUID());
+                            if (Creature* kinndy = GetKinndy())
+                            {
+                                jaina->SetTarget(kinndy->GetGUID());
+                                kinndy->SetTarget(jaina->GetGUID());
+                            }
                         }
-                    }
-                    Next(800ms);
+                        Next(800ms);
+                    #endif
                     break;
+                }
                 case 129:
                     GetKinndy()->AI()->Talk(SAY_POST_BATTLE_04);
                     Next(5s);
@@ -1470,17 +1497,200 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     Next(3s);
                     break;
                 case 141:
+                    ClearTarget();
                     if (Creature* jaina = GetJaina())
                     {
+                        jaina->SetSpeedRate(MOVE_RUN, 0.85f);
+
                         if (Creature* kinndy = GetKinndy())
                         {
-                            jaina->SetTarget(ObjectGuid::Empty);
-                            kinndy->SetTarget(ObjectGuid::Empty);
-
                             jaina->SetFacingTo(3.15f);
                             kinndy->SetFacingTo(2.73f);
                         }
                     }
+                    break;
+
+                #pragma endregion
+
+                // Wait for Archmage Leeson returns
+                #pragma region WAIT_FOR_AMARA
+
+                // Part I
+                case 142:
+                    if (Creature* kalecgos = GetKalec())
+                    {
+                        kalecgos->SetVisible(true);
+                        kalecgos->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, KalecgosPath02, KALECGOS_PATH_02);
+                    }
+                    Next(5s);
+                    break;
+                case 143:
+                    SetTarget(GetKalec());
+                    GetKalec()->AI()->Talk(SAY_IRIS_WARN_01);
+                    Next(1s);
+                    break;
+                case 144:
+                    SetTarget(GetJaina());
+                    GetJaina()->AI()->Talk(SAY_IRIS_WARN_02);
+                    Next(2s);
+                    break;
+                case 145:
+                    SetTarget(GetKalec());
+                    GetKalec()->AI()->Talk(SAY_IRIS_WARN_03);
+                    Next(4s);
+                    break;
+                case 146:
+                    SetTarget(GetJaina());
+                    GetJaina()->AI()->Talk(SAY_IRIS_WARN_04);
+                    Next(8s);
+                    break;
+                case 147:
+                    SetTarget(GetKalec());
+                    GetKalec()->AI()->Talk(SAY_IRIS_WARN_05);
+                    Next(2s);
+                    break;
+                case 148:
+                    SetTarget(GetJaina());
+                    GetJaina()->AI()->Talk(SAY_IRIS_WARN_06);
+                    Next(6s);
+                    break;
+                case 149:
+                    GetJaina()->AI()->Talk(SAY_IRIS_WARN_07);
+                    Next(2s);
+                    break;
+                case 150:
+                    SetTarget(GetKalec());
+                    GetKalec()->AI()->Talk(SAY_IRIS_WARN_08);
+                    Next(7s);
+                    break;
+                case 151:
+                    SetTarget(GetRhonin());
+                    GetRhonin()->AI()->Talk(SAY_IRIS_WARN_09);
+                    Next(5s);
+                    break;
+                case 152:
+                    ClearTarget();
+                    GetKalec()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, KalecgosPath03, KALECGOS_PATH_03);
+                    Next(2s);
+                    break;
+                case 153:
+                    GetRhonin()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, RhoninPath01, RHONIN_PATH_01);
+                    Next(2s);
+                    break;
+                case 154:
+                    GetAmara()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, AmaraPath01, AMARA_PATH_01);
+                    Next(10s);
+                    break;
+                case 155:
+                    if (Creature* amara = GetAmara())
+                    {
+                        amara->SetVisible(true);
+                        amara->SetSpeedRate(MOVE_RUN, 0.85f);
+                        amara->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, KalecgosPath02, KALECGOS_PATH_02);
+                    }
+                    break;
+
+                // Part II
+                case 156:
+                    if (Creature* jaina = GetJaina())
+                    {
+                        if (Creature* amara = GetAmara())
+                        {
+                            jaina->SetTarget(amara->GetGUID());
+                            amara->SetTarget(jaina->GetGUID());
+                        }
+                    }
+                    Next(1s);
+                    break;
+                case 157:
+                    GetAmara()->AI()->Talk(SAY_IRIS_WARN_10);
+                    Next(6s);
+                    break;
+                case 158:
+                    GetJaina()->AI()->Talk(SAY_IRIS_WARN_11);
+                    Next(4s);
+                    break;
+                case 159:
+                    ClearTarget();
+                    GetAmara()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_03, KalecgosPath03, KALECGOS_PATH_03);
+                    Next(2s);
+                    break;
+                case 160:
+                    GetJaina()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_03, RhoninPath01, RHONIN_PATH_01);
+                    break;
+
+                #pragma endregion
+
+                // Retrieve Rhonin
+                #pragma region RETRIEVE_RHONIN
+
+                case 161:
+                    if (Creature* jaina = GetJaina())
+                    {
+                        jaina->AI()->Talk(SAY_IRIS_XPLOSION_01);
+                        jaina->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        jaina->SetFacingToObject(GetRhonin());
+                        jaina->RemoveAllAuras();
+                    }
+                    Next(2s);
+                    break;
+                case 162:
+                    if (Creature* jaina = GetJaina())
+                    {
+                        jaina->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        if (Creature* rhonin = GetRhonin())
+                        {
+                            jaina->SetTarget(rhonin->GetGUID());
+
+                            rhonin->SetTarget(jaina->GetGUID());
+                            rhonin->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        }
+                    }
+                    Next(3s);
+                    break;
+                case 163:
+                    GetRhonin()->AI()->Talk(SAY_IRIS_XPLOSION_02);
+                    Next(4s);
+                    break;
+                case 164:
+                    GetJaina()->AI()->Talk(SAY_IRIS_XPLOSION_03);
+                    Next(6s);
+                    break;
+                case 165:
+                    GetRhonin()->AI()->Talk(SAY_IRIS_XPLOSION_04);
+                    Next(5s);
+                    break;
+                case 166:
+                    GetRhonin()->AI()->Talk(SAY_IRIS_XPLOSION_05);
+                    Next(8s);
+                    break;
+                case 167:
+                    GetRhonin()->AI()->Talk(SAY_IRIS_XPLOSION_06);
+                    Next(6s);
+                    break;
+                case 168:
+                    GetJaina()->AI()->Talk(SAY_IRIS_XPLOSION_07);
+                    Next(6s);
+                    break;
+                case 169:
+                    GetRhonin()->AI()->Talk(SAY_IRIS_XPLOSION_08);
+                    Next(3s);
+                    break;
+                case 170:
+                    GetJaina()->AI()->Talk(SAY_IRIS_XPLOSION_09);
+                    Next(5s);
+                    break;
+                case 171:
+                    if (Creature* rhonin = GetRhonin())
+                    {
+                        rhonin->AI()->Talk(SAY_IRIS_XPLOSION_10);
+                        rhonin->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        rhonin->RemoveAllAuras();
+                    }
+                    Next(2s);
+                    break;
+                case 172:
+                    DoCastSpellOnPlayers(SPELL_THERAMORE_EXPLOSION_SCENE);
                     break;
 
                 #pragma endregion
@@ -1819,7 +2029,57 @@ class scenario_battle_for_theramore : public InstanceMapScript
     }
 };
 
+class scene_theramore_explosion : public SceneScript
+{
+    public:
+        scene_theramore_explosion() : SceneScript("scene_theramore_explosion") { }
+
+    enum Misc
+    {
+        MAP_KALIMDOR                    = 1,
+        PHASE_THERAMORE_SCENE_EXPLOSION = 1503,
+        SPELL_THERAMORE_SCENE_COMPLETE  = 128397,
+        SPELL_DROP_BOMBE                = 128438
+    };
+
+    const Position Center = { -2826.71f, -4756.45f, 5.29f, 2.85f };
+    const float Distance = 3.f;
+
+    void OnSceneStart(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* sceneTemplate) override
+    {
+        PhasingHandler::AddPhase(player, PHASE_THERAMORE_SCENE_EXPLOSION, true);
+        player->SetControlled(true, UNIT_STATE_ROOT);
+    }
+
+    void OnSceneComplete(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/) override
+    {
+        Finish(player);
+    }
+
+    void OnSceneCancel(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/) override
+    {
+        Finish(player);
+    }
+
+    void Finish(Player* player)
+    {
+        player->SetControlled(false, UNIT_STATE_ROOT);
+        player->CastSpell(player, SPELL_THERAMORE_SCENE_COMPLETE);
+        player->TeleportTo(GetRandomPosition(), TELE_REVIVE_AT_TELEPORT);
+    }
+
+    WorldLocation GetRandomPosition()
+    {
+        float alpha = 2 * float(M_PI) * float(rand_norm());
+        float r = Distance * sqrtf(float(rand_norm()));
+        float x = r * cosf(alpha) + Center.GetPositionX();
+        float y = r * sinf(alpha) + Center.GetPositionY();
+        return { MAP_KALIMDOR, { x, y, Center.GetPositionZ(), 2.85f } };
+    }
+};
+
 void AddSC_scenario_battle_for_theramore()
 {
     new scenario_battle_for_theramore();
+    new scene_theramore_explosion();
 }
