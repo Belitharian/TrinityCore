@@ -216,19 +216,22 @@ struct npc_theramore_troopAI : public CustomAI
 		BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
 		if (phase == BFTPhases::Preparation || phase == BFTPhases::Preparation_Rhonin)
 		{
-            #ifdef DEBUG
-                for (uint8 i = 0; i < 5; i++)
-                {
-                    KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
-                }
-            #else
-                if (!emoteReceived && emoteId == TEXT_EMOTE_FORTHEALLIANCE)
-                {
-                    me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
-                    KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
-                    emoteReceived = true;
-                }
-            #endif
+			#ifdef DEBUG
+				for (uint8 i = 0; i < 5; i++)
+				{
+					KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
+				}
+			#else
+				if (!emoteReceived && emoteId == TEXT_EMOTE_FORTHEALLIANCE)
+				{
+                    if (player->IsWithinDist(me, 2.1f))
+                    {
+                        me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
+                        KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
+                        emoteReceived = true;
+                    }
+				}
+			#endif
 		}
 	}
 

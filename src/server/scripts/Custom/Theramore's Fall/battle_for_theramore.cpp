@@ -36,7 +36,7 @@ class npc_jaina_theramore : public CreatureScript
 			SPELL_FIREBLAST             = 20679,
 			SPELL_FROST_BARRIER         = 69787,
 			SPELL_FROSTBOLT_COSMETIC    = 237649,
-            SPELL_LIGHTNING_FX          = 278455
+			SPELL_LIGHTNING_FX          = 278455
 		};
 
 		void Initialize()
@@ -142,21 +142,21 @@ class npc_jaina_theramore : public CreatureScript
 						break;
 					case MOVEMENT_INFO_POINT_03:
 						me->SetVisible(false);
-                        scheduler.Schedule(2s, [this](TaskContext /*context*/)
-                        {
-                            me->SetVisible(true);
-                            me->NearTeleportTo(JainaPoint05);
-                            if (GameObject* portal = me->SummonGameObject(GOB_PORTAL_TO_STORMWIND, PortalPoint03, QuaternionData::fromEulerAnglesZYX(PortalPoint03.GetOrientation(), 0.f, 0.f), 0))
-                                portal->SetObjectScale(0.8f);
-                            if (TempSummon* summon = me->SummonCreature(WORLD_TRIGGER, PortalPoint03, TEMPSUMMON_MANUAL_DESPAWN))
-                            {
-                                summon->SetObjectScale(1.8f);
-                                summon->CastSpell(summon, SPELL_LIGHTNING_FX, true);
-                            }
-                            DoCastSelf(SPELL_PORTAL_CHANNELING_01);
+						scheduler.Schedule(2s, [this](TaskContext /*context*/)
+						{
+							me->SetVisible(true);
+							me->NearTeleportTo(JainaPoint05);
+							if (GameObject* portal = me->SummonGameObject(GOB_PORTAL_TO_STORMWIND, PortalPoint03, QuaternionData::fromEulerAnglesZYX(PortalPoint03.GetOrientation(), 0.f, 0.f), 0))
+								portal->SetObjectScale(0.8f);
+							if (TempSummon* summon = me->SummonCreature(WORLD_TRIGGER, PortalPoint03, TEMPSUMMON_MANUAL_DESPAWN))
+							{
+								summon->SetObjectScale(1.8f);
+								summon->CastSpell(summon, SPELL_LIGHTNING_FX, true);
+							}
+							DoCastSelf(SPELL_PORTAL_CHANNELING_01);
 
-                            instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin);
-                        });
+							instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin);
+						});
 						break;
 					default:
 						break;
@@ -207,9 +207,9 @@ class npc_jaina_theramore : public CreatureScript
 						case BFTPhases::WaitForAmara:
 							instance->DoSendScenarioEvent(EVENT_FIND_JAINA_05);
 							break;
-                        case BFTPhases::RetrieveRhonin:
-                            instance->DoSendScenarioEvent(EVENT_RETRIEVE_RHONIN);
-                            break;
+						case BFTPhases::RetrieveRhonin:
+							instance->DoSendScenarioEvent(EVENT_RETRIEVE_RHONIN);
+							break;
 						default:
 							break;
 					}
@@ -551,9 +551,9 @@ class npc_rhonin : public CreatureScript
 						me->SetVisible(false);
 						scheduler.Schedule(2s, [this](TaskContext /*context*/)
 						{
-                            me->SetVisible(true);
-                            me->NearTeleportTo(RhoninPoint02);
-                            DoCastSelf(SPELL_PORTAL_CHANNELING_03);
+							me->SetVisible(true);
+							me->NearTeleportTo(RhoninPoint02);
+							DoCastSelf(SPELL_PORTAL_CHANNELING_03);
 						});
 						break;
 					default:

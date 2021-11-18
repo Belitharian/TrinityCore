@@ -8,9 +8,9 @@ CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 
 void CustomAI::ReleaseFocus()
 {
-    //me->ReleaseFocus(nullptr, false);   // remove spellcast focus
-    //me->DoNotReacquireTarget();         // cancel delayed re-target
-    //me->SetTarget(ObjectGuid::Empty);   // drop target - dead mobs shouldn't ever target things
+    me->ReleaseFocus(nullptr, false);   // remove spellcast focus
+    me->DoNotReacquireTarget();         // cancel delayed re-target
+    me->SetTarget(ObjectGuid::Empty);   // drop target - dead mobs shouldn't ever target things
 }
 
 void CustomAI::Initialize()
