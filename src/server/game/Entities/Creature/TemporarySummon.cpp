@@ -23,6 +23,7 @@
 #include "ObjectAccessor.h"
 #include "Pet.h"
 #include "Player.h"
+#include <sstream>
 
 TempSummon::TempSummon(SummonPropertiesEntry const* properties, Unit* owner, bool isWorldObject) :
 Creature(isWorldObject), m_Properties(properties), m_type(TEMPSUMMON_MANUAL_DESPAWN),
@@ -171,7 +172,6 @@ void TempSummon::InitStats(uint32 duration)
 
     if (owner && IsTrigger() && m_spells[0])
     {
-        SetFaction(owner->GetFaction());
         SetLevel(owner->getLevel());
         if (owner->GetTypeId() == TYPEID_PLAYER)
             m_ControlledByPlayer = true;
@@ -195,10 +195,13 @@ void TempSummon::InitStats(uint32 duration)
         }
     }
 
-    if (m_Properties->Faction)
-        SetFaction(m_Properties->Faction);
-    else if (IsVehicle() && owner) // properties should be vehicle
-        SetFaction(owner->GetFaction());
+    uint32 faction = m_Properties->Faction;
+    if (m_Properties->GetFlags().HasFlag(SummonPropertiesFlags::UseSummonerFaction)) // TODO: Determine priority between faction and flag
+       if (owner)
+           faction = owner->GetFaction();
+
+    if (faction)
+       SetFaction(faction);
 }
 
 void TempSummon::InitSummon()
@@ -274,6 +277,15 @@ void TempSummon::RemoveFromWorld()
     Creature::RemoveFromWorld();
 }
 
+std::string TempSummon::GetDebugInfo() const
+{
+    std::stringstream sstr;
+    sstr << Creature::GetDebugInfo() << "\n"
+        << std::boolalpha
+        << "TempSummonType : " << std::to_string(GetSummonType()) << " Summoner: " << GetSummonerGUID().ToString();
+    return sstr.str();
+}
+
 Minion::Minion(SummonPropertiesEntry const* properties, Unit* owner, bool isWorldObject)
     : TempSummon(properties, owner, isWorldObject), m_owner(owner)
 {
@@ -291,7 +303,7 @@ void Minion::InitStats(uint32 duration)
     SetReactState(REACT_PASSIVE);
 
     SetCreatorGUID(GetOwner()->GetGUID());
-    SetFaction(GetOwner()->GetFaction());
+    SetFaction(GetOwner()->GetFaction()); // TODO: Is this correct? Overwrite the use of SummonPropertiesFlags::UseSummonerFaction
 
     GetOwner()->SetMinion(this, true);
 }
@@ -305,9 +317,40 @@ void Minion::RemoveFromWorld()
     TempSummon::RemoveFromWorld();
 }
 
+void Minion::setDeathState(DeathState s)
+{
+    Creature::setDeathState(s);
+    if (s != JUST_DIED || !IsGuardianPet())
+        return;
+
+    Unit* owner = GetOwner();
+    if (!owner || owner->GetTypeId() != TYPEID_PLAYER || owner->GetMinionGUID() != GetGUID())
+        return;
+
+    for (Unit* controlled : owner->m_Controlled)
+    {
+        if (controlled->GetEntry() == GetEntry() && controlled->IsAlive())
+        {
+            owner->SetMinionGUID(controlled->GetGUID());
+            owner->SetPetGUID(controlled->GetGUID());
+            owner->ToPlayer()->CharmSpellInitialize();
+            break;
+        }
+    }
+}
+
 bool Minion::IsGuardianPet() const
 {
     return IsPet() || (m_Properties && m_Properties->Control == SUMMON_CATEGORY_PET);
+}
+
+std::string Minion::GetDebugInfo() const
+{
+    std::stringstream sstr;
+    sstr << TempSummon::GetDebugInfo() << "\n"
+        << std::boolalpha
+        << "Owner: " << (GetOwner() ? GetOwner()->GetGUID().ToString() : "");
+    return sstr.str();
 }
 
 Guardian::Guardian(SummonPropertiesEntry const* properties, Unit* owner, bool isWorldObject) : Minion(properties, owner, isWorldObject)
@@ -344,6 +387,13 @@ void Guardian::InitSummon()
     {
         GetOwner()->ToPlayer()->CharmSpellInitialize();
     }
+}
+
+std::string Guardian::GetDebugInfo() const
+{
+    std::stringstream sstr;
+    sstr << Minion::GetDebugInfo();
+    return sstr.str();
 }
 
 Puppet::Puppet(SummonPropertiesEntry const* properties, Unit* owner)

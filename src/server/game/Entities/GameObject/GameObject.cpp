@@ -98,6 +98,11 @@ bool QuaternionData::isUnit() const
     return fabs(x * x + y * y + z * z + w * w - 1.0f) < 1e-5f;
 }
 
+void QuaternionData::toEulerAnglesZYX(float& Z, float& Y, float& X) const
+{
+    G3D::Matrix3(G3D::Quat(x, y, z, w)).toEulerAnglesZYX(Z, Y, X);
+}
+
 QuaternionData QuaternionData::fromEulerAnglesZYX(float Z, float Y, float X)
 {
     G3D::Quat quat(G3D::Matrix3::fromEulerAnglesZYX(Z, Y, X));
@@ -2833,4 +2838,12 @@ void GameObject::CreateModel()
     m_model = GameObjectModel::Create(std::make_unique<GameObjectModelOwnerImpl>(this), sWorld->GetDataPath());
     if (m_model && m_model->isMapObject())
         AddFlag(GO_FLAG_MAP_OBJECT);
+}
+
+std::string GameObject::GetDebugInfo() const
+{
+    std::stringstream sstr;
+    sstr << WorldObject::GetDebugInfo() << "\n"
+        << "SpawnId: " << GetSpawnId() << " GoState: " << std::to_string(GetGoState()) << " ScriptId: " << GetScriptId() << " AIName: " << GetAIName();
+    return sstr.str();
 }

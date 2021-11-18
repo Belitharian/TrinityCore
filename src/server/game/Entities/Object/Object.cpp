@@ -52,6 +52,7 @@
 #include "World.h"
 #include "WorldSession.h"
 #include <G3D/Vector3.h>
+#include <sstream>
 
 constexpr float VisibilityDistances[AsUnderlyingType(VisibilityDistanceType::Max)] =
 {
@@ -140,7 +141,7 @@ void Object::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
     if (!target)
         return;
 
-    uint8 updateType = UPDATETYPE_CREATE_OBJECT;
+    uint8 updateType = m_isNewObject ? UPDATETYPE_CREATE_OBJECT2 : UPDATETYPE_CREATE_OBJECT;
     uint8 objectType = m_objectTypeId;
     CreateObjectBits flags = m_updateFlag;
 
@@ -151,36 +152,6 @@ void Object::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
         objectType = TYPEID_ACTIVE_PLAYER;
     }
 
-    switch (GetGUID().GetHigh())
-    {
-        case HighGuid::Player:
-        case HighGuid::Pet:
-        case HighGuid::Corpse:
-        case HighGuid::DynamicObject:
-        case HighGuid::AreaTrigger:
-        case HighGuid::SceneObject:
-        case HighGuid::Conversation:
-            updateType = UPDATETYPE_CREATE_OBJECT2;
-            break;
-        case HighGuid::Creature:
-        case HighGuid::Vehicle:
-        {
-            if (TempSummon const* summon = ToUnit()->ToTempSummon())
-                if (summon->GetSummonerGUID().IsPlayer())
-                    updateType = UPDATETYPE_CREATE_OBJECT2;
-
-            break;
-        }
-        case HighGuid::GameObject:
-        {
-            if (ToGameObject()->GetOwnerGUID().IsPlayer())
-                updateType = UPDATETYPE_CREATE_OBJECT2;
-            break;
-        }
-        default:
-            break;
-    }
-
     if (WorldObject const* worldObject = dynamic_cast<WorldObject const*>(this))
     {
         if (!flags.MovementUpdate && !worldObject->m_movementInfo.transport.guid.IsEmpty())
@@ -188,25 +159,6 @@ void Object::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
 
         if (worldObject->GetAIAnimKitId() || worldObject->GetMovementAnimKitId() || worldObject->GetMeleeAnimKitId())
             flags.AnimKit = true;
-    }
-
-    if (flags.Stationary)
-    {
-        // UPDATETYPE_CREATE_OBJECT2 for some gameobject types...
-        if (isType(TYPEMASK_GAMEOBJECT))
-        {
-            switch (ToGameObject()->GetGoType())
-            {
-                case GAMEOBJECT_TYPE_TRAP:
-                case GAMEOBJECT_TYPE_DUEL_ARBITER:
-                case GAMEOBJECT_TYPE_FLAGSTAND:
-                case GAMEOBJECT_TYPE_FLAGDROP:
-                    updateType = UPDATETYPE_CREATE_OBJECT2;
-                    break;
-                default:
-                    break;
-            }
-        }
     }
 
     if (Unit const* unit = ToUnit())
@@ -794,6 +746,13 @@ void Object::BuildFieldsUpdate(Player* player, UpdateDataMapType& data_map) cons
     }
 
     BuildValuesUpdateBlockForPlayer(&iter->second, iter->first);
+}
+
+std::string Object::GetDebugInfo() const
+{
+    std::stringstream sstr;
+    sstr << GetGUID().ToString() + " Entry " << GetEntry();
+    return sstr.str();
 }
 
 void MovementInfo::OutDebug()
@@ -1752,7 +1711,7 @@ TempSummon* Map::SummonCreature(uint32 entry, Position const& pos, SummonPropert
                     mask = UNIT_MASK_MINION;
                     break;
                 default:
-                    if (properties->Flags & 512) // Mirror Image, Summon Gargoyle
+                    if (properties->GetFlags().HasFlag(SummonPropertiesFlags::JoinSummonerSpawnGroup))
                         mask = UNIT_MASK_GUARDIAN;
                     break;
                 }
@@ -1789,8 +1748,7 @@ TempSummon* Map::SummonCreature(uint32 entry, Position const& pos, SummonPropert
         return nullptr;
     }
 
-    // Set the summon to the summoner's phase
-    if (summoner)
+    if (summoner && !(properties && properties->GetFlags().HasFlag(SummonPropertiesFlags::IgnoreSummonerPhase)))
         PhasingHandler::InheritPhaseShift(summon, summoner);
 
     summon->SetCreatedBySpell(spellId);
@@ -3320,6 +3278,15 @@ float WorldObject::GetMapHeight(float x, float y, float z, bool vmap/* = true*/,
         z += GetCollisionHeight();
 
     return GetMap()->GetHeight(GetPhaseShift(), x, y, z, vmap, distanceToSearch);
+}
+
+std::string WorldObject::GetDebugInfo() const
+{
+    std::stringstream sstr;
+    sstr << WorldLocation::GetDebugInfo() << "\n"
+         << Object::GetDebugInfo() << "\n"
+         << "Name: " << GetName();
+    return sstr.str();
 }
 
 template TC_GAME_API void WorldObject::GetGameObjectListWithEntryInGrid(std::list<GameObject*>&, uint32, float) const;

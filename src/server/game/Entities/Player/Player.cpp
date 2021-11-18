@@ -972,7 +972,7 @@ void Player::Update(uint32 p_time)
             if (!aura->IsPermanent())
                 aura->SetDuration(aura->GetSpellInfo()->GetMaxDuration());
 
-    AIUpdateTick(p_time);
+    Unit::AIUpdateTick(p_time);
 
     // Update items that have just a limited lifetime
     if (now > m_Last_tick)
@@ -2362,6 +2362,7 @@ void Player::GiveLevel(uint8 level)
     packet.PowerDelta[3] = 0;
     packet.PowerDelta[4] = 0;
     packet.PowerDelta[5] = 0;
+    packet.PowerDelta[6] = 0;
 
     for (uint8 i = STAT_STRENGTH; i < MAX_STATS; ++i)
         packet.StatDelta[i] = int32(info.stats[i]) - GetCreateStat(Stats(i));
@@ -2646,6 +2647,12 @@ void Player::SendKnownSpells()
     }
 
     SendDirectMessage(knownSpells.Write());
+}
+
+void Player::SendUnlearnSpells()
+{
+    WorldPackets::Spells::SendUnlearnSpells sendUnlearnSpells;
+    SendDirectMessage(sendUnlearnSpells.Write());
 }
 
 void Player::RemoveMail(uint32 id)
@@ -24274,7 +24281,7 @@ void Player::SendInitialPacketsBeforeAddToMap()
     SendKnownSpells();
 
     /// SMSG_SEND_UNLEARN_SPELLS
-    SendDirectMessage(WorldPackets::Spells::SendUnlearnSpells().Write());
+    SendUnlearnSpells();
 
     /// SMSG_SEND_SPELL_HISTORY
     WorldPackets::Spells::SendSpellHistory sendSpellHistory;
@@ -28962,4 +28969,11 @@ bool Player::CanEnableWarModeInArea() const
         return false;
 
     return area->Flags[1] & AREA_FLAG_2_CAN_ENABLE_WAR_MODE;
+}
+
+std::string Player::GetDebugInfo() const
+{
+    std::stringstream sstr;
+    sstr << Unit::GetDebugInfo();
+    return sstr.str();
 }

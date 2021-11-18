@@ -304,7 +304,7 @@ Unit::Unit(bool isWorldObject) :
     m_charmer(nullptr), m_charmed(nullptr),
     i_motionMaster(new MotionMaster(this)), m_regenTimer(0), m_vehicle(nullptr),
     m_vehicleKit(nullptr), m_unitTypeMask(UNIT_MASK_NONE), m_Diminishing(), m_combatManager(this),
-    m_threatManager(this), _aiAnimKitId(0), _movementAnimKitId(0), _meleeAnimKitId(0),
+    m_threatManager(this), m_aiLocked(false), _aiAnimKitId(0), _movementAnimKitId(0), _meleeAnimKitId(0),
     _spellHistory(new SpellHistory(this))
 {
     m_objectType |= TYPEMASK_UNIT;
@@ -987,7 +987,7 @@ bool Unit::HasBreakableByDamageCrowdControlAura(Unit* excludeCasterChannel) cons
         {
             Player* he = duel_wasMounted ? victim->GetCharmer()->ToPlayer() : victim->ToPlayer();
 
-            ASSERT(he && he->duel);
+            ASSERT_NODEBUGINFO(he && he->duel);
 
             if (duel_wasMounted) // In this case victim == mount
                 victim->SetHealth(1);
@@ -7709,6 +7709,11 @@ void Unit::AttackedTarget(Unit* target, bool canInitialAggro)
     if (Unit* targetOwner = target->GetCharmerOrOwner())
         targetOwner->EngageWithTarget(this);
 
+    //Patch 3.0.8: All player spells which cause a creature to become aggressive to you will now also immediately cause the creature to be tapped.
+    if (Creature* creature = target->ToCreature())
+        if (!creature->hasLootRecipient() && GetTypeId() == TYPEID_PLAYER)
+            creature->SetLootRecipient(this);
+
     Player* myPlayerOwner = GetCharmerOrOwnerPlayerOrPlayerItself();
     Player* targetPlayerOwner = target->GetCharmerOrOwnerPlayerOrPlayerItself();
     if (myPlayerOwner && targetPlayerOwner && !(myPlayerOwner->duel && myPlayerOwner->duel->Opponent == targetPlayerOwner))
@@ -9053,20 +9058,20 @@ int32 Unit::GetCreatePowers(Powers power) const
     return 0;
 }
 
-void Unit::AIUpdateTick(uint32 diff, bool /*force*/)
+void Unit::AIUpdateTick(uint32 diff)
 {
-    if (!diff) // some places call with diff = 0, which does nothing (for now), see PR #22296
-        return;
     if (UnitAI* ai = GetAI())
+    {
+        m_aiLocked = true;
         ai->UpdateAI(diff);
+        m_aiLocked = false;
+    }
 }
 
 void Unit::SetAI(UnitAI* newAI)
 {
-    if (i_AI)
-        AIUpdateTick(0, true); // old AI gets a final tick if enabled
+    ASSERT(!m_aiLocked, "Attempt to replace AI during AI update tick");
     i_AI.reset(newAI);
-    AIUpdateTick(0, true); // new AI gets its initial tick
 }
 
 void Unit::ScheduleAIChange()
@@ -9080,6 +9085,11 @@ void Unit::ScheduleAIChange()
 
     if (charmed)
         i_disabledAI = std::move(i_AI);
+    else if (m_aiLocked)
+    {
+        ASSERT(!i_lockedAILifetimeExtension, "Attempt to schedule multiple charm AI changes during one update");
+        i_lockedAILifetimeExtension = std::move(i_AI); // AI needs to live just a bit longer to finish its UpdateAI
+    }
     else
         i_AI.reset();
 }
@@ -9088,7 +9098,7 @@ void Unit::RestoreDisabledAI()
 {
     ASSERT((GetTypeId() == TYPEID_PLAYER) || i_disabledAI, "Attempt to restore disabled AI on creature without disabled AI");
     i_AI = std::move(i_disabledAI);
-    AIUpdateTick(0, true);
+    i_lockedAILifetimeExtension.reset();
 }
 
 void Unit::AddToWorld()
@@ -9211,7 +9221,6 @@ void Unit::UpdateCharmAI()
         ASSERT(newAI);
         i_AI.reset(newAI);
         newAI->OnCharmed(true);
-        AIUpdateTick(0, true);
     }
     else
     {
@@ -13221,4 +13230,15 @@ float Unit::GetCollisionHeight() const
 
     float const collisionHeight = scaleMod * modelData->CollisionHeight * modelData->ModelScale * displayInfo->CreatureModelScale;
     return collisionHeight == 0.0f ? DEFAULT_COLLISION_HEIGHT : collisionHeight;
+}
+
+std::string Unit::GetDebugInfo() const
+{
+    std::stringstream sstr;
+    sstr << WorldObject::GetDebugInfo() << "\n"
+        << std::boolalpha
+        << "IsAIEnabled: " << IsAIEnabled() << " DeathState: " << std::to_string(getDeathState())
+        << " UnitMovementFlags: " << GetUnitMovementFlags() << " ExtraUnitMovementFlags: " << GetExtraUnitMovementFlags()
+        << " Class: " << std::to_string(getClass());
+    return sstr.str();
 }

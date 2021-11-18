@@ -367,6 +367,8 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         void AtEnterCombat() override;
         void AtExitCombat() override;
 
+        std::string GetDebugInfo() const override;
+
     protected:
         bool CreateFromProto(ObjectGuid::LowType guidlow, uint32 entry, CreatureData const* data = nullptr, uint32 vehId = 0);
         bool InitEntry(uint32 entry, CreatureData const* data = nullptr);
@@ -402,7 +404,6 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         bool m_AlreadySearchedAssistance;
         bool m_cannotReachTarget;
         uint32 m_cannotReachTimer;
-        bool m_AI_locked;
 
         SpellSchoolMask m_meleeDamageSchoolMask;
         uint32 m_originalEntry;
