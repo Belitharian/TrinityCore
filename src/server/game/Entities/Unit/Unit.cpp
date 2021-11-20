@@ -8647,7 +8647,7 @@ void Unit::UpdateUnitMod(UnitMods unitMod)
     }
 }
 
-void Unit::UpdateDamageDoneMods(WeaponAttackType attackType)
+void Unit::UpdateDamageDoneMods(WeaponAttackType attackType, int32 /*skipEnchantSlot = -1*/)
 {
     UnitMods unitMod;
     switch (attackType)
@@ -13148,7 +13148,7 @@ void Unit::Whisper(uint32 textId, Player* target, bool isBossWhisper /*= false*/
     BroadcastTextEntry const* bct = sBroadcastTextStore.LookupEntry(textId);
     if (!bct)
     {
-        TC_LOG_ERROR("entities.unit", "WorldObject::MonsterWhisper: `broadcast_text` was not %u found", textId);
+        TC_LOG_ERROR("entities.unit", "WorldObject::Whisper: `broadcast_text` was not %u found", textId);
         return;
     }
 

@@ -350,11 +350,13 @@ void World::AddSession_(WorldSession* s)
             if (RemoveQueuedPlayer(old->second))
                 decrease_session = false;
             // not remove replaced session form queue if listed
+            Trinity::Containers::MultimapErasePair(m_sessionsByBnetGuid, old->second->GetBattlenetAccountGUID(), old->second);
             delete old->second;
         }
     }
 
     m_sessions[s->GetAccountId()] = s;
+    m_sessionsByBnetGuid.emplace(s->GetBattlenetAccountGUID(), s);
 
     uint32 Sessions = GetActiveAndQueuedSessionCount();
     uint32 pLimit = GetPlayerAmountLimit();
@@ -1796,7 +1798,6 @@ void World::SetInitialWorldSettings()
     sObjectMgr->LoadCreatureLocales();
     sObjectMgr->LoadGameObjectLocales();
     sObjectMgr->LoadQuestTemplateLocale();
-    sObjectMgr->LoadQuestGreetingLocales();
     sObjectMgr->LoadQuestOfferRewardLocale();
     sObjectMgr->LoadQuestRequestItemsLocale();
     sObjectMgr->LoadQuestObjectivesLocale();
@@ -1968,6 +1969,7 @@ void World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Quest Greetings...");
     sObjectMgr->LoadQuestGreetings();
+    sObjectMgr->LoadQuestGreetingLocales();
 
     TC_LOG_INFO("server.loading", "Loading Objects Pooling Data...");
     sPoolMgr->LoadFromDB();
@@ -3242,8 +3244,8 @@ void World::UpdateSessions(uint32 diff)
                 m_disconnects[itr->second->GetAccountId()] = GameTime::GetGameTime();
             RemoveQueuedPlayer(pSession);
             m_sessions.erase(itr);
+            Trinity::Containers::MultimapErasePair(m_sessionsByBnetGuid, pSession->GetBattlenetAccountGUID(), pSession);
             delete pSession;
-
         }
     }
 }
@@ -3641,6 +3643,15 @@ void World::UpdateAreaDependentAuras()
             itr->second->GetPlayer()->UpdateAreaDependentAuras(itr->second->GetPlayer()->GetAreaId());
             itr->second->GetPlayer()->UpdateZoneDependentAuras(itr->second->GetPlayer()->GetZoneId());
         }
+}
+
+bool World::IsBattlePetJournalLockAcquired(ObjectGuid battlenetAccountGuid)
+{
+    for (auto&& sessionForBnet : Trinity::Containers::MapEqualRange(m_sessionsByBnetGuid, battlenetAccountGuid))
+        if (sessionForBnet.second->GetBattlePetMgr()->HasJournalLock())
+            return true;
+
+    return false;
 }
 
 void World::LoadWorldStates()

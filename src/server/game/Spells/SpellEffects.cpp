@@ -479,31 +479,6 @@ void Spell::EffectSchoolDMG()
         {
             case SPELLFAMILY_GENERIC:
             {
-                ///@todo: move those to scripts
-                switch (m_spellInfo->Id)                     // better way to check unknown
-                {
-                    // Consumption
-                    case 28865:
-                        damage = 2750;
-                        if (m_caster->GetMap()->IsHeroic())
-                            damage = 4250;
-                        break;
-                    // percent from health with min
-                    case 25599:                             // Thundercrash
-                    {
-                        damage = unitTarget->GetHealth() / 2;
-                        if (damage < 200)
-                            damage = 200;
-                        break;
-                    }
-                    // arcane charge. must only affect demons (also undead?)
-                    case 45072:
-                    {
-                        if (!(unitTarget->GetCreatureTypeMask() & CREATURE_TYPEMASK_DEMON_OR_UNDEAD))
-                            return;
-                        break;
-                    }
-                }
                 break;
             }
             case SPELLFAMILY_WARRIOR:
@@ -2990,7 +2965,8 @@ void Spell::EffectInterruptCast()
                 if (unitCaster)
                 {
                     int32 duration = m_spellInfo->GetDuration();
-                    unitTarget->GetSpellHistory()->LockSpellSchool(curSpellInfo->GetSchoolMask(), unitTarget->ModSpellDuration(m_spellInfo, unitTarget, duration, false, 1 << effectInfo->EffectIndex));
+                    duration = unitTarget->ModSpellDuration(m_spellInfo, unitTarget, duration, false, 1 << effectInfo->EffectIndex);
+                    unitTarget->GetSpellHistory()->LockSpellSchool(curSpellInfo->GetSchoolMask(), Milliseconds(duration));
                     if (m_spellInfo->DmgClass == SPELL_DAMAGE_CLASS_MAGIC)
                         Unit::ProcSkillsAndAuras(unitCaster, unitTarget, PROC_FLAG_DONE_SPELL_MAGIC_DMG_CLASS_NEG, PROC_FLAG_TAKEN_SPELL_MAGIC_DMG_CLASS_NEG,
                             PROC_SPELL_TYPE_MASK_ALL, PROC_SPELL_PHASE_HIT, PROC_HIT_INTERRUPT, nullptr, nullptr, nullptr);
@@ -5683,14 +5659,14 @@ void Spell::EffectUncageBattlePet()
 
     if (battlePetMgr->GetMaxPetLevel() < level)
     {
-        battlePetMgr->SendError(BATTLEPETRESULT_TOO_HIGH_LEVEL_TO_UNCAGE, speciesEntry->CreatureID);
+        battlePetMgr->SendError(BattlePetError::TooHighLevelToUncage, speciesEntry->CreatureID);
         SendCastResult(SPELL_FAILED_CANT_ADD_BATTLE_PET);
         return;
     }
 
     if (battlePetMgr->HasMaxPetCount(speciesEntry))
     {
-        battlePetMgr->SendError(BATTLEPETRESULT_CANT_HAVE_MORE_PETS_OF_THAT_TYPE, speciesEntry->CreatureID);
+        battlePetMgr->SendError(BattlePetError::CantHaveMorePetsOfType, speciesEntry->CreatureID);
         SendCastResult(SPELL_FAILED_CANT_ADD_BATTLE_PET);
         return;
     }
