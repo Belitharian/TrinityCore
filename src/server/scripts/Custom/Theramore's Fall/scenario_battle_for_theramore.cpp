@@ -186,7 +186,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			SPELL_METEOR                = 276973,
 			SPELL_BIG_EXPLOSION         = 348750,
 			SPELL_BLAZING_BARRIER       = 295238,
-			SPELL_ICY_GLARE             = 338517,
+            SPELL_PRISMATIC_BARRIER     = 235450,
+            SPELL_ICY_GLARE             = 338517,
 			SPELL_DISSOLVE              = 255295,
 			SPELL_TELEPORT              = 357601,
 			SPELL_CHILLING_BLAST        = 337053,
@@ -313,17 +314,23 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					}
 					if (Creature* tervosh = GetTervosh())
 					{
+						tervosh->GetMotionMaster()->Clear();
+						tervosh->GetMotionMaster()->MoveIdle();
 						tervosh->NearTeleportTo(TervoshPoint01);
 						tervosh->SetHomePosition(TervoshPoint01);
 						tervosh->CastSpell(tervosh, SPELL_COSMETIC_FIRE_LIGHT);
 					}
 					if (Creature* kinndy = GetKinndy())
 					{
+                        kinndy->GetMotionMaster()->Clear();
+                        kinndy->GetMotionMaster()->MoveIdle();
 						kinndy->NearTeleportTo(KinndyPoint02);
 						kinndy->SetHomePosition(KinndyPoint02);
 					}
 					if (Creature* kalecgos = GetKalec())
 					{
+                        kalecgos->GetMotionMaster()->Clear();
+                        kalecgos->GetMotionMaster()->MoveIdle();
 						kalecgos->NearTeleportTo(KalecgosPoint01);
 						kalecgos->SetHomePosition(KalecgosPoint01);
 						kalecgos->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
@@ -395,7 +402,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				// Step 7 : Preparation - Speak with Rhonin
 				case CRITERIA_TREE_TALK_TO_RHONIN:
-                    EnsurePlayerHaveShield();
+					EnsurePlayerHaveShield();
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Preparation_Rhonin);
 					break;
 				// Step 7 : Preparation - Tanks events
@@ -441,8 +448,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 						kalecgos->SetRegenerateHealth(false);
 					}
-                    scheduler.CancelGroup((uint32)BFTPhases::TheBattle);
-                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle_Survive);
+					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle_Survive);
 					#ifdef DEBUG
 						events.ScheduleEvent(WAVE_01, 3s);
 					#else
@@ -455,7 +461,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case CRITERIA_TREE_SURVIVE_THE_BATTLE:
 				{
 					SpawnWoundedTroops();
-                    EnsurePlayerHaveBucket();
+					EnsurePlayerHaveBucket();
 					if (Creature* jaina = GetJaina())
 					{
 						SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, jaina);
@@ -582,18 +588,18 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				// Step 12 : Retrieve Rhonin - Parent
 				case CRITERIA_TREE_RETRIEVE_RHONIN:
-                    DoCastSpellOnPlayers(SPELL_THERAMORE_EXPLOSION_SCENE);
+					DoCastSpellOnPlayers(SPELL_THERAMORE_EXPLOSION_SCENE);
 					break;
-                // Step 12 : Retrieve Rhonin - Retrieve Rhonin at the top of the tower
-                case CRITERIA_TREE_RETRIEVE:
-                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin_JoinRhonin);
-                    events.ScheduleEvent(161, 1s);
-                    break;
-                // Step 12 : Retrieve Rhonin - Localize the bomb
-                case CRITERIA_TREE_REDUCE_EXPLOSION:
-                    EnsurePlayersAreInPhase(PHASE_THERAMORE_SCENE_EXPLOSION);
-                    break;
-            }
+				// Step 12 : Retrieve Rhonin - Retrieve Rhonin at the top of the tower
+				case CRITERIA_TREE_RETRIEVE:
+					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin_JoinRhonin);
+					events.ScheduleEvent(161, 1s);
+					break;
+				// Step 12 : Retrieve Rhonin - Localize the bomb
+				case CRITERIA_TREE_REDUCE_EXPLOSION:
+					EnsurePlayersAreInPhase(PHASE_THERAMORE_SCENE_EXPLOSION);
+					break;
+			}
 		}
 
 		void OnCreatureCreate(Creature* creature) override
@@ -657,7 +663,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 		void Update(uint32 diff) override
 		{
-            scheduler.Update(diff);
+			scheduler.Update(diff);
 
 			events.Update(diff);
 			switch (eventId = events.ExecuteEvent())
@@ -1052,7 +1058,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					#ifdef DEBUG
 						events.ScheduleEvent(77, 1s);
 					#else
-                        EnsurePlayerHaveShaker();
+						EnsurePlayerHaveShaker();
 						if (Creature* hedric = GetHedric())
 						{
 							hedric->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
@@ -1187,7 +1193,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					Next(4600ms);
 					break;
 				case 90:
-                    EnsureBarrierHaveDamage();
+					EnsureBarrierHaveDamage();
 					for (uint8 i = 0; i < ACTORS_RELOCATION; i++)
 					{
 						if (Creature* creature = GetCreature(actorsRelocation[i].dataId))
@@ -1240,9 +1246,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					GetJaina()->AI()->Talk(SAY_BATTLE_02);
 					events.ScheduleEvent(93, 10s);
 					break;
-                // DELETED
-                //case 92:
-                //    break;
+				// DELETED
+				//case 92:
+				//    break;
 				case 93:
 					if (Creature* thalen = GetThalen())
 					{
@@ -1260,7 +1266,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case 94:
 					if (GameObject* barrier = GetBarrier01())
 					{
-						barrier->ResetDoorOrButton();
+                        scheduler.CancelGroup((uint32)BFTPhases::TheBattle);
+                        barrier->ResetDoorOrButton();
 						if (Creature* trigger = barrier->SummonCreature(WORLD_TRIGGER, ExplodingPoint01, TEMPSUMMON_TIMED_DESPAWN, 2s))
 							trigger->CastSpell(trigger, SPELL_BIG_EXPLOSION);
 					}
@@ -1269,8 +1276,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case 95:
 					if (Creature* amara = GetAmara())
 					{
-						amara->RemoveAllAuras();
+                        amara->RemoveAllAuras();
 						amara->SetEmoteState(EMOTE_STATE_READY2HL_ALLOW_MOVEMENT);
+                        amara->CastSpell(amara, SPELL_PRISMATIC_BARRIER, true);
 					}
 					GetThalen()->HandleEmoteCommand(EMOTE_ONESHOT_LAUGH);
 					GetJaina()->SetEmoteState(EMOTE_STATE_READY2HL_ALLOW_MOVEMENT);
@@ -1639,8 +1647,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* jaina = GetJaina())
 					{
 						jaina->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-                        jaina->SetFacingToObject(GetRhonin());
-                        jaina->RemoveAllAuras();
+						jaina->SetFacingToObject(GetRhonin());
+						jaina->RemoveAllAuras();
 
 						if (Creature* rhonin = GetRhonin())
 						{
@@ -1691,22 +1699,22 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						rhonin->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
 						rhonin->RemoveAllAuras();
 					}
-                    Next(5s);
-                    break;
-                case 172:
-                    DoSendScenarioEvent(EVENT_REDUCE_IMPACT);
-                    break;
+					Next(5s);
+					break;
+				case 172:
+					DoSendScenarioEvent(EVENT_REDUCE_IMPACT);
+					break;
 
 				#pragma endregion
 			}
 		}
 
 		EventMap events;
-        TaskScheduler scheduler;
+		TaskScheduler scheduler;
 		BFTPhases phase;
 		uint32 wavesInvoker;
 		uint32 eventId;
-        uint8 archmagesIndex;
+		uint8 archmagesIndex;
 		uint8 waves;
 		GuidVector citizens;
 		GuidVector dummies;
@@ -1736,6 +1744,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		GameObject* GetBarrier02()  { return GetGameObject(DATA_MYSTIC_BARRIER_02); }
 
 		#pragma endregion
+
+        // Utils
+        #pragma region UTILS
 
 		void Talk(Creature* creature, uint8 id)
 		{
@@ -1983,88 +1994,88 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 		}
 
-        void EnsurePlayersAreInPhase(uint32 phaseId)
-        {
-            Map::PlayerList const& players = instance->GetPlayers();
-            if (players.isEmpty())
-                return;
+		void EnsurePlayersAreInPhase(uint32 phaseId)
+		{
+			Map::PlayerList const& players = instance->GetPlayers();
+			if (players.isEmpty())
+				return;
 
-            for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
-            {
-                if (Player* player = i->GetSource())
-                {
-                    PhasingHandler::AddPhase(player, phaseId, true);
-                }
-            }
-        }
+			for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
+			{
+				if (Player* player = i->GetSource())
+				{
+					PhasingHandler::AddPhase(player, phaseId, true);
+				}
+			}
+		}
 
-        void EnsurePlayersHaveAura(uint32 entry)
-        {
-            Map::PlayerList const& players = instance->GetPlayers();
-            if (players.isEmpty())
-                return;
+		void EnsurePlayersHaveAura(uint32 entry)
+		{
+			Map::PlayerList const& players = instance->GetPlayers();
+			if (players.isEmpty())
+				return;
 
-            for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
-            {
-                if (Player* player = i->GetSource())
-                {
-                    if (player->HasAura(entry))
-                        continue;
+			for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
+			{
+				if (Player* player = i->GetSource())
+				{
+					if (player->HasAura(entry))
+						continue;
 
-                    player->CastSpell(player, entry, true);
-                }
-            }
-        }
+					player->CastSpell(player, entry, true);
+				}
+			}
+		}
 
-        void EnsurePlayerHaveShield()
-        {
-            scheduler.Schedule(2s, [this](TaskContext shield)
-            {
-                if (phase >= BFTPhases::Preparation_Rhonin && phase < BFTPhases::HelpTheWounded)
-                {
-                    EnsurePlayersHaveAura(SPELL_RUNIC_SHIELD);
-                    shield.Repeat(1s);
-                }
-            });
-        }
+		void EnsurePlayerHaveShield()
+		{
+			scheduler.Schedule(2s, [this](TaskContext shield)
+			{
+				if (phase >= BFTPhases::Preparation_Rhonin && phase < BFTPhases::HelpTheWounded)
+				{
+					EnsurePlayersHaveAura(SPELL_RUNIC_SHIELD);
+					shield.Repeat(1s);
+				}
+			});
+		}
 
-        void EnsurePlayerHaveBucket()
-        {
-            scheduler.Schedule(2s, [this](TaskContext bucket)
-            {
-                if (phase >= BFTPhases::HelpTheWounded && phase < BFTPhases::HelpTheWounded_Extinguish)
-                {
-                    EnsurePlayersHaveAura(SPELL_WATER_BUCKET);
-                    bucket.Repeat(1s);
-                }
-            });
-        }
+		void EnsurePlayerHaveBucket()
+		{
+			scheduler.Schedule(2s, [this](TaskContext bucket)
+			{
+				if (phase >= BFTPhases::HelpTheWounded && phase < BFTPhases::HelpTheWounded_Extinguish)
+				{
+					EnsurePlayersHaveAura(SPELL_WATER_BUCKET);
+					bucket.Repeat(1s);
+				}
+			});
+		}
 
-        void EnsurePlayerHaveShaker()
-        {
-            scheduler.Schedule(1s, [this](TaskContext shield)
-            {
-                if (phase >= BFTPhases::Preparation && phase < BFTPhases::HelpTheWounded)
-                {
-                    DoCastSpellOnPlayers(SPELL_CAMERA_SHAKE_VOLCANO);
-                }
+		void EnsurePlayerHaveShaker()
+		{
+			scheduler.Schedule(1s, [this](TaskContext shield)
+			{
+				if (phase >= BFTPhases::Preparation && phase < BFTPhases::HelpTheWounded)
+				{
+					DoCastSpellOnPlayers(SPELL_CAMERA_SHAKE_VOLCANO);
+				}
 
-                shield.Repeat(15s, 30s);
-            });
-        }
+				shield.Repeat(15s, 30s);
+			});
+		}
 
-        void EnsureBarrierHaveDamage()
-        {
-            scheduler.Schedule(1s, (uint32)BFTPhases::TheBattle, [this](TaskContext explosion)
-            {
-                if (Creature* thalen = GetThalen())
-                {
-                    if (Creature* trigger = thalen->SummonCreature(WORLD_TRIGGER, ExplodingPoint01, TEMPSUMMON_TIMED_DESPAWN, 2s))
-                        trigger->CastSpell(trigger, SPELL_BIG_EXPLOSION);
-                    explosion.Repeat(1s, 2s);
-                }
-            });
-        }
+		void EnsureBarrierHaveDamage()
+		{
+			scheduler.Schedule(1s, (uint32)BFTPhases::TheBattle, [this](TaskContext explosion)
+			{
+				if (Creature* thalen = GetThalen())
+				{
+					if (Creature* trigger = thalen->SummonCreature(WORLD_TRIGGER, ExplodingPoint01, TEMPSUMMON_TIMED_DESPAWN, 2s))
+						trigger->CastSpell(trigger, SPELL_BIG_EXPLOSION);
+					explosion.Repeat(2s, 5s);
+				}
+			});
+		}
 
 		Position GetRandomPosition(Position center, float dist)
 		{
@@ -2074,6 +2085,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			float y = r * sinf(alpha) + center.GetPositionY();
 			return { x, y, center.GetPositionZ(), 0.f };
 		}
+
+        #pragma endregion
 	};
 
 	InstanceScript* GetInstanceScript(InstanceMap* map) const override
@@ -2113,9 +2126,9 @@ class scene_theramore_explosion : public SceneScript
 
 	void Finish(Player* player)
 	{
-        player->SetControlled(false, UNIT_STATE_ROOT);
+		player->SetControlled(false, UNIT_STATE_ROOT);
 		player->TeleportTo(GetRandomPosition(), TELE_REVIVE_AT_TELEPORT);
-    }
+	}
 
 	WorldLocation GetRandomPosition()
 	{

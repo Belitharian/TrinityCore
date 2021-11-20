@@ -6203,15 +6203,6 @@ void Player::CheckAreaExploreAndOutdoor()
     AreaTableEntry const* areaEntry = sAreaTableStore.LookupEntry(areaId);
     if (!areaEntry)
     {
-        uint32 const mapId = GetMapId();
-        switch (mapId)
-        {
-            case 5000:
-                return;
-            default:
-                break;
-        }
-
         TC_LOG_ERROR("entities.player", "Player '%s' (%s) discovered unknown area (x: %f y: %f z: %f map: %u)",
             GetName().c_str(), GetGUID().ToString().c_str(), GetPositionX(), GetPositionY(), GetPositionZ(), GetMapId());
         return;

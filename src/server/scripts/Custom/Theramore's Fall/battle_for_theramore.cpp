@@ -348,7 +348,6 @@ class npc_amara_leeson : public CreatureScript
 			SPELL_BLAZING_BARRIER       = 295238,
 			SPELL_PRISMATIC_BARRIER     = 235450,
 			SPELL_ICE_BARRIER           = 198094,
-			SPELL_BLINK                 = 295236,
 			SPELL_GREATER_PYROBLAST     = 295231,
 			SPELL_SCORCH                = 301075
 		};
@@ -376,12 +375,6 @@ class npc_amara_leeson : public CreatureScript
 				{
 					DoCastVictim(SPELL_SCORCH);
 					scorch.Repeat(6s, 8s);
-				})
-				.Schedule(4s, [this](TaskContext blink)
-				{
-					me->CastStop();
-					DoCast(SPELL_BLINK);
-					blink.Repeat(24s, 32s);
 				})
 				.Schedule(3s, [this](TaskContext greater_pyroblast)
 				{
