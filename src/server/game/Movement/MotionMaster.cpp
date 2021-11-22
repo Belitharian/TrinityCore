@@ -850,7 +850,7 @@ void MotionMaster::MoveCirclePath(float x, float y, float z, float radius, bool 
     Add(new GenericMovementGenerator(std::move(init), EFFECT_MOTION_TYPE, 0));
 }
 
-void MotionMaster::MoveSmoothPath(uint32 pointId, Position const* pathPoints, size_t pathSize, bool walk, bool fly)
+void MotionMaster::MoveSmoothPath(uint32 pointId, Position const* pathPoints, size_t pathSize, bool walk, bool fly, Optional<float> finalOrient)
 {
     Movement::MoveSplineInit init(_owner);
     if (fly)
@@ -868,6 +868,9 @@ void MotionMaster::MoveSmoothPath(uint32 pointId, Position const* pathPoints, si
     });
     init.MovebyPath(path);
     init.SetWalk(walk);
+
+    if (finalOrient)
+        init.SetFacing(*finalOrient);
 
     // This code is not correct
     // GenericMovementGenerator does not affect UNIT_STATE_ROAMING_MOVE

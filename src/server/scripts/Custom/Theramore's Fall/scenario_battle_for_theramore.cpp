@@ -1866,8 +1866,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				if (Creature* temp = instance->SummonCreature(entry, pos))
 				{
 					float x = pos.GetPositionX();
-					float y = pos.GetPositionY();;
-					float z = pos.GetPositionZ();;
+					float y = pos.GetPositionY();
+					float z = pos.GetPositionZ();
 
 					temp->SetBoundingRadius(20.f);
 					temp->UpdateGroundPositionZ(x, y, z);
@@ -2102,12 +2102,12 @@ class scene_theramore_explosion : public SceneScript
 
 	enum Misc
 	{
-		MAP_KALIMDOR        = 1,
-		SPELL_DROP_BOMBE    = 128438
+		MAP_THERAMORE_RUINS     = 5001,
+		SPELL_DROP_BOMBE        = 128438
 	};
 
-	const Position Center = { -2826.71f, -4756.45f, 5.29f, 2.85f };
-	const float Distance = 3.f;
+	const Position Center = { -3009.70f, -4334.41f, 6.73f, 4.24f };
+	const float Distance = 8.f;
 
 	void OnSceneStart(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* sceneTemplate) override
 	{
@@ -2136,7 +2136,7 @@ class scene_theramore_explosion : public SceneScript
 		float r = Distance * sqrtf(float(rand_norm()));
 		float x = r * cosf(alpha) + Center.GetPositionX();
 		float y = r * sinf(alpha) + Center.GetPositionY();
-		return { MAP_KALIMDOR, { x, y, Center.GetPositionZ(), 2.85f } };
+		return { MAP_THERAMORE_RUINS, { x, y, Center.GetPositionZ(), Center.GetOrientation() }};
 	}
 };
 

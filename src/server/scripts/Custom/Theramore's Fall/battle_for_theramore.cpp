@@ -409,7 +409,7 @@ class npc_amara_leeson : public CreatureScript
 
 	CreatureAI* GetAI(Creature* creature) const override
 	{
-		return new npc_amara_leesonAI(creature);
+		return GetBattleForTheramoreAI<npc_amara_leesonAI>(creature);
 	}
 };
 

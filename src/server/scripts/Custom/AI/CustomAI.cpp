@@ -1,4 +1,6 @@
 #include "CustomAI.h"
+#include "ScriptMgr.h"
+#include "ScriptedCreature.h"
 
 CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
     type(type), summons(creature)
@@ -54,6 +56,24 @@ void CustomAI::SummonedCreatureDies(Creature* summon, Unit* killer)
     ScriptedAI::SummonedCreatureDies(summon, killer);
 }
 
+void CustomAI::SpellHit(Unit* caster, SpellInfo const* spellInfo)
+{
+    if (type == AI_Type::Distance)
+    {
+        if (spellInfo->HasEffect(SPELL_EFFECT_INTERRUPT_CAST))
+        {
+            int32 duration = spellInfo->GetDuration() / IN_MILLISECONDS;
+            DoStartMovement(caster);
+            scheduler.Schedule(Seconds(duration), [caster, this](TaskContext /*context*/)
+            {
+                DoStartMovement(caster, GetDistance());
+            });
+        }
+    }
+
+    ScriptedAI::SpellHit(caster, spellInfo);
+}
+
 void CustomAI::EnterEvadeMode(EvadeReason why)
 {
     ReleaseFocus();
@@ -89,6 +109,7 @@ void CustomAI::AttackStart(Unit* who)
             DoStartMovement(who);
         else
             DoStartMovement(who, GetDistance());
+
         SetCombatMovement(true);
     }
 }

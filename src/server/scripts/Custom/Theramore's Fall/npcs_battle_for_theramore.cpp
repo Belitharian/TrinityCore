@@ -1,5 +1,6 @@
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
+#include "CreatureData.h"
 #include "GameObject.h"
 #include "GridNotifiersImpl.h"
 #include "InstanceScript.h"
@@ -224,12 +225,12 @@ struct npc_theramore_troopAI : public CustomAI
 			#else
 				if (!emoteReceived && emoteId == TEXT_EMOTE_FORTHEALLIANCE)
 				{
-                    if (player->IsWithinDist(me, 2.1f))
-                    {
-                        me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
-                        KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
-                        emoteReceived = true;
-                    }
+					if (player->IsWithinDist(me, 2.1f))
+					{
+						me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
+						KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
+						emoteReceived = true;
+					}
 				}
 			#endif
 		}
@@ -422,7 +423,7 @@ class npc_theramore_officier : public CreatureScript
 
 	CreatureAI* GetAI(Creature* creature) const override
 	{
-		return new npc_theramore_officierAI(creature);
+        return GetBattleForTheramoreAI<npc_theramore_officierAI>(creature);
 	}
 };
 
@@ -477,7 +478,7 @@ class npc_theramore_footman : public CreatureScript
 
 	CreatureAI* GetAI(Creature* creature) const override
 	{
-		return new npc_theramore_footmanAI(creature);
+        return GetBattleForTheramoreAI<npc_theramore_footmanAI>(creature);
 	}
 };
 
@@ -556,7 +557,7 @@ class npc_theramore_arcanist : public CreatureScript
 
 	CreatureAI* GetAI(Creature* creature) const override
 	{
-		return new npc_theramore_arcanistAI(creature);
+        return GetBattleForTheramoreAI<npc_theramore_arcanistAI>(creature);
 	}
 };
 
@@ -683,7 +684,7 @@ class npc_theramore_faithful : public CreatureScript
 				{
 					if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
 						DoCast(target, SPELL_HEAL);
-					heal.Repeat(5s, 8s);
+					heal.Repeat(2s);
 				})
 				.Schedule(1s, 3s, [this](TaskContext psychic_scream)
 				{
@@ -716,7 +717,7 @@ class npc_theramore_faithful : public CreatureScript
 
 	CreatureAI* GetAI(Creature* creature) const override
 	{
-		return new npc_theramore_faithfulAI(creature);
+        return GetBattleForTheramoreAI<npc_theramore_faithfulAI>(creature);
 	}
 };
 
@@ -760,6 +761,15 @@ struct npc_theramore_hordeAI : public CustomAI
 		me->CallAssistance();
 	}
 
+    void JustDied(Unit* killer) override
+    {
+        CustomAI::JustDied(killer);
+
+        uint32 killCredit = me->GetCreatureTemplate()->KillCredit[0];
+        if (Player* player = killer->ToPlayer())
+            KillRewarder(player, me, false).Reward(killCredit);
+    }
+
 	protected:
 
 	uint32 EnemiesInRange(float distance)
@@ -782,7 +792,7 @@ class npc_roknah_hag : public CreatureScript
 	struct npc_roknah_hagAI : public npc_theramore_hordeAI
 	{
 		npc_roknah_hagAI(Creature* creature) : npc_theramore_hordeAI(creature, AI_Type::Distance),
-			closeTarget(false), iceblock(false), icicle(0)
+			closeTarget(false), iceblock(false)
 		{
 		}
 
@@ -817,14 +827,12 @@ class npc_roknah_hag : public CreatureScript
 
 		bool closeTarget;
 		bool iceblock;
-		uint8 icicle;
 
-		void OnSuccessfulSpellCast(SpellInfo const* spell) override
+		void SpellHitTarget(Unit* /*target*/, SpellInfo const* spell) override
 		{
 			switch (spell->Id)
 			{
 				case SPELL_GLACIAL_SPIKE:
-					icicle = 0;
 					me->RemoveAurasDueToSpell(SPELL_ICICLES);
 					for (uint8 i = 0; i < 5; i++)
 						me->RemoveAurasDueToSpell(Icicles[i]);
@@ -833,10 +841,26 @@ class npc_roknah_hag : public CreatureScript
 				case SPELL_FROST_NOVA:
 				case SPELL_EBONBOLT:
 				case SPELL_FLURRY:
-					DoCastSelf(SPELL_ICICLES, true);
-					DoCastSelf(Icicles[icicle], true);
-					icicle++;
-					break;
+                {
+                    if (Aura* aura = me->GetAura(SPELL_ICICLES))
+                    {
+                        uint8 stacks = aura->GetStackAmount();
+                        if (stacks < 4)
+                        {
+                            CastIcicle(stacks);
+                        }
+                        else
+                        {
+                            me->CastStop();
+                            CastIcicle(stacks);
+                            DoCastVictim(SPELL_GLACIAL_SPIKE);
+                        }
+                    }
+                    else
+                        CastIcicle(0);
+
+                    break;
+                }
 			}
 		}
 
@@ -894,15 +918,6 @@ class npc_roknah_hag : public CreatureScript
 				{
 					DoCastVictim(SPELL_FROSTBOLT);
 					frostbolt.Repeat(2s);
-				})
-				.Schedule(5s, GROUP_NORMAL, [this](TaskContext glacial_spike)
-				{
-					if (Aura* aura = me->GetAura(SPELL_ICICLES))
-					{
-						if (aura->GetStackAmount() >= 5)
-							DoCastVictim(SPELL_GLACIAL_SPIKE);
-					}
-					glacial_spike.Repeat(1s);
 				});
 		}
 
@@ -946,6 +961,13 @@ class npc_roknah_hag : public CreatureScript
 				}
 			});
 		}
+
+        void CastIcicle(uint8 index)
+        {
+            uint32 icicle = Icicles[index];
+            DoCastSelf(SPELL_ICICLES, true);
+            DoCastSelf(icicle, true);
+        }
 	};
 
 	CreatureAI* GetAI(Creature* creature) const override
@@ -1123,9 +1145,12 @@ class npc_roknah_loasinger : public CreatureScript
 				})
 				.Schedule(1ms, [this](TaskContext healing_surge)
 				{
-					if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
-						DoCast(target, SPELL_HEALING_SURGE);
-					healing_surge.Repeat(2s);
+                    if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
+                    {
+                        me->CastStop();
+                        DoCast(target, SPELL_HEALING_SURGE);
+                    }
+					healing_surge.Repeat(1s);
 				})
 				.Schedule(1ms, [this](TaskContext riptide)
 				{
@@ -1140,7 +1165,7 @@ class npc_roknah_loasinger : public CreatureScript
 				{
 					if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 40))
 						DoCast(target, SPELL_CHAIN_HEAL);
-					chain_heal.Repeat(5s);
+					chain_heal.Repeat(3s);
 				})
 				.Schedule(11s, 15s, [this](TaskContext lava_burst)
 				{
@@ -1192,8 +1217,6 @@ class npc_roknah_felcaster : public CreatureScript
 		{
 			SPELL_DRAIN_LIFE        = 149992,
 			SPELL_CONFLAGRATE       = 295418,
-			SPELL_BACKDRAFT         = 295419,
-			SPELL_BACKDRAFT_AURA    = 196406,
 			SPELL_CHAOS_BOLT        = 295420,
 			SPELL_IMMOLATE          = 295425,
 			SPELL_INCINERATE        = 295438,
@@ -1234,18 +1257,12 @@ class npc_roknah_felcaster : public CreatureScript
 				})
 				.Schedule(2s, 6s, [this](TaskContext conflagrate)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_MAXDISTANCE, 0))
+					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
 					{
 						me->CastStop();
 						DoCast(target, SPELL_CONFLAGRATE);
-						if (Aura* aura = me->GetAura(SPELL_BACKDRAFT_AURA))
-						{
-							if (aura->GetStackAmount() < 2)
-								DoCastSelf(SPELL_BACKDRAFT, true);
-						}
 					}
-					else
-						conflagrate.Repeat(1s, 3s);
+                    conflagrate.Repeat(1s, 3s);
 				})
 				.Schedule(3s, 5s, [this](TaskContext chaos_bolt)
 				{
@@ -1255,10 +1272,7 @@ class npc_roknah_felcaster : public CreatureScript
 				.Schedule(1ms, [this](TaskContext immolate)
 				{
 					if (Unit* target = DoFindEnemyMissingDot(immolateInfo))
-					{
-						if (!target->HasAura(SPELL_IMMOLATE))
-							DoCast(target, SPELL_IMMOLATE);
-					}
+                        DoCast(target, SPELL_IMMOLATE);
 					immolate.Repeat(2s, 5s);
 				})
 				.Schedule(1ms, [this](TaskContext corruption)

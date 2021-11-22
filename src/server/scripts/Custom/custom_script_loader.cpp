@@ -20,6 +20,10 @@ void AddSC_battle_for_theramore();
 void AddSC_scenario_battle_for_theramore();
 void AddSC_npcs_battle_for_theramore();
 
+void AddSC_ruins_of_theramore();
+void AddSC_scenario_ruins_of_theramore();
+void AddSC_npcs_ruins_of_theramore();
+
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
 void AddCustomScripts()
@@ -27,4 +31,8 @@ void AddCustomScripts()
     AddSC_battle_for_theramore();
     AddSC_scenario_battle_for_theramore();
     AddSC_npcs_battle_for_theramore();
+
+    AddSC_ruins_of_theramore();
+    AddSC_scenario_ruins_of_theramore();
+    AddSC_npcs_ruins_of_theramore();
 }
