@@ -29,6 +29,7 @@
 #include <boost/container/flat_set.hpp>
 #include <array>
 #include <map>
+#include <stack>
 
 #define VISUAL_WAYPOINT 1 // Creature Entry ID used for waypoints show, visible only for GMs
 #define WORLD_TRIGGER 12999
@@ -767,8 +768,14 @@ class TC_GAME_API Unit : public WorldObject
         bool IsAIEnabled() const { return (i_AI != nullptr); }
         void AIUpdateTick(uint32 diff);
         UnitAI* GetAI() const { return i_AI.get(); }
-        void SetAI(UnitAI* newAI);
         void ScheduleAIChange();
+        void PushAI(UnitAI* newAI);
+        bool PopAI();
+    protected:
+        void SetAI(UnitAI* newAI);
+        UnitAI* GetTopAI() const { return i_AIs.empty() ? nullptr : i_AIs.top().get(); }
+        void RefreshAI();
+    public:
 
         void AddToWorld() override;
         void RemoveFromWorld() override;
@@ -1300,8 +1307,10 @@ class TC_GAME_API Unit : public WorldObject
         Pet* CreateTamedPetFrom(uint32 creatureEntry, uint32 spell_id = 0);
         bool InitTamedPet(Pet* pet, uint8 level, uint32 spell_id);
 
-        void SetWildBattlePetLevel(uint32 wildBattlePetLevel) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::WildBattlePetLevel), wildBattlePetLevel); }
+        uint32 GetBattlePetCompanionNameTimestamp() const { return m_unitData->BattlePetCompanionNameTimestamp; }
+        void SetBattlePetCompanionNameTimestamp(uint32 timestamp) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::BattlePetCompanionNameTimestamp), timestamp); }
         uint32 GetWildBattlePetLevel() const { return m_unitData->WildBattlePetLevel; }
+        void SetWildBattlePetLevel(uint32 wildBattlePetLevel) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::WildBattlePetLevel), wildBattlePetLevel); }
 
         // aura apply/remove helpers - you should better not use these
         Aura* _TryStackingOrRefreshingExistingAura(AuraCreateInfo& createInfo);
@@ -1447,7 +1456,7 @@ class TC_GAME_API Unit : public WorldObject
         uint32 GetCreateHealth() const { return m_unitData->BaseHealth; }
         void SetCreateMana(uint32 val) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::BaseMana), val); }
         uint32 GetCreateMana() const { return m_unitData->BaseMana; }
-        int32 GetCreatePowers(Powers power) const;
+        int32 GetCreatePowerValue(Powers power) const;
         float GetPosStat(Stats stat) const { return m_unitData->StatPosBuff[stat]; }
         float GetNegStat(Stats stat) const { return m_unitData->StatNegBuff[stat]; }
         float GetCreateStat(Stats stat) const { return m_createStats[stat]; }
@@ -1970,9 +1979,9 @@ class TC_GAME_API Unit : public WorldObject
 
         void UpdateCharmAI();
         void RestoreDisabledAI();
-        std::unique_ptr<UnitAI> i_AI;
-        std::unique_ptr<UnitAI> i_disabledAI;
-        std::unique_ptr<UnitAI> i_lockedAILifetimeExtension; // yes, this lifetime extension is terrible
+        typedef std::stack<std::shared_ptr<UnitAI>> UnitAIStack;
+        UnitAIStack i_AIs;
+        std::shared_ptr<UnitAI> i_AI;
         bool m_aiLocked;
 
         std::unordered_set<AbstractFollower*> m_followingMe;

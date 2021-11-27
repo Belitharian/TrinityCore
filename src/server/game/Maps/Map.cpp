@@ -208,9 +208,9 @@ void Map::LoadMMap(int gx, int gy)
     bool mmapLoadResult = MMAP::MMapFactory::createOrGetMMapManager()->loadMap(sWorld->GetDataPath(), GetId(), gx, gy);
 
     if (mmapLoadResult)
-        TC_LOG_DEBUG("mmaps", "MMAP loaded name:%s, id:%d, x:%d, y:%d (mmap rep.: x:%d, y:%d)", GetMapName(), GetId(), gx, gy, gx, gy);
+        TC_LOG_DEBUG("mmaps.tiles", "MMAP loaded name:%s, id:%d, x:%d, y:%d (mmap rep.: x:%d, y:%d)", GetMapName(), GetId(), gx, gy, gx, gy);
     else
-        TC_LOG_ERROR("mmaps", "Could not load MMAP name:%s, id:%d, x:%d, y:%d (mmap rep.: x:%d, y:%d)", GetMapName(), GetId(), gx, gy, gx, gy);
+        TC_LOG_ERROR("mmaps.tiles", "Could not load MMAP name:%s, id:%d, x:%d, y:%d (mmap rep.: x:%d, y:%d)", GetMapName(), GetId(), gx, gy, gx, gy);
 }
 
 void Map::LoadVMap(int gx, int gy)
@@ -2537,12 +2537,9 @@ float Map::GetStaticHeight(PhaseShift const& phaseShift, float x, float y, float
     // find raw .map surface under Z coordinates
     float mapHeight = VMAP_INVALID_HEIGHT_VALUE;
     uint32 terrainMapId = PhasingHandler::GetTerrainMapId(phaseShift, this, x, y);
-    if (GridMap* gmap = GetGrid(terrainMapId, x, y))
-    {
-        float gridHeight = gmap->getHeight(x, y);
-        if (G3D::fuzzyGe(z, gridHeight - GROUND_HEIGHT_TOLERANCE))
-            mapHeight = gridHeight;
-    }
+    float gridHeight = GetGridHeight(phaseShift, x, y);
+    if (G3D::fuzzyGe(z, gridHeight - GROUND_HEIGHT_TOLERANCE))
+        mapHeight = gridHeight;
 
     float vmapHeight = VMAP_INVALID_HEIGHT_VALUE;
     if (checkVMap)
@@ -2564,14 +2561,22 @@ float Map::GetStaticHeight(PhaseShift const& phaseShift, float x, float y, float
             // or if the distance of the vmap height is less the land height distance
             if (vmapHeight > mapHeight || std::fabs(mapHeight - z) > std::fabs(vmapHeight - z))
                 return vmapHeight;
-            else
-                return mapHeight;                           // better use .map surface height
+
+            return mapHeight;                           // better use .map surface height
         }
-        else
-            return vmapHeight;                              // we have only vmapHeight (if have)
+
+        return vmapHeight;                              // we have only vmapHeight (if have)
     }
 
     return mapHeight;                               // explicitly use map data
+}
+
+float Map::GetGridHeight(PhaseShift const& phaseShift, float x, float y)
+{
+    if (GridMap* gmap = GetGrid(PhasingHandler::GetTerrainMapId(phaseShift, this, x, y), x, y))
+        return gmap->getHeight(x, y);
+
+    return VMAP_INVALID_HEIGHT_VALUE;
 }
 
 float Map::GetMinHeight(PhaseShift const& phaseShift, float x, float y)

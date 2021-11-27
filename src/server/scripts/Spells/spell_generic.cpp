@@ -171,6 +171,7 @@ enum AnimalBloodPoolSpell
     SPELL_SPAWN_BLOOD_POOL  = 63471
 };
 
+// 46221 - Animal Blood
 class spell_gen_animal_blood : public AuraScript
 {
     PrepareAuraScript(spell_gen_animal_blood);
@@ -198,6 +199,27 @@ class spell_gen_animal_blood : public AuraScript
     {
         AfterEffectApply += AuraEffectRemoveFn(spell_gen_animal_blood::OnApply, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL, AURA_EFFECT_HANDLE_REAL);
         AfterEffectRemove += AuraEffectRemoveFn(spell_gen_animal_blood::OnRemove, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// 63471 -Spawn Blood Pool
+class spell_spawn_blood_pool : public SpellScript
+{
+    PrepareSpellScript(spell_spawn_blood_pool);
+
+    void SetDest(SpellDestination& dest)
+    {
+        Unit* caster = GetCaster();
+        Position summonPos = caster->GetPosition();
+        LiquidData liquidStatus;
+        if (caster->GetMap()->GetLiquidStatus(caster->GetPhaseShift(), caster->GetPositionX(), caster->GetPositionY(), caster->GetPositionZ(), map_liquidHeaderTypeFlags::AllLiquids, &liquidStatus, caster->GetCollisionHeight()))
+            summonPos.m_positionZ = liquidStatus.level;
+        dest.Relocate(summonPos);
+    }
+
+    void Register() override
+    {
+        OnDestinationTargetSelect += SpellDestinationTargetSelectFn(spell_spawn_blood_pool::SetDest, EFFECT_0, TARGET_DEST_CASTER);
     }
 };
 
@@ -4000,6 +4022,133 @@ class spell_gen_pony_mount_check : public AuraScript
     }
 };
 
+enum CorruptinPlagueEntrys
+{
+    NPC_APEXIS_FLAYER       = 22175,
+    NPC_SHARD_HIDE_BOAR     = 22180,
+    NPC_AETHER_RAY          = 22181,
+    SPELL_CORRUPTING_PLAGUE = 40350
+};
+
+// 40350 - Corrupting Plague
+class CorruptingPlagueSearcher
+{
+public:
+    CorruptingPlagueSearcher(Unit* obj, float distance) : _unit(obj), _distance(distance)  { }
+
+    bool operator()(Unit* u) const
+    {
+        if (_unit->GetDistance2d(u) < _distance &&
+            (u->GetEntry() == NPC_APEXIS_FLAYER || u->GetEntry() == NPC_SHARD_HIDE_BOAR || u->GetEntry() == NPC_AETHER_RAY) &&
+            !u->HasAura(SPELL_CORRUPTING_PLAGUE))
+            return true;
+
+        return false;
+    }
+
+private:
+    Unit* _unit;
+    float _distance;
+};
+
+// 40349 - Corrupting Plague
+class spell_corrupting_plague_aura : public AuraScript
+{
+    PrepareAuraScript(spell_corrupting_plague_aura);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_CORRUPTING_PLAGUE });
+    }
+
+    void OnPeriodic(AuraEffect const* /*aurEff*/)
+    {
+        Unit* owner = GetTarget();
+
+        std::list<Creature*> targets;
+        CorruptingPlagueSearcher creature_check(owner, 15.0f);
+        Trinity::CreatureListSearcher<CorruptingPlagueSearcher> creature_searcher(owner, targets, creature_check);
+        Cell::VisitGridObjects(owner, creature_searcher, 15.0f);
+
+        if (!targets.empty())
+            return;
+
+        PreventDefaultAction();
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_corrupting_plague_aura::OnPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL);
+    }
+};
+
+enum SiegeTankControl
+{
+    SPELL_SIEGE_TANK_CONTROL = 47963
+};
+
+class spell_gen_vehicle_control_link : public AuraScript
+{
+    PrepareAuraScript(spell_gen_vehicle_control_link);
+
+    void OnRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        GetTarget()->RemoveAurasDueToSpell(SPELL_SIEGE_TANK_CONTROL); //aurEff->GetAmount()
+    }
+
+    void Register() override
+    {
+        AfterEffectRemove += AuraEffectRemoveFn(spell_gen_vehicle_control_link::OnRemove, EFFECT_1, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// 34779 - Freezing Circle
+enum FreezingCircleMisc
+{
+    SPELL_FREEZING_CIRCLE_PIT_OF_SARON_NORMAL = 69574,
+    SPELL_FREEZING_CIRCLE_PIT_OF_SARON_HEROIC = 70276,
+    SPELL_FREEZING_CIRCLE                     = 34787,
+    SPELL_FREEZING_CIRCLE_SCENARIO            = 141383,
+    MAP_ID_BLOOD_IN_THE_SNOW_SCENARIO         = 1130
+};
+
+class spell_freezing_circle : public SpellScript
+{
+    PrepareSpellScript(spell_freezing_circle);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(
+            {
+                SPELL_FREEZING_CIRCLE_PIT_OF_SARON_NORMAL,
+                SPELL_FREEZING_CIRCLE_PIT_OF_SARON_HEROIC,
+                SPELL_FREEZING_CIRCLE,
+                SPELL_FREEZING_CIRCLE_SCENARIO
+            });
+    }
+
+    void HandleDamage(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        uint32 spellId = 0;
+        Map* map = caster->GetMap();
+
+        if (map->IsDungeon())
+            spellId = map->IsHeroic() ? SPELL_FREEZING_CIRCLE_PIT_OF_SARON_HEROIC : SPELL_FREEZING_CIRCLE_PIT_OF_SARON_NORMAL;
+        else
+            spellId = map->GetId() == MAP_ID_BLOOD_IN_THE_SNOW_SCENARIO ? SPELL_FREEZING_CIRCLE_SCENARIO : SPELL_FREEZING_CIRCLE;
+
+        if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, GetCastDifficulty()))
+            if (!spellInfo->GetEffects().empty())
+                SetHitDamage(spellInfo->GetEffect(EFFECT_0).CalcValue());
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_freezing_circle::HandleDamage, EFFECT_1, SPELL_EFFECT_SCHOOL_DAMAGE);
+    }
+};
+
 // 169869 - Transformation Sickness
 class spell_gen_decimatus_transformation_sickness : public SpellScript
 {
@@ -4251,6 +4400,7 @@ void AddSC_generic_spell_scripts()
     RegisterAuraScript(spell_gen_adaptive_warding);
     RegisterSpellScript(spell_gen_allow_cast_from_item_only);
     RegisterAuraScript(spell_gen_animal_blood);
+    RegisterSpellScript(spell_spawn_blood_pool);
     RegisterSpellScript(spell_gen_arcane_charge);
     RegisterAuraScript(spell_gen_arena_drink);
     RegisterAuraScript(spell_gen_aura_of_anger);
@@ -4363,6 +4513,9 @@ void AddSC_generic_spell_scripts()
     RegisterSpellScript(spell_gen_landmine_knockback_achievement);
     RegisterSpellScript(spell_gen_clear_debuffs);
     RegisterAuraScript(spell_gen_pony_mount_check);
+    RegisterAuraScript(spell_corrupting_plague_aura);
+    RegisterAuraScript(spell_gen_vehicle_control_link);
+    RegisterSpellScript(spell_freezing_circle);
     RegisterSpellScript(spell_gen_decimatus_transformation_sickness);
     RegisterSpellScript(spell_gen_anetheron_summon_towering_infernal);
     RegisterSpellAndAuraScriptPair(spell_gen_mark_of_kazrogal_hellfire, spell_gen_mark_of_kazrogal_hellfire_aura);

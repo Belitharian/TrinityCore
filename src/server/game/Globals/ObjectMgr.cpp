@@ -359,13 +359,13 @@ void ObjectMgr::LoadCreatureTemplates()
     //                                       "type_flags, type_flags2, lootid, pickpocketloot, skinloot, resistance1, resistance2, resistance3, resistance4, resistance5, resistance6, "
     //                                        47      48      49      50      51      52      53      54      55         56       57       58      59
     //                                       "spell1, spell2, spell3, spell4, spell5, spell6, spell7, spell8, VehicleId, mingold, maxgold, AIName, MovementType, "
-    //                                        60          61        62          63          64           65              66                   67            68                 69             70              71
-    //                                       "ctm.Ground, ctm.Swim, ctm.Flight, ctm.Rooted, HoverHeight, HealthModifier, HealthModifierExtra, ManaModifier, ManaModifierExtra, ArmorModifier, DamageModifier, ExperienceModifier, "
-    //                                        72            73          74                    75           76                        77
+    //                                        60          61        62          63          64         65          66           67              68                   69            70                 71             72              73
+    //                                       "ctm.Ground, ctm.Swim, ctm.Flight, ctm.Rooted, ctm.Chase, ctm.Random, HoverHeight, HealthModifier, HealthModifierExtra, ManaModifier, ManaModifierExtra, ArmorModifier, DamageModifier, ExperienceModifier, "
+    //                                        74            75          76                    77           78                        79
     //                                       "RacialLeader, movementId, CreatureDifficultyID, WidgetSetID, WidgetSetUnitConditionID, RegenHealth, "
-    //                                        78                    79                        80
+    //                                        80                    81                        82
     //                                       "mechanic_immune_mask, spell_school_immune_mask, flags_extra, "
-    //                                        81
+    //                                        83
     //                                       "ScriptName FROM creature_template WHERE entry = ? OR 1 = ?");
 
     WorldDatabasePreparedStatement* stmt = WorldDatabase.GetPreparedStatement(WORLD_SEL_CREATURE_TEMPLATE);
@@ -468,24 +468,30 @@ void ObjectMgr::LoadCreatureTemplate(Field* fields)
     if (!fields[63].IsNull())
         creatureTemplate.Movement.Rooted = fields[63].GetBool();
 
-    creatureTemplate.HoverHeight            = fields[64].GetFloat();
-    creatureTemplate.ModHealth              = fields[65].GetFloat();
-    creatureTemplate.ModHealthExtra         = fields[66].GetFloat();
-    creatureTemplate.ModMana                = fields[67].GetFloat();
-    creatureTemplate.ModManaExtra           = fields[68].GetFloat();
-    creatureTemplate.ModArmor               = fields[69].GetFloat();
-    creatureTemplate.ModDamage              = fields[70].GetFloat();
-    creatureTemplate.ModExperience          = fields[71].GetFloat();
-    creatureTemplate.RacialLeader           = fields[72].GetBool();
-    creatureTemplate.movementId             = fields[73].GetUInt32();
-    creatureTemplate.CreatureDifficultyID   = fields[74].GetInt32();
-    creatureTemplate.WidgetSetID            = fields[75].GetInt32();
-    creatureTemplate.WidgetSetUnitConditionID = fields[76].GetInt32();
-    creatureTemplate.RegenHealth            = fields[77].GetBool();
-    creatureTemplate.MechanicImmuneMask     = fields[78].GetUInt32();
-    creatureTemplate.SpellSchoolImmuneMask  = fields[79].GetUInt32();
-    creatureTemplate.flags_extra            = fields[80].GetUInt32();
-    creatureTemplate.ScriptID               = GetScriptId(fields[81].GetString());
+    if (!fields[64].IsNull())
+        creatureTemplate.Movement.Chase = static_cast<CreatureChaseMovementType>(fields[64].GetUInt8());
+
+    if (!fields[65].IsNull())
+        creatureTemplate.Movement.Random = static_cast<CreatureRandomMovementType>(fields[65].GetUInt8());
+
+    creatureTemplate.HoverHeight            = fields[66].GetFloat();
+    creatureTemplate.ModHealth              = fields[67].GetFloat();
+    creatureTemplate.ModHealthExtra         = fields[68].GetFloat();
+    creatureTemplate.ModMana                = fields[69].GetFloat();
+    creatureTemplate.ModManaExtra           = fields[70].GetFloat();
+    creatureTemplate.ModArmor               = fields[71].GetFloat();
+    creatureTemplate.ModDamage              = fields[72].GetFloat();
+    creatureTemplate.ModExperience          = fields[73].GetFloat();
+    creatureTemplate.RacialLeader           = fields[74].GetBool();
+    creatureTemplate.movementId             = fields[75].GetUInt32();
+    creatureTemplate.CreatureDifficultyID   = fields[76].GetInt32();
+    creatureTemplate.WidgetSetID            = fields[77].GetInt32();
+    creatureTemplate.WidgetSetUnitConditionID = fields[78].GetInt32();
+    creatureTemplate.RegenHealth            = fields[79].GetBool();
+    creatureTemplate.MechanicImmuneMask     = fields[80].GetUInt32();
+    creatureTemplate.SpellSchoolImmuneMask  = fields[81].GetUInt32();
+    creatureTemplate.flags_extra            = fields[82].GetUInt32();
+    creatureTemplate.ScriptID               = GetScriptId(fields[83].GetString());
 }
 
 void ObjectMgr::LoadCreatureTemplateModels()
@@ -1053,6 +1059,20 @@ void ObjectMgr::CheckCreatureMovement(char const* table, uint64 id, CreatureMove
             table, uint32(creatureMovement.Flight), id);
         creatureMovement.Flight = CreatureFlightMovementType::None;
     }
+
+    if (creatureMovement.Chase >= CreatureChaseMovementType::Max)
+    {
+        TC_LOG_ERROR("sql.sql", "`%s`.`Chase` wrong value (%u) for Id " UI64FMTD ", setting to Run.",
+                     table, uint32(creatureMovement.Chase), id);
+        creatureMovement.Chase = CreatureChaseMovementType::Run;
+    }
+
+    if (creatureMovement.Random >= CreatureRandomMovementType::Max)
+    {
+        TC_LOG_ERROR("sql.sql", "`%s`.`Random` wrong value (%u) for Id " UI64FMTD ", setting to Walk.",
+                     table, uint32(creatureMovement.Random), id);
+        creatureMovement.Random = CreatureRandomMovementType::Walk;
+    }
 }
 
 void ObjectMgr::LoadCreatureAddons()
@@ -1400,7 +1420,8 @@ void ObjectMgr::LoadCreatureMovementOverrides()
 
     _creatureMovementOverrides.clear();
 
-    QueryResult result = WorldDatabase.Query("SELECT SpawnId, Ground, Swim, Flight, Rooted from creature_movement_override");
+    QueryResult result = WorldDatabase.Query("SELECT SpawnId, Ground, Swim, Flight, Rooted, Chase, Random from creature_movement_override");
+
     if (!result)
     {
         TC_LOG_INFO("server.loading", ">> Loaded 0 creature movement overrides. DB table `creature_movement_override` is empty!");
@@ -1422,6 +1443,8 @@ void ObjectMgr::LoadCreatureMovementOverrides()
         movement.Swim = fields[2].GetBool();
         movement.Flight = static_cast<CreatureFlightMovementType>(fields[3].GetUInt8());
         movement.Rooted = fields[4].GetBool();
+        movement.Chase = static_cast<CreatureChaseMovementType>(fields[5].GetUInt8());
+        movement.Random = static_cast<CreatureRandomMovementType>(fields[6].GetUInt8());
 
         CheckCreatureMovement("creature_movement_override", spawnId, movement);
     }
@@ -4303,11 +4326,11 @@ void ObjectMgr::LoadQuests()
         // 0   1       2       3       4       5            6            7            8            9
         { "ID, Emote1, Emote2, Emote3, Emote4, EmoteDelay1, EmoteDelay2, EmoteDelay3, EmoteDelay4, RewardText",                                                           "quest_offer_reward",   "",                                       "reward emotes",       &Quest::LoadQuestOfferReward   },
 
-        // 0   1         2                 3              4            5            6               7                     8
-        { "ID, MaxLevel, AllowableClasses, SourceSpellID, PrevQuestID, NextQuestID, ExclusiveGroup, RewardMailTemplateID, RewardMailDelay,"
-        // 9               10                   11                     12                     13                   14                   15                 16
+        // 0   1         2                 3              4            5            6               7                     8                     9
+        { "ID, MaxLevel, AllowableClasses, SourceSpellID, PrevQuestID, NextQuestID, ExclusiveGroup, BreadcrumbForQuestId, RewardMailTemplateID, RewardMailDelay,"
+        // 10              11                   12                     13                     14                   15                   16                 17
         " RequiredSkillID, RequiredSkillPoints, RequiredMinRepFaction, RequiredMaxRepFaction, RequiredMinRepValue, RequiredMaxRepValue, ProvidedItemCount, SpecialFlags,"
-        // 17
+        // 18
         " ScriptName",                                                                                                                                                    "quest_template_addon", "",                                       "template addons",     &Quest::LoadQuestTemplateAddon },
 
         // 0        1
@@ -4963,8 +4986,11 @@ void ObjectMgr::LoadQuests()
         // fill additional data stores
         if (uint32 prevQuestId = std::abs(qinfo->_prevQuestID))
         {
-            if (!_questTemplates.count(prevQuestId))
+            auto prevQuestItr = _questTemplates.find(prevQuestId);
+            if (prevQuestItr == _questTemplates.end())
                 TC_LOG_ERROR("sql.sql", "Quest %d has PrevQuestId %i, but no such quest", qinfo->GetQuestId(), qinfo->GetPrevQuestId());
+            else if (prevQuestItr->second._breadcrumbForQuestId)
+                TC_LOG_ERROR("sql.sql", "Quest %u should not be unlocked by breadcrumb quest %u", qinfo->_id, prevQuestId);
         }
 
         if (uint32 nextQuestId = qinfo->_nextQuestID)
@@ -4976,8 +5002,53 @@ void ObjectMgr::LoadQuests()
                 nextQuestItr->second.DependentPreviousQuests.push_back(qinfo->GetQuestId());
         }
 
+        if (uint32 breadcrumbForQuestId = std::abs(qinfo->_breadcrumbForQuestId))
+        {
+            if (_questTemplates.find(breadcrumbForQuestId) == _questTemplates.end())
+            {
+                TC_LOG_ERROR("sql.sql", "Quest %u is a breadcrumb for quest %u, but no such quest exists", qinfo->_id, breadcrumbForQuestId);
+                qinfo->_breadcrumbForQuestId = 0;
+            }
+            if (qinfo->_nextQuestID)
+                TC_LOG_ERROR("sql.sql", "Quest %u is a breadcrumb, should not unlock quest %u", qinfo->_id, qinfo->_nextQuestID);
+            if (qinfo->_exclusiveGroup)
+                TC_LOG_ERROR("sql.sql", "Quest %u is a breadcrumb in exclusive group %i", qinfo->_id, qinfo->_exclusiveGroup);
+        }
+
         if (qinfo->_exclusiveGroup)
             _exclusiveQuestGroups.insert(std::pair<int32, uint32>(qinfo->_exclusiveGroup, qinfo->GetQuestId()));
+    }
+
+    // Disallow any breadcrumb loops and inform quests of their breadcrumbs
+    for (auto& questPair : _questTemplates)
+    {
+        // skip post-loading checks for disabled quests
+        if (DisableMgr::IsDisabledFor(DISABLE_TYPE_QUEST, questPair.first, nullptr))
+            continue;
+
+        Quest* qinfo = &questPair.second;
+        uint32   qid = qinfo->GetQuestId();
+        uint32 breadcrumbForQuestId = std::abs(qinfo->_breadcrumbForQuestId);
+        std::set<uint32> questSet;
+
+        while(breadcrumbForQuestId)
+        {
+            //a previously visited quest was found as a breadcrumb quest
+            //breadcrumb loop found!
+            if (!questSet.insert(qinfo->_id).second)
+            {
+                TC_LOG_ERROR("sql.sql", "Breadcrumb quests %u and %u are in a loop", qid, breadcrumbForQuestId);
+                qinfo->_breadcrumbForQuestId = 0;
+                break;
+            }
+
+            qinfo = const_cast<Quest*>(sObjectMgr->GetQuestTemplate(breadcrumbForQuestId));
+
+            //every quest has a list of every breadcrumb towards it
+            qinfo->DependentBreadcrumbQuests.push_back(qid);
+
+            breadcrumbForQuestId = qinfo->GetBreadcrumbForQuestId();
+        }
     }
 
     // check QUEST_SPECIAL_FLAGS_EXPLORATION_OR_EVENT for spell with SPELL_EFFECT_QUEST_COMPLETE
@@ -9714,34 +9785,21 @@ void ObjectMgr::LoadFactionChangeAchievements()
 void ObjectMgr::LoadFactionChangeItems()
 {
     uint32 oldMSTime = getMSTime();
-
-    QueryResult result = WorldDatabase.Query("SELECT alliance_id, horde_id FROM player_factionchange_items");
-
-    if (!result)
-    {
-        TC_LOG_INFO("server.loading", ">> Loaded 0 faction change item pairs. DB table `player_factionchange_items` is empty.");
-        return;
-    }
-
     uint32 count = 0;
 
-    do
+    for (std::pair<uint32 const, ItemTemplate> const& itemPair : _itemTemplateStore)
     {
-        Field* fields = result->Fetch();
+        if (!itemPair.second.GetOtherFactionItemId())
+            continue;
 
-        uint32 alliance = fields[0].GetUInt32();
-        uint32 horde = fields[1].GetUInt32();
+        if (itemPair.second.GetFlags2() & ITEM_FLAG2_FACTION_HORDE)
+            FactionChangeItemsHordeToAlliance[itemPair.first] = itemPair.second.GetOtherFactionItemId();
 
-        if (!GetItemTemplate(alliance))
-            TC_LOG_ERROR("sql.sql", "Item %u (alliance_id) referenced in `player_factionchange_items` does not exist, pair skipped!", alliance);
-        else if (!GetItemTemplate(horde))
-            TC_LOG_ERROR("sql.sql", "Item %u (horde_id) referenced in `player_factionchange_items` does not exist, pair skipped!", horde);
-        else
-            FactionChangeItems[alliance] = horde;
+        if (itemPair.second.GetFlags2() & ITEM_FLAG2_FACTION_ALLIANCE)
+            FactionChangeItemsAllianceToHorde[itemPair.first] = itemPair.second.GetOtherFactionItemId();
 
         ++count;
     }
-    while (result->NextRow());
 
     TC_LOG_INFO("server.loading", ">> Loaded %u faction change item pairs in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
 }

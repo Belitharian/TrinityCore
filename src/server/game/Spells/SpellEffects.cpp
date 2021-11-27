@@ -428,7 +428,7 @@ void Spell::EffectInstaKill()
     data.SpellID = m_spellInfo->Id;
     m_caster->SendMessageToSet(data.Write(), true);
 
-    Unit::DealDamage(unitCaster, unitTarget, unitTarget->GetHealth(), nullptr, NODAMAGE, SPELL_SCHOOL_MASK_NORMAL, nullptr, false);
+    Unit::Kill(unitCaster, unitTarget, false);
 }
 
 void Spell::EffectEnvironmentalDMG()
@@ -1374,7 +1374,7 @@ void Spell::DoCreateItem(uint32 itemId, ItemContext context /*= ItemContext::NON
         }
 
         // set the "Crafted by ..." property of the item
-        if (pItem->GetTemplate()->GetClass() != ITEM_CLASS_CONSUMABLE && pItem->GetTemplate()->GetClass() != ITEM_CLASS_QUEST && newitemid != 6265 && newitemid != 6948)
+        if (pItem->GetTemplate()->HasSignature())
             pItem->SetCreator(player->GetGUID());
 
         // send info to the client
@@ -1672,6 +1672,11 @@ void Spell::EffectOpenLock()
                     bg->EventPlayerClickedOnFlag(player, gameObjTarget);
                 return;
             }
+        }
+        else if (goInfo->type == GAMEOBJECT_TYPE_NEW_FLAG)
+        {
+            gameObjTarget->Use(player);
+            return;
         }
         else if (m_spellInfo->Id == 1842 && gameObjTarget->GetGOInfo()->type == GAMEOBJECT_TYPE_TRAP && gameObjTarget->GetOwner())
         {
@@ -5664,7 +5669,7 @@ void Spell::EffectUncageBattlePet()
         return;
     }
 
-    if (battlePetMgr->HasMaxPetCount(speciesEntry))
+    if (battlePetMgr->HasMaxPetCount(speciesEntry, player->GetGUID()))
     {
         battlePetMgr->SendError(BattlePetError::CantHaveMorePetsOfType, speciesEntry->CreatureID);
         SendCastResult(SPELL_FAILED_CANT_ADD_BATTLE_PET);

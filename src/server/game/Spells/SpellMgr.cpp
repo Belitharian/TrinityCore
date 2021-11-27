@@ -3149,7 +3149,7 @@ void SpellMgr::LoadSpellInfoCustomAttributes()
                                 spellEffectInfo.ApplyAuraName == SPELL_AURA_PERIODIC_HEALTH_FUNNEL ||
                                 spellEffectInfo.ApplyAuraName == SPELL_AURA_PERIODIC_DUMMY)
                                 break;
-                            /* fallthrough */
+                        /* fallthrough */
                         default:
                         {
                             // No value and not interrupt cast or crowd control without SPELL_ATTR0_UNAFFECTED_BY_INVULNERABILITY flag
@@ -3804,6 +3804,7 @@ void SpellMgr::LoadSpellInfoCorrections()
     });
 
     ApplySpellFix({
+        51597, // Summon Scourged Captive
         56606, // Ride Jokkum
         61791  // Ride Vehicle (Yogg-Saron)
     }, [](SpellInfo* spellInfo)
@@ -3812,6 +3813,15 @@ void SpellMgr::LoadSpellInfoCorrections()
         ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
         {
             spellEffectInfo->BasePoints = 1;
+        });
+    });
+
+    // Summon Scourged Captive
+    ApplySpellFix({ 51597 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->Scaling.Variance = 0.0f;
         });
     });
 

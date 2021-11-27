@@ -747,6 +747,7 @@ struct TC_GAME_API ItemTemplate
     uint32 GetFlags2() const { return ExtendedData->Flags[1]; }
     uint32 GetFlags3() const { return ExtendedData->Flags[2]; }
     uint32 GetFlags4() const { return ExtendedData->Flags[3]; }
+    uint32 GetOtherFactionItemId() const { return ExtendedData->FactionRelated; }
     float GetPriceRandomValue() const { return ExtendedData->PriceRandomValue; }
     float GetPriceVariance() const { return ExtendedData->PriceVariance; }
     uint32 GetBuyCount() const { return std::max<uint32>(ExtendedData->VendorStackCount, 1u); }
@@ -823,6 +824,7 @@ struct TC_GAME_API ItemTemplate
     bool IsVellum() const { return GetFlags3() & ITEM_FLAG3_CAN_STORE_ENCHANTS; }
     bool IsConjuredConsumable() const { return GetClass() == ITEM_CLASS_CONSUMABLE && (GetFlags() & ITEM_FLAG_CONJURED); }
     bool IsCraftingReagent() const { return (GetFlags2() & ITEM_FLAG2_USED_IN_A_TRADESKILL) != 0; }
+    bool HasSignature() const;
 
     bool IsWeapon() const { return GetClass() == ITEM_CLASS_WEAPON; }
 

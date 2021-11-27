@@ -442,7 +442,7 @@ NonDefaultConstructible<pAuraEffectHandler> AuraEffectHandler[TOTAL_AURAS]=
     &AuraEffect::HandleNULL,                                      //371
     &AuraEffect::HandleNULL,                                      //372
     &AuraEffect::HandleNULL,                                      //373 SPELL_AURA_MOD_SPEED_NO_CONTROL
-    &AuraEffect::HandleNULL,                                      //374 SPELL_AURA_MODIFY_FALL_DAMAGE_PCT
+    &AuraEffect::HandleNoImmediateEffect,                         //374 SPELL_AURA_MODIFY_FALL_DAMAGE_PCT implemented in Player::HandleFall
     &AuraEffect::HandleNULL,                                      //375 SPELL_AURA_HIDE_MODEL_AND_EQUIPEMENT_SLOTS implemented clientside
     &AuraEffect::HandleNULL,                                      //376 SPELL_AURA_MOD_CURRENCY_GAIN_FROM_SOURCE
     &AuraEffect::HandleNoImmediateEffect,                         //377 SPELL_AURA_CAST_WHILE_WALKING_ALL implemented in Unit::CanCastSpellWhileMoving
@@ -4514,20 +4514,8 @@ void AuraEffect::HandleAuraDummy(AuraApplication const* aurApp, uint8 mode, bool
                             }
                             break;
                         case 36730:                                     // Flame Strike
-                        {
                             target->CastSpell(target, 36731, this);
                             break;
-                        }
-                        case 44191:                                     // Flame Strike
-                        {
-                            if (target->GetMap()->IsDungeon())
-                            {
-                                uint32 spellId = target->GetMap()->IsHeroic() ? 46163 : 44190;
-
-                                target->CastSpell(target, spellId, this);
-                            }
-                            break;
-                        }
                         case 43681: // Inactive
                         {
                             if (target->GetTypeId() != TYPEID_PLAYER || aurApp->GetRemoveMode() != AURA_REMOVE_BY_EXPIRE)
@@ -5124,7 +5112,7 @@ void AuraEffect::HandlePeriodicTriggerSpellAuraTick(Unit* target, Unit* caster) 
         }
     }
     else
-        TC_LOG_WARN("spells", "AuraEffect::HandlePeriodicTriggerSpellAuraTick: Spell %u has non-existent spell %u in EffectTriggered[%d] and is therefore not triggered.", GetId(), triggerSpellId, GetEffIndex());
+        TC_LOG_WARN("spells.nospell", "AuraEffect::HandlePeriodicTriggerSpellAuraTick: Spell %u has non-existent spell %u in EffectTriggered[%d] and is therefore not triggered.", GetId(), triggerSpellId, GetEffIndex());
 }
 
 void AuraEffect::HandlePeriodicTriggerSpellWithValueAuraTick(Unit* target, Unit* caster) const
@@ -5692,7 +5680,7 @@ void AuraEffect::HandleProcTriggerSpellAuraProc(AuraApplication* aurApp, ProcEve
         triggerCaster->CastSpell(triggerTarget, triggeredSpellInfo->Id, this);
     }
     else if (triggerSpellId && GetAuraType() != SPELL_AURA_DUMMY)
-        TC_LOG_ERROR("spells","AuraEffect::HandleProcTriggerSpellAuraProc: Could not trigger spell %u from aura %u proc, because the spell does not have an entry in Spell.dbc.", triggerSpellId, GetId());
+        TC_LOG_ERROR("spells.nospell.auraproc","AuraEffect::HandleProcTriggerSpellAuraProc: Could not trigger spell %u from aura %u proc, because the spell does not have an entry in Spell.dbc.", triggerSpellId, GetId());
 }
 
 void AuraEffect::HandleProcTriggerSpellWithValueAuraProc(AuraApplication* aurApp, ProcEventInfo& eventInfo)
@@ -5709,7 +5697,7 @@ void AuraEffect::HandleProcTriggerSpellWithValueAuraProc(AuraApplication* aurApp
         TC_LOG_DEBUG("spells", "AuraEffect::HandleProcTriggerSpellWithValueAuraProc: Triggering spell %u with value %d from aura %u proc", triggeredSpellInfo->Id, GetAmount(), GetId());
     }
     else
-        TC_LOG_ERROR("spells","AuraEffect::HandleProcTriggerSpellWithValueAuraProc: Could not trigger spell %u from aura %u proc, because the spell does not have an entry in Spell.dbc.", triggerSpellId, GetId());
+        TC_LOG_ERROR("spells.nospell.valueauraproc","AuraEffect::HandleProcTriggerSpellWithValueAuraProc: Could not trigger spell %u from aura %u proc, because the spell does not have an entry in Spell.dbc.", triggerSpellId, GetId());
 }
 
 void AuraEffect::HandleProcTriggerDamageAuraProc(AuraApplication* aurApp, ProcEventInfo& eventInfo)

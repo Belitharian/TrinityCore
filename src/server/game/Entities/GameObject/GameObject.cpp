@@ -636,7 +636,7 @@ void GameObject::Update(uint32 diff)
                     break;
             }
         }
-            /* fallthrough */
+        /* fallthrough */
         case GO_READY:
         {
             if (m_respawnCompatibilityMode)
@@ -905,7 +905,7 @@ void GameObject::Update(uint32 diff)
                 return;
             }
 
-            SetLootState(GO_READY);
+            SetLootState(GO_NOT_READY);
 
             //burning flags in some battlegrounds, if you find better condition, just add it
             if (GetGOInfo()->IsDespawnAtAction() || GetGoAnimProgress() > 0)
@@ -919,11 +919,10 @@ void GameObject::Update(uint32 diff)
             if (!m_respawnDelayTime)
                 return;
 
-            // ToDo: Decide if we should properly despawn these. Maybe they expect to be able to manually respawn from script?
             if (!m_spawnedByDefault)
             {
                 m_respawnTime = 0;
-                DestroyForNearbyPlayers(); // old UpdateObjectVisibility()
+                Delete();
                 return;
             }
 
@@ -1006,6 +1005,10 @@ void GameObject::DespawnOrUnsummon(Milliseconds delay, Seconds forceRespawnTime)
 
 void GameObject::Delete()
 {
+    // If nearby linked trap exists, despawn it
+    if (GameObject* linkedTrap = GetLinkedTrap())
+        linkedTrap->DespawnOrUnsummon();
+
     SetLootState(GO_NOT_READY);
     RemoveFromOwner();
 
@@ -1568,7 +1571,7 @@ void GameObject::Use(Unit* user)
     if (Player* playerUser = user->ToPlayer())
     {
         if (!m_goInfo->IsUsableMounted())
-            playerUser->Dismount();
+            playerUser->RemoveAurasByType(SPELL_AURA_MOUNTED);
 
         playerUser->PlayerTalkClass->ClearMenus();
         if (AI()->GossipHello(playerUser))
@@ -2133,6 +2136,18 @@ void GameObject::Use(Unit* user)
 
             player->SetStandState(UnitStandStateType(UNIT_STAND_STATE_SIT_LOW_CHAIR + info->barberChair.chairheight), info->barberChair.SitAnimKit);
             return;
+        }
+        case GAMEOBJECT_TYPE_NEW_FLAG:
+        {
+            GameObjectTemplate const* info = GetGOInfo();
+            if (!info)
+                return;
+
+            if (user->GetTypeId() != TYPEID_PLAYER)
+                return;
+
+            spellId = info->newflag.pickupSpell;
+            break;
         }
         case GAMEOBJECT_TYPE_ITEM_FORGE:
         {

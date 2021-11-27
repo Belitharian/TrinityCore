@@ -1374,9 +1374,8 @@ void Spell::SelectImplicitCasterDestTargets(SpellEffectInfo const& spellEffectIn
                 pos.m_positionX = m_preGeneratedPath->GetActualEndPosition().x;
                 pos.m_positionY = m_preGeneratedPath->GetActualEndPosition().y;
                 pos.m_positionZ = m_preGeneratedPath->GetActualEndPosition().z;
+                dest.Relocate(pos);
             }
-
-            dest.Relocate(pos);
             break;
         }
         case TARGET_DEST_CASTER_GROUND:
@@ -2671,7 +2670,9 @@ void Spell::TargetInfo::DoDamageAndTriggers(Spell* spell)
             spell->m_caster->ToPlayer()->UpdatePvP(true);
     }
 
+    spell->_spellAura = HitAura;
     spell->CallScriptAfterHitHandlers();
+    spell->_spellAura = nullptr;
 }
 
 void Spell::GOTargetInfo::DoTargetSpellHit(Spell* spell, SpellEffectInfo const& spellEffectInfo)
@@ -2841,8 +2842,7 @@ void Spell::DoSpellEffectHit(Unit* unit, SpellEffectInfo const& spellEffectInfo,
         {
             bool refresh = false;
 
-            // delayed spells with multiple targets need to create a new aura object, otherwise we'll access a deleted aura
-            if (!_spellAura || (m_spellInfo->HasHitDelay() && !m_spellInfo->IsChanneled()))
+            if (!hitInfo.HitAura)
             {
                 bool const resetPeriodicTimer = !(_triggeredCastFlags & TRIGGERED_DONT_RESET_PERIODIC_TIMER);
                 uint32 const allAuraEffectMask = Aura::BuildEffectMaskForOwner(m_spellInfo, MAX_EFFECT_MASK, unit);
@@ -2858,22 +2858,22 @@ void Spell::DoSpellEffectHit(Unit* unit, SpellEffectInfo const& spellEffectInfo,
 
                 if (Aura* aura = Aura::TryRefreshStackOrCreate(createInfo))
                 {
-                    _spellAura = aura->ToUnitAura();
+                    hitInfo.HitAura = aura->ToUnitAura();
 
                     // Set aura stack amount to desired value
                     if (m_spellValue->AuraStackAmount > 1)
                     {
                         if (!refresh)
-                            _spellAura->SetStackAmount(m_spellValue->AuraStackAmount);
+                            hitInfo.HitAura->SetStackAmount(m_spellValue->AuraStackAmount);
                         else
-                            _spellAura->ModStackAmount(m_spellValue->AuraStackAmount);
+                            hitInfo.HitAura->ModStackAmount(m_spellValue->AuraStackAmount);
                     }
 
-                    _spellAura->SetDiminishGroup(hitInfo.DRGroup);
+                    hitInfo.HitAura->SetDiminishGroup(hitInfo.DRGroup);
 
                     if (!m_spellValue->Duration)
                     {
-                        hitInfo.AuraDuration = caster->ModSpellDuration(m_spellInfo, unit, hitInfo.AuraDuration, hitInfo.Positive, _spellAura->GetEffectMask());
+                        hitInfo.AuraDuration = caster->ModSpellDuration(m_spellInfo, unit, hitInfo.AuraDuration, hitInfo.Positive, hitInfo.HitAura->GetEffectMask());
 
                         if (hitInfo.AuraDuration > 0)
                         {
@@ -2886,7 +2886,7 @@ void Spell::DoSpellEffectHit(Unit* unit, SpellEffectInfo const& spellEffectInfo,
                             {
                                 int32 origDuration = hitInfo.AuraDuration;
                                 hitInfo.AuraDuration = 0;
-                                for (AuraEffect const* auraEff : _spellAura->GetAuraEffects())
+                                for (AuraEffect const* auraEff : hitInfo.HitAura->GetAuraEffects())
                                     if (auraEff)
                                         if (int32 period = auraEff->GetPeriod())  // period is hastened by UNIT_MOD_CAST_SPEED
                                             hitInfo.AuraDuration = std::max(std::max(origDuration / period, 1) * period, hitInfo.AuraDuration);
@@ -2900,21 +2900,21 @@ void Spell::DoSpellEffectHit(Unit* unit, SpellEffectInfo const& spellEffectInfo,
                     else
                         hitInfo.AuraDuration = m_spellValue->Duration.get();
 
-                    if (hitInfo.AuraDuration != _spellAura->GetMaxDuration())
+                    if (hitInfo.AuraDuration != hitInfo.HitAura->GetMaxDuration())
                     {
-                        _spellAura->SetMaxDuration(hitInfo.AuraDuration);
-                        _spellAura->SetDuration(hitInfo.AuraDuration);
+                        hitInfo.HitAura->SetMaxDuration(hitInfo.AuraDuration);
+                        hitInfo.HitAura->SetDuration(hitInfo.AuraDuration);
                     }
                 }
             }
             else
-                _spellAura->AddStaticApplication(unit, aura_effmask);
-
-            hitInfo.HitAura = _spellAura;
+                hitInfo.HitAura->AddStaticApplication(unit, aura_effmask);
         }
     }
 
+    _spellAura = hitInfo.HitAura;
     HandleEffects(unit, nullptr, nullptr, spellEffectInfo, SPELL_EFFECT_HANDLE_HIT_TARGET);
+    _spellAura = nullptr;
 }
 
 void Spell::DoTriggersOnSpellHit(Unit* unit, uint32 effMask)
@@ -5787,8 +5787,7 @@ SpellCastResult Spell::CheckCast(bool strict, int32* param1 /*= nullptr*/, int32
                     case SUMMON_CATEGORY_PET:
                         if (!m_spellInfo->HasAttribute(SPELL_ATTR1_DISMISS_PET) && !unitCaster->GetPetGUID().IsEmpty())
                             return SPELL_FAILED_ALREADY_HAVE_SUMMON;
-                        /* fallthrough */
-                    // intentional, check both GetPetGUID() and GetCharmGUID for SUMMON_CATEGORY_PET
+                        /* fallthrough - check both GetPetGUID() and GetCharmGUID for SUMMON_CATEGORY_PET*/
                     case SUMMON_CATEGORY_PUPPET:
                         if (!unitCaster->GetCharmedGUID().IsEmpty())
                             return SPELL_FAILED_ALREADY_HAVE_CHARM;
@@ -6493,6 +6492,9 @@ SpellCastResult Spell::CheckRange(bool strict) const
     if (m_spellInfo->RangeEntry && m_spellInfo->RangeEntry->Flags != SPELL_RANGE_MELEE && !strict)
         maxRange += std::min(MAX_SPELL_RANGE_TOLERANCE, maxRange*0.1f); // 10% but no more than MAX_SPELL_RANGE_TOLERANCE
 
+    // save the original values before squaring them
+    float origMinRange = minRange, origMaxRange = maxRange;
+
     // get square values for sqr distance checks
     minRange *= minRange;
     maxRange *= maxRange;
@@ -6510,6 +6512,15 @@ SpellCastResult Spell::CheckRange(bool strict) const
             (((m_spellInfo->FacingCasterFlags & SPELL_FACING_FLAG_INFRONT) && !m_caster->HasInArc(static_cast<float>(M_PI), target))
                 && !m_caster->ToPlayer()->IsWithinBoundaryRadius(target)))
             return SPELL_FAILED_UNIT_NOT_INFRONT;
+    }
+
+    if (GameObject* goTarget = m_targets.GetGOTarget())
+    {
+        if (origMinRange > 0.0f && goTarget->IsInRange(m_caster->GetPositionX(), m_caster->GetPositionY(), m_caster->GetPositionZ(), origMinRange))
+            return SPELL_FAILED_OUT_OF_RANGE;
+
+        if (!goTarget->IsInRange(m_caster->GetPositionX(), m_caster->GetPositionY(), m_caster->GetPositionZ(), origMaxRange))
+            return SPELL_FAILED_OUT_OF_RANGE;
     }
 
     if (m_targets.HasDst() && !m_targets.HasTraj())

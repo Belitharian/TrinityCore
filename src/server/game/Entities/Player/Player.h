@@ -1499,8 +1499,8 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void SendPreparedQuest(WorldObject* source);
         bool IsActiveQuest(uint32 quest_id) const;
         Quest const* GetNextQuest(ObjectGuid guid, Quest const* quest) const;
-        bool CanSeeStartQuest(Quest const* quest);
-        bool CanTakeQuest(Quest const* quest, bool msg);
+        bool CanSeeStartQuest(Quest const* quest) const;
+        bool CanTakeQuest(Quest const* quest, bool msg) const;
         bool CanAddQuest(Quest const* quest, bool msg) const;
         bool CanCompleteQuest(uint32 quest_id, uint32 ignoredQuestObjectiveId = 0);
         bool CanCompleteRepeatableQuest(Quest const* quest);
@@ -1526,11 +1526,13 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         bool SatisfyQuestDependentQuests(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestPreviousQuest(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestDependentPreviousQuests(Quest const* qInfo, bool msg) const;
+        bool SatisfyQuestBreadcrumbQuest(Quest const* qInfo, bool msg) const;
+        bool SatisfyQuestDependentBreadcrumbQuests(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestClass(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestRace(Quest const* qInfo, bool msg) const;
-        bool SatisfyQuestReputation(Quest const* qInfo, bool msg);
+        bool SatisfyQuestReputation(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestStatus(Quest const* qInfo, bool msg) const;
-        bool SatisfyQuestConditions(Quest const* qInfo, bool msg);
+        bool SatisfyQuestConditions(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestTimed(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestExclusiveGroup(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestDay(Quest const* qInfo, bool msg) const;
@@ -2279,7 +2281,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void SetEquipmentSet(EquipmentSetInfo::EquipmentSetData const& newEqSet);
         void DeleteEquipmentSet(uint64 id);
 
-        void SendInitWorldStates(uint32 zone, uint32 area);
+        void SendInitWorldStates(uint32 zoneId, uint32 areaId);
         void SendUpdateWorldState(uint32 variable, uint32 value, bool hidden = false) const;
         void SendDirectMessage(WorldPacket const* data) const;
         void SendBGWeekendWorldStates() const;
@@ -2690,7 +2692,8 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         }
         void ClearSelfResSpell() { ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::SelfResSpells)); }
 
-        void SetSummonedBattlePetGUID(ObjectGuid guid) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::SummonedBattlePetGUID), guid);  }
+        ObjectGuid GetSummonedBattlePetGUID() const { return m_activePlayerData->SummonedBattlePetGUID; }
+        void SetSummonedBattlePetGUID(ObjectGuid guid) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::SummonedBattlePetGUID), guid); }
 
         void AddTrackCreatureFlag(uint32 flags) { SetUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TrackCreatureMask), flags); }
         void RemoveTrackCreatureFlag(uint32 flags) { RemoveUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TrackCreatureMask), flags); }
@@ -2709,7 +2712,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         uint8 GetNumRespecs() const { return m_activePlayerData->NumRespecs; }
         void SetNumRespecs(uint8 numRespecs) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::NumRespecs), numRespecs); }
 
-        void SetWatchedFactionIndex(int32 index) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::WatchedFactionIndex), index);  }
+        void SetWatchedFactionIndex(int32 index) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::WatchedFactionIndex), index); }
 
         void AddAuraVision(PlayerFieldByte2Flags flags) { SetUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AuraVision), flags); }
         void RemoveAuraVision(PlayerFieldByte2Flags flags) { RemoveUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AuraVision), flags); }
