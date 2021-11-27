@@ -7,7 +7,7 @@
 #define RFTScriptName "scenario_ruins_of_theramore"
 #define DataHeader "RFT"
 
-#define DEBUG
+//#define DEBUG
 
 #define KALECGOS_PATH_01                5
 
@@ -41,6 +41,8 @@ enum RFTData
     DATA_JAINA_PROUDMOORE               = 1,
     DATA_KALECGOS,
     DATA_KINNDY_SPARKSHINE,
+    DATA_ROKNAH_WARLORD,
+    DATA_BROKEN_GLASS,
     DATA_SCENARIO_PHASE
 };
 
@@ -65,13 +67,17 @@ enum RFTTalks
     SAY_IRIS_PROTECTION_JAINA_03        = 8,
     SAY_IRIS_PROTECTION_JAINA_04        = 9,
     SAY_IRIS_PROTECTION_JAINA_05        = 10,
-    SAY_IRIS_PROTECTION_JAINA_06        = 11,
-    SAY_IRIS_PROTECTION_JAINA_07        = 12,
+    SAY_IRIS_PROTECTION_JAINA_06        = 0,
+    SAY_IRIS_PROTECTION_JAINA_07        = 11,
+    SAY_IRIS_PROTECTION_JAINA_08        = 1,
+    SAY_IRIS_PROTECTION_JAINA_09        = 12,
+    SAY_IRIS_PROTECTION_JAINA_10        = 2,
 };
 
 enum RFTSpells
 {
     SPELL_TELEPORT_VISUAL_ONLY			= 51347,
+    SPELL_COSMETIC_PARACHUTE            = 73363,
     SPELL_COSMETIC_PURPLE_VERTEX_STATE	= 83237,
     SPELL_SUMMON_WATER_ELEMENTALS       = 84374,
     SPELL_ECHO_OF_ALUNETH_SPAWN			= 211768,
@@ -80,9 +86,9 @@ enum RFTSpells
     SPELL_WATER_BOSS_ENTRANCE           = 240261,
     SPELL_COSMETIC_ARCANE_DISSOLVE		= 254799,
     SPELL_SHIMMERDUST					= 278917,
+    SPELL_BURNING                       = 282051,
     SPELL_ARCANE_CHANNELING             = 294676,
     SPELL_EMPOWERED_SUMMON              = 303681,
-    SPELL_PARACHUTE                     = 314810,
     SPELL_SCREEN_FX						= 337213,
     SPELL_GLACIAL_SPIKE_COSMETIC		= 346559,
 };
@@ -90,12 +96,18 @@ enum RFTSpells
 enum RFTMisc
 {
     // GameObjects
+    GOB_BROKEN_GLASS                    = 349872,
+
+    // Sounds
+    SOUND_ZEPPELIN_FLIGHT               = 85549,
 
     // Events
     EVENT_FIND_JAINA_01                 = 65811,    // Isle
     EVENT_HELP_KALECGOS                 = 65812,
     EVENT_FIND_JAINA_02                 = 65813,    // Crater
     EVENT_BACK_TO_SENDER                = 65814,
+    EVENT_WARLORD_ROKNAH_SLAIN	        = 65815,
+    EVENT_JAINA_PROTECTED               = 65816,
 
     // Criteria Tree
     CRITERIA_TREE_FIND_JAINA_01         = 1000031,  // Isle
@@ -103,6 +115,10 @@ enum RFTMisc
     CRITERIA_TREE_FIND_JAINA_02         = 1000035,  // Crater
     CRITERIA_TREE_CLEANING              = 1000037,
     CRITERIA_TREE_BACK_TO_SENDER        = 1000040,
+    CRITERIA_TREE_THE_LAST_STAND        = 1000042,
+    CRITERIA_TREE_WARLORD_SLAIN	        = 1000043,
+    CRITERIA_TREE_JAINA_PROTECTED       = 1000044,
+    CRITERIA_TREE_LEAVE_THE_RUINS       = 1000045,
 
     // Point Id
 	MOVEMENT_INFO_POINT_NONE            = 0,
@@ -120,6 +136,8 @@ enum class RFTPhases
     Standards,
     Standards_Valided,
     BackToSender,
+    TheFinalAssault,
+    LeaveTheRuins
 };
 
 struct SpawnPoint

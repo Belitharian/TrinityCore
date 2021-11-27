@@ -24,7 +24,7 @@ class npc_jaina_ruins : public CreatureScript
 	struct npc_jaina_ruinsAI : public CustomAI
 	{
 		npc_jaina_ruinsAI(Creature* creature) : CustomAI(creature),
-			escaped(false), hasBlinked(false), distance(10.f)
+			hasBlinked(false), distance(10.f)
 		{
 			Initialize();
 		}
@@ -33,7 +33,6 @@ class npc_jaina_ruins : public CreatureScript
 		{
 			SPELL_FROSTBOLT         = 284703,
 			SPELL_RING_OF_ICE       = 285459,
-			SPELL_ICEBOUND_ESCAPE   = 290878,
             SPELL_COMET_BARRAGE     = 354938,
             SPELL_FRIGID_SHARD      = 354933,
             SPELL_BLINK             = 357601
@@ -45,7 +44,7 @@ class npc_jaina_ruins : public CreatureScript
 		}
 
 		InstanceScript* instance;
-        bool escaped, hasBlinked;
+        bool hasBlinked;
         float distance;
         Position beforeBlink;
 
@@ -70,6 +69,21 @@ class npc_jaina_ruins : public CreatureScript
             hasBlinked = false;
         }
 
+        void EnterEvadeMode(EvadeReason why) override
+        {
+            CustomAI::EnterEvadeMode(why);
+
+            RFTPhases phase = (RFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+            switch (phase)
+            {
+                case RFTPhases::Standards_Valided:
+                    instance->SetData(EVENT_BACK_TO_SENDER, 0U);
+                    break;
+                default:
+                    break;
+            }
+        }
+
 		void OnSuccessfulSpellCast(SpellInfo const* spell) override
 		{
 			switch (spell->Id)
@@ -81,9 +95,6 @@ class npc_jaina_ruins : public CreatureScript
                             elemental->CastSpell(elemental, SPELL_WATER_BOSS_ENTRANCE);
                     }
                     break;
-				case SPELL_ICEBOUND_ESCAPE:
-					me->DespawnOrUnsummon(1s);
-					break;
                 case SPELL_RING_OF_ICE:
                     if (!hasBlinked)
                         break;
@@ -100,15 +111,7 @@ class npc_jaina_ruins : public CreatureScript
 		void DamageTaken(Unit* attacker, uint32& damage) override
 		{
             if (HealthBelowPct(10))
-            {
                 damage = 0;
-                if (!escaped)
-                {
-                    me->CastStop();
-                    DoCast(SPELL_ICEBOUND_ESCAPE);
-                    escaped = true;
-                }
-            }
 		}
 
 		void JustEngagedWith(Unit* who) override
@@ -167,6 +170,34 @@ class npc_jaina_ruins : public CreatureScript
             return true;
         }
 
+        void MovementInform(uint32 type, uint32 id) override
+        {
+            switch (id)
+            {
+                case MOVEMENT_INFO_POINT_01:
+                    me->SetStandState(UNIT_STAND_STATE_KNEEL);
+                    scheduler
+                        .Schedule(2s, [this](TaskContext context)
+                        {
+                            switch (context.GetRepeatCounter())
+                            {
+                                case 0:
+                                    me->SetStandState(UNIT_STAND_STATE_STAND);
+                                    context.Repeat(2s);
+                                    break;
+                                case 1:
+                                    if (Creature* warlord = instance->GetCreature(DATA_ROKNAH_WARLORD))
+                                        me->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_02, warlord, 1.3f);
+                                    break;
+                            }
+                        });
+                    break;
+                case MOVEMENT_INFO_POINT_02:
+                    me->HandleEmoteCommand(EMOTE_ONESHOT_ATTACK2H);
+                    break;
+            }
+        }
+
         void MoveInLineOfSight(Unit* who) override
         {
             ScriptedAI::MoveInLineOfSight(who);
@@ -192,9 +223,6 @@ class npc_jaina_ruins : public CreatureScript
                             break;
                         case RFTPhases::FindJaina_Crater:
                             instance->SetData(EVENT_FIND_JAINA_02, 0U);
-                            break;
-                        case RFTPhases::Standards_Valided:
-                            instance->SetData(EVENT_BACK_TO_SENDER, 0U);
                             break;
                         default:
                             break;

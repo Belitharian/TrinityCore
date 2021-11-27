@@ -1258,10 +1258,7 @@ class npc_roknah_felcaster : public CreatureScript
 				.Schedule(2s, 6s, [this](TaskContext conflagrate)
 				{
 					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
-					{
-						me->CastStop();
 						DoCast(target, SPELL_CONFLAGRATE);
-					}
                     conflagrate.Repeat(1s, 3s);
 				})
 				.Schedule(3s, 5s, [this](TaskContext chaos_bolt)
