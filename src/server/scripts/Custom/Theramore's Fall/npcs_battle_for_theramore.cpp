@@ -70,7 +70,14 @@ class npc_theramore_citizen : public CreatureScript
 			{
 				case 0:
 				{
-					KillRewarder(player, me, false).Reward(NPC_THERAMORE_CITIZEN_CREDIT);
+                    #ifdef DEBUG
+                        for (uint8 i = 0; i < NUMBER_OF_CITIZENS; ++i)
+                        {
+                            KillRewarder(player, me, false).Reward(NPC_THERAMORE_CITIZEN_CREDIT);
+                        }
+                    #else
+                        KillRewarder(player, me, false).Reward(NPC_THERAMORE_CITIZEN_CREDIT);
+                    #endif
 
 					me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 					me->SetEmoteState(EMOTE_STATE_NONE);
@@ -162,6 +169,7 @@ class npc_wounded_theramore_troop : public CreatureScript
 		npc_wounded_theramore_troopAI(Creature* creature) : ScriptedAI(creature),
 			preventClick(false)
 		{
+            instance = creature->GetInstanceScript();
 		}
 
 		enum Spells
@@ -169,6 +177,7 @@ class npc_wounded_theramore_troop : public CreatureScript
 			SPELL_TELEPORT_TROOP = 69074
 		};
 
+        InstanceScript* instance;
 		bool preventClick;
 
 		void SpellHit(Unit* caster, SpellInfo const* spellInfo) override
@@ -184,8 +193,29 @@ class npc_wounded_theramore_troop : public CreatureScript
 				KillRewarder(player, me, false).Reward(NPC_THERAMORE_WOUNDED_TROOP);
 			}
 
-			me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-			me->DespawnOrUnsummon();
+            me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+
+            uint32 counter = instance->GetData(DATA_WOUNDED_TROOPS);
+
+            printf("%u\n", counter);
+
+            if (counter < NUMBER_OF_WOUNDED - 1)
+            {
+                me->DespawnOrUnsummon();
+            }
+            else
+            {
+                if (Player* player = caster->ToPlayer())
+                {
+                    me->PlayDistanceSound(SOUND_COUNTERSPELL, player);
+                    if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
+                        jaina->AI()->Talk(SAY_WOUNDED_TROOP, player);
+                }
+            }
+
+            counter += 1;
+
+            instance->SetData(DATA_WOUNDED_TROOPS, counter);
 
 			preventClick = true;
 		}
@@ -218,14 +248,14 @@ struct npc_theramore_troopAI : public CustomAI
 		if (phase == BFTPhases::Preparation || phase == BFTPhases::Preparation_Rhonin)
 		{
 			#ifdef DEBUG
-				for (uint8 i = 0; i < 5; i++)
+				for (uint8 i = 0; i < NUMBER_OF_TROOPS; i++)
 				{
 					KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
 				}
 			#else
 				if (!emoteReceived && emoteId == TEXT_EMOTE_FORTHEALLIANCE)
 				{
-					if (player->IsWithinDist(me, 2.1f))
+					if (player->IsWithinDist(me, 5.f))
 					{
 						me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
 						KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
@@ -1371,21 +1401,29 @@ class spell_theramore_throw_bucket : public SpellScript
 			float y = destination->GetPositionY();
 			float z = destination->GetPositionZ();
 
-			if (Creature* trigger = caster->SummonTrigger(x, y, z, 0.0f, 5 * IN_MILLISECONDS))
-			{
-				std::list<Creature*> fires;
-				trigger->GetCreatureListWithEntryInGrid(fires, NPC_THERAMORE_FIRE_CREDIT, radius);
+            #ifdef DEBUG
+                for (uint8 i = 0; i < NUMBER_OF_FIRES; ++i)
+                {
+                    if (Player* player = caster->ToPlayer())
+                        KillRewarder(player, nullptr, false).Reward(NPC_THERAMORE_FIRE_CREDIT);
+                }
+            #else
+                if (Creature* trigger = caster->SummonTrigger(x, y, z, 0.0f, 5 * IN_MILLISECONDS))
+                {
+                    std::list<Creature*> fires;
+                    trigger->GetCreatureListWithEntryInGrid(fires, NPC_THERAMORE_FIRE_CREDIT, radius);
 
-				for (Creature* fire : fires)
-				{
-					if (Player* player = caster->ToPlayer())
-					{
-						KillRewarder(player, fire, false).Reward(NPC_THERAMORE_FIRE_CREDIT);
-					}
+                    for (Creature* fire : fires)
+                    {
+                        if (Player* player = caster->ToPlayer())
+                        {
+                            KillRewarder(player, fire, false).Reward(NPC_THERAMORE_FIRE_CREDIT);
+                        }
 
-					fire->DespawnOrUnsummon();
-				}
-			}
+                        fire->DespawnOrUnsummon();
+                    }
+                }
+            #endif
 		}
 	}
 

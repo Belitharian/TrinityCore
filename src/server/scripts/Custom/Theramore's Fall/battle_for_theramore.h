@@ -7,7 +7,7 @@
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader "BFT"
 
-//#define DEBUG
+#define DEBUG
 
 #define TERVOSH_PATH_01          6
 #define TERVOSH_PATH_02         10
@@ -32,6 +32,10 @@
 #define FIRE_LOCATION           32
 
 #define NUMBER_OF_MEMBERS       10
+#define NUMBER_OF_WOUNDED       6
+#define NUMBER_OF_CITIZENS      8
+#define NUMBER_OF_TROOPS        5
+#define NUMBER_OF_FIRES         8
 
 #define KALECGOS_CIRCLE_RADIUS  95.f
 
@@ -79,6 +83,7 @@ enum BFTData
 	DATA_ROKNAH_HAG,
 
 	DATA_SCENARIO_PHASE,
+    DATA_WOUNDED_TROOPS,
 
 	// GameObjects
 	DATA_PORTAL_TO_STORMWIND,
@@ -182,6 +187,7 @@ enum BFTMisc
 
 	// Sounds
 	SOUND_FEARFUL_CROWD                 = 15003,
+    SOUND_COUNTERSPELL                  = 3227,
 
 	// Point Id
 	MOVEMENT_INFO_POINT_NONE            = 0,
@@ -326,6 +332,8 @@ enum BFTTalks
 	SAY_IRIS_XPLOSION_08  = 7,
 	SAY_IRIS_XPLOSION_09  = 60,
 	SAY_IRIS_XPLOSION_10  = 8,
+
+    SAY_WOUNDED_TROOP     = 61,
 
 	SAY_JAINA_SPELL_01    = 40,
 	SAY_JAINA_BLIZZARD_01 = 41,

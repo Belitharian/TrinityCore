@@ -137,7 +137,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 	struct scenario_battle_for_theramore_InstanceScript : public InstanceScript
 	{
 		scenario_battle_for_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map),
-			phase(BFTPhases::FindJaina), eventId(1), archmagesIndex(0), waves(0), wavesInvoker(WAVE_01)
+			phase(BFTPhases::FindJaina), eventId(1), archmagesIndex(0), waves(0), woundedTroops(0),
+            wavesInvoker(WAVE_01)
 		{
 			SetHeaders(DataHeader);
 			LoadObjectData(creatureData, gameobjectData);
@@ -212,15 +213,22 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 		uint32 GetData(uint32 dataId) const override
 		{
-			if (dataId == DATA_SCENARIO_PHASE)
-				return (uint32)phase;
+            if (dataId == DATA_SCENARIO_PHASE)
+                return (uint32)phase;
+            else if (dataId == DATA_WOUNDED_TROOPS)
+                return woundedTroops;
 			return 0;
 		}
 
 		void SetData(uint32 dataId, uint32 value) override
 		{
-			if (dataId == DATA_SCENARIO_PHASE)
-				phase = (BFTPhases)value;
+            if (dataId == DATA_SCENARIO_PHASE)
+                phase = (BFTPhases)value;
+            else if (dataId == DATA_WOUNDED_TROOPS)
+            {
+                woundedTroops = value;
+                printf("woundedTroops: %u\n", woundedTroops);
+            }
 		}
 
 		void OnCompletedCriteriaTree(CriteriaTree const* tree) override
@@ -1714,6 +1722,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		BFTPhases phase;
 		uint32 wavesInvoker;
 		uint32 eventId;
+        uint32 woundedTroops;
 		uint8 archmagesIndex;
 		uint8 waves;
 		GuidVector citizens;

@@ -292,19 +292,11 @@ void KillRewarder::Reward()
 void KillRewarder::Reward(uint32 entry)
 {
     // 5. Credit instance encounter.
-    // 6. Update guild achievements.
-    // 7. Credit scenario criterias
-    if (Creature* victim = _victim->ToCreature())
+    if (Scenario* scenario = _killer->GetScenario())
     {
-        if (victim->IsDungeonBoss())
-            if (InstanceScript* instance = _victim->GetInstanceScript())
-                instance->UpdateEncounterStateForKilledCreature(entry, _victim);
-
-        if (ObjectGuid::LowType guildId = victim->GetMap()->GetOwnerGuildId())
-            if (Guild* guild = sGuildMgr->GetGuildById(guildId))
-                guild->UpdateCriteria(CriteriaType::KillCreature, entry, 1, 0, victim, _killer);
-
-        if (Scenario* scenario = victim->GetScenario())
+        if (Creature* victim = _victim->ToCreature())
             scenario->UpdateCriteria(CriteriaType::KillCreature, entry, 1, 0, victim, _killer);
+        else
+            scenario->UpdateCriteria(CriteriaType::KillCreature, entry, 1, 0, nullptr, _killer);
     }
 }
