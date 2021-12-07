@@ -23,6 +23,7 @@
 #include "ObjectGuid.h"
 #include "Optional.h"
 
+class Creature;
 class GameObject;
 class Player;
 class Quest;
@@ -41,7 +42,7 @@ class TC_GAME_API GameObjectAI
         GameObject* const me;
 
     public:
-        explicit GameObjectAI(GameObject* g, uint32 scriptId = {});
+        explicit GameObjectAI(GameObject* go, uint32 scriptId = {});
         virtual ~GameObjectAI() { }
 
         // Gets the id of the AI (script id)
@@ -97,11 +98,17 @@ class TC_GAME_API GameObjectAI
 
         // Called when hit by a spell
         virtual void SpellHit(Unit* /*caster*/, SpellInfo const* /*spellInfo*/) { }
-        virtual void SpellHit(GameObject* /*caster*/, SpellInfo const* /*spellInfo*/) { }
+        virtual void SpellHitByGameObject(GameObject* /*caster*/, SpellInfo const* /*spellInfo*/) { }
 
         // Called when spell hits a target
         virtual void SpellHitTarget(Unit* /*target*/, SpellInfo const* /*spellInfo*/) { }
-        virtual void SpellHitTarget(GameObject* /*target*/, SpellInfo const* /*spellInfo*/) { }
+        virtual void SpellHitTargetGameObject(GameObject* /*target*/, SpellInfo const* /*spellInfo*/) { }
+
+        // Called when the gameobject summon successfully other creature
+        virtual void JustSummoned(Creature* /*summon*/) { }
+
+        virtual void SummonedCreatureDespawn(Creature* /*summon*/) { }
+        virtual void SummonedCreatureDies(Creature* /*summon*/, Unit* /*killer*/) { }
 };
 
 class TC_GAME_API NullGameObjectAI : public GameObjectAI

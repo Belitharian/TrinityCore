@@ -2467,6 +2467,17 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
 
             break;
         }
+        case SMART_ACTION_PLAY_CINEMATIC:
+        {
+            for (WorldObject* target : targets)
+            {
+                if (!IsPlayer(target))
+                    continue;
+
+                target->ToPlayer()->SendCinematicStart(e.action.cinematic.entry);
+            }
+            break;
+        }
         default:
             TC_LOG_ERROR("sql.sql", "SmartScript::ProcessAction: Entry " SI64FMTD " SourceType %u, Event %u, Unhandled Action type %u", e.entryOrGuid, e.GetScriptType(), e.event_id, e.GetActionType());
             break;
@@ -2712,6 +2723,17 @@ void SmartScript::GetTargets(ObjectVector& targets, SmartScriptHolder const& e, 
             break;
         case SMART_TARGET_CREATURE_RANGE:
         {
+            WorldObject* ref = baseObject;
+            if (!ref)
+                ref = scriptTrigger;
+
+            if (!ref)
+            {
+                TC_LOG_ERROR("sql.sql", "SMART_TARGET_CREATURE_RANGE: Entry " SI64FMTD " SourceType %u Event %u Action %u Target %u is missing base object or invoker.",
+                    e.entryOrGuid, e.GetScriptType(), e.event_id, e.GetActionType(), e.GetTargetType());
+                break;
+            }
+
             ObjectVector units;
             GetWorldObjectsInDist(units, static_cast<float>(e.target.unitRange.maxDist));
 
@@ -2723,7 +2745,7 @@ void SmartScript::GetTargets(ObjectVector& targets, SmartScriptHolder const& e, 
                 if (me && me->GetGUID() == unit->GetGUID())
                     continue;
 
-                if ((!e.target.unitRange.creature || unit->ToCreature()->GetEntry() == e.target.unitRange.creature) && baseObject->IsInRange(unit, float(e.target.unitRange.minDist), float(e.target.unitRange.maxDist)))
+                if ((!e.target.unitRange.creature || unit->ToCreature()->GetEntry() == e.target.unitRange.creature) && ref->IsInRange(unit, float(e.target.unitRange.minDist), float(e.target.unitRange.maxDist)))
                     targets.push_back(unit);
             }
 
@@ -2775,6 +2797,17 @@ void SmartScript::GetTargets(ObjectVector& targets, SmartScriptHolder const& e, 
         }
         case SMART_TARGET_GAMEOBJECT_RANGE:
         {
+            WorldObject* ref = baseObject;
+            if (!ref)
+                ref = scriptTrigger;
+
+            if (!ref)
+            {
+                TC_LOG_ERROR("sql.sql", "SMART_TARGET_GAMEOBJECT_RANGE: Entry " SI64FMTD " SourceType %u Event %u Action %u Target %u is missing base object or invoker.",
+                    e.entryOrGuid, e.GetScriptType(), e.event_id, e.GetActionType(), e.GetTargetType());
+                break;
+            }
+
             ObjectVector units;
             GetWorldObjectsInDist(units, static_cast<float>(e.target.goRange.maxDist));
 
@@ -2786,7 +2819,7 @@ void SmartScript::GetTargets(ObjectVector& targets, SmartScriptHolder const& e, 
                 if (go && go->GetGUID() == unit->GetGUID())
                     continue;
 
-                if ((!e.target.goRange.entry && unit->ToGameObject()->GetEntry() == e.target.goRange.entry) && baseObject->IsInRange(unit, float(e.target.goRange.minDist), float(e.target.goRange.maxDist)))
+                if ((!e.target.goRange.entry && unit->ToGameObject()->GetEntry() == e.target.goRange.entry) && ref->IsInRange(unit, float(e.target.goRange.minDist), float(e.target.goRange.maxDist)))
                     targets.push_back(unit);
             }
 
@@ -2798,7 +2831,8 @@ void SmartScript::GetTargets(ObjectVector& targets, SmartScriptHolder const& e, 
         {
             if (!scriptTrigger && !baseObject)
             {
-                TC_LOG_ERROR("sql.sql", "SMART_TARGET_CREATURE_GUID can not be used without invoker");
+                TC_LOG_ERROR("sql.sql", "SMART_TARGET_CREATURE_GUID: Entry " SI64FMTD " SourceType %u Event %u Action %u Target %u is missing base object or invoker.",
+                    e.entryOrGuid, e.GetScriptType(), e.event_id, e.GetActionType(), e.GetTargetType());
                 break;
             }
 
@@ -2811,7 +2845,8 @@ void SmartScript::GetTargets(ObjectVector& targets, SmartScriptHolder const& e, 
         {
             if (!scriptTrigger && !baseObject)
             {
-                TC_LOG_ERROR("sql.sql", "SMART_TARGET_GAMEOBJECT_GUID can not be used without invoker");
+                TC_LOG_ERROR("sql.sql", "SMART_TARGET_GAMEOBJECT_GUID: Entry " SI64FMTD " SourceType %u Event %u Action %u Target %u is missing base object or invoker.",
+                    e.entryOrGuid, e.GetScriptType(), e.event_id, e.GetActionType(), e.GetTargetType());
                 break;
             }
 
@@ -2843,32 +2878,70 @@ void SmartScript::GetTargets(ObjectVector& targets, SmartScriptHolder const& e, 
         }
         case SMART_TARGET_STORED:
         {
-            WorldObject* ref = GetBaseObject();
+            WorldObject* ref = baseObject;
             if (!ref)
                 ref = scriptTrigger;
 
-            if (ref)
-                if (ObjectVector const* stored = GetStoredTargetVector(e.target.stored.id, *ref))
-                    targets.assign(stored->begin(), stored->end());
+            if (!ref)
+            {
+                TC_LOG_ERROR("sql.sql", "SMART_TARGET_STORED: Entry " SI64FMTD " SourceType %u Event %u Action %u Target %u is missing base object or invoker.",
+                    e.entryOrGuid, e.GetScriptType(), e.event_id, e.GetActionType(), e.GetTargetType());
+                break;
+            }
+
+            if (ObjectVector const* stored = GetStoredTargetVector(e.target.stored.id, *ref))
+                targets.assign(stored->begin(), stored->end());
             break;
         }
         case SMART_TARGET_CLOSEST_CREATURE:
         {
-            if (Creature* target = baseObject->FindNearestCreature(e.target.closest.entry, float(e.target.closest.dist ? e.target.closest.dist : 100), !e.target.closest.dead))
+            WorldObject* ref = baseObject;
+            if (!ref)
+                ref = scriptTrigger;
+
+            if (!ref)
+            {
+                TC_LOG_ERROR("sql.sql", "SMART_TARGET_CLOSEST_CREATURE: Entry " SI64FMTD " SourceType %u Event %u Action %u Target %u is missing base object or invoker.",
+                    e.entryOrGuid, e.GetScriptType(), e.event_id, e.GetActionType(), e.GetTargetType());
+                break;
+            }
+
+            if (Creature* target = ref->FindNearestCreature(e.target.closest.entry, float(e.target.closest.dist ? e.target.closest.dist : 100), !e.target.closest.dead))
                 targets.push_back(target);
             break;
         }
         case SMART_TARGET_CLOSEST_GAMEOBJECT:
         {
-            if (GameObject* target = baseObject->FindNearestGameObject(e.target.closest.entry, float(e.target.closest.dist ? e.target.closest.dist : 100)))
+            WorldObject* ref = baseObject;
+            if (!ref)
+                ref = scriptTrigger;
+
+            if (!ref)
+            {
+                TC_LOG_ERROR("sql.sql", "SMART_TARGET_CLOSEST_GAMEOBJECT: Entry " SI64FMTD " SourceType %u Event %u Action %u Target %u is missing base object or invoker.",
+                    e.entryOrGuid, e.GetScriptType(), e.event_id, e.GetActionType(), e.GetTargetType());
+                break;
+            }
+
+            if (GameObject* target = ref->FindNearestGameObject(e.target.closest.entry, float(e.target.closest.dist ? e.target.closest.dist : 100)))
                 targets.push_back(target);
             break;
         }
         case SMART_TARGET_CLOSEST_PLAYER:
         {
-            if (WorldObject* obj = GetBaseObject())
-                if (Player* target = obj->SelectNearestPlayer(float(e.target.playerDistance.dist)))
-                    targets.push_back(target);
+            WorldObject* ref = baseObject;
+            if (!ref)
+                ref = scriptTrigger;
+
+            if (!ref)
+            {
+                TC_LOG_ERROR("sql.sql", "SMART_TARGET_CLOSEST_PLAYER: Entry " SI64FMTD " SourceType %u Event %u Action %u Target %u is missing base object or invoker.",
+                    e.entryOrGuid, e.GetScriptType(), e.event_id, e.GetActionType(), e.GetTargetType());
+                break;
+            }
+
+            if (Player* target = ref->SelectNearestPlayer(float(e.target.playerDistance.dist)))
+                targets.push_back(target);
             break;
         }
         case SMART_TARGET_OWNER_OR_SUMMONER:
@@ -2879,13 +2952,13 @@ void SmartScript::GetTargets(ObjectVector& targets, SmartScriptHolder const& e, 
 
                 if (!charmerOrOwnerGuid)
                     if (TempSummon* tempSummon = me->ToTempSummon())
-                        if (Unit* summoner = tempSummon->GetSummoner())
+                        if (WorldObject* summoner = tempSummon->GetSummoner())
                             charmerOrOwnerGuid = summoner->GetGUID();
 
                 if (!charmerOrOwnerGuid)
                     charmerOrOwnerGuid = me->GetCreatorGUID();
 
-                if (Unit* owner = ObjectAccessor::GetUnit(*me, charmerOrOwnerGuid))
+                if (WorldObject* owner = ObjectAccessor::GetWorldObject(*me, charmerOrOwnerGuid))
                     targets.push_back(owner);
             }
             else if (go)
@@ -2897,7 +2970,7 @@ void SmartScript::GetTargets(ObjectVector& targets, SmartScriptHolder const& e, 
             // Get owner of owner
             if (e.target.owner.useCharmerOrOwner && !targets.empty())
             {
-                Unit* owner = targets.front()->ToUnit();
+                WorldObject* owner = targets.front();
                 targets.clear();
 
                 if (Unit* base = ObjectAccessor::GetUnit(*owner, owner->GetCharmerOrOwnerGUID()))

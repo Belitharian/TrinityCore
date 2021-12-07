@@ -18,12 +18,12 @@
 #ifndef TRINITY_CREATUREAI_H
 #define TRINITY_CREATUREAI_H
 
-#include "UnitAI.h"
 #include "Common.h"
 #include "LootItemType.h"
 #include "ObjectDefines.h"
 #include "Optional.h"
 #include "QuestDef.h"
+#include "UnitAI.h"
 
 class AreaBoundary;
 class AreaTrigger;
@@ -39,6 +39,16 @@ typedef std::vector<AreaBoundary const*> CreatureBoundary;
 
 #define TIME_INTERVAL_LOOK   5000
 #define VISIBILITY_RANGE    10000
+
+enum Permitions : int32
+{
+    PERMIT_BASE_NO               = -1,
+    PERMIT_BASE_IDLE             = 1,
+    PERMIT_BASE_REACTIVE         = 100,
+    PERMIT_BASE_PROACTIVE        = 200,
+    PERMIT_BASE_FACTION_SPECIFIC = 400,
+    PERMIT_BASE_SPECIAL          = 800
+};
 
 enum SCEquip
 {
@@ -98,7 +108,7 @@ class TC_GAME_API CreatureAI : public UnitAI
 
         // Called when the creature summon successfully other creature
         virtual void JustSummoned(Creature* /*summon*/) { }
-        virtual void IsSummonedBy(Unit* /*summoner*/) { }
+        virtual void IsSummonedBy(WorldObject* /*summoner*/) { }
 
         virtual void SummonedCreatureDespawn(Creature* /*summon*/) { }
         virtual void SummonedCreatureDies(Creature* /*summon*/, Unit* /*killer*/) { }
@@ -117,11 +127,11 @@ class TC_GAME_API CreatureAI : public UnitAI
 
         // Called when hit by a spell
         virtual void SpellHit(Unit* /*caster*/, SpellInfo const* /*spellInfo*/) { }
-        virtual void SpellHit(GameObject* /*caster*/, SpellInfo const* /*spellInfo*/) { }
+        virtual void SpellHitByGameObject(GameObject* /*caster*/, SpellInfo const* /*spellInfo*/) { }
 
         // Called when spell hits a target
         virtual void SpellHitTarget(Unit* /*target*/, SpellInfo const* /*spellInfo*/) { }
-        virtual void SpellHitTarget(GameObject* /*target*/, SpellInfo const* /*spellInfo*/) { }
+        virtual void SpellHitTargetGameObject(GameObject* /*target*/, SpellInfo const* /*spellInfo*/) { }
 
         virtual bool IsEscorted() const { return false; }
 
@@ -148,10 +158,10 @@ class TC_GAME_API CreatureAI : public UnitAI
         virtual void ReceiveEmote(Player* /*player*/, uint32 /*emoteId*/) { }
 
         // Called when owner takes damage
-        virtual void OwnerAttackedBy(Unit* attacker) { _OnOwnerCombatInteraction(attacker); }
+        virtual void OwnerAttackedBy(Unit* attacker) { OnOwnerCombatInteraction(attacker); }
 
         // Called when owner attacks something
-        virtual void OwnerAttacked(Unit* target) { _OnOwnerCombatInteraction(target); }
+        virtual void OwnerAttacked(Unit* target) { OnOwnerCombatInteraction(target); }
 
         /// == Triggered Actions Requested ==================
 
@@ -233,20 +243,10 @@ class TC_GAME_API CreatureAI : public UnitAI
         bool _negateBoundary;
 
     private:
+        void OnOwnerCombatInteraction(Unit* target);
+
         uint32 const _scriptId;
-
-        bool m_MoveInLineOfSight_locked;
-        void _OnOwnerCombatInteraction(Unit* target);
-};
-
-enum Permitions : int32
-{
-    PERMIT_BASE_NO                 = -1,
-    PERMIT_BASE_IDLE               = 1,
-    PERMIT_BASE_REACTIVE           = 100,
-    PERMIT_BASE_PROACTIVE          = 200,
-    PERMIT_BASE_FACTION_SPECIFIC   = 400,
-    PERMIT_BASE_SPECIAL            = 800
+        bool _moveInLOSLocked;
 };
 
 #endif
