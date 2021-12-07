@@ -27,6 +27,7 @@ class npc_water_elementals_theramore : public CreatureScript
 
         enum Spells
         {
+            SPELL_FROST_BARRIER = 69787,
             SPELL_WATER_BOLT    = 125995,
             SPELL_WATER_SPOUT   = 39207
         };
@@ -38,6 +39,8 @@ class npc_water_elementals_theramore : public CreatureScript
 
         void JustEngagedWith(Unit* who) override
         {
+            DoCast(SPELL_FROST_BARRIER);
+
             scheduler
                 .Schedule(5s, 8s, [this](TaskContext water_bolt)
                 {
@@ -69,7 +72,7 @@ class npc_roknah_warlord : public CreatureScript
 	struct npc_roknah_warlordAI : public CustomAI
 	{
 		npc_roknah_warlordAI(Creature* creature) : CustomAI(creature, AI_Type::Melee),
-            isLow(false)
+            sendEvent(false)
 		{
             instance = creature->GetInstanceScript();
         }
@@ -84,22 +87,45 @@ class npc_roknah_warlord : public CreatureScript
 		};
 
         InstanceScript* instance;
-        bool isLow;
+        bool sendEvent;
+
+        void JustDied(Unit* killer) override
+        {
+            CustomAI::JustDied(killer);
+
+            instance->DoSendScenarioEvent(EVENT_WARLORD_ROKNAH_SLAIN);
+        }
 
         void DamageTaken(Unit* /*attacker*/, uint32& damage) override
         {
-            if (HealthAbovePct(40))
+            if (HealthAbovePct(30))
                 return;
 
-            if (!isLow)
+            if (!sendEvent)
             {
-                instance->DoSendScenarioEvent(EVENT_WARLORD_ROKNAH_SLAIN);
-                isLow = true;
+                sendEvent = true;
+
+                me->SetHomePosition(me->GetPosition());
+                me->SetRegenerateHealth(false);
+                me->AI()->EnterEvadeMode();
+                me->SetImmuneToAll(true);
+
+                scheduler.Schedule(2s, [this](TaskContext /*context*/)
+                {
+                    me->SetStandState(UNIT_STAND_STATE_KNEEL);
+                });
+
+                if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
+                {
+                    jaina->RemoveAllAuras();
+                    jaina->SetReactState(REACT_PASSIVE);
+                    jaina->SetImmuneToAll(false);
+
+                    instance->SetData(EVENT_WARLORD_ROKNAH_SLAIN, 0U);
+                }
             }
-            else
-            {
-                damage = 0;
-            }
+
+            damage = 0;
         }
 
 		void JustEngagedWith(Unit* who) override

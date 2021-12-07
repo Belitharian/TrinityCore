@@ -14,7 +14,7 @@
 #include "TemporarySummon.h"
 #include "ruins_of_theramore.h"
 
-#define CREATURE_DATA_SIZE 5
+#define CREATURE_DATA_SIZE 6
 
 const ObjectData creatureData[CREATURE_DATA_SIZE] =
 {
@@ -22,13 +22,14 @@ const ObjectData creatureData[CREATURE_DATA_SIZE] =
 	{ NPC_KALECGOS,             DATA_KALECGOS               },
 	{ NPC_KINNDY_SPARKSHINE,    DATA_KINNDY_SPARKSHINE      },
 	{ NPC_ROKNAH_WARLORD,       DATA_ROKNAH_WARLORD         },
+	{ NPC_BOMBARDING_ZEPPELIN,  DATA_BOMBARDING_ZEPPELIN    },
 	{ 0,                        0                           }   // END
 };
 
 const ObjectData gameobjectData[] =
 {
-    { GOB_BROKEN_GLASS,         DATA_BROKEN_GLASS           },
-    { 0,                        0                           }   // END
+	{ GOB_BROKEN_GLASS,         DATA_BROKEN_GLASS           },
+	{ 0,                        0                           }   // END
 };
 
 class scenario_ruins_of_theramore : public InstanceMapScript
@@ -60,6 +61,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			{
 				case DATA_SCENARIO_PHASE:
 					phase = (RFTPhases)value;
+					if (phase == RFTPhases::LeaveTheRuins)
+						events.ScheduleEvent(40, 1s);
 					break;
 				case EVENT_FIND_JAINA_02:
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::FindJaina_Crater_Valided);
@@ -69,6 +72,15 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::BackToSender);
 					events.ScheduleEvent(25, 500ms);
 					break;
+				case EVENT_WARLORD_ROKNAH_SLAIN:
+					GetJaina()->CastSpell(GetJaina(), SPELL_ALUNETH_FREED_EXPLOSION);
+					for (Creature* horde : hordes)
+					{
+						if (horde && horde->IsAlive() && horde->GetEntry() != NPC_ROKNAH_WARLORD)
+							horde->KillSelf();
+					}
+					events.ScheduleEvent(39, 1s);
+					break;
 			}
 		}
 
@@ -76,78 +88,60 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		{
 			switch (tree->ID)
 			{
+				// Retrieve Jaina
 				case CRITERIA_TREE_FIND_JAINA_01:
-					instance->SummonCreature(NPC_KALECGOS, KalecgosPath01[0]);
-					if (Creature* kalecgos = GetKalecgos())
-					{
-						kalecgos->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-						kalecgos->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, KalecgosPath01, KALECGOS_PATH_01, false, false, KalecgosPath01[KALECGOS_PATH_01 - 1].GetOrientation());
-					}
-					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::FindJaina_Isle_Valided);
-					#ifdef DEBUG
-						events.ScheduleEvent(17, 1s);
-					#else
-						events.ScheduleEvent(1, 1s);
-					#endif
-					break;
+                {
+                    instance->SummonCreature(NPC_KALECGOS, KalecgosPath01[0]);
+                    if (Creature* kalecgos = GetKalecgos())
+                    {
+                        kalecgos->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        kalecgos->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, KalecgosPath01, KALECGOS_PATH_01, false, false, KalecgosPath01[KALECGOS_PATH_01 - 1].GetOrientation());
+                    }
+                    SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::FindJaina_Isle_Valided);
+                    #ifdef DEBUG
+                    events.ScheduleEvent(17, 1s);
+                    #else
+                    events.ScheduleEvent(1, 1s);
+                    #endif
+                    break;
+                }
+				// Help Kalecgos
 				case CRITERIA_TREE_HELP_KALECGOS:
 					if (Creature* jaina = GetJaina())
 					{
 						jaina->LoadEquipment(2);
 						jaina->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
-						jaina->RemoveAllAuras();
-						jaina->SetStandState(UNIT_STAND_STATE_KNEEL);
+                        jaina->SetStandState(UNIT_STAND_STATE_KNEEL);
+                        jaina->RemoveAllAuras();
 
 						// Distance minimale pour déclencher l'event
 						jaina->AI()->SetData(0U, 50U);
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::FindJaina_Crater);
 					break;
+				// Return to Theramore
 				case CRITERIA_TREE_FIND_JAINA_02:
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::Standards);
 					break;
+				// Cleaning
 				case CRITERIA_TREE_CLEANING:
 					instance->SummonCreatureGroup(0);
-					if (Creature * jaina = GetJaina())
+					if (Creature* jaina = GetJaina())
 					{
+						Talk(jaina, SAY_IRIS_PROTECTION_JAINA_03);
 						jaina->RemoveAurasDueToSpell(SPELL_ALUNETH_DRINKS);
-						jaina->AI()->Talk(SAY_IRIS_PROTECTION_JAINA_03);
-
-						// Distance minimale pour déclencher l'event
 						jaina->AI()->SetData(0U, 15U);
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::Standards_Valided);
 					break;
-                case CRITERIA_TREE_BACK_TO_SENDER:
-                    SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::TheFinalAssault);
-                    break;
-                case CRITERIA_TREE_WARLORD_SLAIN:
-                    if (Creature* warlord = GetWarlord())
-                    {
-                        if (warlord->IsAlive())
-                        {
-                            warlord->SetRegenerateHealth(false);
-                            warlord->CombatStop();
-                            warlord->SetImmuneToAll(true);
-                            warlord->SetControlled(true, UNIT_STATE_ROOT);
-                            warlord->SetStandState(UNIT_STAND_STATE_KNEEL);
-
-                            if (Creature* jaina = GetJaina())
-                            {
-                                jaina->CombatStop();
-                                jaina->SetImmuneToAll(true);
-                                jaina->GetMotionMaster()->Clear();
-                                jaina->SetWalk(true);
-                                GameObject* brokenGlass = GetGameObject(DATA_BROKEN_GLASS);
-                                if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, brokenGlass->GetPosition()))
-                                    jaina->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_01, trigger, 0.3f);
-                            }
-                        }
-                    }
-                    break;
-                case CRITERIA_TREE_THE_LAST_STAND:
-                    SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::LeaveTheRuins);
-                    break;
+				// Back to sender
+				case CRITERIA_TREE_BACK_TO_SENDER:
+					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::TheFinalAssault);
+					break;
+				// The last assault - Parent
+				case CRITERIA_TREE_THE_LAST_STAND:
+					events.ScheduleEvent(40, 1s);
+					break;
 				default:
 					break;
 			}
@@ -188,13 +182,13 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			}
 		}
 
-        void OnGameObjectCreate(GameObject* go) override
-        {
-            InstanceScript::OnGameObjectCreate(go);
+		void OnGameObjectCreate(GameObject* go) override
+		{
+			InstanceScript::OnGameObjectCreate(go);
 
-            if (go->GetEntry() == GOB_BROKEN_GLASS)
-                go->SetFlags(GO_FLAG_NOT_SELECTABLE);
-        }
+			if (go->GetEntry() == GOB_BROKEN_GLASS)
+				go->SetFlags(GO_FLAG_NOT_SELECTABLE);
+		}
 
 		void Update(uint32 diff) override
 		{
@@ -218,7 +212,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					{
 						if (Creature* kalecgos = GetKalecgos())
 						{
-							kalecgos->AI()->Talk(SAY_AFTER_BATTLE_KALECGOS_01);
+							Talk(kalecgos, SAY_AFTER_BATTLE_KALECGOS_01);
 							kalecgos->SetWalk(true);
 							kalecgos->SetTarget(jaina->GetGUID());
 
@@ -228,52 +222,52 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(2s);
 					break;
 				case 3:
-					GetJaina()->AI()->Talk(SAY_AFTER_BATTLE_JAINA_02);
+					Talk(GetJaina(), SAY_AFTER_BATTLE_JAINA_02);
 					Next(6s);
 					break;
 				case 4:
-					GetJaina()->AI()->Talk(SAY_AFTER_BATTLE_JAINA_03);
+					Talk(GetJaina(), SAY_AFTER_BATTLE_JAINA_03);
 					Next(10s);
 					break;
 				case 5:
 					if (Creature* kalecgos = GetKalecgos())
 					{
-						kalecgos->AI()->Talk(SAY_AFTER_BATTLE_KALECGOS_04);
+						Talk(kalecgos, SAY_AFTER_BATTLE_KALECGOS_04);
 						kalecgos->SetSpeedRate(MOVE_WALK, 0.6f);
 						kalecgos->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, KalecgosPoint01, true, KalecgosPoint01.GetOrientation());
 					}
 					Next(8s);
 					break;
 				case 6:
-					GetJaina()->AI()->Talk(SAY_AFTER_BATTLE_JAINA_05);
+					Talk(GetJaina(), SAY_AFTER_BATTLE_JAINA_05);
 					Next(5s);
 					break;
 				case 7:
-					GetKalecgos()->AI()->Talk(SAY_AFTER_BATTLE_KALECGOS_06);
+					Talk(GetKalecgos(), SAY_AFTER_BATTLE_KALECGOS_06);
 					Next(4s);
 					break;
 				case 8:
-					GetJaina()->AI()->Talk(SAY_AFTER_BATTLE_JAINA_07);
+					Talk(GetJaina(), SAY_AFTER_BATTLE_JAINA_07);
 					Next(6s);
 					break;
 				case 9:
-					GetKalecgos()->AI()->Talk(SAY_AFTER_BATTLE_KALECGOS_08);
+					Talk(GetKalecgos(), SAY_AFTER_BATTLE_KALECGOS_08);
 					Next(4s);
 					break;
 				case 10:
-					GetJaina()->AI()->Talk(SAY_AFTER_BATTLE_JAINA_09);
+					Talk(GetJaina(), SAY_AFTER_BATTLE_JAINA_09);
 					Next(4s);
 					break;
 				case 11:
-					GetKalecgos()->AI()->Talk(SAY_AFTER_BATTLE_KALECGOS_10);
+					Talk(GetKalecgos(), SAY_AFTER_BATTLE_KALECGOS_10);
 					Next(6s);
 					break;
 				case 12:
-					GetKalecgos()->AI()->Talk(SAY_AFTER_BATTLE_KALECGOS_11);
+					Talk(GetKalecgos(), SAY_AFTER_BATTLE_KALECGOS_11);
 					Next(7s);
 					break;
 				case 13:
-					GetJaina()->AI()->Talk(SAY_AFTER_BATTLE_JAINA_12);
+					Talk(GetJaina(), SAY_AFTER_BATTLE_JAINA_12);
 					Next(2s);
 					break;
 				case 14:
@@ -293,14 +287,15 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(800ms);
 					break;
 				case 16:
-					GetJaina()->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+					if (Creature* jaina = GetJaina())
+						jaina->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
 					Next(2s);
 					break;
 				case 17:
 					GetJaina()->NearTeleportTo(JainaPoint02);
 					if (Creature* kalecgos = GetKalecgos())
 					{
-						kalecgos->AI()->Talk(SAY_AFTER_BATTLE_KALECGOS_13);
+						Talk(kalecgos, SAY_AFTER_BATTLE_KALECGOS_13);
 						kalecgos->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
 						if (Player* player = instance->GetPlayers().begin()->GetSource())
 							kalecgos->SetFacingToObject(player);
@@ -313,13 +308,14 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					DoSendScenarioEvent(EVENT_HELP_KALECGOS);
 					break;
 
-				#pragma endregion
+					#pragma endregion
 
 				// Find Jaina - Crater
 				#pragma region FIND_JAINA_CRATER
 
 				case 19:
-					GetJaina()->SetStandState(UNIT_STAND_STATE_STAND);
+					if (Creature* jaina = GetJaina())
+                        jaina->SetStandState(UNIT_STAND_STATE_STAND);
 					Next(1800ms);
 					break;
 				case 20:
@@ -330,14 +326,14 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(2s);
 					break;
 				case 21:
-					GetJaina()->AI()->Talk(SAY_IRIS_PROTECTION_JAINA_01);
+					Talk(GetJaina(), SAY_IRIS_PROTECTION_JAINA_01);
 					Next(4s);
 					break;
 				case 22:
 					if (Creature* jaina = GetJaina())
 					{
 						jaina->SetWalk(true);
-						jaina->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, JainaPoint03, true, JainaPoint03.GetOrientation());
+						jaina->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, JainaPoint03, true, JainaPoint03.GetOrientation());
 						jaina->SetHomePosition(JainaPoint03);
 					}
 					if (Creature* kinndy = GetCreature(DATA_KINNDY_SPARKSHINE))
@@ -348,7 +344,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(8s);
 					break;
 				case 23:
-					GetJaina()->AI()->Talk(SAY_IRIS_PROTECTION_JAINA_02);
+					Talk(GetJaina(), SAY_IRIS_PROTECTION_JAINA_02);
 					Next(6s);
 					break;
 				case 24:
@@ -358,6 +354,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						dummy->SetObjectScale(0.6f);
 						dummy->CastSpell(GetJaina(), SPELL_ALUNETH_DRINKS);
 						dummy->CastSpell(dummy, SPELL_EMPOWERED_SUMMON, true);
+                        irisDummy = dummy->GetGUID();
 					}
 					break;
 
@@ -369,7 +366,14 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case 25:
 					if (Creature* jaina = GetJaina())
 					{
-						jaina->AI()->Talk(SAY_IRIS_PROTECTION_JAINA_04);
+                        if (Creature* dummy = instance->GetCreature(irisDummy))
+                        {
+                            dummy->RemoveAllAuras();
+                            dummy->SetObjectScale(5.0f);
+                            dummy->AddAura(SPELL_COSMETIC_ARCANE_ENERGY_1, dummy);
+                        }
+
+						Talk(jaina, SAY_IRIS_PROTECTION_JAINA_04);
 						if (Player* player = instance->GetPlayers().begin()->GetSource())
 							jaina->SetFacingToObject(player);
 					}
@@ -378,28 +382,31 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case 26:
 					if (Creature* jaina = GetJaina())
 					{
-						jaina->AI()->Talk(SAY_IRIS_PROTECTION_JAINA_05);
+						Talk(jaina, SAY_IRIS_PROTECTION_JAINA_05);
 						jaina->SetFacingTo(JainaPoint03.GetOrientation());
 					}
 					Next(6s);
 					break;
 				case 27:
 					GetJaina()->CastSpell(GetJaina(), SPELL_SUMMON_WATER_ELEMENTALS);
-                    DoSendScenarioEvent(EVENT_BACK_TO_SENDER);
-                    Next(2s);
+					DoSendScenarioEvent(EVENT_BACK_TO_SENDER);
+					Next(2s);
 					break;
 				case 28:
-					GetJaina()->CastSpell(GetJaina(), SPELL_ARCANE_CHANNELING);
-					for (uint8 i = 0; i < ELEMENTALS_SIZE; ++i)
+					if (Creature* jaina = GetJaina())
 					{
-						elementals[i]->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, ElementalsPoint[i].destination, true, ElementalsPoint[i].destination.GetOrientation());
-						elementals[i]->SetHomePosition(ElementalsPoint[i].destination);
-                        elementals[i]->SetBoundingRadius(4.f);
+						jaina->CastSpell(GetJaina(), SPELL_ARCANE_CHANNELING);
+						for (uint8 i = 0; i < ELEMENTALS_SIZE; ++i)
+						{
+							elementals[i]->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, ElementalsPoint[i].destination, true, ElementalsPoint[i].destination.GetOrientation());
+							elementals[i]->SetHomePosition(ElementalsPoint[i].destination);
+							elementals[i]->SetBoundingRadius(4.f);
+						}
 					}
 					Next(5s);
 					break;
 				case 29:
-					if (TempSummon* zeppelin = instance->SummonCreature(NPC_BOMBARDING_ZEPPELIN, ZeppelinPoint.spawn))
+					if (TempSummon* zeppelin = instance->SummonCreature(NPC_BOMBARDING_ZEPPELIN, ZeppelinPoint.spawn, nullptr, 15 * IN_MILLISECONDS))
 					{
 						zeppelin->SetSpeedRate(MOVE_RUN, 3.f);
 						zeppelin->PlayDirectSound(SOUND_ZEPPELIN_FLIGHT);
@@ -411,92 +418,141 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					instance->SummonCreatureGroup(1, &hordes);
 					for (Creature* horde : hordes)
 					{
+						Position pos = horde->GetPosition();
+						horde->UpdateGroundPositionZ(pos.GetPositionX(), pos.GetPositionY(), pos.m_positionZ);
+						horde->NearTeleportTo(pos);
 						horde->SetImmuneToAll(true);
-						horde->AddAura(SPELL_COSMETIC_PARACHUTE, horde);
-						horde->GetMotionMaster()->MoveFall();
+						horde->CastSpell(horde, SPELL_TELEPORT_VISUAL_ONLY);
 					}
-					Next(2s);
+					Next(4s);
 					break;
-                case 31:
-                    for (Creature* horde : hordes)
-                        horde->RemoveAurasDueToSpell(SPELL_COSMETIC_PARACHUTE);
-                    Next(8s);
-                    break;
-				case 32:
-					GetWarlord()->AI()->Talk(SAY_IRIS_PROTECTION_JAINA_06);
+				case 31:
+					Talk(GetWarlord(), SAY_IRIS_PROTECTION_JAINA_06);
 					Next(6s);
+					break;
+				case 32:
+					Talk(GetJaina(), SAY_IRIS_PROTECTION_JAINA_07);
+					Next(8s);
 					break;
 				case 33:
-					GetJaina()->AI()->Talk(SAY_IRIS_PROTECTION_JAINA_07);
-					Next(10s);
-					break;
-				case 34:
-					GetWarlord()->AI()->Talk(SAY_IRIS_PROTECTION_JAINA_08);
+					Talk(GetWarlord(), SAY_IRIS_PROTECTION_JAINA_08);
 					Next(6s);
 					break;
-				case 35:
-					GetJaina()->AI()->Talk(SAY_IRIS_PROTECTION_JAINA_09);
-					Next(11s);
+				case 34:
+					Talk(GetJaina(), SAY_IRIS_PROTECTION_JAINA_09);
+					Next(9s);
 					break;
-				case 36:
-					GetWarlord()->AI()->Talk(SAY_IRIS_PROTECTION_JAINA_10);
+				case 35:
+					Talk(GetWarlord(), SAY_IRIS_PROTECTION_JAINA_10);
 					Next(2s);
 					break;
-				case 37:
+				case 36:
 					for (Creature* horde : hordes)
 					{
-                        horde->SetImmuneToAll(false);
-                        if (horde->GetEntry() == NPC_ROKNAH_WARLORD)
-                        {
-                            if (Player* player = instance->GetPlayers().begin()->GetSource())
-                                horde->AI()->AttackStart(player);
-                        }
-                        else
-                        {
-                            if (horde->GetPositionY() <= -4468.18f)
-                                horde->AI()->AttackStart(elementals[0]);
-                            else
-                                horde->AI()->AttackStart(elementals[1]);
-                        }
+						horde->SetImmuneToAll(false);
+						horde->GetMotionMaster()->Clear();
+						horde->GetMotionMaster()->MoveIdle();
+
+						if (horde->GetEntry() == NPC_ROKNAH_WARLORD)
+						{
+							if (Player* player = instance->GetPlayers().begin()->GetSource())
+								horde->AI()->AttackStart(player);
+						}
+						else
+						{
+							if (horde->GetPositionY() <= -4468.18f)
+								horde->AI()->AttackStart(elementals[0]);
+							else
+								horde->AI()->AttackStart(elementals[1]);
+						}
 					}
-                    Next(1s);
+					Next(1s);
 					break;
-                case 38:
-                    if (Creature* jaina = GetJaina())
-                    {
-                        for (Creature* horde : hordes)
-                        {
-                            jaina->GetThreatManager().AddThreat(horde, 100000.f);
-                            horde->GetThreatManager().AddThreat(jaina, 100000.f);
-                        }
-                    }
-                    Next(2s);
-                    break;
-                case 39:
-                {
-                    uint32 membersCounter = 0;
-                    uint32 deadCounter = 0;
-                    for (Creature* horde : hordes)
-                    {
-                        if (horde->GetEntry() != NPC_ROKNAH_WARLORD)
-                        {
-                            ++membersCounter;
-                            if (horde->isDead())
-                                ++deadCounter;
-                        }
-                    }
+				case 37:
+					if (Creature* jaina = GetJaina())
+						jaina->SetImmuneToAll(true);
+					Next(2s);
+					break;
+				case 38:
+				{
+					uint32 membersCounter = 0;
+					uint32 deadCounter = 0;
 
-                    // Quand le nombre de membres vivants est inférieur ou égal au nom de membres morts
-                    if (membersCounter <= deadCounter)
-                    {
-                        DoSendScenarioEvent(EVENT_JAINA_PROTECTED);
-                        Next(2s);
-                    }
-                    else
-                        events.RescheduleEvent(39, 1s);
+					for (Creature* horde : hordes)
+					{
+						if (horde->GetEntry() != NPC_ROKNAH_WARLORD)
+						{
+							++membersCounter;
+							if (horde->isDead())
+								++deadCounter;
+						}
+					}
 
-                    break;
-                }
+					if (membersCounter <= deadCounter)
+					{
+						DoSendScenarioEvent(EVENT_JAINA_PROTECTED);
+						events.CancelEvent(38);
+					}
+					else
+						events.RescheduleEvent(38, 1s);
+
+					break;
+				}
+
+				#pragma endregion
+
+				// Leave the Ruins
+				#pragma region LEAVE_THE_RUINS
+
+				case 39:
+					if (Creature* jaina = GetJaina())
+					{
+						jaina->SetImmuneToAll(true);
+						jaina->SetWalk(true);
+
+						if (GameObject* brokenGlass = GetGameObject(DATA_BROKEN_GLASS))
+							if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, brokenGlass->GetPosition()))
+								jaina->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_01, trigger, 0.8f);
+					}
+					break;
+				case 40:
+					if (Creature* jaina = GetJaina())
+					{
+						Talk(jaina, SAY_LEAVE_THE_RUINS_JAINA_01);
+						if (Player* player = instance->GetPlayers().begin()->GetSource())
+							jaina->SetFacingToObject(player);
+					}
+					Next(9s);
+					break;
+				case 41:
+					if (Creature* jaina = GetJaina())
+					{
+						Talk(jaina, SAY_LEAVE_THE_RUINS_JAINA_02);
+						if (Player* player = instance->GetPlayers().begin()->GetSource())
+							jaina->SetFacingToObject(player);
+					}
+					Next(10s);
+					break;
+				case 42:
+					if (Creature* jaina = GetJaina())
+					{
+						GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_STORMWIND, jaina->GetPosition(), QuaternionData::fromEulerAnglesZYX(jaina->GetOrientation(), 0.f, 0.f), 0);
+						if (portal)
+						{
+							portal->SetGoState(GO_STATE_ACTIVE);
+							portal->UseDoorOrButton();
+						}
+					}
+					Next(1s);
+					break;
+				case 43:
+                    DoRemoveAurasDueToSpellOnPlayers(SPELL_SCREEN_FX);
+					if (Creature* jaina = GetJaina())
+					{
+						jaina->CastSpell(jaina, SPELL_COSMETIC_ARCANE_DISSOLVE);
+						jaina->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+					}
+					break;
 
 				#pragma endregion
 
@@ -508,16 +564,18 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		EventMap events;
 		uint32 eventId;
 		RFTPhases phase;
+        ObjectGuid irisDummy;
 		std::vector<Creature*> elementals;
 		std::list<TempSummon*> hordes;
 
 		// Accesseurs
 		#pragma region ACCESSORS
-		
+
 		Creature* GetJaina() { return GetCreature(DATA_JAINA_PROUDMOORE); }
 		Creature* GetKalecgos() { return GetCreature(DATA_KALECGOS); }
 		Creature* GetKinndy() { return GetCreature(DATA_KINNDY_SPARKSHINE); }
 		Creature* GetWarlord() { return GetCreature(DATA_ROKNAH_WARLORD); }
+		Creature* GetZeppelin() { return GetCreature(DATA_BOMBARDING_ZEPPELIN); }
 
 		#pragma endregion
 

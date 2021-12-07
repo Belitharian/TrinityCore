@@ -1439,21 +1439,26 @@ class spell_theramore_barrier : public AuraScript
 {
 	PrepareAuraScript(spell_theramore_barrier);
 
+    void OnAbsorb(AuraEffect* /*aurEff*/, DamageInfo& dmgInfo, uint32& absorbAmount)
+    {
+        // Prevent default action (which would remove the aura)
+        PreventDefaultAction();
+
+        absorbAmount = dmgInfo.GetDamage();
+    }
+
 	void CalculateAmount(AuraEffect const* /*aurEff*/, int32& amount, bool& canBeRecalculated)
 	{
 		canBeRecalculated = false;
-
 		if (Unit* caster = GetCaster())
-		{
-			uint32 health = caster->GetMaxHealth();
-			amount = int32(health * 0.20f);
-		}
+            amount = caster->CountPctFromMaxHealth(20);
 	}
 
 	void Register() override
 	{
 		DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_theramore_barrier::CalculateAmount, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB);
-	}
+        OnEffectAbsorb += AuraEffectAbsorbFn(spell_theramore_barrier::OnAbsorb, EFFECT_0);
+    }
 };
 
 // Blizzard - 284968
@@ -1484,7 +1489,6 @@ class at_blizzard_theramore : public AreaTriggerEntityScript
 		void OnUpdate(uint32 diff) override
 		{
 			Unit* caster = at->GetCaster();
-
 			if (!caster)
 				return;
 
@@ -1518,7 +1522,7 @@ class at_blizzard_theramore : public AreaTriggerEntityScript
 						{
 							target->CastStop();
 							target->GetMotionMaster()->Clear();
-							target->GetMotionMaster()->MoveFleeing(tempSumm, 3 * IN_MILLISECONDS);
+							target->GetMotionMaster()->MoveFleeing(tempSumm, 5 * IN_MILLISECONDS);
 						}
 					}
 				}

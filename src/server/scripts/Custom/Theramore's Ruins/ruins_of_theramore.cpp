@@ -176,24 +176,34 @@ class npc_jaina_ruins : public CreatureScript
             {
                 case MOVEMENT_INFO_POINT_01:
                     me->SetStandState(UNIT_STAND_STATE_KNEEL);
-                    scheduler
-                        .Schedule(2s, [this](TaskContext context)
+                    scheduler.Schedule(2s, [this](TaskContext context)
+                    {
+                        switch (context.GetRepeatCounter())
                         {
-                            switch (context.GetRepeatCounter())
-                            {
-                                case 0:
-                                    me->SetStandState(UNIT_STAND_STATE_STAND);
-                                    context.Repeat(2s);
-                                    break;
-                                case 1:
-                                    if (Creature* warlord = instance->GetCreature(DATA_ROKNAH_WARLORD))
-                                        me->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_02, warlord, 1.3f);
-                                    break;
-                            }
-                        });
+                            case 0:
+                                me->SetStandState(UNIT_STAND_STATE_STAND);
+                                context.Repeat(2s);
+                                break;
+                            case 1:
+                                if (Creature* warlord = instance->GetCreature(DATA_ROKNAH_WARLORD))
+                                    me->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_02, warlord, 1.3f);
+                                break;
+                        }
+                    });
                     break;
                 case MOVEMENT_INFO_POINT_02:
-                    me->HandleEmoteCommand(EMOTE_ONESHOT_ATTACK2H);
+                    me->HandleEmoteCommand(EMOTE_ONESHOT_CASTSTRONG);
+                    scheduler.Schedule(1s, [this](TaskContext /*context*/)
+                    {
+                        if (Creature* warlord = instance->GetCreature(DATA_ROKNAH_WARLORD))
+                        {
+                            warlord->SetRespawnTime(5 * MINUTE * IN_MILLISECONDS);
+                            warlord->SetRespawnDelay(5 * MINUTE * IN_MILLISECONDS);
+                            warlord->KillSelf();
+
+                            instance->DoSendScenarioEvent(EVENT_WARLORD_ROKNAH_SLAIN);
+                        }
+                    });
                     break;
             }
         }

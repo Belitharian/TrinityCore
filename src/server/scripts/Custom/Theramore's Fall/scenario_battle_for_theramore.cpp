@@ -554,10 +554,21 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case CRITERIA_TREE_FOLLOW_JAINA:
 					events.ScheduleEvent(128, 3s);
 					break;
-				// Step 10 : Help the wounded - Help teleporting the wounded troops
-				case CRITERIA_TREE_HELP_WOUNDED_TROOP:
-					MassDespawn(NPC_THERAMORE_WOUNDED_TROOP);
-					break;
+                // Step 10 : Help the wounded - Help teleporting the wounded troops
+                case CRITERIA_TREE_HELP_THE_TROOPS:
+                {
+                    std::list<Creature*> results;
+                    if (Creature* jaina = GetJaina())
+                    {
+                        jaina->GetCreatureListWithEntryInGrid(results, NPC_THERAMORE_WOUNDED_TROOP, SIZE_OF_GRIDS);
+                        if (results.empty())
+                            return;
+
+                        for (Creature* c : results)
+                            c->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+                    }
+                    break;
+                }
 				// Step 10 : Help the wounded - Extinguish the fires
 				case CRITERIA_TREE_EXTINGUISH_FIRES:
 					MassDespawn(NPC_THERAMORE_FIRE_CREDIT);
