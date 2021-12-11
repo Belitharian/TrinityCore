@@ -27,6 +27,7 @@
 #include "ObjectMgr.h"
 #include "Transport.h"
 #include "WaypointManager.h"
+#include <sstream>
 
 WaypointMovementGenerator<Creature>::WaypointMovementGenerator(uint32 pathId, bool repeating) : _nextMoveTime(0), _pathId(pathId), _repeating(repeating), _loadedFromDB(true)
 {
@@ -388,4 +389,12 @@ bool WaypointMovementGenerator<Creature>::ComputeNextNode()
 
     _currentNode = (_currentNode + 1) % _path->nodes.size();
     return true;
+}
+
+std::string WaypointMovementGenerator<Creature>::GetDebugInfo() const
+{
+    std::stringstream sstr;
+    sstr << PathMovementBase::GetDebugInfo() << "\n"
+        << MovementGeneratorMedium::GetDebugInfo();
+    return sstr.str();
 }

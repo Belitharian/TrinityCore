@@ -366,7 +366,7 @@ struct SmartEvent
 
         struct
         {
-            uint32 noReportUse;
+            uint32 filter;
         } gossipHello;
 
         struct
@@ -752,6 +752,7 @@ struct SmartAction
         {
             uint32 spell;
             uint32 charges;
+            uint32 onlyOwnedAuras;
         } removeAura;
 
         struct
