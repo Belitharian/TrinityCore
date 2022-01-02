@@ -197,8 +197,6 @@ class npc_wounded_theramore_troop : public CreatureScript
 
             uint32 counter = instance->GetData(DATA_WOUNDED_TROOPS);
 
-            printf("%u\n", counter);
-
             if (counter < NUMBER_OF_WOUNDED - 1)
             {
                 me->DespawnOrUnsummon();
@@ -706,14 +704,17 @@ class npc_theramore_faithful : public CreatureScript
 				})
 				.Schedule(12s, 14s, [this](TaskContext prayer_of_healing)
 				{
-					me->CastStop();
+					me->CastStop(SPELL_PRAYER_OF_HEALING);
 					DoCastSelf(SPELL_PRAYER_OF_HEALING);
 					prayer_of_healing.Repeat(25s);
 				})
 				.Schedule(1s, 3s, [this](TaskContext heal)
 				{
-					if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
-						DoCast(target, SPELL_HEAL);
+                    if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
+                    {
+                        me->CastStop(SPELL_HEAL);
+                        DoCast(target, SPELL_HEAL);
+                    }
 					heal.Repeat(2s);
 				})
 				.Schedule(1s, 3s, [this](TaskContext psychic_scream)
@@ -829,7 +830,8 @@ class npc_roknah_hag : public CreatureScript
 		enum Groups
 		{
 			GROUP_NORMAL,
-			GROUP_FLEE
+			GROUP_FLEE,
+            GROUP_FROSTBOLT
 		};
 
 		uint32 Icicles[5] =
@@ -868,22 +870,21 @@ class npc_roknah_hag : public CreatureScript
 						me->RemoveAurasDueToSpell(Icicles[i]);
 					break;
 				case SPELL_FROSTBOLT:
-				case SPELL_FROST_NOVA:
-				case SPELL_EBONBOLT:
-				case SPELL_FLURRY:
                 {
                     if (Aura* aura = me->GetAura(SPELL_ICICLES))
                     {
                         uint8 stacks = aura->GetStackAmount();
-                        if (stacks < 4)
+                        if (stacks < 5)
                         {
                             CastIcicle(stacks);
                         }
                         else
                         {
-                            me->CastStop();
-                            CastIcicle(stacks);
-                            DoCastVictim(SPELL_GLACIAL_SPIKE);
+                            scheduler.Schedule(3s, 5s, [this](TaskContext /*context*/)
+                            {
+                                me->CastStop(SPELL_GLACIAL_SPIKE);
+                                DoCastVictim(SPELL_GLACIAL_SPIKE);
+                            });
                         }
                     }
                     else
@@ -900,6 +901,9 @@ class npc_roknah_hag : public CreatureScript
 			{
 				damage = 0;
 
+                scheduler.DelayGroup(GROUP_NORMAL, 2s);
+                scheduler.DelayGroup(GROUP_FROSTBOLT, 2s);
+
 				iceblock = true;
 
 				me->CastStop();
@@ -911,7 +915,7 @@ class npc_roknah_hag : public CreatureScript
 					iceblock = false;
 				});
 
-				CastFleeSequence(11s);
+				CastFleeSequence(12s);
 			}
 		}
 
@@ -926,7 +930,7 @@ class npc_roknah_hag : public CreatureScript
 				{
 					if (EnemiesInRange(12.0f) > 2)
 					{
-						me->CastStop();
+						me->CastStop(SPELL_CONE_OF_COLD);
 						DoCast(SPELL_CONE_OF_COLD);
 						cone_of_cold.Repeat(5s, 8s);
 					}
@@ -944,9 +948,21 @@ class npc_roknah_hag : public CreatureScript
 						DoCast(target, SPELL_FLURRY);
 					flurry.Repeat(12s, 14s);
 				})
-				.Schedule(1ms, GROUP_NORMAL, [this](TaskContext frostbolt)
+				.Schedule(1ms, GROUP_FROSTBOLT, [this](TaskContext frostbolt)
 				{
-					DoCastVictim(SPELL_FROSTBOLT);
+                    if (Aura* aura = me->GetAura(SPELL_ICICLES))
+                    {
+                        uint8 stacks = aura->GetStackAmount();
+                        if (stacks > 5)
+                            scheduler.DelayGroup(GROUP_FROSTBOLT, 10s);
+                        else
+                            DoCastVictim(SPELL_FROSTBOLT);
+                    }
+                    else
+                    {
+                        DoCastVictim(SPELL_FROSTBOLT);
+                    }
+
 					frostbolt.Repeat(2s);
 				});
 		}
@@ -961,6 +977,7 @@ class npc_roknah_hag : public CreatureScript
 			{
 				closeTarget = true;
 				scheduler.DelayGroup(GROUP_NORMAL, 2s);
+				scheduler.DelayGroup(GROUP_FROSTBOLT, 2s);
 				me->CastStop();
 				CastFleeSequence(1s);
 			}
@@ -995,8 +1012,9 @@ class npc_roknah_hag : public CreatureScript
         void CastIcicle(uint8 index)
         {
             uint32 icicle = Icicles[index];
-            DoCastSelf(SPELL_ICICLES, true);
             DoCastSelf(icicle, true);
+
+            DoCastSelf(SPELL_ICICLES, true);
         }
 	};
 
@@ -1148,19 +1166,13 @@ class npc_roknah_loasinger : public CreatureScript
 				.Schedule(5s, 8s, [this](TaskContext frost_shock)
 				{
 					if (Unit* target = DoFindEnemyMissingDot(frostShock))
-					{
-						if (!target->HasAura(SPELL_FROST_SHOCK))
-							DoCast(target, SPELL_FROST_SHOCK);
-					}
+                        DoCast(target, SPELL_FROST_SHOCK);
 					frost_shock.Repeat(8s, 10s);
 				})
 				.Schedule(5s, 8s, [this](TaskContext flame_shock)
 				{
 					if (Unit* target = DoFindEnemyMissingDot(flameShock))
-					{
-						if (!target->HasAura(SPELL_FLAME_SHOCK))
-							DoCast(target, SPELL_FLAME_SHOCK);
-					}
+                        DoCast(target, SPELL_FLAME_SHOCK);
 					flame_shock.Repeat(5s, 8s);
 				})
 				.Schedule(20s, 25s, [this](TaskContext earthquake)
@@ -1177,7 +1189,7 @@ class npc_roknah_loasinger : public CreatureScript
 				{
                     if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
                     {
-                        me->CastStop();
+                        me->CastStop(SPELL_HEALING_SURGE);
                         DoCast(target, SPELL_HEALING_SURGE);
                     }
 					healing_surge.Repeat(1s);

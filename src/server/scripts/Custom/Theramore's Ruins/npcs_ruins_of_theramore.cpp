@@ -14,52 +14,52 @@
 
 class npc_water_elementals_theramore : public CreatureScript
 {
-    public:
-    npc_water_elementals_theramore() : CreatureScript("npc_water_elementals_theramore")
-    {
-    }
+	public:
+	npc_water_elementals_theramore() : CreatureScript("npc_water_elementals_theramore")
+	{
+	}
 
-    struct npc_water_elementals_theramoreAI : public CustomAI
-    {
-        npc_water_elementals_theramoreAI(Creature* creature) : CustomAI(creature, AI_Type::Melee)
-        {
-        }
+	struct npc_water_elementals_theramoreAI : public CustomAI
+	{
+		npc_water_elementals_theramoreAI(Creature* creature) : CustomAI(creature, AI_Type::Melee)
+		{
+		}
 
-        enum Spells
-        {
-            SPELL_FROST_BARRIER = 69787,
-            SPELL_WATER_BOLT    = 125995,
-            SPELL_WATER_SPOUT   = 39207
-        };
+		enum Spells
+		{
+			SPELL_FROST_BARRIER = 69787,
+			SPELL_WATER_BOLT    = 125995,
+			SPELL_WATER_SPOUT   = 39207
+		};
 
-        float GetDistance() override
-        {
-            return 12.f;
-        }
+		float GetDistance() override
+		{
+			return 12.f;
+		}
 
-        void JustEngagedWith(Unit* who) override
-        {
-            DoCast(SPELL_FROST_BARRIER);
+		void JustEngagedWith(Unit* who) override
+		{
+			DoCast(SPELL_FROST_BARRIER);
 
-            scheduler
-                .Schedule(5s, 8s, [this](TaskContext water_bolt)
-                {
-                    DoCastVictim(SPELL_WATER_BOLT);
-                    water_bolt.Repeat(8s, 10s);
-                })
-                .Schedule(12s, 22s, [this](TaskContext water_spout)
-                {
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
-                        DoCast(target, SPELL_WATER_SPOUT);
-                    water_spout.Repeat(18s, 20s);
-                });
-        }
-    };
+			scheduler
+				.Schedule(5s, 8s, [this](TaskContext water_bolt)
+				{
+					DoCastVictim(SPELL_WATER_BOLT);
+					water_bolt.Repeat(8s, 10s);
+				})
+				.Schedule(12s, 22s, [this](TaskContext water_spout)
+				{
+					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+						DoCast(target, SPELL_WATER_SPOUT);
+					water_spout.Repeat(18s, 20s);
+				});
+		}
+	};
 
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_water_elementals_theramoreAI(creature);
-    }
+	CreatureAI* GetAI(Creature* creature) const override
+	{
+		return new npc_water_elementals_theramoreAI(creature);
+	}
 };
 
 class npc_roknah_warlord : public CreatureScript
@@ -72,10 +72,10 @@ class npc_roknah_warlord : public CreatureScript
 	struct npc_roknah_warlordAI : public CustomAI
 	{
 		npc_roknah_warlordAI(Creature* creature) : CustomAI(creature, AI_Type::Melee),
-            sendEvent(false)
+			sendEvent(false)
 		{
-            instance = creature->GetInstanceScript();
-        }
+			instance = creature->GetInstanceScript();
+		}
 
 		enum Spells
 		{
@@ -86,47 +86,47 @@ class npc_roknah_warlord : public CreatureScript
 			SPELL_SLAM                  = 299995
 		};
 
-        InstanceScript* instance;
-        bool sendEvent;
+		InstanceScript* instance;
+		bool sendEvent;
 
-        void JustDied(Unit* killer) override
-        {
-            CustomAI::JustDied(killer);
+		void JustDied(Unit* killer) override
+		{
+			CustomAI::JustDied(killer);
 
-            instance->DoSendScenarioEvent(EVENT_WARLORD_ROKNAH_SLAIN);
-        }
+			instance->DoSendScenarioEvent(EVENT_WARLORD_ROKNAH_SLAIN);
+		}
 
-        void DamageTaken(Unit* /*attacker*/, uint32& damage) override
-        {
-            if (HealthAbovePct(30))
-                return;
+		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+		{
+			if (HealthAbovePct(30))
+				return;
 
-            if (!sendEvent)
-            {
-                sendEvent = true;
+			if (!sendEvent)
+			{
+				sendEvent = true;
 
-                me->SetHomePosition(me->GetPosition());
-                me->SetRegenerateHealth(false);
-                me->AI()->EnterEvadeMode();
-                me->SetImmuneToAll(true);
+				me->SetHomePosition(me->GetPosition());
+				me->SetRegenerateHealth(false);
+				me->AI()->EnterEvadeMode();
+				me->SetImmuneToAll(true);
 
-                scheduler.Schedule(2s, [this](TaskContext /*context*/)
-                {
-                    me->SetStandState(UNIT_STAND_STATE_KNEEL);
-                });
+				scheduler.Schedule(2s, [this](TaskContext /*context*/)
+				{
+					me->SetStandState(UNIT_STAND_STATE_KNEEL);
+				});
 
-                if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
-                {
-                    jaina->RemoveAllAuras();
-                    jaina->SetReactState(REACT_PASSIVE);
-                    jaina->SetImmuneToAll(false);
+				if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
+				{
+					jaina->RemoveAllAuras();
+					jaina->SetReactState(REACT_PASSIVE);
+					jaina->SetImmuneToAll(false);
 
-                    instance->SetData(EVENT_WARLORD_ROKNAH_SLAIN, 0U);
-                }
-            }
+					instance->SetData(EVENT_WARLORD_ROKNAH_SLAIN, 0U);
+				}
+			}
 
-            damage = 0;
-        }
+			damage = 0;
+		}
 
 		void JustEngagedWith(Unit* who) override
 		{
@@ -175,94 +175,94 @@ class npc_roknah_warlord : public CreatureScript
 
 class go_theramore_banner : public GameObjectScript
 {
-    public:
-    go_theramore_banner() : GameObjectScript("go_theramore_banner")
-    {
-    }
+	public:
+	go_theramore_banner() : GameObjectScript("go_theramore_banner")
+	{
+	}
 
-    struct go_theramore_bannerAI : public GameObjectAI
-    {
-        go_theramore_bannerAI(GameObject* go) : GameObjectAI(go)
-        {
-            instance = go->GetInstanceScript();
-        }
+	struct go_theramore_bannerAI : public GameObjectAI
+	{
+		go_theramore_bannerAI(GameObject* go) : GameObjectAI(go)
+		{
+			instance = go->GetInstanceScript();
+		}
 
-        enum Spells
-        {
-            SPELL_STANDARD_OF_THERAMORE = 105690
-        };
+		enum Spells
+		{
+			SPELL_STANDARD_OF_THERAMORE = 105690
+		};
 
-        InstanceScript* instance;
+		InstanceScript* instance;
 
-        bool GossipHello(Player* player) override
-        {
-            RFTPhases phase = (RFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-            if (phase != RFTPhases::Standards)
-                return false;
-            player->CastSpell(player, SPELL_STANDARD_OF_THERAMORE, true);
-            me->DespawnOrUnsummon();
-            return true;
-        }
-    };
+		bool GossipHello(Player* player) override
+		{
+			RFTPhases phase = (RFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+			if (phase != RFTPhases::Standards)
+				return false;
+			player->CastSpell(player, SPELL_STANDARD_OF_THERAMORE, true);
+			me->DespawnOrUnsummon();
+			return true;
+		}
+	};
 
-    GameObjectAI* GetAI(GameObject* go) const override
-    {
-        return GetRuinsOfTheramoreAI<go_theramore_bannerAI>(go);
-    }
+	GameObjectAI* GetAI(GameObject* go) const override
+	{
+		return GetRuinsOfTheramoreAI<go_theramore_bannerAI>(go);
+	}
 };
 
 // Frigid Shards - 354933
 class spell_ruins_frigid_shards : public AuraScript
 {
-    PrepareAuraScript(spell_ruins_frigid_shards);
+	PrepareAuraScript(spell_ruins_frigid_shards);
 
-    void OnPeriodic(AuraEffect const* aurEff)
-    {
-        Unit* target = GetTarget();
-        Unit* caster = GetCaster();
-        if (target && caster)
-        {
-            uint32 triggerSpell = GetSpellInfo()->GetEffect(aurEff->GetEffIndex()).TriggerSpell;
-            caster->CastSpell(target, triggerSpell, true);
-        }
-    }
+	void OnPeriodic(AuraEffect const* aurEff)
+	{
+		Unit* target = GetTarget();
+		Unit* caster = GetCaster();
+		if (target && caster)
+		{
+			uint32 triggerSpell = GetSpellInfo()->GetEffect(aurEff->GetEffIndex()).TriggerSpell;
+			caster->CastSpell(target, triggerSpell, true);
+		}
+	}
 
-    void Register() override
-    {
-        OnEffectPeriodic += AuraEffectPeriodicFn(spell_ruins_frigid_shards::OnPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
-    }
+	void Register() override
+	{
+		OnEffectPeriodic += AuraEffectPeriodicFn(spell_ruins_frigid_shards::OnPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
+	}
 };
 
 // Comet Barrage - 354938
 class spell_ruins_comet_barrage : public SpellScript
 {
-    PrepareSpellScript(spell_ruins_comet_barrage);
+	PrepareSpellScript(spell_ruins_comet_barrage);
 
-    void HandleDamages(SpellEffIndex effIndex)
-    {
-        Unit* caster = GetCaster();
-        Unit* victim = GetHitUnit();
-        if (caster && victim)
-        {
-            uint32 triggerSpell = GetSpellInfo()->GetEffect(effIndex).TriggerSpell;
-            caster->CastSpell(victim, triggerSpell, true);
-        }
-    }
+	void HandleDamages(SpellEffIndex effIndex)
+	{
+		Unit* caster = GetCaster();
+		Unit* victim = GetHitUnit();
+		if (caster && victim)
+		{
+			uint32 triggerSpell = GetSpellInfo()->GetEffect(effIndex).TriggerSpell;
+			caster->CastSpell(victim, triggerSpell, true);
+		}
+	}
 
-    void Register() override
-    {
-        OnEffectHitTarget += SpellEffectFn(spell_ruins_comet_barrage::HandleDamages, EFFECT_0, SPELL_EFFECT_DUMMY);
-    }
+	void Register() override
+	{
+		OnEffectHitTarget += SpellEffectFn(spell_ruins_comet_barrage::HandleDamages, EFFECT_0, SPELL_EFFECT_DUMMY);
+	}
 };
 
 void AddSC_npcs_ruins_of_theramore()
 {
-    new npc_water_elementals_theramore();
-    new npc_roknah_warlord();
+	new npc_water_elementals_theramore();
+	new npc_roknah_warlord();
 
-    new go_theramore_banner();
+	new go_theramore_banner();
 
-    RegisterSpellScript(spell_ruins_comet_barrage);
+	RegisterSpellScript(spell_ruins_comet_barrage);
 
-    RegisterAuraScript(spell_ruins_frigid_shards);
+	RegisterAuraScript(spell_ruins_frigid_shards);
 }

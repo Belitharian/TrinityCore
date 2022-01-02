@@ -90,29 +90,30 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			{
 				// Retrieve Jaina
 				case CRITERIA_TREE_FIND_JAINA_01:
-                {
-                    instance->SummonCreature(NPC_KALECGOS, KalecgosPath01[0]);
-                    if (Creature* kalecgos = GetKalecgos())
-                    {
-                        kalecgos->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-                        kalecgos->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, KalecgosPath01, KALECGOS_PATH_01, false, false, KalecgosPath01[KALECGOS_PATH_01 - 1].GetOrientation());
-                    }
-                    SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::FindJaina_Isle_Valided);
-                    #ifdef DEBUG
-                    events.ScheduleEvent(17, 1s);
-                    #else
-                    events.ScheduleEvent(1, 1s);
-                    #endif
-                    break;
-                }
+				{
+					instance->SummonCreature(NPC_KALECGOS, KalecgosPath01[0]);
+					if (Creature* kalecgos = GetKalecgos())
+					{
+						kalecgos->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+						kalecgos->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, KalecgosPath01, KALECGOS_PATH_01, false, false, KalecgosPath01[KALECGOS_PATH_01 - 1].GetOrientation());
+					}
+					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::FindJaina_Isle_Valided);
+					#ifdef DEBUG
+					events.ScheduleEvent(17, 1s);
+					#else
+					events.ScheduleEvent(1, 1s);
+					#endif
+					break;
+				}
 				// Help Kalecgos
 				case CRITERIA_TREE_HELP_KALECGOS:
 					if (Creature* jaina = GetJaina())
 					{
 						jaina->LoadEquipment(2);
 						jaina->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
-                        jaina->SetStandState(UNIT_STAND_STATE_KNEEL);
-                        jaina->RemoveAllAuras();
+						jaina->SetStandState(UNIT_STAND_STATE_KNEEL);
+						jaina->RemoveAllAuras();
+                        jaina->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
 
 						// Distance minimale pour déclencher l'event
 						jaina->AI()->SetData(0U, 50U);
@@ -315,7 +316,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 				case 19:
 					if (Creature* jaina = GetJaina())
-                        jaina->SetStandState(UNIT_STAND_STATE_STAND);
+						jaina->SetStandState(UNIT_STAND_STATE_STAND);
 					Next(1800ms);
 					break;
 				case 20:
@@ -354,7 +355,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						dummy->SetObjectScale(0.6f);
 						dummy->CastSpell(GetJaina(), SPELL_ALUNETH_DRINKS);
 						dummy->CastSpell(dummy, SPELL_EMPOWERED_SUMMON, true);
-                        irisDummy = dummy->GetGUID();
+						irisDummy = dummy->GetGUID();
 					}
 					break;
 
@@ -366,12 +367,12 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case 25:
 					if (Creature* jaina = GetJaina())
 					{
-                        if (Creature* dummy = instance->GetCreature(irisDummy))
-                        {
-                            dummy->RemoveAllAuras();
-                            dummy->SetObjectScale(5.0f);
-                            dummy->AddAura(SPELL_COSMETIC_ARCANE_ENERGY_1, dummy);
-                        }
+						if (Creature* dummy = instance->GetCreature(irisDummy))
+						{
+							dummy->RemoveAllAuras();
+							dummy->SetObjectScale(5.0f);
+							dummy->AddAura(SPELL_COSMETIC_ARCANE_ENERGY_1, dummy);
+						}
 
 						Talk(jaina, SAY_IRIS_PROTECTION_JAINA_04);
 						if (Player* player = instance->GetPlayers().begin()->GetSource())
@@ -507,12 +508,21 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case 39:
 					if (Creature* jaina = GetJaina())
 					{
+						if (Creature* dummy = instance->GetCreature(irisDummy))
+							dummy->DespawnOrUnsummon();
+
 						jaina->SetImmuneToAll(true);
 						jaina->SetWalk(true);
 
 						if (GameObject* brokenGlass = GetGameObject(DATA_BROKEN_GLASS))
 							if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, brokenGlass->GetPosition()))
+							{
+								jaina->SetWalk(true);
+								if (brokenGlass->IsWithinDist(jaina, 15.f))
+									jaina->SetWalk(false);
+
 								jaina->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_01, trigger, 0.8f);
+							}
 					}
 					break;
 				case 40:
@@ -546,9 +556,15 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(1s);
 					break;
 				case 43:
-                    DoRemoveAurasDueToSpellOnPlayers(SPELL_SCREEN_FX);
+					DoRemoveAurasDueToSpellOnPlayers(SPELL_SCREEN_FX);
 					if (Creature* jaina = GetJaina())
 					{
+						for (Creature* elemental : elementals)
+						{
+							elemental->CastSpell(elemental, SPELL_WATER_BOSS_ENTRANCE);
+							elemental->DespawnOrUnsummon(1s);
+						}
+
 						jaina->CastSpell(jaina, SPELL_COSMETIC_ARCANE_DISSOLVE);
 						jaina->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
 					}
@@ -564,7 +580,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		EventMap events;
 		uint32 eventId;
 		RFTPhases phase;
-        ObjectGuid irisDummy;
+		ObjectGuid irisDummy;
 		std::vector<Creature*> elementals;
 		std::list<TempSummon*> hordes;
 
