@@ -579,8 +579,8 @@ struct gunship_npc_AI : public ScriptedAI
         if (!me->IsAlive() || !me->IsInCombat())
             return;
 
-        me->GetThreatManager().ClearAllThreat();
         me->CombatStop(true);
+        EngagementOver();
         me->GetMotionMaster()->MoveTargetedHome();
     }
 
@@ -630,7 +630,7 @@ protected:
         if (!me->HasReactState(REACT_PASSIVE))
         {
             if (Unit* victim = me->SelectVictim())
-                if (!me->IsFocusing(nullptr, true) && victim != me->GetVictim())
+                if (!me->HasSpellFocus() && victim != me->GetVictim())
                     AttackStart(victim);
 
             return me->GetVictim() != nullptr;
@@ -724,7 +724,6 @@ class npc_gunship : public CreatureScript
                 {
                     Creature* stalker = *itr;
                     stalker->RemoveAllAuras();
-                    stalker->GetThreatManager().ClearAllThreat();
                     stalker->CombatStop(true);
                 }
 
@@ -877,8 +876,8 @@ class npc_high_overlord_saurfang_igb : public CreatureScript
                 if (!me->IsAlive())
                     return;
 
-                me->GetThreatManager().ClearAllThreat();
                 me->CombatStop(true);
+                EngagementOver();
                 me->GetMotionMaster()->MoveTargetedHome();
 
                 Reset();
@@ -1141,8 +1140,8 @@ class npc_muradin_bronzebeard_igb : public CreatureScript
                 if (!me->IsAlive())
                     return;
 
-                me->GetThreatManager().ClearAllThreat();
                 me->CombatStop(true);
+                EngagementOver();
                 me->GetMotionMaster()->MoveTargetedHome();
 
                 Reset();

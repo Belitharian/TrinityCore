@@ -112,8 +112,8 @@ AccountOpResult AccountMgr::DeleteAccount(uint32 accountId)
             if (Player* p = ObjectAccessor::FindConnectedPlayer(guid))
             {
                 WorldSession* s = p->GetSession();
-                s->KickPlayer();                            // mark session to remove at next session list update
-                s->LogoutPlayer(false);                     // logout player without waiting next session list update
+                s->KickPlayer("AccountMgr::DeleteAccount Deleting the account"); // mark session to remove at next session list update
+                s->LogoutPlayer(false); // logout player without waiting next session list update
             }
 
             Player::DeleteFromDB(guid, accountId, false);       // no need to update realm characters
@@ -591,8 +591,8 @@ bool AccountMgr::HasPermission(uint32 accountId, uint32 permissionId, uint32 rea
 
 void AccountMgr::ClearRBAC()
 {
-    for (rbac::RBACPermissionsContainer::iterator itr = _permissions.begin(); itr != _permissions.end(); ++itr)
-        delete itr->second;
+    for (std::pair<uint32 const, rbac::RBACPermission*>& permission : _permissions)
+        delete permission.second;
 
     _permissions.clear();
     _defaultPermissions.clear();

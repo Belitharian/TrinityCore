@@ -1311,9 +1311,9 @@ void Battleground::BuildPvPLogDataPacket(WorldPackets::Battleground::PVPMatchSta
         {
             playerData.IsInWorld = true;
             playerData.PrimaryTalentTree = player->GetPrimarySpecialization();
-            playerData.Sex = player->getGender();
-            playerData.Race = player->getRace();
-            playerData.Class = player->getClass();
+            playerData.Sex = player->GetGender();
+            playerData.Race = player->GetRace();
+            playerData.Class = player->GetClass();
             playerData.HonorLevel = player->GetHonorLevel();
         }
 
@@ -1527,11 +1527,22 @@ void Battleground::SpawnBGObject(uint32 type, uint32 respawntime)
         if (GameObject* obj = map->GetGameObject(BgObjects[type]))
         {
             if (respawntime)
+            {
                 obj->SetLootState(GO_JUST_DEACTIVATED);
-            else
-                if (obj->getLootState() == GO_JUST_DEACTIVATED)
-                    // Change state from GO_JUST_DEACTIVATED to GO_READY in case battleground is starting again
-                    obj->SetLootState(GO_READY);
+
+                if (GameObjectOverride const* goOverride = obj->GetGameObjectOverride())
+                    if (goOverride->Flags & GO_FLAG_NODESPAWN)
+                    {
+                        // This function should be called in GameObject::Update() but in case of
+                        // GO_FLAG_NODESPAWN flag the function is never called, so we call it here
+                        obj->SendGameObjectDespawn();
+                    }
+            }
+            else if (obj->getLootState() == GO_JUST_DEACTIVATED)
+            {
+                // Change state from GO_JUST_DEACTIVATED to GO_READY in case battleground is starting again
+                obj->SetLootState(GO_READY);
+            }
             obj->SetRespawnTime(respawntime);
             map->AddToMap(obj);
         }
@@ -1711,6 +1722,12 @@ void Battleground::EndNow()
 // buffs are in their positions when battleground starts
 void Battleground::HandleTriggerBuff(ObjectGuid go_guid)
 {
+    if (!FindBgMap())
+    {
+        TC_LOG_ERROR("bg.battleground", "Battleground::HandleTriggerBuff called with null bg map, %s", go_guid.ToString().c_str());
+        return;
+    }
+
     GameObject* obj = GetBgMap()->GetGameObject(go_guid);
     if (!obj || obj->GetGoType() != GAMEOBJECT_TYPE_TRAP || !obj->isSpawned())
         return;

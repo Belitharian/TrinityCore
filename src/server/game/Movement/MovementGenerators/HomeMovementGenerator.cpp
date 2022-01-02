@@ -89,6 +89,8 @@ void HomeMovementGenerator<Creature>::DoInitialize(Creature* owner)
     RemoveFlag(MOVEMENTGENERATOR_FLAG_INITIALIZATION_PENDING | MOVEMENTGENERATOR_FLAG_DEACTIVATED);
     AddFlag(MOVEMENTGENERATOR_FLAG_INITIALIZED);
 
+    owner->SetNoSearchAssistance(false);
+
     SetTargetLocation(owner);
 }
 
@@ -142,7 +144,6 @@ void HomeMovementGenerator<Creature>::DoFinalize(Creature* owner, bool active, b
 
     if (movementInform && HasFlag(MOVEMENTGENERATOR_FLAG_INFORM_ENABLED))
     {
-        owner->SetWalk(true);
         owner->SetSpawnHealth();
         owner->LoadCreaturesAddon();
         if (owner->IsVehicle())

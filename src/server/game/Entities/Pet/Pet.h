@@ -51,6 +51,7 @@ class TC_GAME_API Pet : public Guardian
         void AddToWorld() override;
         void RemoveFromWorld() override;
 
+        float GetNativeObjectScale() const override;
         void SetDisplayId(uint32 modelId, float displayScale = 1.f) override;
 
         PetType getPetType() const { return m_petType; }
@@ -163,10 +164,6 @@ class TC_GAME_API Pet : public Guardian
 
     private:
         void SaveToDB(uint32, std::vector<Difficulty> const&) override              // override of Creature::SaveToDB     - must not be called
-        {
-            ABORT();
-        }
-        void DeleteFromDB() override                                 // override of Creature::DeleteFromDB - must not be called
         {
             ABORT();
         }

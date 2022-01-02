@@ -93,6 +93,7 @@ enum WorldTimers
     WUPDATE_BLACKMARKET,
     WUPDATE_CHECK_FILECHANGES,
     WUPDATE_WHO_LIST,
+    WUPDATE_CHANNEL_SAVE,
     WUPDATE_COUNT
 };
 
@@ -119,7 +120,6 @@ enum WorldBoolConfigs
     CONFIG_GM_LOWER_SECURITY,
     CONFIG_SKILL_PROSPECTING,
     CONFIG_SKILL_MILLING,
-    CONFIG_SAVE_RESPAWN_TIME_IMMEDIATELY,
     CONFIG_WEATHER,
     CONFIG_QUEST_IGNORE_RAID,
     CONFIG_CHAT_PARTY_RAID_WARNINGS,
@@ -171,7 +171,6 @@ enum WorldBoolConfigs
     CONFIG_STATS_LIMITS_ENABLE,
     CONFIG_INSTANCES_RESET_ANNOUNCE,
     CONFIG_IP_BASED_ACTION_LOGGING,
-    CONFIG_ALLOW_TRACK_BOTH_RESOURCES,
     CONFIG_CALCULATE_CREATURE_ZONE_AREA_DATA,
     CONFIG_CALCULATE_GAMEOBJECT_ZONE_AREA_DATA,
     CONFIG_FEATURE_SYSTEM_BPAY_STORE_ENABLED,
@@ -218,6 +217,9 @@ enum WorldFloatConfigs
     CONFIG_ARENA_MATCHMAKER_RATING_MODIFIER,
     CONFIG_RESPAWN_DYNAMICRATE_CREATURE,
     CONFIG_RESPAWN_DYNAMICRATE_GAMEOBJECT,
+    CONFIG_CALL_TO_ARMS_5_PCT,
+    CONFIG_CALL_TO_ARMS_10_PCT,
+    CONFIG_CALL_TO_ARMS_20_PCT,
     FLOAT_CONFIG_VALUE_COUNT
 };
 
@@ -266,6 +268,7 @@ enum WorldIntConfigs
     CONFIG_INSTANCE_RESET_TIME_HOUR,
     CONFIG_INSTANCE_UNLOAD_DELAY,
     CONFIG_DAILY_QUEST_RESET_TIME_HOUR,
+    CONFIG_WEEKLY_QUEST_RESET_TIME_WDAY,
     CONFIG_MAX_PRIMARY_TRADE_SKILL,
     CONFIG_MIN_PETITION_SIGNS,
     CONFIG_MIN_QUEST_SCALED_XP_RATIO,
@@ -348,6 +351,7 @@ enum WorldIntConfigs
     CONFIG_GUILD_BANK_EVENT_LOG_COUNT,
     CONFIG_MIN_LEVEL_STAT_SAVE,
     CONFIG_RANDOM_BG_RESET_HOUR,
+    CONFIG_CALENDAR_DELETE_OLD_EVENTS_HOUR,
     CONFIG_GUILD_RESET_HOUR,
     CONFIG_CHARDELETE_KEEP_DAYS,
     CONFIG_CHARDELETE_METHOD,
@@ -359,6 +363,7 @@ enum WorldIntConfigs
     CONFIG_MAX_RESULTS_LOOKUP_COMMANDS,
     CONFIG_DB_PING_INTERVAL,
     CONFIG_PRESERVE_CUSTOM_CHANNEL_DURATION,
+    CONFIG_PRESERVE_CUSTOM_CHANNEL_INTERVAL,
     CONFIG_PERSISTENT_CHARACTER_CLEAN_FLAGS,
     CONFIG_LFG_OPTIONSMASK,
     CONFIG_MAX_INSTANCES_PER_HOUR,
@@ -418,6 +423,7 @@ enum WorldIntConfigs
     CONFIG_SOCKET_TIMEOUTTIME_ACTIVE,
     CONFIG_BLACKMARKET_MAXAUCTIONS,
     CONFIG_BLACKMARKET_UPDATE_PERIOD,
+    CONFIG_FACTION_BALANCE_LEVEL_CHECK_DIFF,
     INT_CONFIG_VALUE_COUNT
 };
 
@@ -553,11 +559,13 @@ enum RealmZone
 enum WorldStates
 {
     WS_CURRENCY_RESET_TIME      = 20001,                     // Next currency reset time
-    WS_WEEKLY_QUEST_RESET_TIME  = 20002,                     // Next weekly reset time
+    WS_WEEKLY_QUEST_RESET_TIME  = 20002,                     // Next weekly quest reset time
     WS_BG_DAILY_RESET_TIME      = 20003,                     // Next daily BG reset time
     WS_CLEANING_FLAGS           = 20004,                     // Cleaning Flags
     WS_GUILD_DAILY_RESET_TIME   = 20006,                     // Next guild cap reset time
-    WS_MONTHLY_QUEST_RESET_TIME = 20007,                     // Next monthly reset time
+    WS_MONTHLY_QUEST_RESET_TIME = 20007,                     // Next monthly quest reset time
+    WS_DAILY_QUEST_RESET_TIME   = 20008,                     // Next daily quest reset time
+    WS_DAILY_CALENDAR_DELETION_OLD_EVENTS_TIME = 20009,      // Next daily calendar deletions of old events time
     // Cata specific custom worldstates
     WS_GUILD_WEEKLY_RESET_TIME  = 20050,                     // Next guild week reset time
 };
@@ -792,8 +800,8 @@ class TC_GAME_API World
         bool IsBattlePetJournalLockAcquired(ObjectGuid battlenetAccountGuid);
 
         uint32 GetCleaningFlags() const { return m_CleaningFlags; }
-        void   SetCleaningFlags(uint32 flags) { m_CleaningFlags = flags; }
-        void   ResetEventSeasonalQuests(uint16 event_id);
+        void SetCleaningFlags(uint32 flags) { m_CleaningFlags = flags; }
+        void ResetEventSeasonalQuests(uint16 event_id);
 
         void ReloadRBAC();
 
@@ -803,22 +811,30 @@ class TC_GAME_API World
         bool IsGuidWarning() { return _guidWarn; }
         bool IsGuidAlert() { return _guidAlert; }
 
+        // War mode balancing
+        TeamId GetWarModeDominantFaction() const { return _warModeDominantFaction; }
+        int32 GetWarModeOutnumberedFactionReward() const { return _warModeOutnumberedFactionReward; }
+        void SetForcedWarModeFactionBalanceState(TeamId team, int32 reward = 0);
+        void DisableForcedWarModeFactionBalanceState();
+
     protected:
         void _UpdateGameTime();
 
         // callback for UpdateRealmCharacters
         void _UpdateRealmCharCount(PreparedQueryResult resultCharCount);
 
-        void InitDailyQuestResetTime(bool loading = true);
-        void InitWeeklyQuestResetTime();
-        void InitMonthlyQuestResetTime();
-        void InitRandomBGResetTime();
-        void InitGuildResetTime();
+        void InitQuestResetTimes();
+        void CheckScheduledResetTimes();
         void InitCurrencyResetTime();
         void DailyReset();
         void ResetWeeklyQuests();
         void ResetMonthlyQuests();
+
+        void InitRandomBGResetTime();
+        void InitCalendarOldEventsDeletionTime();
+        void InitGuildResetTime();
         void ResetRandomBG();
+        void CalendarDeleteOldEvents();
         void ResetGuildCap();
         void ResetCurrencyWeekCap();
     private:
@@ -882,6 +898,7 @@ class TC_GAME_API World
         time_t m_NextWeeklyQuestReset;
         time_t m_NextMonthlyQuestReset;
         time_t m_NextRandomBGReset;
+        time_t m_NextCalendarOldEventsDeletionTime;
         time_t m_NextGuildReset;
         time_t m_NextCurrencyReset;
 
@@ -922,6 +939,14 @@ class TC_GAME_API World
         bool _guidAlert;
         uint32 _warnDiff;
         time_t _warnShutdownTime;
+
+        // War mode balancing
+        void UpdateWarModeRewardValues();
+
+        TeamId _warModeDominantFaction; // the team that has higher percentage
+        int32 _warModeOutnumberedFactionReward;
+
+    friend class debug_commandscript;
 };
 
 TC_GAME_API extern Realm realm;

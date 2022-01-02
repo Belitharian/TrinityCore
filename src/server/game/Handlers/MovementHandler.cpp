@@ -112,7 +112,7 @@ void WorldSession::HandleMoveWorldportAck()
 
     if (!player->GetMap()->AddPlayerToMap(player, !seamlessTeleport))
     {
-        TC_LOG_ERROR("network", "WORLD: failed to teleport player %s (%s) to map %d (%s) because of unknown reason!",
+        TC_LOG_ERROR("network", "WORLD: failed to teleport player %s %s to map %d (%s) because of unknown reason!",
             player->GetName().c_str(), player->GetGUID().ToString().c_str(), loc.GetMapId(), newMap ? newMap->GetMapName() : "Unknown");
         player->ResetMap();
         player->SetMap(oldMap);
@@ -249,7 +249,7 @@ void WorldSession::HandleMoveTeleportAck(WorldPackets::Movement::MoveTeleportAck
 {
     TC_LOG_DEBUG("network", "CMSG_MOVE_TELEPORT_ACK: Guid: %s, Sequence: %u, Time: %u", packet.MoverGUID.ToString().c_str(), packet.AckIndex, packet.MoveTime);
 
-    Player* plMover = _player->m_unitMovedByMe->ToPlayer();
+    Player* plMover = _player->GetUnitBeingMoved()->ToPlayer();
 
     if (!plMover || !plMover->IsBeingTeleportedNear())
         return;
@@ -296,7 +296,7 @@ void WorldSession::HandleMovementOpcodes(WorldPackets::Movement::ClientPlayerMov
 
 void WorldSession::HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movementInfo)
 {
-    Unit* mover = _player->m_unitMovedByMe;
+    Unit* mover = _player->GetUnitBeingMoved();
 
     ASSERT(mover != nullptr);                      // there must always be a mover
 
@@ -521,7 +521,7 @@ void WorldSession::HandleForceSpeedChangeAck(WorldPackets::Movement::MovementSpe
         {
             TC_LOG_DEBUG("misc", "Player %s from account id %u kicked for incorrect speed (must be %f instead %f)",
                 _player->GetName().c_str(), _player->GetSession()->GetAccountId(), _player->GetSpeed(move_type), packet.Speed);
-            _player->GetSession()->KickPlayer();
+            _player->GetSession()->KickPlayer("WorldSession::HandleForceSpeedChangeAck Incorrect speed");
         }
     }
 }
@@ -529,8 +529,8 @@ void WorldSession::HandleForceSpeedChangeAck(WorldPackets::Movement::MovementSpe
 void WorldSession::HandleSetActiveMoverOpcode(WorldPackets::Movement::SetActiveMover& packet)
 {
     if (GetPlayer()->IsInWorld())
-        if (_player->m_unitMovedByMe->GetGUID() != packet.ActiveMover)
-            TC_LOG_DEBUG("network", "HandleSetActiveMoverOpcode: incorrect mover guid: mover is %s and should be %s" , packet.ActiveMover.ToString().c_str(), _player->m_unitMovedByMe->GetGUID().ToString().c_str());
+        if (_player->GetUnitBeingMoved()->GetGUID() != packet.ActiveMover)
+            TC_LOG_DEBUG("network", "HandleSetActiveMoverOpcode: incorrect mover guid: mover is %s and should be %s" , packet.ActiveMover.ToString().c_str(), _player->GetUnitBeingMoved()->GetGUID().ToString().c_str());
 }
 
 void WorldSession::HandleMoveKnockBackAck(WorldPackets::Movement::MoveKnockBackAck& movementAck)
@@ -637,7 +637,7 @@ void WorldSession::HandleMoveSetModMovementForceMagnitudeAck(WorldPackets::Movem
             {
                 TC_LOG_DEBUG("misc", "Player %s from account id %u kicked for incorrect movement force magnitude (must be %f instead %f)",
                     _player->GetName().c_str(), _player->GetSession()->GetAccountId(), expectedModMagnitude, setModMovementForceMagnitudeAck.Speed);
-                _player->GetSession()->KickPlayer();
+                _player->GetSession()->KickPlayer("WorldSession::HandleMoveSetModMovementForceMagnitudeAck Incorrect magnitude");
                 return;
             }
         }

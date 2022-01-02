@@ -113,7 +113,7 @@ void WorldSession::HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& p
         {
             Creature* creature = GetPlayer()->GetMap()->GetCreature(lguid);
 
-            bool lootAllowed = creature && creature->IsAlive() == (player->getClass() == CLASS_ROGUE && creature->loot.loot_type == LOOT_PICKPOCKETING);
+            bool lootAllowed = creature && creature->IsAlive() == (player->GetClass() == CLASS_ROGUE && creature->loot.loot_type == LOOT_PICKPOCKETING);
             if (!lootAllowed || !creature->IsWithinDistInMap(_player, AELootCreatureCheck::LootDistance))
             {
                 player->SendLootError(req.Object, lguid, lootAllowed ? LOOT_ERROR_TOO_FAR : LOOT_ERROR_DIDNT_KILL);
@@ -188,7 +188,7 @@ void WorldSession::HandleLootMoneyOpcode(WorldPackets::Loot::LootMoney& /*packet
             case HighGuid::Vehicle:
             {
                 Creature* creature = player->GetMap()->GetCreature(guid);
-                bool lootAllowed = creature && creature->IsAlive() == (player->getClass() == CLASS_ROGUE && creature->loot.loot_type == LOOT_PICKPOCKETING);
+                bool lootAllowed = creature && creature->IsAlive() == (player->GetClass() == CLASS_ROGUE && creature->loot.loot_type == LOOT_PICKPOCKETING);
                 if (lootAllowed && creature->IsWithinDistInMap(player, AELootCreatureCheck::LootDistance))
                 {
                     loot = &creature->loot;
@@ -402,7 +402,7 @@ void WorldSession::DoLootRelease(ObjectGuid lguid)
         else
         {
             // Only delete item if no loot or money (unlooted loot is saved to db) or if it isn't an openable item
-            if (pItem->loot.isLooted() || !(proto->GetFlags() & ITEM_FLAG_HAS_LOOT))
+            if (pItem->loot.isLooted() || !proto->HasFlag(ITEM_FLAG_HAS_LOOT))
                 player->DestroyItem(pItem->GetBagSlot(), pItem->GetSlot(), true);
         }
         return;                                             // item can be looted only single player
@@ -411,7 +411,7 @@ void WorldSession::DoLootRelease(ObjectGuid lguid)
     {
         Creature* creature = GetPlayer()->GetMap()->GetCreature(lguid);
 
-        bool lootAllowed = creature && creature->IsAlive() == (player->getClass() == CLASS_ROGUE && creature->loot.loot_type == LOOT_PICKPOCKETING);
+        bool lootAllowed = creature && creature->IsAlive() == (player->GetClass() == CLASS_ROGUE && creature->loot.loot_type == LOOT_PICKPOCKETING);
         if (!lootAllowed || !creature->IsWithinDistInMap(_player, AELootCreatureCheck::LootDistance))
             return;
 
@@ -516,7 +516,7 @@ void WorldSession::HandleLootMasterGiveOpcode(WorldPackets::Loot::MasterLootItem
 
         ItemPosCountVec dest;
         InventoryResult msg = target->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, item.itemid, item.count);
-        if (item.follow_loot_rules && !item.AllowedForPlayer(target))
+        if (!item.AllowedForPlayer(target, true))
             msg = EQUIP_ERR_CANT_EQUIP_EVER;
         if (msg != EQUIP_ERR_OK)
         {
@@ -526,8 +526,6 @@ void WorldSession::HandleLootMasterGiveOpcode(WorldPackets::Loot::MasterLootItem
                 _player->SendLootError(req.Object, ObjectGuid::Empty, LOOT_ERROR_MASTER_INV_FULL);
             else
                 _player->SendLootError(req.Object, ObjectGuid::Empty, LOOT_ERROR_MASTER_OTHER);
-
-            target->SendEquipError(msg, nullptr, nullptr, item.itemid);
             return;
         }
 
@@ -557,7 +555,7 @@ void WorldSession::HandleSetLootSpecialization(WorldPackets::Loot::SetLootSpecia
     if (packet.SpecID)
     {
         if (ChrSpecializationEntry const* chrSpec = sChrSpecializationStore.LookupEntry(packet.SpecID))
-            if (chrSpec->ClassID == GetPlayer()->getClass())
+            if (chrSpec->ClassID == GetPlayer()->GetClass())
                 GetPlayer()->SetLootSpecId(packet.SpecID);
     }
     else

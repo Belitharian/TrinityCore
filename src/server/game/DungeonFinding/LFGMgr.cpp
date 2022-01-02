@@ -544,7 +544,7 @@ void LFGMgr::JoinLfg(Player* player, uint8 roles, LfgDungeonSet& dungeons)
     {
         // Create new rolecheck
         LfgRoleCheck& roleCheck = RoleChecksStore[gguid];
-        roleCheck.cancelTime = time_t(GameTime::GetGameTime()) + LFG_TIME_ROLECHECK;
+        roleCheck.cancelTime = GameTime::GetGameTime() + LFG_TIME_ROLECHECK;
         roleCheck.state = LFG_ROLECHECK_INITIALITING;
         roleCheck.leader = guid;
         roleCheck.dungeons = dungeons;
@@ -626,13 +626,22 @@ void LFGMgr::LeaveLfg(ObjectGuid guid, bool disconnected)
         case LFG_STATE_QUEUED:
             if (!gguid.IsEmpty())
             {
+                LfgState newState = LFG_STATE_NONE;
+                LfgState oldState = GetOldState(gguid);
+
+                // Set the new state to LFG_STATE_DUNGEON/LFG_STATE_FINISHED_DUNGEON if the group is already in a dungeon
+                // This is required in case a LFG group vote-kicks a player in a dungeon, queues, then leaves the queue (maybe to queue later again)
+                if (Group* group = sGroupMgr->GetGroupByGUID(gguid))
+                    if (group->isLFGGroup() && GetDungeon(gguid) && (oldState == LFG_STATE_DUNGEON || oldState == LFG_STATE_FINISHED_DUNGEON))
+                        newState = oldState;
+
                 LFGQueue& queue = GetQueue(gguid);
                 queue.RemoveFromQueue(gguid);
-                SetState(gguid, LFG_STATE_NONE);
+                SetState(gguid, newState);
                 GuidSet const& players = GetPlayers(gguid);
                 for (GuidSet::const_iterator it = players.begin(); it != players.end(); ++it)
                 {
-                    SetState(*it, LFG_STATE_NONE);
+                    SetState(*it, newState);
                     SendLfgUpdateStatus(*it, LfgUpdateData(LFG_UPDATETYPE_REMOVED_FROM_QUEUE), true);
                 }
             }
@@ -1107,6 +1116,11 @@ void LFGMgr::UpdateProposal(uint32 proposalId, ObjectGuid guid, bool accept)
                 break;
         }
 
+        // Store the number of players that were present in group when joining RFD, used for achievement purposes
+        if (Player* player = ObjectAccessor::FindConnectedPlayer(pguid))
+            if (Group* group = player->GetGroup())
+                PlayersStore[pguid].SetNumberOfPartyMembersAtJoin(group->GetMembersCount());
+
         SetState(pguid, LFG_STATE_DUNGEON);
     }
 
@@ -1476,9 +1490,16 @@ void LFGMgr::FinishDungeon(ObjectGuid gguid, const uint32 dungeonId, Map const* 
 
         // Update achievements
         if (dungeon->difficulty == DIFFICULTY_HEROIC)
-            player->UpdateCriteria(CriteriaType::CompletedLFGDungeonWithStrangers, 1);
+        {
+            uint8 lfdRandomPlayers = 0;
+            if (uint8 numParty = PlayersStore[guid].GetNumberOfPartyMembersAtJoin())
+                lfdRandomPlayers = 5 - numParty;
+            else
+                lfdRandomPlayers = 4;
+            player->UpdateCriteria(CriteriaType::CompletedLFGDungeonWithStrangers, lfdRandomPlayers);
+        }
 
-        LfgReward const* reward = GetRandomDungeonReward(rDungeonId, player->getLevel());
+        LfgReward const* reward = GetRandomDungeonReward(rDungeonId, player->GetLevel());
         if (!reward)
             continue;
 
@@ -1665,7 +1686,7 @@ LfgLockMap LFGMgr::GetLockedDungeons(ObjectGuid guid)
         return lock;
     }
 
-    uint8 level = player->getLevel();
+    uint8 level = player->GetLevel();
     uint8 expansion = player->GetSession()->GetExpansion();
     LfgDungeonSet const& dungeons = GetDungeonsByRandom(0);
     bool denyJoin = !player->GetSession()->HasPermission(rbac::RBAC_PERM_JOIN_DUNGEON_FINDER);

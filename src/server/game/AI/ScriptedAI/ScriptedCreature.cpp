@@ -27,6 +27,7 @@
 #include "Log.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
+#include "PhasingHandler.h"
 #include "Spell.h"
 #include "SpellMgr.h"
 #include "TemporarySummon.h"
@@ -96,9 +97,9 @@ void SummonList::RemoveNotExisting()
 
 bool SummonList::HasEntry(uint32 entry) const
 {
-    for (StorageType::const_iterator i = _storage.begin(); i != _storage.end(); ++i)
+    for (ObjectGuid const& guid : _storage)
     {
-        Creature* summon = ObjectAccessor::GetCreature(*_me, *i);
+        Creature* summon = ObjectAccessor::GetCreature(*_me, guid);
         if (summon && summon->GetEntry() == entry)
             return true;
     }
@@ -108,7 +109,7 @@ bool SummonList::HasEntry(uint32 entry) const
 
 void SummonList::DoActionImpl(int32 action, StorageType const& summons)
 {
-    for (auto const& guid : summons)
+    for (ObjectGuid const& guid : summons)
     {
         Creature* summon = ObjectAccessor::GetCreature(*_me, guid);
         if (summon && summon->IsAIEnabled())
@@ -236,6 +237,51 @@ float ScriptedAI::GetThreat(Unit const* victim, Unit const* who)
     return who->GetThreatManager().GetThreat(victim);
 }
 
+void ScriptedAI::ForceCombatStop(Creature* who, bool reset /*= true*/)
+{
+    if (!who || !who->IsInCombat())
+        return;
+
+    who->CombatStop(true);
+    who->DoNotReacquireSpellFocusTarget();
+    who->GetMotionMaster()->Clear(MOTION_PRIORITY_NORMAL);
+
+    if (reset)
+    {
+        who->LoadCreaturesAddon();
+        who->SetLootRecipient(nullptr);
+        who->ResetPlayerDamageReq();
+        who->SetLastDamagedTime(0);
+        who->SetCannotReachTarget(false);
+    }
+}
+
+void ScriptedAI::ForceCombatStopForCreatureEntry(uint32 entry, float maxSearchRange /*= 250.0f*/, bool samePhase /*= true*/, bool reset /*= true*/)
+{
+    TC_LOG_DEBUG("scripts.ai", "ScriptedAI::ForceCombatStopForCreatureEntry: called on '%s'. Debug info: %s", me->GetGUID().ToString().c_str(), me->GetDebugInfo().c_str());
+
+    std::list<Creature*> creatures;
+    Trinity::AllCreaturesOfEntryInRange check(me, entry, maxSearchRange);
+    Trinity::CreatureListSearcher<Trinity::AllCreaturesOfEntryInRange> searcher(me, creatures, check);
+
+    if (!samePhase)
+        PhasingHandler::SetAlwaysVisible(me, true, false);
+
+    Cell::VisitGridObjects(me, searcher, maxSearchRange);
+
+    if (!samePhase)
+        PhasingHandler::SetAlwaysVisible(me, false, false);
+
+    for (Creature* creature : creatures)
+        ForceCombatStop(creature, reset);
+}
+
+void ScriptedAI::ForceCombatStopForCreatureEntry(std::vector<uint32> creatureEntries, float maxSearchRange /*= 250.0f*/, bool samePhase /*= true*/, bool reset /*= true*/)
+{
+    for (uint32 const entry : creatureEntries)
+        ForceCombatStopForCreatureEntry(entry, maxSearchRange, samePhase, reset);
+}
+
 Creature* ScriptedAI::DoSpawnCreature(uint32 entry, float offsetX, float offsetY, float offsetZ, float angle, uint32 type, uint32 despawntime)
 {
     return me->SummonCreature(entry, me->GetPositionX() + offsetX, me->GetPositionY() + offsetY, me->GetPositionZ() + offsetZ, angle, TempSummonType(type), despawntime);
@@ -271,10 +317,10 @@ SpellInfo const* ScriptedAI::SelectSpell(Unit* target, uint32 school, uint32 mec
     AISpellInfoType const* aiSpell = nullptr;
 
     // Check if each spell is viable(set it to null if not)
-    for (uint32 i = 0; i < MAX_CREATURE_SPELLS; i++)
+    for (uint32 spell : me->m_spells)
     {
-        tempSpell = sSpellMgr->GetSpellInfo(me->m_spells[i], me->GetMap()->GetDifficultyID());
-        aiSpell = GetAISpellInfo(me->m_spells[i], me->GetMap()->GetDifficultyID());
+        tempSpell = sSpellMgr->GetSpellInfo(spell, me->GetMap()->GetDifficultyID());
+        aiSpell = GetAISpellInfo(spell, me->GetMap()->GetDifficultyID());
 
         // This spell doesn't exist
         if (!tempSpell || !aiSpell)
@@ -363,9 +409,8 @@ void ScriptedAI::DoTeleportAll(float x, float y, float z, float o)
     if (!map->IsDungeon())
         return;
 
-    Map::PlayerList const& PlayerList = map->GetPlayers();
-    for (Map::PlayerList::const_iterator itr = PlayerList.begin(); itr != PlayerList.end(); ++itr)
-        if (Player* player = itr->GetSource())
+    for (MapReference const& mapref : map->GetPlayers())
+        if (Player* player = mapref.GetSource())
             if (player->IsAlive())
                 player->TeleportTo(me->GetMapId(), x, y, z, o, TELE_TO_NOT_LEAVE_COMBAT);
 }
@@ -523,12 +568,12 @@ void BossAI::_JustReachedHome()
     me->setActive(false);
 }
 
-void BossAI::_JustEngagedWith()
+void BossAI::_JustEngagedWith(Unit* who)
 {
     if (instance)
     {
         // bosses do not respawn, check only on enter combat
-        if (!instance->CheckRequiredBosses(_bossId))
+        if (!instance->CheckRequiredBosses(_bossId, who->ToPlayer()))
         {
             EnterEvadeMode(EVADE_REASON_SEQUENCE_BREAK);
             return;

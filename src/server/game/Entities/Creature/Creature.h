@@ -25,7 +25,6 @@
 #include "Duration.h"
 #include "Loot.h"
 #include "MapObject.h"
-
 #include <list>
 
 class CreatureAI;
@@ -74,6 +73,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         void AddToWorld() override;
         void RemoveFromWorld() override;
 
+        float GetNativeObjectScale() const override;
         void SetObjectScale(float scale) override;
         void SetDisplayId(uint32 displayId, float displayScale = 1.f) override;
         void SetDisplayFromModel(uint32 modelIdx);
@@ -97,7 +97,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
 
         void Update(uint32 time) override;                         // overwrited Unit::Update
         void GetRespawnPosition(float &x, float &y, float &z, float* ori = nullptr, float* dist = nullptr) const;
-        bool IsSpawnedOnTransport() const { return m_creatureData && m_creatureData->spawnPoint.GetMapId() != GetMapId(); }
+        bool IsSpawnedOnTransport() const { return m_creatureData && m_creatureData->mapId != GetMapId(); }
 
         void SetCorpseDelay(uint32 delay) { m_corpseDelay = delay; }
         uint32 GetCorpseDelay() const { return m_corpseDelay; }
@@ -214,7 +214,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         void SaveToDB();
                                                             // overriden in Pet
         virtual void SaveToDB(uint32 mapid, std::vector<Difficulty> const& spawnDifficulties);
-        virtual void DeleteFromDB();                        // overriden in Pet
+        static bool DeleteFromDB(ObjectGuid::LowType spawnId);
 
         Loot loot;
         void StartPickPocketRefillTimer();
@@ -246,7 +246,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
 
         Unit* SelectNearestTarget(float dist = 0, bool playerOnly = false) const;
         Unit* SelectNearestTargetInAttackDistance(float dist = 0) const;
-        Unit* SelectNearestHostileUnitInAggroRange(bool useLOS = false) const;
+        Unit* SelectNearestHostileUnitInAggroRange(bool useLOS = false, bool ignoreCivilians = false) const;
 
         void DoFleeToGetAssistance();
         void CallForHelp(float fRadius);
@@ -266,13 +266,13 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         time_t GetRespawnTimeEx() const;
         void SetRespawnTime(uint32 respawn);
         void Respawn(bool force = false);
-        void SaveRespawnTime(uint32 forceDelay = 0, bool savetodb = true) override;
+        void SaveRespawnTime(uint32 forceDelay = 0);
 
         uint32 GetRespawnDelay() const { return m_respawnDelay; }
         void SetRespawnDelay(uint32 delay) { m_respawnDelay = delay; }
 
-        float GetRespawnRadius() const { return m_respawnradius; }
-        void SetRespawnRadius(float dist) { m_respawnradius = dist; }
+        float GetWanderDistance() const { return m_wanderDistance; }
+        void SetWanderDistance(float dist) { m_wanderDistance = dist; }
 
         void DoImmediateBoundaryCheck() { m_boundaryCheckTime = 0; }
         uint32 GetCombatPulseDelay() const { return m_combatPulseDelay; }
@@ -323,7 +323,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         CreatureGroup* GetFormation() { return m_formation; }
         void SetFormation(CreatureGroup* formation) { m_formation = formation; }
         bool IsFormationLeader() const;
-        void SignalFormationMovement(Position const& destination, uint32 id = 0, uint32 moveType = 0, bool orientation = false);
+        void SignalFormationMovement();
         bool IsFormationLeaderMoveAllowed() const;
 
         void SetDisableReputationGain(bool disable) { DisableReputationGain = disable; }
@@ -348,11 +348,10 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
 
         // Handling caster facing during spellcast
         void SetTarget(ObjectGuid const& guid) override;
-        void MustReacquireTarget() { m_shouldReacquireTarget = true; } // flags the Creature for forced (client displayed) target reacquisition in the next ::Update call
-        void DoNotReacquireTarget() { m_shouldReacquireTarget = false; m_suppressedTarget = ObjectGuid::Empty; m_suppressedOrientation = 0.0f; }
-        void FocusTarget(Spell const* focusSpell, WorldObject const* target);
-        bool IsFocusing(Spell const* focusSpell = nullptr, bool withDelay = false) override;
-        void ReleaseFocus(Spell const* focusSpell = nullptr, bool withDelay = true);
+        void DoNotReacquireSpellFocusTarget();
+        void SetSpellFocus(Spell const* focusSpell, WorldObject const* target);
+        bool HasSpellFocus(Spell const* focusSpell = nullptr) const override;
+        void ReleaseSpellFocus(Spell const* focusSpell = nullptr, bool withDelay = true);
 
         bool IsMovementPreventedByCasting() const override;
 
@@ -363,12 +362,13 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         CreatureTextRepeatIds GetTextRepeatGroup(uint8 textGroup);
         void SetTextRepeatId(uint8 textGroup, uint8 id);
         void ClearTextRepeatGroup(uint8 textGroup);
-        bool IsEscortNPC(bool onlyIfActive = true);
+        bool IsEscorted() const;
 
         bool CanGiveExperience() const;
 
-        void AtEnterCombat() override;
-        void AtExitCombat() override;
+        bool IsEngaged() const override;
+        void AtEngage(Unit* target) override;
+        void AtDisengage() override;
 
         std::string GetDebugInfo() const override;
 
@@ -390,7 +390,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         time_t m_respawnTime;                               // (secs) time of next respawn
         uint32 m_respawnDelay;                              // (secs) delay between corpse disappearance and respawning
         uint32 m_corpseDelay;                               // (secs) delay between death and corpse disappearance
-        float m_respawnradius;
+        float m_wanderDistance;
         uint32 m_boundaryCheckTime;                         // (msecs) remaining time for next evade boundary check
         uint32 m_combatPulseTime;                           // (msecs) remaining time for next zone-in-combat pulse
         uint32 m_combatPulseDelay;                          // (secs) how often the creature puts the entire zone in combat (only works in dungeons)
@@ -432,17 +432,20 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         uint32 _waypointPathId;
         std::pair<uint32/*nodeId*/, uint32/*pathId*/> _currentWaypointNodeInfo;
 
-        //Formation var
+        // Formation var
         CreatureGroup* m_formation;
         bool m_triggerJustAppeared;
         bool m_respawnCompatibilityMode;
 
         /* Spell focus system */
-        Spell const* m_focusSpell;   // Locks the target during spell cast for proper facing
-        uint32 m_focusDelay;
-        bool m_shouldReacquireTarget;
-        ObjectGuid m_suppressedTarget; // Stores the creature's "real" target while casting
-        float m_suppressedOrientation; // Stores the creature's "real" orientation while casting
+        void ReacquireSpellFocusTarget();
+        struct
+        {
+            ::Spell const* Spell = nullptr;
+            uint32 Delay = 0;         // ms until the creature's target should snap back (0 = no snapback scheduled)
+            ObjectGuid Target;        // the creature's "real" target while casting
+            float Orientation = 0.0f; // the creature's "real" orientation while casting
+        } _spellFocusInfo;
 
         time_t _lastDamagedTime; // Part of Evade mechanics
         CreatureTextRepeatGroup m_textRepeat;

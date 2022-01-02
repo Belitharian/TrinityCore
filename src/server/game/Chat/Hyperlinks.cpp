@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2018 TrinityCore <https://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -353,7 +353,7 @@ struct LinkValidator<LinkTags::item>
     static bool IsTextValid(ItemLinkData const& data, char const* pos, size_t len)
     {
         LocalizedString const* suffixStrings = nullptr;
-        if (!(data.Item->GetFlags3() & ITEM_FLAG3_HIDE_NAME_SUFFIX) && data.Suffix)
+        if (!data.Item->HasFlag(ITEM_FLAG3_HIDE_NAME_SUFFIX) && data.Suffix)
             suffixStrings = &data.Suffix->Description;
 
         return IsTextValid(data.Item, suffixStrings, pos, len);
@@ -689,7 +689,7 @@ bool Trinity::Hyperlinks::CheckAllLinks(std::string const& str)
                 return false;
         }
     }
-    
+
     // Step 2: Parse all link sequences
     // They look like this: |c<color>|H<linktag>:<linkdata>|h[<linktext>]|h|r
     // - <color> is 8 hex characters AARRGGBB

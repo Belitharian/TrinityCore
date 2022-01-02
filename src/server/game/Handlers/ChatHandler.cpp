@@ -41,7 +41,6 @@
 #include "Util.h"
 #include "World.h"
 #include "WorldPacket.h"
-#include <utf8.h>
 #include <algorithm>
 
 inline bool isNasty(uint8 c)
@@ -67,18 +66,10 @@ inline bool ValidateMessage(Player const* player, std::string& msg)
     {
         if (isNasty(c))
         {
-            TC_LOG_ERROR("network", "Player %s (%s) sent a message containing invalid character %u - blocked", player->GetName().c_str(),
+            TC_LOG_ERROR("network", "Player %s %s sent a message containing invalid character %u - blocked", player->GetName().c_str(),
                 player->GetGUID().ToString().c_str(), uint32(c));
             return false;
         }
-    }
-
-    // validate utf8
-    if (!utf8::is_valid(msg.begin(), msg.end()))
-    {
-        TC_LOG_ERROR("network", "Player %s (%s) sent a message containing an invalid UTF8 sequence - blocked", player->GetName().c_str(),
-            player->GetGUID().ToString().c_str());
-        return false;
     }
 
     // collapse multiple spaces into one
@@ -249,7 +240,7 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
             if (!sender->IsAlive())
                 return;
 
-            if (sender->getLevel() < sWorld->getIntConfig(CONFIG_CHAT_SAY_LEVEL_REQ))
+            if (sender->GetLevel() < sWorld->getIntConfig(CONFIG_CHAT_SAY_LEVEL_REQ))
             {
                 SendNotification(GetTrinityString(LANG_SAY_REQ), sWorld->getIntConfig(CONFIG_CHAT_SAY_LEVEL_REQ));
                 return;
@@ -264,7 +255,7 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
             if (!sender->IsAlive())
                 return;
 
-            if (sender->getLevel() < sWorld->getIntConfig(CONFIG_CHAT_EMOTE_LEVEL_REQ))
+            if (sender->GetLevel() < sWorld->getIntConfig(CONFIG_CHAT_EMOTE_LEVEL_REQ))
             {
                 SendNotification(GetTrinityString(LANG_SAY_REQ), sWorld->getIntConfig(CONFIG_CHAT_EMOTE_LEVEL_REQ));
                 return;
@@ -279,7 +270,7 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
             if (!sender->IsAlive())
                 return;
 
-            if (sender->getLevel() < sWorld->getIntConfig(CONFIG_CHAT_YELL_LEVEL_REQ))
+            if (sender->GetLevel() < sWorld->getIntConfig(CONFIG_CHAT_YELL_LEVEL_REQ))
             {
                 SendNotification(GetTrinityString(LANG_SAY_REQ), sWorld->getIntConfig(CONFIG_CHAT_YELL_LEVEL_REQ));
                 return;
@@ -309,7 +300,7 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
             // Apply checks only if receiver is not already in whitelist and if receiver is not a GM with ".whisper on"
             if (!receiver->IsInWhisperWhiteList(sender->GetGUID()) && !receiver->IsGameMasterAcceptingWhispers())
             {
-                if (!sender->IsGameMaster() && sender->getLevel() < sWorld->getIntConfig(CONFIG_CHAT_WHISPER_LEVEL_REQ))
+                if (!sender->IsGameMaster() && sender->GetLevel() < sWorld->getIntConfig(CONFIG_CHAT_WHISPER_LEVEL_REQ))
                 {
                     SendNotification(GetTrinityString(LANG_WHISPER_REQ), sWorld->getIntConfig(CONFIG_CHAT_WHISPER_LEVEL_REQ));
                     return;
@@ -330,7 +321,7 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
 
             // If player is a Gamemaster and doesn't accept whisper, we auto-whitelist every player that the Gamemaster is talking to
             // We also do that if a player is under the required level for whispers.
-            if (receiver->getLevel() < sWorld->getIntConfig(CONFIG_CHAT_WHISPER_LEVEL_REQ) ||
+            if (receiver->GetLevel() < sWorld->getIntConfig(CONFIG_CHAT_WHISPER_LEVEL_REQ) ||
                 (HasPermission(rbac::RBAC_PERM_CAN_FILTER_WHISPERS) && !sender->isAcceptWhispers() && !sender->IsInWhisperWhiteList(receiver->GetGUID())))
                 sender->AddWhisperWhiteList(receiver->GetGUID());
 
@@ -418,7 +409,7 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
         {
             if (!HasPermission(rbac::RBAC_PERM_SKIP_CHECK_CHAT_CHANNEL_REQ))
             {
-                if (sender->getLevel() < sWorld->getIntConfig(CONFIG_CHAT_CHANNEL_LEVEL_REQ))
+                if (sender->GetLevel() < sWorld->getIntConfig(CONFIG_CHAT_CHANNEL_LEVEL_REQ))
                 {
                     SendNotification(GetTrinityString(LANG_CHANNEL_REQ), sWorld->getIntConfig(CONFIG_CHAT_CHANNEL_LEVEL_REQ));
                     return;

@@ -24,6 +24,7 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "QuestPackets.h"
+#include "QuestPools.h"
 #include "SpellMgr.h"
 #include "World.h"
 #include "WorldSession.h"
@@ -284,14 +285,14 @@ uint32 Quest::XPValue(Player const* player) const
         if (!questXp || _rewardXPDifficulty >= 10)
             return 0;
 
-        int32 diffFactor = 2 * (questLevel - player->getLevel()) + 12;
+        int32 diffFactor = 2 * (questLevel - player->GetLevel()) + 12;
         if (diffFactor < 1)
             diffFactor = 1;
         else if (diffFactor > 10)
             diffFactor = 10;
 
         uint32 xp = diffFactor * questXp->Difficulty[_rewardXPDifficulty] * _rewardXPMultiplier / 10;
-        if (player->getLevel() >= GetMaxLevelForExpansion(CURRENT_EXPANSION - 1) && player->GetSession()->GetExpansion() == CURRENT_EXPANSION && _expansion < CURRENT_EXPANSION)
+        if (player->GetLevel() >= GetMaxLevelForExpansion(CURRENT_EXPANSION - 1) && player->GetSession()->GetExpansion() == CURRENT_EXPANSION && _expansion < CURRENT_EXPANSION)
             xp = uint32(xp / 9.0f);
 
         xp = RoundXPValue(xp);
@@ -306,6 +307,14 @@ uint32 Quest::XPValue(Player const* player) const
     }
 
     return 0;
+}
+
+/*static*/ bool Quest::IsTakingQuestEnabled(uint32 questId)
+{
+    if (!sQuestPoolMgr->IsQuestActive(questId))
+        return false;
+
+    return true;
 }
 
 uint32 Quest::MoneyValue(Player const* player) const

@@ -70,7 +70,7 @@ class boss_nethermancer_sepethrea : public CreatureScript
 
             void JustEngagedWith(Unit* who) override
             {
-                _JustEngagedWith();
+                BossAI::JustEngagedWith(who);
                 events.ScheduleEvent(EVENT_FROST_ATTACK, 7s, 10s);
                 events.ScheduleEvent(EVENT_ARCANE_BLAST, 12s, 18s);
                 events.ScheduleEvent(EVENT_DRAGONS_BREATH, 18s, 22s);
@@ -192,7 +192,7 @@ class npc_ragin_flames : public CreatureScript
                     //Check_Timer
                     if (Check_Timer <= diff)
                     {
-                        if (instance->GetData(DATA_NETHERMANCER_SEPRETHREA) != IN_PROGRESS)
+                        if (instance->GetBossState(DATA_NETHERMANCER_SEPRETHREA) != IN_PROGRESS)
                         {
                             //remove
                             me->DespawnOrUnsummon();

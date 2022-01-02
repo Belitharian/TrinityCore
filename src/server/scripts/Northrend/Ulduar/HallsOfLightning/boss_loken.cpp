@@ -100,9 +100,9 @@ public:
             instance->DoStopCriteriaTimer(CriteriaStartEvent::SendEvent, ACHIEV_TIMELY_DEATH_START_EVENT);
         }
 
-        void JustEngagedWith(Unit* /*who*/) override
+        void JustEngagedWith(Unit* who) override
         {
-            _JustEngagedWith();
+            BossAI::JustEngagedWith(who);
             Talk(SAY_AGGRO);
             events.SetPhase(PHASE_NORMAL);
             events.ScheduleEvent(EVENT_ARC_LIGHTNING, 15000);
@@ -115,7 +115,7 @@ public:
         {
             Talk(SAY_DEATH);
             _JustDied();
-            instance->DoRemoveAurasDueToSpellOnPlayers(SPELL_PULSING_SHOCKWAVE_AURA);
+            instance->DoRemoveAurasDueToSpellOnPlayers(SPELL_PULSING_SHOCKWAVE_AURA, true, true);
         }
 
         void KilledUnit(Unit* who) override

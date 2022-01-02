@@ -49,6 +49,7 @@ EndScriptData */
 bool HandleNpcSpawnGroup(ChatHandler* handler, char const* args);
 bool HandleNpcDespawnGroup(ChatHandler* handler, char const* args);
 
+using namespace Trinity::ChatCommands;
 class gobject_commandscript : public CommandScript
 {
 public:
@@ -182,7 +183,7 @@ public:
             return false;
 
         /// @todo is it really necessary to add both the real and DB table guid here ?
-        sObjectMgr->AddGameobjectToGrid(spawnId, ASSERT_NOTNULL(sObjectMgr->GetGameObjectData(spawnId)));
+        sObjectMgr->AddGameobjectToGrid(ASSERT_NOTNULL(sObjectMgr->GetGameObjectData(spawnId)));
 
         handler->PSendSysMessage(LANG_GAMEOBJECT_ADD, objectId, objectInfo->name.c_str(), std::to_string(spawnId).c_str(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ());
         return true;
@@ -331,8 +332,8 @@ public:
             if (curRespawnDelay < 0)
                 curRespawnDelay = 0;
 
-            std::string curRespawnDelayStr = secsToTimeString(curRespawnDelay, true);
-            std::string defRespawnDelayStr = secsToTimeString(target->GetRespawnDelay(), true);
+            std::string curRespawnDelayStr = secsToTimeString(curRespawnDelay, TimeFormat::ShortText);
+            std::string defRespawnDelayStr = secsToTimeString(target->GetRespawnDelay(), TimeFormat::ShortText);
 
             handler->PSendSysMessage(LANG_COMMAND_RAWPAWNTIMES, defRespawnDelayStr.c_str(), curRespawnDelayStr.c_str());
         }
@@ -340,49 +341,36 @@ public:
     }
 
     //delete object by selection or guid
-    static bool HandleGameObjectDeleteCommand(ChatHandler* handler, char const* args)
+    static bool HandleGameObjectDeleteCommand(ChatHandler* handler, Variant<Hyperlink<gameobject>, ObjectGuid::LowType> spawnId)
     {
-        // number or [name] Shift-click form |color|Hgameobject:go_guid|h[name]|h|r
-        char* id = handler->extractKeyFromLink((char*)args, "Hgameobject");
-        if (!id)
-            return false;
-
-        ObjectGuid::LowType guidLow = atoull(id);
-        if (!guidLow)
-            return false;
-
-        Player const* const player = handler->GetSession()->GetPlayer();
-        // force respawn to make sure we find something
-        player->GetMap()->ForceRespawn(SPAWN_TYPE_GAMEOBJECT, guidLow);
-        GameObject* object = handler->GetObjectFromPlayerMapByDbGuid(guidLow);
-        if (!object)
+        if (GameObject* object = handler->GetObjectFromPlayerMapByDbGuid(spawnId))
         {
-            handler->PSendSysMessage(LANG_COMMAND_OBJNOTFOUND, std::to_string(guidLow).c_str());
+            Player const* const player = handler->GetSession()->GetPlayer();
+            ObjectGuid ownerGuid = object->GetOwnerGUID();
+            if (!ownerGuid.IsEmpty())
+            {
+                Unit* owner = ObjectAccessor::GetUnit(*player, ownerGuid);
+                if (!owner || !ownerGuid.IsPlayer())
+                {
+                    handler->PSendSysMessage(LANG_COMMAND_DELOBJREFERCREATURE, ownerGuid.GetCounter(), spawnId);
+                    handler->SetSentErrorMessage(true);
+                    return false;
+                }
+                owner->RemoveGameObject(object, false);
+            }
+        }
+
+        if (GameObject::DeleteFromDB(spawnId))
+        {
+            handler->PSendSysMessage(LANG_COMMAND_DELOBJMESSAGE, std::to_string(spawnId));
+            return true;
+        }
+        else
+        {
+            handler->PSendSysMessage(LANG_COMMAND_OBJNOTFOUND, std::to_string(spawnId));
             handler->SetSentErrorMessage(true);
             return false;
         }
-
-        ObjectGuid ownerGuid = object->GetOwnerGUID();
-        if (!ownerGuid.IsEmpty())
-        {
-            Unit* owner = ObjectAccessor::GetUnit(*player, ownerGuid);
-            if (!owner || !ownerGuid.IsPlayer())
-            {
-                handler->PSendSysMessage(LANG_COMMAND_DELOBJREFERCREATURE, ownerGuid.ToString().c_str(), object->GetGUID().ToString().c_str());
-                handler->SetSentErrorMessage(true);
-                return false;
-            }
-
-            owner->RemoveGameObject(object, false);
-        }
-
-        object->SetRespawnTime(0);                                 // not save respawn time
-        object->Delete();
-        object->DeleteFromDB();
-
-        handler->PSendSysMessage(LANG_COMMAND_DELOBJMESSAGE, std::to_string(guidLow).c_str());
-
-        return true;
     }
 
     //turn selected object
@@ -499,9 +487,9 @@ public:
         object->Relocate(x, y, z, object->GetOrientation());
 
         // update which cell has this gameobject registered for loading
-        sObjectMgr->RemoveGameobjectFromGrid(guidLow, object->GetGameObjectData());
+        sObjectMgr->RemoveGameobjectFromGrid(object->GetGameObjectData());
         object->SaveToDB();
-        sObjectMgr->AddGameobjectToGrid(guidLow, object->GetGameObjectData());
+        sObjectMgr->AddGameobjectToGrid(object->GetGameObjectData());
 
         // Generate a completely new spawn with new guid
         // 3.3.5a client caches recently deleted objects and brings them back to life

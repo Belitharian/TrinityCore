@@ -141,6 +141,15 @@ void CombatManager::Update(uint32 tdiff)
     }
 }
 
+bool CombatManager::HasPvECombatWithPlayers() const
+{
+    for (std::pair<ObjectGuid const, CombatReference*> const& reference : _pveRefs)
+        if (reference.second->GetOther(_owner)->GetTypeId() == TYPEID_PLAYER)
+            return true;
+
+    return false;
+}
+
 bool CombatManager::HasPvPCombat() const
 {
     for (auto const& pair : _pvpRefs)
@@ -293,13 +302,8 @@ void CombatManager::EndAllPvPCombat()
 
 /*static*/ void CombatManager::NotifyAICombat(Unit* me, Unit* other)
 {
-    if (!me->IsAIEnabled())
-        return;
-    me->GetAI()->JustEnteredCombat(other);
-
-    if (Creature* cMe = me->ToCreature())
-        if (!cMe->CanHaveThreatList())
-            cMe->AI()->JustEngagedWith(other);
+    if (UnitAI* ai = me->GetAI())
+        ai->JustEnteredCombat(other);
 }
 
 void CombatManager::PutReference(ObjectGuid const& guid, CombatReference* ref)
@@ -336,11 +340,15 @@ bool CombatManager::UpdateOwnerCombatState() const
     {
         _owner->AddUnitFlag(UNIT_FLAG_IN_COMBAT);
         _owner->AtEnterCombat();
+        if (_owner->GetTypeId() != TYPEID_UNIT)
+            _owner->AtEngage(GetAnyTarget());
     }
     else
     {
         _owner->RemoveUnitFlag(UNIT_FLAG_IN_COMBAT);
         _owner->AtExitCombat();
+        if (_owner->GetTypeId() != TYPEID_UNIT)
+            _owner->AtDisengage();
     }
 
     if (Unit* master = _owner->GetCharmerOrOwner())

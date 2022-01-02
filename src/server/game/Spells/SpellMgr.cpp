@@ -685,11 +685,6 @@ SpellAreaForAreaMapBounds SpellMgr::GetSpellAreaForAreaMapBounds(uint32 area_id)
     return mSpellAreaForAreaMap.equal_range(area_id);
 }
 
-SpellAreaForQuestAreaMapBounds SpellMgr::GetSpellAreaForQuestAreaMapBounds(uint32 area_id, uint32 quest_id) const
-{
-    return mSpellAreaForQuestAreaMap.equal_range(std::pair<uint32, uint32>(area_id, quest_id));
-}
-
 SpellInfo const* SpellMgr::GetSpellInfo(uint32 spellId, Difficulty difficulty) const
 {
     auto itr = mSpellInfoMap.find(boost::make_tuple(spellId, difficulty));
@@ -731,11 +726,11 @@ void SpellMgr::ForEachSpellInfoDifficulty(uint32 spellId, std::function<void(Spe
 bool SpellArea::IsFitToRequirements(Player const* player, uint32 newZone, uint32 newArea) const
 {
     if (gender != GENDER_NONE)                   // is not expected gender
-        if (!player || gender != player->getGender())
+        if (!player || gender != player->GetNativeGender())
             return false;
 
     if (raceMask)                                // is not expected race
-        if (!player || !raceMask.HasRace(player->getRace()))
+        if (!player || !raceMask.HasRace(player->GetRace()))
             return false;
 
     if (areaId)                                  // is not in expected zone
@@ -2287,7 +2282,6 @@ void SpellMgr::LoadSpellAreas()
     mSpellAreaForQuestMap.clear();
     mSpellAreaForQuestEndMap.clear();
     mSpellAreaForAuraMap.clear();
-    mSpellAreaForQuestAreaMap.clear();
 
     //                                                  0     1         2              3               4                 5          6          7       8         9
     QueryResult result = WorldDatabase.Query("SELECT spell, area, quest_start, quest_start_status, quest_end_status, quest_end, aura_spell, racemask, gender, flags FROM spell_area");
@@ -2449,9 +2443,19 @@ void SpellMgr::LoadSpellAreas()
         if (spellArea.areaId)
             mSpellAreaForAreaMap.insert(SpellAreaForAreaMap::value_type(spellArea.areaId, sa));
 
-        // for search at quest start/reward
-        if (spellArea.questStart)
-            mSpellAreaForQuestMap.insert(SpellAreaForQuestMap::value_type(spellArea.questStart, sa));
+        // for search at quest update checks
+        if (spellArea.questStart || spellArea.questEnd)
+        {
+            if (spellArea.questStart == spellArea.questEnd)
+                mSpellAreaForQuestMap.insert(SpellAreaForQuestMap::value_type(spellArea.questStart, sa));
+            else
+            {
+                if (spellArea.questStart)
+                    mSpellAreaForQuestMap.insert(SpellAreaForQuestMap::value_type(spellArea.questStart, sa));
+                if (spellArea.questEnd)
+                    mSpellAreaForQuestMap.insert(SpellAreaForQuestMap::value_type(spellArea.questEnd, sa));
+            }
+        }
 
         // for search at quest start/reward
         if (spellArea.questEnd)
@@ -2460,12 +2464,6 @@ void SpellMgr::LoadSpellAreas()
         // for search at aura apply
         if (spellArea.auraSpell)
             mSpellAreaForAuraMap.insert(SpellAreaForAuraMap::value_type(abs(spellArea.auraSpell), sa));
-
-        if (spellArea.areaId && spellArea.questStart)
-            mSpellAreaForQuestAreaMap.insert(SpellAreaForQuestAreaMap::value_type(std::pair<uint32, uint32>(spellArea.areaId, spellArea.questStart), sa));
-
-        if (spellArea.areaId && spellArea.questEnd)
-            mSpellAreaForQuestAreaMap.insert(SpellAreaForQuestAreaMap::value_type(std::pair<uint32, uint32>(spellArea.areaId, spellArea.questEnd), sa));
 
         ++count;
     } while (result->NextRow());
@@ -2992,18 +2990,6 @@ void SpellMgr::LoadSpellInfoCustomAttributes()
                 case SPELL_AURA_MOD_STUN:
                     spellInfoMutable->AttributesCu |= SPELL_ATTR0_CU_AURA_CC;
                     break;
-                case SPELL_AURA_PERIODIC_HEAL:
-                case SPELL_AURA_PERIODIC_DAMAGE:
-                case SPELL_AURA_PERIODIC_DAMAGE_PERCENT:
-                case SPELL_AURA_PERIODIC_LEECH:
-                case SPELL_AURA_PERIODIC_MANA_LEECH:
-                case SPELL_AURA_PERIODIC_HEALTH_FUNNEL:
-                case SPELL_AURA_PERIODIC_ENERGIZE:
-                case SPELL_AURA_OBS_MOD_HEALTH:
-                case SPELL_AURA_OBS_MOD_POWER:
-                case SPELL_AURA_POWER_BURN:
-                    spellInfoMutable->AttributesCu |= SPELL_ATTR0_CU_NO_INITIAL_THREAT;
-                    break;
                 default:
                     break;
             }
@@ -3276,6 +3262,7 @@ void SpellMgr::LoadSpellInfoCustomAttributes()
                     switch (spellEffectInfo.ApplyAuraName)
                     {
                         case SPELL_AURA_PERIODIC_TRIGGER_SPELL:
+                        case SPELL_AURA_PERIODIC_TRIGGER_SPELL_FROM_CLIENT:
                         case SPELL_AURA_PERIODIC_TRIGGER_SPELL_WITH_VALUE:
                             if (SpellInfo const* triggerSpell = sSpellMgr->GetSpellInfo(spellEffectInfo.TriggerSpell, DIFFICULTY_NONE))
                             {
@@ -3452,6 +3439,15 @@ void SpellMgr::LoadSpellInfoCorrections()
                 spellEffectInfo->ApplyAuraName = SPELL_AURA_PERIODIC_TRIGGER_SPELL;
             });
         });
+
+        // Lich Pet
+        ApplySpellFix({ 70050 }, [](SpellInfo* spellInfo)
+        {
+            ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+            {
+                spellEffectInfo->TriggerSpell = 70049;
+            });
+        });
     }
 
     // Allows those to crit
@@ -3595,7 +3591,12 @@ void SpellMgr::LoadSpellInfoCorrections()
         45907, // Torch Target Picker
         52953, // Torch
         58121, // Torch
-        43109  // Throw Torch
+        43109, // Throw Torch
+        58552, // Return to Orgrimmar
+        58533, // Return to Stormwind
+        21855, // Challenge Flag
+        51122, // Fierce Lightning Stike
+        71848  // Toxic Wasteling Find Target
     }, [](SpellInfo* spellInfo)
     {
         spellInfo->MaxAffectedTargets = 1;
@@ -3867,6 +3868,7 @@ void SpellMgr::LoadSpellInfoCorrections()
     });
 
     ApplySpellFix({
+        15538, // Gout of Flame
         42490, // Energized!
         42492, // Cast Energized
         43115  // Plague Vial
@@ -3913,6 +3915,14 @@ void SpellMgr::LoadSpellInfoCorrections()
     }, [](SpellInfo* spellInfo)
     {
         spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(13); // 50000yd
+    });
+
+    ApplySpellFix({
+        44327, // Trained Rock Falcon/Hawk Hunting
+        44408  // Trained Rock Falcon/Hawk Hunting
+        }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->Speed = 0.f;
     });
 
     // Summon Corpse Scarabs
@@ -3976,6 +3986,18 @@ void SpellMgr::LoadSpellInfoCorrections()
     }, [](SpellInfo* spellInfo)
     {
         spellInfo->RecoveryTime = 20000;
+    });
+
+    // Summon Frigid Bones
+    ApplySpellFix({ 53525 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->DurationEntry = sSpellDurationStore.LookupEntry(4); // 2 minutes
+    });
+
+    // Dark Conclave Ritualist Channel
+    ApplySpellFix({ 38469 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(6);  // 100yd
     });
 
     //
@@ -4244,6 +4266,13 @@ void SpellMgr::LoadSpellInfoCorrections()
         {
             spellEffectInfo->TargetB = SpellImplicitTargetInfo(TARGET_UNIT_TARGET_ENEMY);
         });
+    });
+
+    // Mutated Transformation (Professor Putricide)
+    ApplySpellFix({ 70402 }, [](SpellInfo* spellInfo)
+    {
+        // Resistance is calculated inside of SpellScript
+        spellInfo->AttributesEx4 |= SPELL_ATTR4_IGNORE_RESISTANCES;
     });
 
     // Empowered Flare (Blood Prince Council)
@@ -4576,10 +4605,32 @@ void SpellMgr::LoadSpellInfoCorrections()
         spellInfo->ProcChance = 10;
     });
 
+    // Survey Sinkholes
+    ApplySpellFix({ 45853 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(5); // 40 yards
+    });
+
     // Baron Rivendare (Stratholme) - Unholy Aura
     ApplySpellFix({ 17466, 17467 }, [](SpellInfo* spellInfo)
     {
         spellInfo->AttributesEx3 |= SPELL_ATTR3_NO_INITIAL_AGGRO;
+    });
+
+    // Spore - Spore Visual
+    ApplySpellFix({ 42525 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->AttributesEx3 |= SPELL_ATTR3_DEATH_PERSISTENT;
+        spellInfo->AttributesEx2 |= SPELL_ATTR2_CAN_TARGET_DEAD;
+    });
+
+    // Soul Sickness (Forge of Souls)
+    ApplySpellFix({ 69131 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_1, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->ApplyAuraName = SPELL_AURA_MOD_DECREASE_SPEED;
+        });
     });
 
     //
@@ -4831,7 +4882,6 @@ uint32 SpellMgr::GetModelForTotem(uint32 spellId, uint8 race) const
     if (itr != mSpellTotemModel.end())
         return itr->second;
 
-    TC_LOG_ERROR("spells", "Spell %u with RaceID (%u) have no totem model data defined, set to default model.", spellId, race);
     return 0;
 }
 

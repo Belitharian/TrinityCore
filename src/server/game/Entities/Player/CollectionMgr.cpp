@@ -188,14 +188,14 @@ void CollectionMgr::LoadAccountHeirlooms(PreparedQueryResult result)
 
         uint32 bonusId = 0;
 
-        if (flags & HEIRLOOM_FLAG_BONUS_LEVEL_120)
-            bonusId = heirloom->UpgradeItemBonusListID[3];
-        else if (flags & HEIRLOOM_FLAG_BONUS_LEVEL_110)
-            bonusId = heirloom->UpgradeItemBonusListID[2];
-        else if (flags & HEIRLOOM_FLAG_BONUS_LEVEL_100)
-            bonusId = heirloom->UpgradeItemBonusListID[1];
-        else if (flags & HEIRLOOM_FLAG_BONUS_LEVEL_90)
-            bonusId = heirloom->UpgradeItemBonusListID[0];
+        for (int32 upgradeLevel = std::size(heirloom->UpgradeItemID) - 1; upgradeLevel >= 0; --upgradeLevel)
+        {
+            if (flags & (1 << upgradeLevel))
+            {
+                bonusId = heirloom->UpgradeItemBonusListID[upgradeLevel];
+                break;
+            }
+        }
 
         _heirlooms[itemId] = HeirloomData(flags, bonusId);
     } while (result->NextRow());
@@ -257,25 +257,13 @@ void CollectionMgr::UpgradeHeirloom(uint32 itemId, int32 castItem)
     uint32 flags = itr->second.flags;
     uint32 bonusId = 0;
 
-    if (heirloom->UpgradeItemID[0] == castItem)
+    for (size_t upgradeLevel = 0; upgradeLevel < std::size(heirloom->UpgradeItemID); ++upgradeLevel)
     {
-        flags |= HEIRLOOM_FLAG_BONUS_LEVEL_90;
-        bonusId = heirloom->UpgradeItemBonusListID[0];
-    }
-    if (heirloom->UpgradeItemID[1] == castItem)
-    {
-        flags |= HEIRLOOM_FLAG_BONUS_LEVEL_100;
-        bonusId = heirloom->UpgradeItemBonusListID[1];
-    }
-    if (heirloom->UpgradeItemID[2] == castItem)
-    {
-        flags |= HEIRLOOM_FLAG_BONUS_LEVEL_110;
-        bonusId = heirloom->UpgradeItemBonusListID[2];
-    }
-    if (heirloom->UpgradeItemID[3] == castItem)
-    {
-        flags |= HEIRLOOM_FLAG_BONUS_LEVEL_120;
-        bonusId = heirloom->UpgradeItemBonusListID[3];
+        if (heirloom->UpgradeItemID[upgradeLevel] == castItem)
+        {
+            flags |= 1 << upgradeLevel;
+            bonusId = heirloom->UpgradeItemBonusListID[upgradeLevel];
+        }
     }
 
     for (Item* item : player->GetItemListByEntry(itemId, true))
@@ -348,27 +336,6 @@ void CollectionMgr::CheckHeirloomUpgrades(Item* item)
         if (std::find(bonusListIDs->begin(), bonusListIDs->end(), itr->second.bonusId) == bonusListIDs->end())
             item->AddBonuses(itr->second.bonusId);
     }
-}
-
-bool CollectionMgr::CanApplyHeirloomXpBonus(uint32 itemId, uint32 level)
-{
-    if (!sDB2Manager.GetHeirloomByItemId(itemId))
-        return false;
-
-    HeirloomContainer::iterator itr = _heirlooms.find(itemId);
-    if (itr == _heirlooms.end())
-        return false;
-
-    if (itr->second.flags & HEIRLOOM_FLAG_BONUS_LEVEL_120)
-        return level <= 120;
-    if (itr->second.flags & HEIRLOOM_FLAG_BONUS_LEVEL_110)
-        return level <= 110;
-    if (itr->second.flags & HEIRLOOM_FLAG_BONUS_LEVEL_100)
-        return level <= 100;
-    if (itr->second.flags & HEIRLOOM_FLAG_BONUS_LEVEL_90)
-        return level <= 90;
-
-    return level <= 60;
 }
 
 void CollectionMgr::LoadMounts()
@@ -624,7 +591,7 @@ void CollectionMgr::AddItemAppearance(Item* item)
     if (!CanAddAppearance(itemModifiedAppearance))
         return;
 
-    if (item->HasItemFlag(ItemFieldFlags(ITEM_FIELD_FLAG_BOP_TRADEABLE | ITEM_FIELD_FLAG_REFUNDABLE)))
+    if (item->IsBOPTradeable() || item->IsRefundable())
     {
         AddTemporaryAppearance(item->GetGUID(), itemModifiedAppearance);
         return;
@@ -710,7 +677,7 @@ bool CollectionMgr::CanAddAppearance(ItemModifiedAppearanceEntry const* itemModi
     if (_owner->GetPlayer()->CanUseItem(itemTemplate) != EQUIP_ERR_OK)
         return false;
 
-    if (itemTemplate->GetFlags2() & ITEM_FLAG2_NO_SOURCE_FOR_ITEM_VISUAL || itemTemplate->GetQuality() == ITEM_QUALITY_ARTIFACT)
+    if (itemTemplate->HasFlag(ITEM_FLAG2_NO_SOURCE_FOR_ITEM_VISUAL) || itemTemplate->GetQuality() == ITEM_QUALITY_ARTIFACT)
         return false;
 
     switch (itemTemplate->GetClass())
@@ -754,7 +721,7 @@ bool CollectionMgr::CanAddAppearance(ItemModifiedAppearanceEntry const* itemModi
                     return false;
             }
             if (itemTemplate->GetInventoryType() != INVTYPE_CLOAK)
-                if (!(PlayerClassByArmorSubclass[itemTemplate->GetSubClass()] & _owner->GetPlayer()->getClassMask()))
+                if (!(PlayerClassByArmorSubclass[itemTemplate->GetSubClass()] & _owner->GetPlayer()->GetClassMask()))
                     return false;
             break;
         }
@@ -763,7 +730,7 @@ bool CollectionMgr::CanAddAppearance(ItemModifiedAppearanceEntry const* itemModi
     }
 
     if (itemTemplate->GetQuality() < ITEM_QUALITY_UNCOMMON)
-        if (!(itemTemplate->GetFlags2() & ITEM_FLAG2_IGNORE_QUALITY_FOR_ITEM_VISUAL_SOURCE) || !(itemTemplate->GetFlags3() & ITEM_FLAG3_ACTS_AS_TRANSMOG_HIDDEN_VISUAL_OPTION))
+        if (!itemTemplate->HasFlag(ITEM_FLAG2_IGNORE_QUALITY_FOR_ITEM_VISUAL_SOURCE) || !itemTemplate->HasFlag(ITEM_FLAG3_ACTS_AS_TRANSMOG_HIDDEN_VISUAL_OPTION))
             return false;
 
     if (itemModifiedAppearance->ID < _appearances->size() && _appearances->test(itemModifiedAppearance->ID))

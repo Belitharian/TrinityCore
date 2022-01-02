@@ -89,9 +89,9 @@ struct boss_amanitar : public BossAI
 {
     boss_amanitar(Creature* creature) : BossAI(creature, DATA_AMANITAR) { }
 
-    void JustEngagedWith(Unit* /*who*/) override
+    void JustEngagedWith(Unit* who) override
     {
-        _JustEngagedWith();
+        BossAI::JustEngagedWith(who);
         events.ScheduleEvent(EVENT_ROOT, 5s, 9s);
         events.ScheduleEvent(EVENT_BASH, 10s, 14s);
         events.ScheduleEvent(EVENT_BOLT, 15s, 20s);
@@ -104,7 +104,7 @@ struct boss_amanitar : public BossAI
     {
         _EnterEvadeMode();
         summons.DespawnAll();
-        instance->DoRemoveAurasDueToSpellOnPlayers(SPELL_MINI);
+        instance->DoRemoveAurasDueToSpellOnPlayers(SPELL_MINI, true, true);
         _DespawnAtEvade();
     }
 
@@ -112,7 +112,7 @@ struct boss_amanitar : public BossAI
     {
         _JustDied();
         DoCastAOE(SPELL_REMOVE_MUSHROOM_POWER);
-        instance->DoRemoveAurasDueToSpellOnPlayers(SPELL_MINI);
+        instance->DoRemoveAurasDueToSpellOnPlayers(SPELL_MINI, true, true);
     }
 
     void JustSummoned(Creature* summon) override

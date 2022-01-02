@@ -11,6 +11,7 @@
 #    PERFORMANCE SETTINGS
 #    SERVER LOGGING
 #    SERVER SETTINGS
+#    CRYPTOGRAPHY
 #    UPDATE SETTINGS
 #    HOTSWAP SETTINGS
 #    WARDEN SETTINGS
@@ -39,6 +40,7 @@
 #    CURRENCIES SETTINGS
 #    PACKET SPOOF PROTECTION SETTINGS
 #    METRIC SETTINGS
+#    PVP SETTINGS
 #
 ###################################################################################################
 
@@ -91,7 +93,7 @@ LogsDir = ""
 #    CharacterDatabaseInfo
 #    HotfixDatabaseInfo
 #        Description: Database connection settings for the world server.
-#        Example:     "hostname;port;username;password;database"
+#        Example:     "hostname;port;username;password;database;ssl"
 #                     ".;some_number;username;password;database" - (Use named pipes on Windows
 #                                                                 "enable-named-pipe" to [mysqld]
 #                                                                 section my.ini)
@@ -107,6 +109,8 @@ LogsDir = ""
 #    search for TCE00016 on forum.
 #    Don't open port on firewall to external connections (it belongs to MySQL, not to wow server).
 #    The username you choose must have permissions to create/alter/rename tables.
+#    The SSL option will enable TLS when connecting to the specified database. If not provided or
+#    any value other than 'ssl' is set, TLS will not be used.
 
 LoginDatabaseInfo     = "127.0.0.1;3306;trinity;trinity;auth"
 WorldDatabaseInfo     = "127.0.0.1;3306;trinity;trinity;world"
@@ -287,14 +291,6 @@ Compression = 1
 #                     1+  - (Enabled)
 
 PlayerLimit = 0
-
-#
-#    SaveRespawnTimeImmediately
-#        Description: Save respawn time for creatures at death and gameobjects at use/open.
-#        Default:     1 - (Enabled, Save respawn time immediately)
-#                     0 - (Disabled, Save respawn time at grid unloading)
-
-SaveRespawnTimeImmediately = 1
 
 #
 #    MaxOverspeedPings
@@ -482,10 +478,10 @@ LogDB.Opt.ClearTime = 1209600
 #
 #    MaxCoreStuckTime
 #        Description: Time (in seconds) before the server is forced to crash if it is frozen.
-#        Default:     0   - (Disabled)
-#                     10+ - (Enabled, Recommended 10+)
+#        Default:     60 - (Enabled, Recommended 10+)
+#                      0 - (Disabled)
 
-MaxCoreStuckTime = 0
+MaxCoreStuckTime = 60
 
 #
 #    AddonChannel
@@ -1083,6 +1079,23 @@ Quests.IgnoreAutoComplete = 0
 Quests.DailyResetTime = 3
 
 #
+#    Quests.WeeklyResetWDay
+#        Description: Day of the week when weekly quest reset occurs.
+#        Range:       0 (Sunday) to 6 (Saturday)
+#        Default:     3 - (Wednesday)
+#
+
+Quests.WeeklyResetWDay = 3
+
+#
+#    Calendar.DeleteOldEventsHour
+#        Description: Hour of the day when the daily deletion of old calendar events occurs.
+#        Range:       0-23
+#        Default:     6 - (06:00 AM)
+
+Calendar.DeleteOldEventsHour = 6
+
+#
 #    Guild.EventLogRecordsCount
 #        Description: Number of log entries for guild events that are stored per guild. Old entries
 #                     will be overwritten if the number of log entries exceed the configured value.
@@ -1162,7 +1175,7 @@ MinQuestScaledXPRatio = 0
 
 #
 #    MinCreatureScaledXPRatio
-#        Description: Min ratio of experience that a creature kill can grant when player level scaling is factored.  This 
+#        Description: Min ratio of experience that a creature kill can grant when player level scaling is factored.  This
 #                     will also allow spell procs to trigger, such as Drain Soul, if > 0 and exp is grantable.
 #        Example:     50 (No less than 50% experience granted from a lower leveled creature kill)
 #                     100 (Creature kills always grant full experience upon kill)
@@ -1342,6 +1355,25 @@ FeatureSystem.CharacterUndelete.Enabled = 0
 #        Default:     2592000 (30 days)
 
 FeatureSystem.CharacterUndelete.Cooldown = 2592000
+
+#
+###################################################################################################
+
+###################################################################################################
+# CRYPTOGRAPHY
+#
+#    TOTPMasterSecret
+#        Description: The key used by authserver to decrypt TOTP secrets from database storage.
+#                     You only need to set this here if you plan to use the in-game 2FA
+#                     management commands (.account 2fa), otherwise this can be left blank.
+#
+#                     The server will auto-detect if this does not match your authserver setting,
+#                     in which case any commands reliant on the secret will be disabled.
+#
+#        Default:     <blank>
+#
+
+TOTPMasterSecret =
 
 #
 ###################################################################################################
@@ -1681,13 +1713,13 @@ WorldBossLevelDiff = 3
 #    Corpse.Decay.RAREELITE
 #    Corpse.Decay.WORLDBOSS
 #        Description: Time (in seconds) until creature corpse will decay if not looted or skinned.
-#        Default:     60   - (1 Minute, Corpse.Decay.NORMAL)
+#        Default:     300  - (5 Minutes, Corpse.Decay.NORMAL)
 #                     300  - (5 Minutes, Corpse.Decay.RARE)
 #                     300  - (5 Minutes, Corpse.Decay.ELITE)
 #                     300  - (5 Minutes, Corpse.Decay.RAREELITE)
 #                     3600 - (1 Hour, Corpse.Decay.WORLDBOSS)
 
-Corpse.Decay.NORMAL    = 60
+Corpse.Decay.NORMAL    = 300
 Corpse.Decay.RARE      = 300
 Corpse.Decay.ELITE     = 300
 Corpse.Decay.RAREELITE = 300
@@ -2021,6 +2053,13 @@ PartyLevelReq = 1
 #                     1 - (Enabled)
 
 PreserveCustomChannels = 1
+
+#
+#    PreserveCustomChannelInterval
+#        Description: Interval (in minutes) at which custom channel data is saved to the database
+#        Default:     5 minutes
+
+PreserveCustomChannelInterval = 5
 
 #
 #    PreserveCustomChannelDuration
@@ -3132,20 +3171,6 @@ CharDelete.KeepDays = 30
 ###################################################################################################
 # CUSTOM SERVER OPTIONS
 #
-#     AllowTrackBothResources
-#        Description: Allows players to track herbs and minerals at the same time (if they have the skills)
-#        Default:     0 - (Do not allow)
-#                     1 - (Allow)
-#
-#        Note:        The following are client limitations and cannot be coded for:
-#                     * The minimap tracking icon will display whichever skill is activated second.
-#                     * The minimap tracking list will only show a check mark next to the last skill activated (sometimes this
-#                       bugs out and doesn't switch the check mark. It has no effect on the actual tracking though).
-#                     * The minimap dots are yellow for both resources.
-
-AllowTrackBothResources = 0
-
-#
 #    PlayerStart.AllReputation
 #        Description: Players will start with most of the high level reputations that are needed
 #                     for items, mounts etc.
@@ -4073,6 +4098,7 @@ Logger.mmaps=3,Server
 #Logger.movement.motionmaster=3,Console Server
 #Logger.movement.splinechain=3,Console Server
 #Logger.network=3,Console Server
+#Logger.network.kick=3,Console Server
 #Logger.network.opcode=3,Console Server
 #Logger.network.soap=3,Console Server
 #Logger.outdoorpvp=3,Console Server
@@ -4247,6 +4273,43 @@ Metric.ConnectionInfo = "127.0.0.1;8086;worldserver"
 #
 
 Metric.OverallStatusInterval = 1
+
+#
+###################################################################################################
+
+###################################################################################################
+# PVP SETTINGS
+#
+#
+#    Pvp.FactionBalance.LevelCheckDiff
+#        Description: The amount of levels below the maximum level that accounts people for faction balance.
+#                     That is, if max level is 60 and this has a value of 5, all players that are level 55 and above (including) will be included in the check
+#        Default:     0
+
+Pvp.FactionBalance.LevelCheckDiff = 0
+
+#    Pvp.FactionBalance.Pct5
+#        Description: The percentage at which a faction will receive an extra % percentage on their enlisted buff. Value range: [0...1]
+#                     That is, if value is 0.6, and alliance outnumber horde by 60%, horde will get 15% bonus (5% + base 10%)
+#        Default:     0.6
+
+Pvp.FactionBalance.Pct5 = 0.6
+
+#    Pvp.FactionBalance.Pct10
+#        Description: The percentage at which a faction will receive an extra % percentage on their enlisted buff. Value range: [0...1]
+#                     Does not stack with previous pct. Pct5 will not be checked if faction percentage is higher than this value.
+#                     That is, if value is 0.7, and alliance outnumber horde by 70%, horde will get 20% bonus (10% + base 10%)
+#        Default:     0.7
+
+Pvp.FactionBalance.Pct10 = 0.7
+
+#    Pvp.FactionBalance.Pct20
+#        Description: The percentage at which a faction will receive an extra % percentage on their enlisted buff. Value range: [0...1]
+#                     Does not stack with previous pct. Pct10 will not be checked if faction percentage is higher than this value.
+#                     That is, if value is 0.8, and alliance outnumber horde by 80%, horde will get 30% bonus (20% + base 10%)
+#        Default:     0.8
+
+Pvp.FactionBalance.Pct20 = 0.8
 
 #
 ###################################################################################################

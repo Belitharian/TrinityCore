@@ -450,7 +450,7 @@ private:
     Unit* _owner;
 };
 
-class ChargeTargetSelector : public std::unary_function<Unit*, bool>
+class ChargeTargetSelector
 {
 public:
     ChargeTargetSelector() { }
@@ -487,9 +487,9 @@ struct boss_illidan_stormrage : public BossAI
                 akama->AI()->DoAction(ACTION_ACTIVE_AKAMA_INTRO);
     }
 
-    void JustEngagedWith(Unit* /*who*/) override
+    void JustEngagedWith(Unit* who) override
     {
-        _JustEngagedWith();
+        BossAI::JustEngagedWith(who);
         me->SetCanDualWield(true);
         if (GameObject* musicController = instance->GetGameObject(DATA_ILLIDAN_MUSIC_CONTROLLER))
             musicController->PlayDirectMusic(EVENT_BT_SUMMIT_WALK_3_SOUND_ID);
@@ -2320,7 +2320,7 @@ class spell_maiev_down : public AuraScript
     }
 };
 
-//  40693 - Cage Trap
+// 40693 - Cage Trap
 class spell_illidan_cage_teleport : public SpellScript
 {
     PrepareSpellScript(spell_illidan_cage_teleport);

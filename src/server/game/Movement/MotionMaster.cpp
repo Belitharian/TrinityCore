@@ -83,7 +83,7 @@ bool MovementGeneratorComparator::operator()(MovementGenerator const* a, Movemen
 
 MovementGeneratorInformation::MovementGeneratorInformation(MovementGeneratorType type, ObjectGuid targetGUID, std::string const& targetName) : Type(type), TargetGUID(targetGUID), TargetName(targetName) { }
 
-MotionMaster::MotionMaster(Unit* unit) : _owner(unit), _defaultGenerator(nullptr), _flags(MOTIONMASTER_FLAG_NONE) { }
+MotionMaster::MotionMaster(Unit* unit) : _owner(unit), _defaultGenerator(nullptr), _flags(MOTIONMASTER_FLAG_INITIALIZATION_PENDING) { }
 
 MotionMaster::~MotionMaster()
 {
@@ -95,6 +95,9 @@ MotionMaster::~MotionMaster()
 
 void MotionMaster::Initialize()
 {
+    if (HasFlag(MOTIONMASTER_FLAG_INITIALIZATION_PENDING))
+        return;
+
     if (HasFlag(MOTIONMASTER_FLAG_UPDATE))
     {
         DelayedActionDefine action = [this]()
@@ -113,6 +116,20 @@ void MotionMaster::InitializeDefault()
     Add(FactorySelector::SelectMovementGenerator(_owner), MOTION_SLOT_DEFAULT);
 }
 
+void MotionMaster::AddToWorld()
+{
+    if (!HasFlag(MOTIONMASTER_FLAG_INITIALIZATION_PENDING))
+        return;
+
+    AddFlag(MOTIONMASTER_FLAG_INITIALIZING);
+    RemoveFlag(MOTIONMASTER_FLAG_INITIALIZATION_PENDING);
+
+    DirectInitialize();
+    ResolveDelayedActions();
+
+    RemoveFlag(MOTIONMASTER_FLAG_INITIALIZING);
+}
+
 bool MotionMaster::Empty() const
 {
     return !_defaultGenerator && _generators.empty();
@@ -120,7 +137,7 @@ bool MotionMaster::Empty() const
 
 uint32 MotionMaster::Size() const
 {
-    return _defaultGenerator ? 1 : 0 + uint32(_generators.size());
+    return (_defaultGenerator ? 1 : 0) + uint32(_generators.size());
 }
 
 std::vector<MovementGeneratorInformation> MotionMaster::GetMovementGeneratorsInformation() const
@@ -277,6 +294,9 @@ void MotionMaster::Update(uint32 diff)
     if (!_owner)
         return;
 
+    if (HasFlag(MOTIONMASTER_FLAG_INITIALIZATION_PENDING | MOTIONMASTER_FLAG_INITIALIZING))
+        return;
+
     ASSERT(!Empty(), "MotionMaster:Update: update called without Initializing! (%s)", _owner->GetGUID().ToString().c_str());
 
     AddFlag(MOTIONMASTER_FLAG_UPDATE);
@@ -304,11 +324,7 @@ void MotionMaster::Update(uint32 diff)
 
     RemoveFlag(MOTIONMASTER_FLAG_UPDATE);
 
-    while (!_delayedActions.empty())
-    {
-        _delayedActions.front().Resolve();
-        _delayedActions.pop_front();
-    }
+    ResolveDelayedActions();
 }
 
 void MotionMaster::Add(MovementGenerator* movement, MovementSlot slot/* = MOTION_SLOT_ACTIVE*/)
@@ -322,7 +338,7 @@ void MotionMaster::Add(MovementGenerator* movement, MovementSlot slot/* = MOTION
         return;
     }
 
-    if (HasFlag(MOTIONMASTER_FLAG_UPDATE))
+    if (HasFlag(MOTIONMASTER_FLAG_DELAYED))
     {
         DelayedActionDefine action = [this, movement, slot]()
         {
@@ -339,7 +355,7 @@ void MotionMaster::Remove(MovementGenerator* movement, MovementSlot slot/* = MOT
     if (!movement || IsInvalidMovementSlot(slot))
         return;
 
-    if (HasFlag(MOTIONMASTER_FLAG_UPDATE))
+    if (HasFlag(MOTIONMASTER_FLAG_DELAYED))
     {
         DelayedActionDefine action = [this, movement, slot]()
         {
@@ -377,7 +393,7 @@ void MotionMaster::Remove(MovementGeneratorType type, MovementSlot slot/* = MOTI
     if (IsInvalidMovementGeneratorType(type) || IsInvalidMovementSlot(slot))
         return;
 
-    if (HasFlag(MOTIONMASTER_FLAG_UPDATE))
+    if (HasFlag(MOTIONMASTER_FLAG_DELAYED))
     {
         DelayedActionDefine action = [this, type, slot]()
         {
@@ -415,7 +431,7 @@ void MotionMaster::Remove(MovementGeneratorType type, MovementSlot slot/* = MOTI
 
 void MotionMaster::Clear()
 {
-    if (HasFlag(MOTIONMASTER_FLAG_UPDATE))
+    if (HasFlag(MOTIONMASTER_FLAG_DELAYED))
     {
         DelayedActionDefine action = [this]()
         {
@@ -434,7 +450,7 @@ void MotionMaster::Clear(MovementSlot slot)
     if (IsInvalidMovementSlot(slot))
         return;
 
-    if (HasFlag(MOTIONMASTER_FLAG_UPDATE))
+    if (HasFlag(MOTIONMASTER_FLAG_DELAYED))
     {
         DelayedActionDefine action = [this, slot]()
         {
@@ -462,7 +478,7 @@ void MotionMaster::Clear(MovementSlot slot)
 
 void MotionMaster::Clear(MovementGeneratorMode mode)
 {
-    if (HasFlag(MOTIONMASTER_FLAG_UPDATE))
+    if (HasFlag(MOTIONMASTER_FLAG_DELAYED))
     {
         DelayedActionDefine action = [this, mode]()
         {
@@ -484,7 +500,7 @@ void MotionMaster::Clear(MovementGeneratorMode mode)
 
 void MotionMaster::Clear(MovementGeneratorPriority priority)
 {
-    if (HasFlag(MOTIONMASTER_FLAG_UPDATE))
+    if (HasFlag(MOTIONMASTER_FLAG_DELAYED))
     {
         DelayedActionDefine action = [this, priority]()
         {
@@ -557,12 +573,12 @@ void MotionMaster::MoveTargetedHome()
     }
 }
 
-void MotionMaster::MoveRandom(float spawndist)
+void MotionMaster::MoveRandom(float wanderDistance)
 {
     if (_owner->GetTypeId() == TYPEID_UNIT)
     {
-        TC_LOG_DEBUG("movement.motionmaster", "MotionMaster::MoveRandom: '%s', started random movement (spawnDist: %f)", _owner->GetGUID().ToString().c_str(), spawndist);
-        Add(new RandomMovementGenerator<Creature>(spawndist), MOTION_SLOT_DEFAULT);
+        TC_LOG_DEBUG("movement.motionmaster", "MotionMaster::MoveRandom: '%s', started random movement (spawnDist: %f)", _owner->GetGUID().ToString().c_str(), wanderDistance);
+        Add(new RandomMovementGenerator<Creature>(wanderDistance), MOTION_SLOT_DEFAULT);
     }
 }
 
@@ -728,15 +744,16 @@ void MotionMaster::MoveKnockbackFrom(Position const& origin, float speedXY, floa
     if (speedXY < 0.01f)
         return;
 
-    float x, y, z;
+    Position dest = _owner->GetPosition();
     float moveTimeHalf = speedZ / Movement::gravity;
     float dist = 2 * moveTimeHalf * speedXY;
     float max_height = -Movement::computeFallElevation(moveTimeHalf, false, -speedZ);
 
-    _owner->GetNearPoint(_owner, x, y, z, dist, _owner->GetAbsoluteAngle(origin) + float(M_PI));
+    // Use a mmap raycast to get a valid destination.
+    _owner->MovePositionToFirstCollision(dest, dist, _owner->GetRelativeAngle(origin) + float(M_PI));
 
     Movement::MoveSplineInit init(_owner);
-    init.MoveTo(x, y, z);
+    init.MoveTo(dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), false);
     init.SetParabolic(max_height, 0);
     init.SetOrientationFixed(true);
     init.SetVelocity(speedXY);
@@ -843,6 +860,9 @@ void MotionMaster::MoveCirclePath(float x, float y, float z, float radius, bool 
 
     Movement::MoveSplineInit init(_owner);
 
+    // add the owner's current position as starting point as it gets removed after entering the cycle
+    init.Path().push_back(G3D::Vector3(_owner->GetPositionX(), _owner->GetPositionY(), _owner->GetPositionZ()));
+
     for (uint8 i = 0; i < stepCount; angle += step, ++i)
     {
         G3D::Vector3 point;
@@ -948,7 +968,7 @@ void MotionMaster::MoveFall(uint32 id/* = 0*/)
         return;
 
     // rooted units don't move (also setting falling+root flag causes client freezes)
-    if (_owner->HasUnitState(UNIT_STATE_ROOT))
+    if (_owner->HasUnitState(UNIT_STATE_ROOT | UNIT_STATE_STUNNED))
         return;
 
     _owner->SetFall(true);
@@ -971,12 +991,13 @@ void MotionMaster::MoveFall(uint32 id/* = 0*/)
 
 void MotionMaster::MoveSeekAssistance(float x, float y, float z)
 {
-    if (_owner->GetTypeId() == TYPEID_UNIT)
+    if (Creature* creature = _owner->ToCreature())
     {
-        TC_LOG_DEBUG("movement.motionmaster", "MotionMaster::MoveSeekAssistance: '%s', seeks assistance (X: %f, Y: %f, Z: %f)", _owner->GetGUID().ToString().c_str(), x, y, z);
-        _owner->AttackStop();
-        _owner->CastStop();
-        _owner->ToCreature()->SetReactState(REACT_PASSIVE);
+        TC_LOG_DEBUG("movement.motionmaster", "MotionMaster::MoveSeekAssistance: '%s', seeks assistance (X: %f, Y: %f, Z: %f)", creature->GetGUID().ToString().c_str(), x, y, z);
+        creature->AttackStop();
+        creature->CastStop();
+        creature->DoNotReacquireSpellFocusTarget();
+        creature->SetReactState(REACT_PASSIVE);
         Add(new AssistanceMovementGenerator(EVENT_ASSIST_MOVE, x, y, z));
     }
     else
@@ -1051,12 +1072,12 @@ void MotionMaster::MoveRotate(uint32 id, uint32 time, RotateDirection direction)
     Add(new RotateMovementGenerator(id, time, direction));
 }
 
-void MotionMaster::MoveFormation(uint32 id, Position destination, uint32 moveType, bool forceRun /*= false*/, bool forceOrientation /*= false*/)
+void MotionMaster::MoveFormation(Unit* leader, float range, float angle, uint32 point1, uint32 point2)
 {
-    if (_owner->GetTypeId() == TYPEID_UNIT)
+    if (_owner->GetTypeId() == TYPEID_UNIT && leader)
     {
-        TC_LOG_DEBUG("movement.motionmaster", "MotionMaster::MoveFormation: '%s', targeted point Id: %u (X: %f, Y: %f, Z: %f)", _owner->GetGUID().ToString().c_str(), id, destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ());
-        Add(new FormationMovementGenerator(id, destination, moveType, forceRun, forceOrientation));
+        TC_LOG_DEBUG("movement.motionmaster", "MotionMaster::MoveFormation: '%s', started to move in a formation with leader %s", _owner->GetGUID().ToString().c_str(), leader->GetGUID().ToString().c_str());
+        Add(new FormationMovementGenerator(leader, range, angle, point1, point2), MOTION_SLOT_DEFAULT);
     }
 }
 
@@ -1077,6 +1098,15 @@ void MotionMaster::LaunchMoveSpline(Movement::MoveSplineInit&& init, uint32 id/*
 
 /******************** Private methods ********************/
 
+void MotionMaster::ResolveDelayedActions()
+{
+    while (!_delayedActions.empty())
+    {
+        _delayedActions.front().Resolve();
+        _delayedActions.pop_front();
+    }
+}
+
 void MotionMaster::Remove(MotionMasterContainer::iterator iterator, bool active, bool movementInform)
 {
     MovementGenerator* pointer = *iterator;
@@ -1086,7 +1116,8 @@ void MotionMaster::Remove(MotionMasterContainer::iterator iterator, bool active,
 
 void MotionMaster::Pop(bool active, bool movementInform)
 {
-    Remove(_generators.begin(), active, movementInform);
+    if (!_generators.empty())
+        Remove(_generators.begin(), active, movementInform);
 }
 
 void MotionMaster::DirectInitialize()
@@ -1172,7 +1203,10 @@ void MotionMaster::DirectAdd(MovementGenerator* movement, MovementSlot slot/* = 
     {
         case MOTION_SLOT_DEFAULT:
             if (_defaultGenerator)
+            {
                 _defaultGenerator->Finalize(_owner, _generators.empty(), false);
+                _defaultGenerator->NotifyAIOnFinalize(_owner);
+            }
 
             _defaultGenerator = MovementGeneratorPointer(movement);
             if (IsStatic(movement))
@@ -1217,6 +1251,7 @@ void MotionMaster::Delete(MovementGenerator* movement, bool active, bool movemen
         movement->Priority, movement->Flags, movement->BaseUnitState, movement->GetMovementGeneratorType(), _owner->GetGUID().ToString().c_str());
 
     movement->Finalize(_owner, active, movementInform);
+    movement->NotifyAIOnFinalize(_owner);
     ClearBaseUnitState(movement);
     MovementGeneratorPointerDeleter(movement);
 }
@@ -1227,6 +1262,7 @@ void MotionMaster::DeleteDefault(bool active, bool movementInform)
         _defaultGenerator->Priority, _defaultGenerator->Flags, _defaultGenerator->BaseUnitState, _defaultGenerator->GetMovementGeneratorType(), _owner->GetGUID().ToString().c_str());
 
     _defaultGenerator->Finalize(_owner, active, movementInform);
+    _defaultGenerator->NotifyAIOnFinalize(_owner);
     _defaultGenerator = MovementGeneratorPointer(GetIdleMovementGenerator());
     AddFlag(MOTIONMASTER_FLAG_STATIC_INITIALIZATION_PENDING);
 }

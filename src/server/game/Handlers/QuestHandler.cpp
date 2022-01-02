@@ -33,6 +33,7 @@
 #include "PoolMgr.h"
 #include "QuestDef.h"
 #include "QuestPackets.h"
+#include "QuestPools.h"
 #include "ReputationMgr.h"
 #include "ScriptMgr.h"
 #include "World.h"
@@ -52,7 +53,7 @@ void WorldSession::HandleQuestgiverStatusQueryOpcode(WorldPackets::Quest::QuestG
     {
         case TYPEID_UNIT:
         {
-            TC_LOG_DEBUG("network", "WORLD: Received CMSG_QUESTGIVER_STATUS_QUERY for npc, %s", questGiver->GetGUID().ToString().c_str());
+            TC_LOG_DEBUG("network", "WORLD: Received CMSG_QUESTGIVER_STATUS_QUERY for npc %s", questGiver->GetGUID().ToString().c_str());
             if (!questGiver->ToCreature()->IsHostileTo(_player)) // do not show quest status to enemies
                 questStatus = _player->GetQuestDialogStatus(questGiver);
             break;
@@ -269,7 +270,7 @@ void WorldSession::HandleQuestgiverChooseRewardOpcode(WorldPackets::Quest::Quest
                 ItemTemplate const* rewardProto = sObjectMgr->GetItemTemplate(packet.Choice.Item.ItemID);
                 if (!rewardProto)
                 {
-                    TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_QUESTGIVER_CHOOSE_REWARD: player %s (%s) tried to get invalid reward item (Item Entry: %u) for quest %u (possible packet-hacking detected)",
+                    TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_QUESTGIVER_CHOOSE_REWARD: player %s %s tried to get invalid reward item (Item Entry: %u) for quest %u (possible packet-hacking detected)",
                         _player->GetName().c_str(), _player->GetGUID().ToString().c_str(), packet.Choice.Item.ItemID, packet.QuestID);
                     return;
                 }
@@ -319,7 +320,7 @@ void WorldSession::HandleQuestgiverChooseRewardOpcode(WorldPackets::Quest::Quest
 
                 if (!itemValid)
                 {
-                    TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_QUESTGIVER_CHOOSE_REWARD: player %s (%s) tried to get reward item (Item Entry: %u) wich is not a reward for quest %u (possible packet-hacking detected)",
+                    TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_QUESTGIVER_CHOOSE_REWARD: player %s %s tried to get reward item (Item Entry: %u) wich is not a reward for quest %u (possible packet-hacking detected)",
                         _player->GetName().c_str(), _player->GetGUID().ToString().c_str(), packet.Choice.Item.ItemID, packet.QuestID);
                     return;
                 }
@@ -329,7 +330,7 @@ void WorldSession::HandleQuestgiverChooseRewardOpcode(WorldPackets::Quest::Quest
             {
                 if (!sCurrencyTypesStore.HasRecord(packet.Choice.Item.ItemID))
                 {
-                    TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_QUESTGIVER_CHOOSE_REWARD: player %s (%s) tried to get invalid reward currency (Currency ID: %u) for quest %u (possible packet-hacking detected)",
+                    TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_QUESTGIVER_CHOOSE_REWARD: player %s %s tried to get invalid reward currency (Currency ID: %u) for quest %u (possible packet-hacking detected)",
                         _player->GetName().c_str(), _player->GetGUID().ToString().c_str(), packet.Choice.Item.ItemID, packet.QuestID);
                     return;
                 }
@@ -346,7 +347,7 @@ void WorldSession::HandleQuestgiverChooseRewardOpcode(WorldPackets::Quest::Quest
 
                 if (!currencyValid)
                 {
-                    TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_QUESTGIVER_CHOOSE_REWARD: player %s (%s) tried to get reward currency (Currency ID: %u) wich is not a reward for quest %u (possible packet-hacking detected)",
+                    TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_QUESTGIVER_CHOOSE_REWARD: player %s %s tried to get reward currency (Currency ID: %u) wich is not a reward for quest %u (possible packet-hacking detected)",
                         _player->GetName().c_str(), _player->GetGUID().ToString().c_str(), packet.Choice.Item.ItemID, packet.QuestID);
                     return;
                 }
@@ -373,61 +374,64 @@ void WorldSession::HandleQuestgiverChooseRewardOpcode(WorldPackets::Quest::Quest
     if ((!_player->CanSeeStartQuest(quest) &&  _player->GetQuestStatus(packet.QuestID) == QUEST_STATUS_NONE) ||
         (_player->GetQuestStatus(packet.QuestID) != QUEST_STATUS_COMPLETE && !quest->IsAutoComplete()))
     {
-        TC_LOG_ERROR("network", "Error in QUEST_STATUS_COMPLETE: player %s (%s) tried to complete quest %u, but is not allowed to do so (possible packet-hacking or high latency)",
+        TC_LOG_ERROR("network", "Error in QUEST_STATUS_COMPLETE: player %s %s tried to complete quest %u, but is not allowed to do so (possible packet-hacking or high latency)",
             _player->GetName().c_str(), _player->GetGUID().ToString().c_str(), packet.QuestID);
         return;
     }
 
-    if (_player->CanRewardQuest(quest, packet.Choice.LootItemType, packet.Choice.Item.ItemID, true))
+    if (_player->CanRewardQuest(quest, true)) // First, check if player is allowed to turn the quest in (all objectives completed). If not, we send players to the offer reward screen
     {
-        _player->RewardQuest(quest, packet.Choice.LootItemType, packet.Choice.Item.ItemID, object);
-
-        switch (object->GetTypeId())
+        if (_player->CanRewardQuest(quest, packet.Choice.LootItemType, packet.Choice.Item.ItemID, true)) // Then check if player can receive the reward item (if inventory is not full, if player doesn't have too many unique items, and so on). If not, the client will close the gossip window
         {
-            case TYPEID_UNIT:
-            case TYPEID_PLAYER:
+            _player->RewardQuest(quest, packet.Choice.LootItemType, packet.Choice.Item.ItemID, object);
+
+            switch (object->GetTypeId())
             {
-                //For AutoSubmition was added plr case there as it almost same exclute AI script cases.
-                // Send next quest
-                if (Quest const* nextQuest = _player->GetNextQuest(packet.QuestGiverGUID, quest))
+                case TYPEID_UNIT:
+                case TYPEID_PLAYER:
                 {
-                    // Only send the quest to the player if the conditions are met
-                    if (_player->CanTakeQuest(nextQuest, false))
+                    //For AutoSubmition was added plr case there as it almost same exclute AI script cases.
+                    // Send next quest
+                    if (Quest const* nextQuest = _player->GetNextQuest(packet.QuestGiverGUID, quest))
                     {
-                        if (nextQuest->IsAutoAccept() && _player->CanAddQuest(nextQuest, true))
-                            _player->AddQuestAndCheckCompletion(nextQuest, object);
+                        // Only send the quest to the player if the conditions are met
+                        if (_player->CanTakeQuest(nextQuest, false))
+                        {
+                            if (nextQuest->IsAutoAccept() && _player->CanAddQuest(nextQuest, true))
+                                _player->AddQuestAndCheckCompletion(nextQuest, object);
 
-                        _player->PlayerTalkClass->SendQuestGiverQuestDetails(nextQuest, packet.QuestGiverGUID, true, false);
+                            _player->PlayerTalkClass->SendQuestGiverQuestDetails(nextQuest, packet.QuestGiverGUID, true, false);
+                        }
                     }
-                }
 
-                _player->PlayerTalkClass->ClearMenus();
-                if (Creature* creatureQGiver = object->ToCreature())
-                    creatureQGiver->AI()->QuestReward(_player, quest, packet.Choice.LootItemType, packet.Choice.Item.ItemID);
-                break;
-            }
-            case TYPEID_GAMEOBJECT:
-            {
-                GameObject* questGiver = object->ToGameObject();
-                // Send next quest
-                if (Quest const* nextQuest = _player->GetNextQuest(packet.QuestGiverGUID, quest))
+                    _player->PlayerTalkClass->ClearMenus();
+                    if (Creature* creatureQGiver = object->ToCreature())
+                        creatureQGiver->AI()->QuestReward(_player, quest, packet.Choice.LootItemType, packet.Choice.Item.ItemID);
+                    break;
+                }
+                case TYPEID_GAMEOBJECT:
                 {
-                    // Only send the quest to the player if the conditions are met
-                    if (_player->CanTakeQuest(nextQuest, false))
+                    GameObject* questGiver = object->ToGameObject();
+                    // Send next quest
+                    if (Quest const* nextQuest = _player->GetNextQuest(packet.QuestGiverGUID, quest))
                     {
-                        if (nextQuest->IsAutoAccept() && _player->CanAddQuest(nextQuest, true))
-                            _player->AddQuestAndCheckCompletion(nextQuest, object);
+                        // Only send the quest to the player if the conditions are met
+                        if (_player->CanTakeQuest(nextQuest, false))
+                        {
+                            if (nextQuest->IsAutoAccept() && _player->CanAddQuest(nextQuest, true))
+                                _player->AddQuestAndCheckCompletion(nextQuest, object);
 
-                        _player->PlayerTalkClass->SendQuestGiverQuestDetails(nextQuest, packet.QuestGiverGUID, true, false);
+                            _player->PlayerTalkClass->SendQuestGiverQuestDetails(nextQuest, packet.QuestGiverGUID, true, false);
+                        }
                     }
-                }
 
-                _player->PlayerTalkClass->ClearMenus();
-                questGiver->AI()->QuestReward(_player, quest, packet.Choice.LootItemType, packet.Choice.Item.ItemID);
-                break;
+                    _player->PlayerTalkClass->ClearMenus();
+                    questGiver->AI()->QuestReward(_player, quest, packet.Choice.LootItemType, packet.Choice.Item.ItemID);
+                    break;
+                }
+                default:
+                    break;
             }
-            default:
-                break;
         }
     }
     else
@@ -488,7 +492,7 @@ void WorldSession::HandleQuestLogRemoveQuest(WorldPackets::Quest::QuestLogRemove
             _player->RemoveActiveQuest(questId);
             _player->RemoveCriteriaTimer(CriteriaStartEvent::AcceptQuest, questId);
 
-            TC_LOG_INFO("network", "%s abandoned quest %u", _player->GetGUID().ToString().c_str(), questId);
+            TC_LOG_INFO("network", "Player %s abandoned quest %u", _player->GetGUID().ToString().c_str(), questId);
 
             if (sWorld->getBoolConfig(CONFIG_QUEST_ENABLE_QUEST_TRACKER)) // check if Quest Tracker is enabled
             {
@@ -638,7 +642,7 @@ void WorldSession::HandlePushQuestToParty(WorldPackets::Quest::PushQuestToParty&
     }
 
     // in pool and not currently available (wintergrasp weekly, dalaran weekly) - can't share
-    if (sPoolMgr->IsPartOfAPool<Quest>(packet.QuestID) && !sPoolMgr->IsSpawnedObject<Quest>(packet.QuestID))
+    if (!sQuestPoolMgr->IsQuestActive(packet.QuestID))
     {
         sender->SendPushToPartyResponse(sender, QuestPushReason::NotDaily);
         return;

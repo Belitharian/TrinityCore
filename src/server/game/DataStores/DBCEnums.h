@@ -487,9 +487,9 @@ enum class CriteriaType : uint8
     AccountObtainPetThroughBattle                  = 157, /*NYI*/ // (Account Only) Obtain a pet through battle
     WinPetBattle                                   = 158, /*NYI*/ // Win a pet battle
     LosePetBattle                                  = 159, /*NYI*/ // Lose a pet battle
-    BattlePetReachLevel                            = 160, /*NYI*/ // (Account Only) Battle pet has reached level {#Level}
+    BattlePetReachLevel                            = 160, // (Account Only) Battle pet has reached level {#Level}
     PlayerObtainPetThroughBattle                   = 161, /*NYI*/ // (Player) Obtain a pet through battle
-    ActivelyEarnPetLevel                           = 162, /*NYI*/ // (Player) Actively earn level {#Level} with a pet by a player
+    ActivelyEarnPetLevel                           = 162, // (Player) Actively earn level {#Level} with a pet by a player
     EnterArea                                      = 163, /*NYI*/ // Enter Map Area "{AreaTable}"
     LeaveArea                                      = 164, /*NYI*/ // Leave Map Area "{AreaTable}"
     DefeatDungeonEncounter                         = 165, /*NYI*/ // Defeat Encounter "{DungeonEncounter}"
@@ -666,25 +666,6 @@ enum DifficultyFlags
     DIFFICULTY_FLAG_LEGACY          = 0x20,
     DIFFICULTY_FLAG_DISPLAY_HEROIC  = 0x40, // Controls icon displayed on minimap when inside the instance
     DIFFICULTY_FLAG_DISPLAY_MYTHIC  = 0x80  // Controls icon displayed on minimap when inside the instance
-};
-
-enum SpawnMask
-{
-    SPAWNMASK_CONTINENT = (1 << DIFFICULTY_NONE), // any maps without spawn modes
-
-    SPAWNMASK_DUNGEON_NORMAL    = (1 << DIFFICULTY_NORMAL),
-    SPAWNMASK_DUNGEON_HEROIC    = (1 << DIFFICULTY_HEROIC),
-    SPAWNMASK_DUNGEON_ALL       = (SPAWNMASK_DUNGEON_NORMAL | SPAWNMASK_DUNGEON_HEROIC),
-
-    SPAWNMASK_RAID_10MAN_NORMAL = (1 << DIFFICULTY_10_N),
-    SPAWNMASK_RAID_25MAN_NORMAL = (1 << DIFFICULTY_25_N),
-    SPAWNMASK_RAID_NORMAL_ALL   = (SPAWNMASK_RAID_10MAN_NORMAL | SPAWNMASK_RAID_25MAN_NORMAL),
-
-    SPAWNMASK_RAID_10MAN_HEROIC = (1 << DIFFICULTY_10_HC),
-    SPAWNMASK_RAID_25MAN_HEROIC = (1 << DIFFICULTY_25_HC),
-    SPAWNMASK_RAID_HEROIC_ALL   = (SPAWNMASK_RAID_10MAN_HEROIC | SPAWNMASK_RAID_25MAN_HEROIC),
-
-    SPAWNMASK_RAID_ALL          = (SPAWNMASK_RAID_NORMAL_ALL | SPAWNMASK_RAID_HEROIC_ALL)
 };
 
 enum class ExpectedStatType : uint8
@@ -1571,7 +1552,7 @@ enum class SummonPropertiesFlags : uint32
     CannotDismissPet                  = 0x00000020, // NYI
     UseDemonTimeout                   = 0x00000040, // NYI
     UnlimitedSummons                  = 0x00000080, // NYI
-    UseCreatureLevel                  = 0x00000100, // NYI
+    UseCreatureLevel                  = 0x00000100,
     JoinSummonerSpawnGroup            = 0x00000200, // NYI
     DoNotToggle                       = 0x00000400, // NYI
     DespawnWhenExpired                = 0x00000800, // NYI
@@ -1584,7 +1565,7 @@ enum class SummonPropertiesFlags : uint32
     CastRideVehicleSpellOnSummoner    = 0x00040000, // NYI
     GuardianActsLikePet               = 0x00080000, // NYI
     DontSnapSessileToGround           = 0x00100000, // NYI
-    SummonFromBattlePetJournal        = 0x00200000, // NYI
+    SummonFromBattlePetJournal        = 0x00200000,
     UnitClutter                       = 0x00400000, // NYI
     DefaultNameColor                  = 0x00800000, // NYI
     UseOwnInvisibilityDetection       = 0x01000000, // NYI. Ignore Owner's Invisibility Detection

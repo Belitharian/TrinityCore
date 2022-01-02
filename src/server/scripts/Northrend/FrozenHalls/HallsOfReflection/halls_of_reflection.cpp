@@ -712,7 +712,7 @@ class npc_jaina_or_sylvanas_intro_hor : public CreatureScript
                     case EVENT_INTRO_LK_9:
                         if (Creature* falric = ObjectAccessor::GetCreature(*me, _instance->GetGuidData(DATA_FALRIC)))
                             falric->AI()->Talk(SAY_FALRIC_INTRO_2);
-                        _instance->ProcessEvent(nullptr, EVENT_SPAWN_WAVES);
+                        _instance->ProcessEvent(nullptr, EVENT_SPAWN_WAVES, nullptr);
                         _events.ScheduleEvent(EVENT_INTRO_LK_10, 4000);
                         break;
                     case EVENT_INTRO_LK_10:
@@ -1363,7 +1363,7 @@ class npc_the_lich_king_escape_hor : public CreatureScript
                 if (!me->HasReactState(REACT_PASSIVE))
                 {
                     if (Unit* victim = me->SelectVictim())
-                        if (!me->IsFocusing(nullptr, true) && victim != me->GetVictim())
+                        if (!me->HasSpellFocus() && victim != me->GetVictim())
                             AttackStart(victim);
                     return me->GetVictim() != nullptr;
                 }
@@ -2076,7 +2076,7 @@ class at_hor_waves_restarter : public AreaTriggerScript
 
             if (_instance->GetData(DATA_INTRO_EVENT) == DONE && _instance->GetBossState(DATA_MARWYN) != DONE)
             {
-                _instance->ProcessEvent(nullptr, EVENT_SPAWN_WAVES);
+                _instance->ProcessEvent(nullptr, EVENT_SPAWN_WAVES, nullptr);
 
                 if (Creature* falric = ObjectAccessor::GetCreature(*player, _instance->GetGuidData(DATA_FALRIC)))
                 {

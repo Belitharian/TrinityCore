@@ -17,7 +17,6 @@
 
 #include "ObjectGuid.h"
 #include "ByteBuffer.h"
-#include "Containers.h"
 #include "Errors.h"
 #include "Hash.h"
 #include "Log.h"
@@ -104,7 +103,7 @@ namespace
             };
 
             ObjectGuid::LowType id = guid.GetCounter();
-            if (id >= Trinity::Containers::Size(uniqNames))
+            if (id >= std::size(uniqNames))
                 id = 3;
 
             return Trinity::StringFormat("%s-%s", typeName, uniqNames[id]);
@@ -134,7 +133,7 @@ namespace
                 "WOWGUID_UNIQUE_ACCOUNT_OBJ_INITIALIZATION"
             };
 
-            for (std::size_t id = 0; id < Trinity::Containers::Size(uniqNames); ++id)
+            for (std::size_t id = 0; id < std::size(uniqNames); ++id)
             {
                 if (!uniqNames[id])
                     continue;

@@ -279,7 +279,7 @@ public:
 
             if (titleInfo && target->HasTitle(titleInfo))
             {
-                std::string name = (target->getGender() == GENDER_MALE ? titleInfo->Name : titleInfo->Name1)[handler->GetSessionDbcLocale()];
+                std::string name = (target->GetNativeGender() == GENDER_MALE ? titleInfo->Name : titleInfo->Name1)[handler->GetSessionDbcLocale()];
                 if (name.empty())
                     continue;
 
@@ -377,7 +377,7 @@ public:
                 target->SetName(newName);
 
                 if (WorldSession* session = target->GetSession())
-                    session->KickPlayer();
+                    session->KickPlayer("HandleCharacterRenameCommand GM Command renaming character");
             }
             else
             {
@@ -450,7 +450,7 @@ public:
         if (!handler->extractPlayerTarget(nameStr, &target, &targetGuid, &targetName))
             return false;
 
-        int32 oldlevel = target ? target->getLevel() : sCharacterCache->GetCharacterLevelByGuid(targetGuid);
+        int32 oldlevel = target ? target->GetLevel() : sCharacterCache->GetCharacterLevelByGuid(targetGuid);
         int32 newlevel = levelStr ? atoi(levelStr) : oldlevel;
 
         if (newlevel < 1)
@@ -861,7 +861,7 @@ public:
         {
             characterGuid = player->GetGUID();
             accountId = player->GetSession()->GetAccountId();
-            player->GetSession()->KickPlayer();
+            player->GetSession()->KickPlayer("HandleCharacterEraseCommand GM Command deleting character");
         }
         else
         {
@@ -903,7 +903,7 @@ public:
         if (!handler->extractPlayerTarget(nameStr, &target, &targetGuid, &targetName))
             return false;
 
-        int32 oldlevel = target ? target->getLevel() : sCharacterCache->GetCharacterLevelByGuid(targetGuid);
+        int32 oldlevel = target ? target->GetLevel() : sCharacterCache->GetCharacterLevelByGuid(targetGuid);
         int32 addlevel = levelStr ? atoi(levelStr) : 1;
         int32 newlevel = oldlevel + addlevel;
 

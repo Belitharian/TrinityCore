@@ -83,6 +83,12 @@ enum class AuraTriggerOnPowerChangeDirection : int32
     Loss    = 1
 };
 
+enum class AuraTriggerOnHealthChangeDirection : int32
+{
+    Above   = 0,
+    Below   = 1,
+};
+
 enum AuraType : uint32
 {
     SPELL_AURA_NONE                                         = 0,
@@ -133,7 +139,7 @@ enum AuraType : uint32
     SPELL_AURA_TRACK_RESOURCES                              = 45,
     SPELL_AURA_46                                           = 46,   // Ignore all Gear test spells
     SPELL_AURA_MOD_PARRY_PERCENT                            = 47,
-    SPELL_AURA_48                                           = 48,   // One periodic spell
+    SPELL_AURA_PERIODIC_TRIGGER_SPELL_FROM_CLIENT           = 48,   // One periodic spell
     SPELL_AURA_MOD_DODGE_PERCENT                            = 49,
     SPELL_AURA_MOD_CRITICAL_HEALING_AMOUNT                  = 50,
     SPELL_AURA_MOD_BLOCK_PERCENT                            = 51,
@@ -428,7 +434,7 @@ enum AuraType : uint32
     SPELL_AURA_MOD_RESURRECTED_HEALTH_BY_GUILD_MEMBER       = 340,  // Increases health gained when resurrected by a guild member by X
     SPELL_AURA_MOD_SPELL_CATEGORY_COOLDOWN                  = 341,  // Modifies cooldown of all spells using affected category
     SPELL_AURA_MOD_MELEE_RANGED_HASTE_2                     = 342,
-    SPELL_AURA_MOD_MELEE_DAMAGE_FROM_CASTER                 = 343,  // NYI
+    SPELL_AURA_MOD_MELEE_DAMAGE_FROM_CASTER                 = 343,
     SPELL_AURA_MOD_AUTOATTACK_DAMAGE                        = 344,
     SPELL_AURA_BYPASS_ARMOR_FOR_CASTER                      = 345,
     SPELL_AURA_ENABLE_ALT_POWER                             = 346,
@@ -505,7 +511,7 @@ enum AuraType : uint32
     SPELL_AURA_MOD_GLOBAL_COOLDOWN_BY_HASTE_REGEN           = 417,
     SPELL_AURA_MOD_MAX_POWER                                = 418,  // NYI
     SPELL_AURA_MOD_BASE_MANA_PCT                            = 419,
-    SPELL_AURA_MOD_BATTLE_PET_XP_PCT                        = 420,  // NYI
+    SPELL_AURA_MOD_BATTLE_PET_XP_PCT                        = 420,
     SPELL_AURA_MOD_ABSORB_EFFECTS_DONE_PCT                  = 421,  // NYI
     SPELL_AURA_MOD_ABSORB_EFFECTS_TAKEN_PCT                 = 422,  // NYI
     SPELL_AURA_MOD_MANA_COST_PCT                            = 423,
@@ -580,7 +586,7 @@ enum AuraType : uint32
     SPELL_AURA_492                                          = 492,
     SPELL_AURA_493                                          = 493, // 1 spell, 267116 - Animal Companion (modifies Call Pet)
     SPELL_AURA_SET_POWER_POINT_CHARGE                       = 494, // NYI
-    SPELL_AURA_TRIGGER_SPELL_ON_EXPIRE                      = 495, // NYI
+    SPELL_AURA_TRIGGER_SPELL_ON_EXPIRE                      = 495,
     SPELL_AURA_ALLOW_CHANGING_EQUIPMENT_IN_TORGHAST         = 496, // NYI
     SPELL_AURA_MOD_ANIMA_GAIN                               = 497, // NYI
     SPELL_AURA_CURRENCY_LOSS_PCT_ON_DEATH                   = 498, // NYI

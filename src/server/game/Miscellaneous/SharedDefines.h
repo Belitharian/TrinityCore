@@ -133,21 +133,22 @@ enum Gender
 };
 
 // Class value is index in ChrClasses.db2
+// EnumUtils: DESCRIBE THIS
 enum Classes : uint8
 {
-    CLASS_NONE          = 0,
-    CLASS_WARRIOR       = 1,
-    CLASS_PALADIN       = 2,
-    CLASS_HUNTER        = 3,
-    CLASS_ROGUE         = 4,
-    CLASS_PRIEST        = 5,
-    CLASS_DEATH_KNIGHT  = 6,
-    CLASS_SHAMAN        = 7,
-    CLASS_MAGE          = 8,
-    CLASS_WARLOCK       = 9,
-    CLASS_MONK          = 10,
-    CLASS_DRUID         = 11,
-    CLASS_DEMON_HUNTER  = 12
+    CLASS_NONE          = 0,  // SKIP
+    CLASS_WARRIOR       = 1,  // TITLE Warrior
+    CLASS_PALADIN       = 2,  // TITLE Paladin
+    CLASS_HUNTER        = 3,  // TITLE Hunter
+    CLASS_ROGUE         = 4,  // TITLE Rogue
+    CLASS_PRIEST        = 5,  // TITLE Priest
+    CLASS_DEATH_KNIGHT  = 6,  // TITLE Death Knight
+    CLASS_SHAMAN        = 7,  // TITLE Shaman
+    CLASS_MAGE          = 8,  // TITLE Mage
+    CLASS_WARLOCK       = 9,  // TITLE Warlock
+    CLASS_MONK          = 10, // TITLE Monk
+    CLASS_DRUID         = 11, // TITLE Druid
+    CLASS_DEMON_HUNTER  = 12  // TITLE Demon Hunter
 };
 
 // max+1 for player class
@@ -205,6 +206,7 @@ enum FactionTemplates
     FACTION_PREY                        = 31,
     FACTION_ESCORTEE_H_NEUTRAL_PASSIVE  = 33,
     FACTION_FRIENDLY                    = 35,
+    FACTION_TROLL_FROSTMANE             = 37,
     FACTION_OGRE                        = 45,
     FACTION_ORC_DRAGONMAW               = 62,
     FACTION_HORDE_GENERIC               = 83,
@@ -220,6 +222,7 @@ enum FactionTemplates
     FACTION_ESCORTEE_N_FRIEND_PASSIVE   = 290,
     FACTION_TITAN                       = 415,
     FACTION_ESCORTEE_N_FRIEND_ACTIVE    = 495,
+    FACTION_RATCHET                     = 637,
     FACTION_GOBLIN_DARK_IRON_BAR_PATRON = 736,
     FACTION_DARK_IRON_DWARVES           = 754,
     FACTION_ESCORTEE_A_PASSIVE          = 774,
@@ -236,7 +239,8 @@ enum FactionTemplates
     FACTION_ESCORTEE_H_ACTIVE           = 2046,
     FACTION_UNDEAD_SCOURGE_2            = 2068,
     FACTION_UNDEAD_SCOURGE_3            = 2084,
-    FACTION_SCARLET_CRUSADE             = 2089
+    FACTION_SCARLET_CRUSADE             = 2089,
+    FACTION_SCARLET_CRUSADE_2           = 2096
 };
 
 #define MIN_REPUTATION_RANK (REP_HATED)
@@ -722,7 +726,7 @@ enum SpellAttr8 : uint32
     SPELL_ATTR8_RAID_MARKER                      = 0x04000000, // TITLE Skip Is Known Check
     SPELL_ATTR8_UNK27                            = 0x08000000, // TITLE Unknown attribute 27@Attr8
     SPELL_ATTR8_NOT_IN_BG_OR_ARENA               = 0x10000000, // TITLE Not in Battleground
-    SPELL_ATTR8_MASTERY_SPECIALIZATION           = 0x20000000, // TITLE Mastery Affects Points
+    SPELL_ATTR8_MASTERY_AFFECTS_POINTS           = 0x20000000, // TITLE Mastery Affects Points
     SPELL_ATTR8_UNK30                            = 0x40000000, // TITLE Unknown attribute 30@Attr8
     SPELL_ATTR8_ATTACK_IGNORE_IMMUNE_TO_PC_FLAG  = 0x80000000  // TITLE Can Attack ImmunePC DESCRIPTION Do not check UNIT_FLAG_IMMUNE_TO_PC in IsValidAttackTarget
 };
@@ -2500,152 +2504,152 @@ enum SpellImmunity
 // TARGET_[OBJECT_TYPE]_[REFERENCE_TYPE(skipped for caster)]_[SELECTION_TYPE(skipped for default)]_[additional specifiers(friendly, BACK_LEFT, etc.]
 enum Targets
 {
-    TARGET_UNIT_CASTER                      = 1,
-    TARGET_UNIT_NEARBY_ENEMY                = 2,
-    TARGET_UNIT_NEARBY_PARTY                = 3,
-    TARGET_UNIT_NEARBY_ALLY                 = 4,
-    TARGET_UNIT_PET                         = 5,
-    TARGET_UNIT_TARGET_ENEMY                = 6,
-    TARGET_UNIT_SRC_AREA_ENTRY              = 7,
-    TARGET_UNIT_DEST_AREA_ENTRY             = 8,
-    TARGET_DEST_HOME                        = 9,
-    TARGET_UNIT_SRC_AREA_UNK_11             = 11,
-    TARGET_UNIT_SRC_AREA_ENEMY              = 15,
-    TARGET_UNIT_DEST_AREA_ENEMY             = 16,
-    TARGET_DEST_DB                          = 17,
-    TARGET_DEST_CASTER                      = 18,
-    TARGET_UNIT_CASTER_AREA_PARTY           = 20,
-    TARGET_UNIT_TARGET_ALLY                 = 21,
-    TARGET_SRC_CASTER                       = 22,
-    TARGET_GAMEOBJECT_TARGET                = 23,
-    TARGET_UNIT_CONE_ENEMY_24               = 24,
-    TARGET_UNIT_TARGET_ANY                  = 25,
-    TARGET_GAMEOBJECT_ITEM_TARGET           = 26,
-    TARGET_UNIT_MASTER                      = 27,
-    TARGET_DEST_DYNOBJ_ENEMY                = 28,
-    TARGET_DEST_DYNOBJ_ALLY                 = 29,
-    TARGET_UNIT_SRC_AREA_ALLY               = 30,
-    TARGET_UNIT_DEST_AREA_ALLY              = 31,
-    TARGET_DEST_CASTER_SUMMON               = 32, // front left, doesn't use radius
-    TARGET_UNIT_SRC_AREA_PARTY              = 33,
-    TARGET_UNIT_DEST_AREA_PARTY             = 34,
-    TARGET_UNIT_TARGET_PARTY                = 35,
-    TARGET_DEST_CASTER_UNK_36               = 36,
-    TARGET_UNIT_LASTTARGET_AREA_PARTY       = 37,
-    TARGET_UNIT_NEARBY_ENTRY                = 38,
-    TARGET_DEST_CASTER_FISHING              = 39,
-    TARGET_GAMEOBJECT_NEARBY_ENTRY          = 40,
-    TARGET_DEST_CASTER_FRONT_RIGHT          = 41,
-    TARGET_DEST_CASTER_BACK_RIGHT           = 42,
-    TARGET_DEST_CASTER_BACK_LEFT            = 43,
-    TARGET_DEST_CASTER_FRONT_LEFT           = 44,
-    TARGET_UNIT_TARGET_CHAINHEAL_ALLY       = 45,
-    TARGET_DEST_NEARBY_ENTRY                = 46,
-    TARGET_DEST_CASTER_FRONT                = 47,
-    TARGET_DEST_CASTER_BACK                 = 48,
-    TARGET_DEST_CASTER_RIGHT                = 49,
-    TARGET_DEST_CASTER_LEFT                 = 50,
-    TARGET_GAMEOBJECT_SRC_AREA              = 51,
-    TARGET_GAMEOBJECT_DEST_AREA             = 52,
-    TARGET_DEST_TARGET_ENEMY                = 53,
-    TARGET_UNIT_CONE_ENEMY_54               = 54,
-    TARGET_DEST_CASTER_FRONT_LEAP           = 55, // for a leap spell
-    TARGET_UNIT_CASTER_AREA_RAID            = 56,
-    TARGET_UNIT_TARGET_RAID                 = 57,
-    TARGET_UNIT_NEARBY_RAID                 = 58,
-    TARGET_UNIT_CONE_ALLY                   = 59,
-    TARGET_UNIT_CONE_ENTRY                  = 60,
-    TARGET_UNIT_TARGET_AREA_RAID_CLASS      = 61,
-    TARGET_UNK_62                           = 62,
-    TARGET_DEST_TARGET_ANY                  = 63,
-    TARGET_DEST_TARGET_FRONT                = 64,
-    TARGET_DEST_TARGET_BACK                 = 65,
-    TARGET_DEST_TARGET_RIGHT                = 66,
-    TARGET_DEST_TARGET_LEFT                 = 67,
-    TARGET_DEST_TARGET_FRONT_RIGHT          = 68,
-    TARGET_DEST_TARGET_BACK_RIGHT           = 69,
-    TARGET_DEST_TARGET_BACK_LEFT            = 70,
-    TARGET_DEST_TARGET_FRONT_LEFT           = 71,
-    TARGET_DEST_CASTER_RANDOM               = 72,
-    TARGET_DEST_CASTER_RADIUS               = 73,
-    TARGET_DEST_TARGET_RANDOM               = 74,
-    TARGET_DEST_TARGET_RADIUS               = 75,
-    TARGET_DEST_CHANNEL_TARGET              = 76,
-    TARGET_UNIT_CHANNEL_TARGET              = 77,
-    TARGET_DEST_DEST_FRONT                  = 78,
-    TARGET_DEST_DEST_BACK                   = 79,
-    TARGET_DEST_DEST_RIGHT                  = 80,
-    TARGET_DEST_DEST_LEFT                   = 81,
-    TARGET_DEST_DEST_FRONT_RIGHT            = 82,
-    TARGET_DEST_DEST_BACK_RIGHT             = 83,
-    TARGET_DEST_DEST_BACK_LEFT              = 84,
-    TARGET_DEST_DEST_FRONT_LEFT             = 85,
-    TARGET_DEST_DEST_RANDOM                 = 86,
-    TARGET_DEST_DEST                        = 87,
-    TARGET_DEST_DYNOBJ_NONE                 = 88,
-    TARGET_DEST_TRAJ                        = 89,
-    TARGET_UNIT_TARGET_MINIPET              = 90,
-    TARGET_DEST_DEST_RADIUS                 = 91,
-    TARGET_UNIT_SUMMONER                    = 92,
-    TARGET_CORPSE_SRC_AREA_ENEMY            = 93, // NYI
-    TARGET_UNIT_VEHICLE                     = 94,
-    TARGET_UNIT_TARGET_PASSENGER            = 95,
-    TARGET_UNIT_PASSENGER_0                 = 96,
-    TARGET_UNIT_PASSENGER_1                 = 97,
-    TARGET_UNIT_PASSENGER_2                 = 98,
-    TARGET_UNIT_PASSENGER_3                 = 99,
-    TARGET_UNIT_PASSENGER_4                 = 100,
-    TARGET_UNIT_PASSENGER_5                 = 101,
-    TARGET_UNIT_PASSENGER_6                 = 102,
-    TARGET_UNIT_PASSENGER_7                 = 103,
-    TARGET_UNIT_CONE_ENEMY_104              = 104,
-    TARGET_UNIT_UNK_105                     = 105, // 1 spell
-    TARGET_DEST_CHANNEL_CASTER              = 106,
-    TARGET_UNK_DEST_AREA_UNK_107            = 107, // not enough info - only generic spells avalible
-    TARGET_GAMEOBJECT_CONE_108              = 108,
-    TARGET_GAMEOBJECT_CONE_109              = 109,
-    TARGET_UNIT_CONE_ENTRY_110              = 110,
-    TARGET_UNK_111                          = 111,
-    TARGET_UNK_112                          = 112,
-    TARGET_UNK_113                          = 113,
-    TARGET_UNK_114                          = 114,
-    TARGET_UNK_115                          = 115,
-    TARGET_UNK_116                          = 116,
-    TARGET_UNK_117                          = 117,
-    TARGET_UNIT_TARGET_ALLY_OR_RAID         = 118, // If target is in your party or raid, all party and raid members will be affected
-    TARGET_CORPSE_SRC_AREA_RAID             = 119,
-    TARGET_UNIT_CASTER_AND_SUMMONS          = 120,
-    TARGET_UNK_121                          = 121,
-    TARGET_UNIT_AREA_THREAT_LIST            = 122, // any unit on threat list
-    TARGET_UNIT_AREA_TAP_LIST               = 123,
-    TARGET_UNK_124                          = 124,
-    TARGET_DEST_CASTER_GROUND               = 125,
-    TARGET_UNK_126                          = 126,
-    TARGET_UNK_127                          = 127,
-    TARGET_UNK_128                          = 128,
-    TARGET_UNIT_CONE_ENTRY_129              = 129,
-    TARGET_UNK_130                          = 130,
-    TARGET_DEST_SUMMONER                    = 131,
-    TARGET_DEST_TARGET_ALLY                 = 132,
-    TARGET_UNIT_LINE_CASTER_TO_DEST_ALLY    = 133,
-    TARGET_UNIT_LINE_CASTER_TO_DEST_ENEMY   = 134,
-    TARGET_UNIT_LINE_CASTER_TO_DEST         = 135,
-    TARGET_UNK_136                          = 136,
-    TARGET_UNK_137                          = 137,
-    TARGET_UNK_138                          = 138,
-    TARGET_UNK_139                          = 139,
-    TARGET_UNK_140                          = 140,
-    TARGET_UNK_141                          = 141,
-    TARGET_UNK_142                          = 142,
-    TARGET_UNK_143                          = 143,
-    TARGET_UNK_144                          = 144,
-    TARGET_UNK_145                          = 145,
-    TARGET_UNK_146                          = 146,
-    TARGET_UNK_147                          = 147,
-    TARGET_UNK_148                          = 148,
-    TARGET_UNK_149                          = 149,
-    TARGET_UNIT_OWN_CRITTER                 = 150, // own battle pet from UNIT_FIELD_CRITTER
-    TARGET_UNK_151                          = 151,
+    TARGET_UNIT_CASTER                          = 1,
+    TARGET_UNIT_NEARBY_ENEMY                    = 2,
+    TARGET_UNIT_NEARBY_PARTY                    = 3,
+    TARGET_UNIT_NEARBY_ALLY                     = 4,
+    TARGET_UNIT_PET                             = 5,
+    TARGET_UNIT_TARGET_ENEMY                    = 6,
+    TARGET_UNIT_SRC_AREA_ENTRY                  = 7,
+    TARGET_UNIT_DEST_AREA_ENTRY                 = 8,
+    TARGET_DEST_HOME                            = 9,
+    TARGET_UNIT_SRC_AREA_UNK_11                 = 11,
+    TARGET_UNIT_SRC_AREA_ENEMY                  = 15,
+    TARGET_UNIT_DEST_AREA_ENEMY                 = 16,
+    TARGET_DEST_DB                              = 17,
+    TARGET_DEST_CASTER                          = 18,
+    TARGET_UNIT_CASTER_AREA_PARTY               = 20,
+    TARGET_UNIT_TARGET_ALLY                     = 21,
+    TARGET_SRC_CASTER                           = 22,
+    TARGET_GAMEOBJECT_TARGET                    = 23,
+    TARGET_UNIT_CONE_ENEMY_24                   = 24,
+    TARGET_UNIT_TARGET_ANY                      = 25,
+    TARGET_GAMEOBJECT_ITEM_TARGET               = 26,
+    TARGET_UNIT_MASTER                          = 27,
+    TARGET_DEST_DYNOBJ_ENEMY                    = 28,
+    TARGET_DEST_DYNOBJ_ALLY                     = 29,
+    TARGET_UNIT_SRC_AREA_ALLY                   = 30,
+    TARGET_UNIT_DEST_AREA_ALLY                  = 31,
+    TARGET_DEST_CASTER_SUMMON                   = 32, // front left, doesn't use radius
+    TARGET_UNIT_SRC_AREA_PARTY                  = 33,
+    TARGET_UNIT_DEST_AREA_PARTY                 = 34,
+    TARGET_UNIT_TARGET_PARTY                    = 35,
+    TARGET_DEST_CASTER_UNK_36                   = 36,
+    TARGET_UNIT_LASTTARGET_AREA_PARTY           = 37,
+    TARGET_UNIT_NEARBY_ENTRY                    = 38,
+    TARGET_DEST_CASTER_FISHING                  = 39,
+    TARGET_GAMEOBJECT_NEARBY_ENTRY              = 40,
+    TARGET_DEST_CASTER_FRONT_RIGHT              = 41,
+    TARGET_DEST_CASTER_BACK_RIGHT               = 42,
+    TARGET_DEST_CASTER_BACK_LEFT                = 43,
+    TARGET_DEST_CASTER_FRONT_LEFT               = 44,
+    TARGET_UNIT_TARGET_CHAINHEAL_ALLY           = 45,
+    TARGET_DEST_NEARBY_ENTRY                    = 46,
+    TARGET_DEST_CASTER_FRONT                    = 47,
+    TARGET_DEST_CASTER_BACK                     = 48,
+    TARGET_DEST_CASTER_RIGHT                    = 49,
+    TARGET_DEST_CASTER_LEFT                     = 50,
+    TARGET_GAMEOBJECT_SRC_AREA                  = 51,
+    TARGET_GAMEOBJECT_DEST_AREA                 = 52,
+    TARGET_DEST_TARGET_ENEMY                    = 53,
+    TARGET_UNIT_CONE_180_DEG_ENEMY              = 54, // Defaults to 180 if ConeDegrees is not set
+    TARGET_DEST_CASTER_FRONT_LEAP               = 55, // for a leap spell
+    TARGET_UNIT_CASTER_AREA_RAID                = 56,
+    TARGET_UNIT_TARGET_RAID                     = 57,
+    TARGET_UNIT_NEARBY_RAID                     = 58,
+    TARGET_UNIT_CONE_ALLY                       = 59,
+    TARGET_UNIT_CONE_ENTRY                      = 60,
+    TARGET_UNIT_TARGET_AREA_RAID_CLASS          = 61,
+    TARGET_DEST_CASTER_GROUND                   = 62,
+    TARGET_DEST_TARGET_ANY                      = 63,
+    TARGET_DEST_TARGET_FRONT                    = 64,
+    TARGET_DEST_TARGET_BACK                     = 65,
+    TARGET_DEST_TARGET_RIGHT                    = 66,
+    TARGET_DEST_TARGET_LEFT                     = 67,
+    TARGET_DEST_TARGET_FRONT_RIGHT              = 68,
+    TARGET_DEST_TARGET_BACK_RIGHT               = 69,
+    TARGET_DEST_TARGET_BACK_LEFT                = 70,
+    TARGET_DEST_TARGET_FRONT_LEFT               = 71,
+    TARGET_DEST_CASTER_RANDOM                   = 72,
+    TARGET_DEST_CASTER_RADIUS                   = 73,
+    TARGET_DEST_TARGET_RANDOM                   = 74,
+    TARGET_DEST_TARGET_RADIUS                   = 75,
+    TARGET_DEST_CHANNEL_TARGET                  = 76,
+    TARGET_UNIT_CHANNEL_TARGET                  = 77,
+    TARGET_DEST_DEST_FRONT                      = 78,
+    TARGET_DEST_DEST_BACK                       = 79,
+    TARGET_DEST_DEST_RIGHT                      = 80,
+    TARGET_DEST_DEST_LEFT                       = 81,
+    TARGET_DEST_DEST_FRONT_RIGHT                = 82,
+    TARGET_DEST_DEST_BACK_RIGHT                 = 83,
+    TARGET_DEST_DEST_BACK_LEFT                  = 84,
+    TARGET_DEST_DEST_FRONT_LEFT                 = 85,
+    TARGET_DEST_DEST_RANDOM                     = 86,
+    TARGET_DEST_DEST                            = 87,
+    TARGET_DEST_DYNOBJ_NONE                     = 88,
+    TARGET_DEST_TRAJ                            = 89,
+    TARGET_UNIT_TARGET_MINIPET                  = 90,
+    TARGET_DEST_DEST_RADIUS                     = 91,
+    TARGET_UNIT_SUMMONER                        = 92,
+    TARGET_CORPSE_SRC_AREA_ENEMY                = 93, // NYI
+    TARGET_UNIT_VEHICLE                         = 94,
+    TARGET_UNIT_TARGET_PASSENGER                = 95,
+    TARGET_UNIT_PASSENGER_0                     = 96,
+    TARGET_UNIT_PASSENGER_1                     = 97,
+    TARGET_UNIT_PASSENGER_2                     = 98,
+    TARGET_UNIT_PASSENGER_3                     = 99,
+    TARGET_UNIT_PASSENGER_4                     = 100,
+    TARGET_UNIT_PASSENGER_5                     = 101,
+    TARGET_UNIT_PASSENGER_6                     = 102,
+    TARGET_UNIT_PASSENGER_7                     = 103,
+    TARGET_UNIT_CONE_CASTER_TO_DEST_ENEMY       = 104,
+    TARGET_UNIT_CASTER_AND_PASSENGERS           = 105,
+    TARGET_DEST_CHANNEL_CASTER                  = 106,
+    TARGET_DEST_NEARBY_ENTRY_2                  = 107,
+    TARGET_GAMEOBJECT_CONE_CASTER_TO_DEST_ENEMY = 108,
+    TARGET_GAMEOBJECT_CONE_CASTER_TO_DEST_ALLY  = 109,
+    TARGET_UNIT_CONE_CASTER_TO_DEST_ENTRY       = 110,
+    TARGET_UNK_111                              = 111, // NYI
+    TARGET_UNK_112                              = 112, // NYI
+    TARGET_UNK_113                              = 113, // NYI
+    TARGET_UNK_114                              = 114, // NYI
+    TARGET_UNIT_SRC_AREA_FURTHEST_ENEMY         = 115,
+    TARGET_UNIT_AND_DEST_LAST_ENEMY             = 116,
+    TARGET_UNK_117                              = 117,
+    TARGET_UNIT_TARGET_ALLY_OR_RAID             = 118, // If target is in your party or raid, all party and raid members will be affected
+    TARGET_CORPSE_SRC_AREA_RAID                 = 119,
+    TARGET_UNIT_CASTER_AND_SUMMONS              = 120,
+    TARGET_CORPSE_TARGET_ALLY                   = 121,
+    TARGET_UNIT_AREA_THREAT_LIST                = 122, // any unit on threat list
+    TARGET_UNIT_AREA_TAP_LIST                   = 123,
+    TARGET_UNIT_TARGET_TAP_LIST                 = 124,
+    TARGET_DEST_CASTER_GROUND_2                 = 125,
+    TARGET_UNIT_CASTER_AREA_ENEMY_CLUMP         = 126, // NYI
+    TARGET_DEST_CASTER_ENEMY_CLUMP_CENTROID     = 127, // NYI
+    TARGET_UNIT_RECT_CASTER_ALLY                = 128,
+    TARGET_UNIT_RECT_CASTER_ENEMY               = 129,
+    TARGET_UNIT_RECT_CASTER                     = 130,
+    TARGET_DEST_SUMMONER                        = 131,
+    TARGET_DEST_TARGET_ALLY                     = 132,
+    TARGET_UNIT_LINE_CASTER_TO_DEST_ALLY        = 133,
+    TARGET_UNIT_LINE_CASTER_TO_DEST_ENEMY       = 134,
+    TARGET_UNIT_LINE_CASTER_TO_DEST             = 135,
+    TARGET_UNIT_CONE_CASTER_TO_DEST_ALLY        = 136,
+    TARGET_DEST_CASTER_MOVEMENT_DIRECTION       = 137,
+    TARGET_DEST_DEST_GROUND                     = 138,
+    TARGET_UNK_139                              = 139,
+    TARGET_DEST_CASTER_CLUMP_CENTROID           = 140, // NYI
+    TARGET_UNK_141                              = 141,
+    TARGET_UNK_142                              = 142,
+    TARGET_UNK_143                              = 143,
+    TARGET_UNK_144                              = 144,
+    TARGET_UNK_145                              = 145,
+    TARGET_UNK_146                              = 146,
+    TARGET_UNK_147                              = 147,
+    TARGET_UNK_148                              = 148,
+    TARGET_UNK_149                              = 149,
+    TARGET_UNIT_OWN_CRITTER                     = 150, // own battle pet from UNIT_FIELD_CRITTER
+    TARGET_UNK_151                              = 151,
     TOTAL_SPELL_TARGETS
 };
 
@@ -2805,7 +2809,7 @@ enum GOState : uint8
 {
     GO_STATE_ACTIVE             = 0,                        // show in world as used and not reset (closed door open)
     GO_STATE_READY              = 1,                        // show in world as ready (closed door close)
-    GO_STATE_ACTIVE_ALTERNATIVE = 2,                        // show in world as used in alt way and not reset (closed door open by cannon fire)
+    GO_STATE_DESTROYED          = 2,                        // show the object in-game as already used and not yet reset (e.g. door opened by a cannon blast)
     GO_STATE_TRANSPORT_ACTIVE   = 24,
     GO_STATE_TRANSPORT_STOPPED  = 25
 };
@@ -5851,6 +5855,23 @@ enum class SummonTitle : int32
     ServantOfNZoth      = 44
 };
 
+enum SummonSlot : int32
+{
+    SUMMON_SLOT_ANY_TOTEM           = -1,
+    SUMMON_SLOT_PET                 = 0,
+    SUMMON_SLOT_TOTEM               = 1,
+    SUMMON_SLOT_TOTEM_2             = 2,
+    SUMMON_SLOT_TOTEM_3             = 3,
+    SUMMON_SLOT_TOTEM_4             = 4,
+    SUMMON_SLOT_MINIPET             = 5,
+    SUMMON_SLOT_QUEST               = 6,
+
+    MAX_SUMMON_SLOT
+};
+
+#define MAX_TOTEM_SLOT      5
+#define MAX_GAMEOBJECT_SLOT 4
+
 enum EventId
 {
     EVENT_CHARGE            = 1003,
@@ -5984,6 +6005,13 @@ enum CharacterUndeleteResult
     CHARACTER_UNDELETE_RESULT_ERROR_DISABLED                   = 3,
     CHARACTER_UNDELETE_RESULT_ERROR_NAME_TAKEN_BY_THIS_ACCOUNT = 4,
     CHARACTER_UNDELETE_RESULT_ERROR_UNKNOWN                    = 5
+};
+
+enum ComplaintStatus : uint8
+{
+    COMPLAINT_DISABLED                      = 0,
+    COMPLAINT_ENABLED_WITHOUT_AUTO_IGNORE   = 1,
+    COMPLAINT_ENABLED_WITH_AUTO_IGNORE      = 2
 };
 
 /// Ban function modes

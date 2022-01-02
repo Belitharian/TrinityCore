@@ -29,7 +29,7 @@
 
 TempSummon::TempSummon(SummonPropertiesEntry const* properties, WorldObject* owner, bool isWorldObject) :
 Creature(isWorldObject), m_Properties(properties), m_type(TEMPSUMMON_MANUAL_DESPAWN),
-m_timer(0), m_lifetime(0)
+m_timer(0), m_lifetime(0), m_canFollowOwner(true)
 {
     if (owner)
         m_summonerGUID = owner->GetGUID();
@@ -187,11 +187,8 @@ void TempSummon::InitStats(uint32 duration)
     Unit* owner = GetSummonerUnit();
 
     if (owner && IsTrigger() && m_spells[0])
-    {
-        SetLevel(owner->getLevel());
         if (owner->GetTypeId() == TYPEID_PLAYER)
             m_ControlledByPlayer = true;
-    }
 
     if (!m_Properties)
         return;
@@ -209,15 +206,20 @@ void TempSummon::InitStats(uint32 duration)
             }
             owner->m_SummonSlot[slot] = GetGUID();
         }
+
+        if (!m_Properties->GetFlags().HasFlag(SummonPropertiesFlags::UseCreatureLevel))
+            SetLevel(owner->GetLevel());
     }
 
     uint32 faction = m_Properties->Faction;
-    if (m_Properties->GetFlags().HasFlag(SummonPropertiesFlags::UseSummonerFaction)) // TODO: Determine priority between faction and flag
-       if (owner)
-           faction = owner->GetFaction();
+    if (owner && m_Properties->GetFlags().HasFlag(SummonPropertiesFlags::UseSummonerFaction)) // TODO: Determine priority between faction and flag
+        faction = owner->GetFaction();
 
     if (faction)
-       SetFaction(faction);
+        SetFaction(faction);
+
+    if (m_Properties->GetFlags().HasFlag(SummonPropertiesFlags::SummonFromBattlePetJournal))
+        RemoveNpcFlag(UNIT_NPC_FLAG_WILD_BATTLE_PET);
 }
 
 void TempSummon::InitSummon()
@@ -397,7 +399,7 @@ void Guardian::InitStats(uint32 duration)
 {
     Minion::InitStats(duration);
 
-    InitStatsForLevel(GetOwner()->getLevel());
+    InitStatsForLevel(GetOwner()->GetLevel());
 
     if (GetOwner()->GetTypeId() == TYPEID_PLAYER && HasUnitTypeMask(UNIT_MASK_CONTROLABLE_GUARDIAN))
         m_charmInfo->InitCharmCreateSpells();
@@ -434,7 +436,6 @@ Puppet::Puppet(SummonPropertiesEntry const* properties, Unit* owner)
 void Puppet::InitStats(uint32 duration)
 {
     Minion::InitStats(duration);
-    SetLevel(GetOwner()->getLevel());
     SetReactState(REACT_PASSIVE);
 }
 
@@ -457,13 +458,4 @@ void Puppet::Update(uint32 time)
             /// @todo why long distance .die does not remove it
         }
     }
-}
-
-void Puppet::RemoveFromWorld()
-{
-    if (!IsInWorld())
-        return;
-
-    RemoveCharmedBy(nullptr);
-    Minion::RemoveFromWorld();
 }

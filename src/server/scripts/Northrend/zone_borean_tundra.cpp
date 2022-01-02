@@ -15,23 +15,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Borean_Tundra
-SD%Complete: 100
-SDCategory: Borean Tundra
-EndScriptData */
-
-/* ContentData
-npc_iruk
-npc_corastrasza
-npc_sinkhole_kill_credit
-npc_khunok_the_behemoth
-npc_nerubar_victim
-npc_nesingwary_trapper
-npc_lurgglbr
-EndContentData */
-
 #include "ScriptMgr.h"
+#include "CreatureAIImpl.h"
 #include "GameObject.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
@@ -47,136 +32,6 @@ EndContentData */
 #include "SpellScript.h"
 #include "TemporarySummon.h"
 #include "WorldSession.h"
-
-/*######
-## npc_sinkhole_kill_credit
-######*/
-
-enum Sinkhole
-{
-    GO_EXPLOSIVES_CART            = 188160,
-    NPC_SCOURGED_BURROWER         = 26250,
-    QUEST_PLUG_THE_SINKHOLES      = 11897,
-    SPELL_SET_CART                = 46797,
-    SPELL_EXPLODE_CART            = 46799,
-    SPELL_SUMMON_CART             = 46798,
-    SPELL_SUMMON_WORM             = 46800
-};
-
-class npc_sinkhole_kill_credit : public CreatureScript
-{
-public:
-    npc_sinkhole_kill_credit() : CreatureScript("npc_sinkhole_kill_credit") { }
-
-    struct npc_sinkhole_kill_creditAI : public ScriptedAI
-    {
-        npc_sinkhole_kill_creditAI(Creature* creature) : ScriptedAI(creature)
-        {
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            phaseTimer = 500;
-            phase = 0;
-            casterGuid.Clear();
-        }
-
-        uint32 phaseTimer;
-        uint8  phase;
-        ObjectGuid casterGuid;
-
-        void Reset() override
-        {
-            Initialize();
-        }
-
-        void SpellHit(Unit* caster, SpellInfo const* spell) override
-        {
-            if (phase || spell->Id != SPELL_SET_CART)
-                return;
-
-            Player* player = caster->ToPlayer();
-            if (player && player->GetQuestStatus(QUEST_PLUG_THE_SINKHOLES) == QUEST_STATUS_INCOMPLETE)
-            {
-                phase = 1;
-                casterGuid = caster->GetGUID();
-            }
-        }
-
-        void JustEngagedWith(Unit* /*who*/) override { }
-
-        void UpdateAI(uint32 diff) override
-        {
-            if (!phase)
-                return;
-
-            if (phaseTimer <= diff)
-            {
-                switch (phase)
-                {
-                    case 1:
-                        DoCast(me, SPELL_EXPLODE_CART, true);
-                        DoCast(me, SPELL_SUMMON_CART, true);
-                        if (GameObject* cart = me->FindNearestGameObject(GO_EXPLOSIVES_CART, 3.0f))
-                            cart->SetFaction(FACTION_MONSTER);
-                        phaseTimer = 3000;
-                        phase = 2;
-                        break;
-                    case 2:
-                        if (GameObject* cart = me->FindNearestGameObject(GO_EXPLOSIVES_CART, 3.0f))
-                            cart->UseDoorOrButton();
-                        DoCast(me, SPELL_EXPLODE_CART, true);
-                        phaseTimer = 3000;
-                        phase = 3;
-                        break;
-                    case 3:
-                        DoCast(me, SPELL_EXPLODE_CART, true);
-                        phaseTimer = 2000;
-                        phase = 5; // @fixme: phase 4 is missing...
-                        break;
-                    case 5:
-                        DoCast(me, SPELL_SUMMON_WORM, true);
-                        if (Unit* worm = me->FindNearestCreature(NPC_SCOURGED_BURROWER, 3.0f))
-                        {
-                            worm->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
-                            worm->HandleEmoteCommand(EMOTE_ONESHOT_EMERGE);
-                        }
-                        phaseTimer = 1000;
-                        phase = 6;
-                        break;
-                    case 6:
-                        DoCast(me, SPELL_EXPLODE_CART, true);
-                        if (Unit* worm = me->FindNearestCreature(NPC_SCOURGED_BURROWER, 3.0f))
-                        {
-                            Unit::Kill(me, worm);
-                            worm->RemoveDynamicFlag(UNIT_DYNFLAG_LOOTABLE);
-                        }
-                        phaseTimer = 2000;
-                        phase = 7;
-                        break;
-                    case 7:
-                        DoCast(me, SPELL_EXPLODE_CART, true);
-                        if (Player* caster = ObjectAccessor::GetPlayer(*me, casterGuid))
-                            caster->KilledMonster(me->GetCreatureTemplate(), me->GetGUID());
-                        phaseTimer = 5000;
-                        phase = 8;
-                        break;
-                    case 8:
-                        EnterEvadeMode();
-                        break;
-                }
-            } else phaseTimer -= diff;
-
-        }
-
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_sinkhole_kill_creditAI(creature);
-    }
-};
 
 /*######
 ## npc_khunok_the_behemoth
@@ -298,59 +153,6 @@ public:
 };
 
 /*######
-## npc_iruk
-######*/
-
-enum Iruk
-{
-    GOSSIP_MENU_ID_NPC_IRUK        = 9280,
-    GOSSIP_OPTION_SEARCH_CORPSE    = 0,
-    NPC_TEXT_THIS_YOUNG_TUSKARR    = 12585,
-
-    QUEST_SPIRITS_WATCH_OVER_US    = 11961,
-
-    SPELL_CREATE_TOTEM_OF_ISSLIRUK = 46816
-};
-
-class npc_iruk : public CreatureScript
-{
-public:
-    npc_iruk() : CreatureScript("npc_iruk") { }
-
-    struct npc_irukAI : public ScriptedAI
-    {
-        npc_irukAI(Creature* creature) : ScriptedAI(creature) { }
-
-        bool GossipHello(Player* player) override
-        {
-            if (player->GetQuestStatus(QUEST_SPIRITS_WATCH_OVER_US) == QUEST_STATUS_INCOMPLETE)
-                AddGossipItemFor(player, GOSSIP_MENU_ID_NPC_IRUK, GOSSIP_OPTION_SEARCH_CORPSE, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
-
-            SendGossipMenuFor(player, NPC_TEXT_THIS_YOUNG_TUSKARR, me->GetGUID());
-            return true;
-        }
-
-        bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
-        {
-            uint32 const action = player->PlayerTalkClass->GetGossipOptionAction(gossipListId);
-            ClearGossipMenuFor(player);
-
-            if (action == GOSSIP_ACTION_INFO_DEF + 1)
-            {
-                player->CastSpell(player, SPELL_CREATE_TOTEM_OF_ISSLIRUK, true);
-                CloseGossipMenuFor(player);
-            }
-            return true;
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_irukAI(creature);
-    }
-};
-
-/*######
 ## npc_nerubar_victim
 ######*/
 
@@ -410,12 +212,10 @@ public:
     }
 };
 
-/*######
-## npc_nesingwary_trapper
-######*/
-
 enum NesingwaryTrapper
 {
+    NPC_NESINGWARY_TRAPPER = 25835,
+
     GO_HIGH_QUALITY_FUR = 187983,
 
     GO_CARIBOU_TRAP_1   = 187982,
@@ -443,6 +243,42 @@ const uint32 CaribouTraps[CaribouTrapsNum] =
     GO_CARIBOU_TRAP_1, GO_CARIBOU_TRAP_2, GO_CARIBOU_TRAP_3, GO_CARIBOU_TRAP_4, GO_CARIBOU_TRAP_5,
     GO_CARIBOU_TRAP_6, GO_CARIBOU_TRAP_7, GO_CARIBOU_TRAP_8, GO_CARIBOU_TRAP_9, GO_CARIBOU_TRAP_10,
     GO_CARIBOU_TRAP_11, GO_CARIBOU_TRAP_12, GO_CARIBOU_TRAP_13, GO_CARIBOU_TRAP_14, GO_CARIBOU_TRAP_15,
+};
+
+class spell_q11865_place_fake_fur : public SpellScript
+{
+    PrepareSpellScript(spell_q11865_place_fake_fur);
+
+    bool Load() override
+    {
+        return GetCaster()->GetTypeId() == TYPEID_PLAYER;
+    }
+
+    void ActivateGameObject(SpellEffIndex effIndex)
+    {
+        PreventHitDefaultEffect(effIndex);
+        GameObject* go = GetHitGObj();
+        Player* player = GetCaster()->ToPlayer();
+
+        if (go->FindNearestCreature(NPC_NESINGWARY_TRAPPER, 10.0f, true) || go->FindNearestCreature(NPC_NESINGWARY_TRAPPER, 10.0f, false) || go->FindNearestGameObject(GO_HIGH_QUALITY_FUR, 2.0f))
+            return;
+
+        float x, y, z;
+        go->GetClosePoint(x, y, z, go->GetCombatReach() / 3, 7.0f);
+
+        go->SummonGameObject(GO_HIGH_QUALITY_FUR, go->GetPosition(), QuaternionData::fromEulerAnglesZYX(go->GetOrientation(), 0.0f, 0.0f), 20);
+        if (TempSummon* summon = player->SummonCreature(NPC_NESINGWARY_TRAPPER, x, y, z, go->GetOrientation(), TEMPSUMMON_DEAD_DESPAWN, 1000))
+        {
+            summon->SetVisible(false);
+            summon->SetReactState(REACT_PASSIVE);
+            summon->SetImmuneToPC(true);
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_q11865_place_fake_fur::ActivateGameObject, EFFECT_0, SPELL_EFFECT_ACTIVATE_OBJECT);
+    }
 };
 
 class npc_nesingwary_trapper : public CreatureScript
@@ -732,12 +568,11 @@ public:
             Creature* owner = GetOwner()->ToCreature();
             owner->RemoveAllAurasExceptType(SPELL_AURA_DUMMY);
             owner->CombatStop(true);
-            owner->GetThreatManager().ClearAllThreat();
             owner->GetMotionMaster()->Clear();
             owner->GetMotionMaster()->MoveFollow(GetCaster(), 4.0f, 0.0f);
             owner->CastSpell(owner, SPELL_SUBDUED, true);
             GetCaster()->CastSpell(GetCaster(), SPELL_DRAKE_HATCHLING_SUBDUED, true);
-            owner->SetFaction(35);
+            owner->SetFaction(FACTION_FRIENDLY);
             owner->SetImmuneToAll(true);
             owner->DespawnOrUnsummon(3min);
         }
@@ -918,7 +753,7 @@ public:
                         if (talbot)
                         {
                             talbot->UpdateEntry(NPC_PRINCE_VALANAR);
-                            talbot->SetFaction(14);
+                            talbot->SetFaction(FACTION_MONSTER);
                             talbot->AddUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
                             talbot->SetReactState(REACT_PASSIVE);
                         }
@@ -2024,119 +1859,6 @@ public:
     }
 };
 
-/*******************************************************
- * npc_warmage_coldarra
- *******************************************************/
-
-enum Spells
-{
-    SPELL_TRANSITUS_SHIELD_BEAM = 48310
-};
-
-enum NPCs
-{
-    NPC_TRANSITUS_SHIELD_DUMMY   = 27306,
-    NPC_WARMAGE_HOLLISTER        = 27906,
-    NPC_WARMAGE_CALANDRA         = 27173,
-    NPC_WARMAGE_WATKINS          = 27904
-};
-
-class npc_warmage_coldarra : public CreatureScript
-{
-public:
-    npc_warmage_coldarra() : CreatureScript("npc_warmage_coldarra") { }
-
-    struct npc_warmage_coldarraAI : public ScriptedAI
-    {
-        npc_warmage_coldarraAI(Creature* creature) : ScriptedAI(creature)
-        {
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            m_uiTimer = 0;
-        }
-
-        uint32 m_uiTimer;                 //Timer until recast
-
-        void Reset() override
-        {
-            Initialize();
-        }
-
-        void JustEngagedWith(Unit* /*who*/) override { }
-
-        void AttackStart(Unit* /*who*/) override { }
-
-        void UpdateAI(uint32 uiDiff) override
-        {
-            if (m_uiTimer <= uiDiff)
-            {
-                std::list<Creature*> orbList;
-                GetCreatureListWithEntryInGrid(orbList, me, NPC_TRANSITUS_SHIELD_DUMMY, 32.0f);
-
-                switch (me->GetEntry())
-                {
-                    case NPC_WARMAGE_HOLLISTER:
-                    {
-                        if (!orbList.empty())
-                        {
-                            for (std::list<Creature*>::const_iterator itr = orbList.begin(); itr != orbList.end(); ++itr)
-                            {
-                                if (Creature* pOrb = *itr)
-                                    if (pOrb->GetPositionY() > 6680)
-                                        DoCast(pOrb, SPELL_TRANSITUS_SHIELD_BEAM);
-                            }
-                        }
-                        m_uiTimer = urand(90000, 120000);
-                    }
-                        break;
-                    case NPC_WARMAGE_CALANDRA:
-                    {
-                        if (!orbList.empty())
-                        {
-                            for (std::list<Creature*>::const_iterator itr = orbList.begin(); itr != orbList.end(); ++itr)
-                            {
-                                if (Creature* pOrb = *itr)
-                                    if ((pOrb->GetPositionY() < 6680) && (pOrb->GetPositionY() > 6630))
-                                        DoCast(pOrb, SPELL_TRANSITUS_SHIELD_BEAM);
-                            }
-                        }
-                        m_uiTimer = urand(90000, 120000);
-                    }
-                        break;
-                    case NPC_WARMAGE_WATKINS:
-                    {
-                        if (!orbList.empty())
-                        {
-                            for (std::list<Creature*>::const_iterator itr = orbList.begin(); itr != orbList.end(); ++itr)
-                            {
-                                if (Creature* pOrb = *itr)
-                                    if (pOrb->GetPositionY() < 6630)
-                                        DoCast(pOrb, SPELL_TRANSITUS_SHIELD_BEAM);
-                            }
-                        }
-                        m_uiTimer = urand(90000, 120000);
-                    }
-                        break;
-                }
-            }
-            else m_uiTimer -= uiDiff;
-
-            ScriptedAI::UpdateAI(uiDiff);
-
-            if (!UpdateVictim())
-                return;
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_warmage_coldarraAI(creature);
-    }
-};
-
 /*######
 ## npc_hidden_cultist
 ######*/
@@ -2224,7 +1946,7 @@ public:
 
         void AttackPlayer()
         {
-            me->SetFaction(14);
+            me->SetFaction(FACTION_MONSTER);
             if (Player* player = ObjectAccessor::GetPlayer(*me, uiPlayerGUID))
                 AttackStart(player);
         }
@@ -2523,13 +2245,52 @@ public:
     }
 };
 
+// 45668 - Ultra-Advanced Proto-Typical Shortening Blaster
+enum ShorteningBlaster
+{
+    SPELL_SHORTENING_BLASTER_BIGGER1    = 45674,
+    SPELL_SHORTENING_BLASTER_SHRUNK1    = 45675,
+    SPELL_SHORTENING_BLASTER_YELLOW1    = 45678,
+    SPELL_SHORTENING_BLASTER_GHOST1     = 45682,
+    SPELL_SHORTENING_BLASTER_POLYMORPH1 = 45684,
+
+    SPELL_SHORTENING_BLASTER_BIGGER2    = 45673,
+    SPELL_SHORTENING_BLASTER_SHRUNK2    = 45672,
+    SPELL_SHORTENING_BLASTER_YELLOW2    = 45677,
+    SPELL_SHORTENING_BLASTER_GHOST2     = 45682,
+    SPELL_SHORTENING_BLASTER_POLYMORPH2 = 45683
+};
+
+class spell_q11653_shortening_blaster : public SpellScript
+{
+    PrepareSpellScript(spell_q11653_shortening_blaster);
+
+    void HandleScript(SpellEffIndex /* effIndex */)
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetHitUnit();
+
+        uint32 spellId = RAND(SPELL_SHORTENING_BLASTER_BIGGER1, SPELL_SHORTENING_BLASTER_SHRUNK1, SPELL_SHORTENING_BLASTER_YELLOW1,
+            SPELL_SHORTENING_BLASTER_GHOST1, SPELL_SHORTENING_BLASTER_POLYMORPH1);
+        uint32 spellId2 = RAND(SPELL_SHORTENING_BLASTER_BIGGER2, SPELL_SHORTENING_BLASTER_SHRUNK2, SPELL_SHORTENING_BLASTER_YELLOW2,
+            SPELL_SHORTENING_BLASTER_GHOST2, SPELL_SHORTENING_BLASTER_POLYMORPH2);
+
+        caster->CastSpell(caster, spellId, true);
+        target->CastSpell(target, spellId2, true);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_q11653_shortening_blaster::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
 void AddSC_borean_tundra()
 {
-    new npc_sinkhole_kill_credit();
     new npc_khunok_the_behemoth();
     new npc_corastrasza();
-    new npc_iruk();
     new npc_nerubar_victim();
+    RegisterSpellScript(spell_q11865_place_fake_fur);
     new npc_nesingwary_trapper();
     new npc_lurgglbr();
     new spell_red_dragonblood();
@@ -2544,10 +2305,10 @@ void AddSC_borean_tundra()
     new npc_bonker_togglevolt();
     new npc_trapped_mammoth_calf();
     new npc_valiance_keep_cannoneer();
-    new npc_warmage_coldarra();
     new npc_hidden_cultist();
     new spell_windsoul_totem_aura();
     new spell_q11719_bloodspore_ruination_45997();
     new npc_bloodmage_laurith();
     new npc_orabus_the_helmsman_ship_exit_pos();
+    RegisterSpellScript(spell_q11653_shortening_blaster);
 }

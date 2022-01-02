@@ -17,7 +17,6 @@
 
 #include "Common.h"
 #include "CellImpl.h"
-#include "Config.h"
 #include "DB2Stores.h"
 #include "DynamicObject.h"
 #include "GridNotifiersImpl.h"
@@ -238,7 +237,7 @@ void AuraApplication::BuildUpdatePacket(WorldPackets::Spells::AuraInfo& auraInfo
     auraData.SpellID = aura->GetId();
     auraData.Visual = aura->GetSpellVisual();
     auraData.Flags = GetFlags();
-    if (aura->GetMaxDuration() > 0 && !aura->GetSpellInfo()->HasAttribute(SPELL_ATTR5_HIDE_DURATION))
+    if (aura->GetType() != DYNOBJ_AURA_TYPE && aura->GetMaxDuration() > 0 && !aura->GetSpellInfo()->HasAttribute(SPELL_ATTR5_HIDE_DURATION))
         auraData.Flags |= AFLAG_DURATION;
 
     auraData.ActiveFlags = GetEffectMask();
@@ -451,7 +450,7 @@ m_spellInfo(createInfo._spellInfo), m_castDifficulty(createInfo._castDifficulty)
 m_castItemGuid(createInfo.CastItemGUID), m_castItemId(createInfo.CastItemId),
 m_castItemLevel(createInfo.CastItemLevel), m_spellVisual({ createInfo.Caster ? createInfo.Caster->GetCastSpellXSpellVisualId(createInfo._spellInfo) : createInfo._spellInfo->GetSpellXSpellVisualId(), 0 }),
 m_applyTime(GameTime::GetGameTime()), m_owner(createInfo._owner), m_timeCla(0), m_updateTargetMapInterval(0),
-m_casterLevel(createInfo.Caster ? createInfo.Caster->getLevel() : m_spellInfo->SpellLevel), m_procCharges(0), m_stackAmount(1),
+m_casterLevel(createInfo.Caster ? createInfo.Caster->GetLevel() : m_spellInfo->SpellLevel), m_procCharges(0), m_stackAmount(1),
 m_isRemoved(false), m_isSingleTarget(false), m_isUsingCharges(false), m_dropEvent(nullptr),
 m_procCooldown(std::chrono::steady_clock::time_point::min()),
 m_lastProcAttemptTime(std::chrono::steady_clock::now() - Seconds(10)), m_lastProcSuccessTime(std::chrono::steady_clock::now() - Seconds(120))
@@ -558,8 +557,8 @@ void Aura::_UnapplyForTarget(Unit* target, Unit* caster, AuraApplication* auraAp
     /// @todo Figure out why this happens
     if (itr == m_applications.end())
     {
-        TC_LOG_ERROR("spells", "Aura::_UnapplyForTarget, target: %s, caster:%s, spell:%u was not found in owners application map!",
-            target->GetGUID().ToString().c_str(), caster ? caster->GetGUID().ToString().c_str() : "Empty", auraApp->GetBase()->GetSpellInfo()->Id);
+        TC_LOG_ERROR("spells", "Aura::_UnapplyForTarget, target: %s, caster: %s, spell:%u was not found in owners application map!",
+        target->GetGUID().ToString().c_str(), caster ? caster->GetGUID().ToString().c_str() : "Empty", auraApp->GetBase()->GetSpellInfo()->Id);
         ABORT();
     }
 
@@ -654,30 +653,25 @@ void Aura::UpdateTargetMap(Unit* caster, bool apply)
         if (addUnit && !itr->first->IsHighestExclusiveAura(this, true))
             addUnit = false;
 
+        // Dynobj auras don't hit flying targets
+        if (GetType() == DYNOBJ_AURA_TYPE && itr->first->IsInFlight())
+            addUnit = false;
+
+        // Do not apply aura if it cannot stack with existing auras
         if (addUnit)
         {
-            // persistent area aura does not hit flying targets
-            if (GetType() == DYNOBJ_AURA_TYPE)
+            // Allow to remove by stack when aura is going to be applied on owner
+            if (itr->first != GetOwner())
             {
-                if (itr->first->IsInFlight())
-                    addUnit = false;
-            }
-            // unit auras can not stack with each other
-            else // (GetType() == UNIT_AURA_TYPE)
-            {
-                // Allow to remove by stack when aura is going to be applied on owner
-                if (itr->first != GetOwner())
+                // check if not stacking aura already on target
+                // this one prevents unwanted usefull buff loss because of stacking and prevents overriding auras periodicaly by 2 near area aura owners
+                for (Unit::AuraApplicationMap::iterator iter = itr->first->GetAppliedAuras().begin(); iter != itr->first->GetAppliedAuras().end(); ++iter)
                 {
-                    // check if not stacking aura already on target
-                    // this one prevents unwanted usefull buff loss because of stacking and prevents overriding auras periodicaly by 2 near area aura owners
-                    for (Unit::AuraApplicationMap::iterator iter = itr->first->GetAppliedAuras().begin(); iter != itr->first->GetAppliedAuras().end(); ++iter)
+                    Aura const* aura = iter->second->GetBase();
+                    if (!CanStackWith(aura))
                     {
-                        Aura const* aura = iter->second->GetBase();
-                        if (!CanStackWith(aura))
-                        {
-                            addUnit = false;
-                            break;
-                        }
+                        addUnit = false;
+                        break;
                     }
                 }
             }
@@ -1571,12 +1565,16 @@ bool Aura::CanStackWith(Aura const* existingAura) const
     if (this == existingAura)
         return true;
 
-    // Dynobj auras always stack
-    if (GetType() == DYNOBJ_AURA_TYPE || existingAura->GetType() == DYNOBJ_AURA_TYPE)
-        return true;
-
-    SpellInfo const* existingSpellInfo = existingAura->GetSpellInfo();
     bool sameCaster = GetCasterGUID() == existingAura->GetCasterGUID();
+    SpellInfo const* existingSpellInfo = existingAura->GetSpellInfo();
+
+    // Dynobj auras do not stack when they come from the same spell cast by the same caster
+    if (GetType() == DYNOBJ_AURA_TYPE || existingAura->GetType() == DYNOBJ_AURA_TYPE)
+    {
+        if (sameCaster && m_spellInfo->Id == existingSpellInfo->Id)
+            return false;
+        return true;
+    }
 
     // passive auras don't stack with another rank of the spell cast by same caster
     if (IsPassive() && sameCaster && (m_spellInfo->IsDifferentRankOf(existingSpellInfo) || (m_spellInfo->Id == existingSpellInfo->Id && m_castItemGuid.IsEmpty())))
@@ -1595,15 +1593,6 @@ bool Aura::CanStackWith(Aura const* existingAura) const
         if (spellEffectInfo.TriggerSpell == existingAura->GetId())
             return true;
     }
-
-    // Check for custom server setting to allow tracking both Herbs and Minerals
-    // Note: The following are client limitations and cannot be coded for:
-    //  * The minimap tracking icon will display whichever skill is activated second
-    //  * The minimap tracking list will only show a check mark next to the last skill activated
-    //    Sometimes this bugs out and doesn't switch the check mark. It has no effect on the actual tracking though.
-    //  * The minimap dots are yellow for both resources
-    if (m_spellInfo->HasAura(SPELL_AURA_TRACK_RESOURCES) && existingSpellInfo->HasAura(SPELL_AURA_TRACK_RESOURCES))
-        return sWorld->getBoolConfig(CONFIG_ALLOW_TRACK_BOTH_RESOURCES);
 
     // check spell specific stack rules
     if (m_spellInfo->IsAuraExclusiveBySpecificWith(existingSpellInfo)
@@ -1889,8 +1878,8 @@ float Aura::CalcProcChance(SpellProcEntry const& procEntry, ProcEventInfo& event
     }
 
     // proc chance is reduced by an additional 3.333% per level past 60
-    if ((procEntry.AttributesMask & PROC_ATTR_REDUCE_PROC_60) && eventInfo.GetActor()->getLevel() > 60)
-        chance = std::max(0.f, (1.f - ((eventInfo.GetActor()->getLevel() - 60) * 1.f / 30.f)) * chance);
+    if ((procEntry.AttributesMask & PROC_ATTR_REDUCE_PROC_60) && eventInfo.GetActor()->GetLevel() > 60)
+        chance = std::max(0.f, (1.f - ((eventInfo.GetActor()->GetLevel() - 60) * 1.f / 30.f)) * chance);
 
     return chance;
 }

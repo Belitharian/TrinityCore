@@ -1202,7 +1202,7 @@ void BattlefieldWG::BrokenWallOrTower(TeamId team, BfWGGameObjectBuilding* build
         for (auto itr = m_PlayersInWar[GetAttackerTeam()].begin(); itr != m_PlayersInWar[GetAttackerTeam()].end(); ++itr)
         {
             if (Player* player = ObjectAccessor::FindPlayer(*itr))
-                if (player->GetDistance2d(GetGameObject(building->GetGUID())) < 50.0f)
+                if (player->GetDistance2d(ASSERT_NOTNULL(GetGameObject(building->GetGUID()))) < 50.0f)
                     player->KilledMonsterCredit(QUEST_CREDIT_DEFEND_SIEGE);
         }
     }
@@ -1251,7 +1251,7 @@ void BattlefieldWG::UpdatedDestroyedTowerCount(TeamId team)
     }
 }
 
-void BattlefieldWG::ProcessEvent(WorldObject* obj, uint32 eventId)
+void BattlefieldWG::ProcessEvent(WorldObject* obj, uint32 eventId, WorldObject* /*invoker*/)
 {
     if (!obj || !IsWarTime())
         return;
@@ -1328,7 +1328,7 @@ void BattlefieldWG::UpdateTenacity()
     {
         for (auto itr = m_players[m_tenacityTeam].begin(); itr != m_players[m_tenacityTeam].end(); ++itr)
             if (Player* player = ObjectAccessor::FindPlayer(*itr))
-                if (player->getLevel() >= m_MinLevel)
+                if (player->GetLevel() >= m_MinLevel)
                     player->RemoveAurasDueToSpell(SPELL_TENACITY);
 
         for (auto itr = m_vehicles[m_tenacityTeam].begin(); itr != m_vehicles[m_tenacityTeam].end(); ++itr)

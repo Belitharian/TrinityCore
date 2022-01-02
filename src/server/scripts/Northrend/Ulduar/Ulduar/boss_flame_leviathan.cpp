@@ -274,9 +274,9 @@ class boss_flame_leviathan : public CreatureScript
                 me->SetReactState(REACT_DEFENSIVE);
             }
 
-            void JustEngagedWith(Unit* /*who*/) override
+            void JustEngagedWith(Unit* who) override
             {
-                _JustEngagedWith();
+                BossAI::JustEngagedWith(who);
                 me->SetReactState(REACT_PASSIVE);
                 events.ScheduleEvent(EVENT_PURSUE, 1);
                 events.ScheduleEvent(EVENT_MISSILE, urand(1500, 4*IN_MILLISECONDS));
@@ -1310,21 +1310,21 @@ class go_ulduar_tower : public GameObjectScript
 
             InstanceScript* instance;
 
-            void Destroyed(WorldObject* /*attacker*/, uint32 /*eventId*/) override
+            void Destroyed(WorldObject* attacker, uint32 /*eventId*/) override
             {
                 switch (me->GetEntry())
                 {
                     case GO_TOWER_OF_STORMS:
-                        instance->ProcessEvent(me, EVENT_TOWER_OF_STORM_DESTROYED);
+                        instance->ProcessEvent(me, EVENT_TOWER_OF_STORM_DESTROYED, attacker);
                         break;
                     case GO_TOWER_OF_FLAMES:
-                        instance->ProcessEvent(me, EVENT_TOWER_OF_FLAMES_DESTROYED);
+                        instance->ProcessEvent(me, EVENT_TOWER_OF_FLAMES_DESTROYED, attacker);
                         break;
                     case GO_TOWER_OF_FROST:
-                        instance->ProcessEvent(me, EVENT_TOWER_OF_FROST_DESTROYED);
+                        instance->ProcessEvent(me, EVENT_TOWER_OF_FROST_DESTROYED, attacker);
                         break;
                     case GO_TOWER_OF_LIFE:
-                        instance->ProcessEvent(me, EVENT_TOWER_OF_LIFE_DESTROYED);
+                        instance->ProcessEvent(me, EVENT_TOWER_OF_LIFE_DESTROYED, attacker);
                         break;
                 }
 

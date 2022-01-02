@@ -131,9 +131,9 @@ class boss_general_vezax : public CreatureScript
                 Initialize();
             }
 
-            void JustEngagedWith(Unit* /*who*/) override
+            void JustEngagedWith(Unit* who) override
             {
-                _JustEngagedWith();
+                BossAI::JustEngagedWith(who);
 
                 Talk(SAY_AGGRO);
                 DoCast(me, SPELL_AURA_OF_DESPAIR);
@@ -235,7 +235,7 @@ class boss_general_vezax : public CreatureScript
             {
                 _JustDied();
                 Talk(SAY_DEATH);
-                instance->DoRemoveAurasDueToSpellOnPlayers(SPELL_AURA_OF_DESPAIR);
+                instance->DoRemoveAurasDueToSpellOnPlayers(SPELL_AURA_OF_DESPAIR, true, true);
             }
 
             void CheckShamanisticRage()

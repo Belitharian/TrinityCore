@@ -29,7 +29,12 @@ enum Spells
     SPELL_POLARITY_SHIFT            = 39096,
     SPELL_BERSERK                   = 26662,
     SPELL_NETHER_CHARGE_TIMER       = 37670,
-    SPELL_NETHER_CHARGE_PASSIVE     = 37670,
+    SPELL_NETHER_CHARGE_PASSIVE     = 35150,
+
+    SPELL_SUMMON_NETHER_CHARGE_NE   = 35153,
+    SPELL_SUMMON_NETHER_CHARGE_NW   = 35904,
+    SPELL_SUMMON_NETHER_CHARGE_SE   = 35905,
+    SPELL_SUMMON_NETHER_CHARGE_SW   = 35906,
 
     SPELL_POSITIVE_POLARITY         = 39088,
     SPELL_POSITIVE_CHARGE_STACK     = 39089,
@@ -75,9 +80,9 @@ class boss_mechano_lord_capacitus : public CreatureScript
         {
             boss_mechano_lord_capacitusAI(Creature* creature) : BossAI(creature, DATA_MECHANOLORD_CAPACITUS) { }
 
-            void JustEngagedWith(Unit* /*who*/) override
+            void JustEngagedWith(Unit* who) override
             {
-                _JustEngagedWith();
+                BossAI::JustEngagedWith(who);
                 Talk(YELL_AGGRO);
                 events.ScheduleEvent(EVENT_HEADCRACK, 10s);
                 events.ScheduleEvent(EVENT_REFLECTIVE_DAMAGE_SHIELD, 15s);
@@ -133,9 +138,13 @@ class boss_mechano_lord_capacitus : public CreatureScript
                             break;
                         case EVENT_SUMMON_NETHER_CHARGE:
                         {
-                            Position pos = me->GetRandomNearPosition(5.0f);
-                            me->SummonCreature(NPC_NETHER_CHARGE, pos, TEMPSUMMON_TIMED_DESPAWN, 18000);
-                            events.ScheduleEvent(EVENT_SUMMON_NETHER_CHARGE, 10s);
+                            uint32 spellId = RAND(SPELL_SUMMON_NETHER_CHARGE_NE,
+                                                  SPELL_SUMMON_NETHER_CHARGE_NW,
+                                                  SPELL_SUMMON_NETHER_CHARGE_SE,
+                                                  SPELL_SUMMON_NETHER_CHARGE_SW);
+                            uint32 netherChargeTimer = DUNGEON_MODE(urand(9000, 11000), urand(2000, 5000));
+                            DoCastSelf(spellId);
+                            events.ScheduleEvent(EVENT_SUMMON_NETHER_CHARGE, netherChargeTimer);
                             break;
                         }
                         case EVENT_BERSERK:

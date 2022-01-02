@@ -98,7 +98,7 @@ enum SMART_EVENT
 {
     SMART_EVENT_UPDATE_IC                = 0,       // InitialMin, InitialMax, RepeatMin, RepeatMax
     SMART_EVENT_UPDATE_OOC               = 1,       // InitialMin, InitialMax, RepeatMin, RepeatMax
-    SMART_EVENT_HEALT_PCT                = 2,       // HPMin%, HPMax%,  RepeatMin, RepeatMax
+    SMART_EVENT_HEALTH_PCT               = 2,       // HPMin%, HPMax%,  RepeatMin, RepeatMax
     SMART_EVENT_MANA_PCT                 = 3,       // ManaMin%, ManaMax%, RepeatMin, RepeatMax
     SMART_EVENT_AGGRO                    = 4,       // NONE
     SMART_EVENT_KILL                     = 5,       // CooldownMin0, CooldownMax1, playerOnly2, else creature entry3
@@ -115,8 +115,8 @@ enum SMART_EVENT
     SMART_EVENT_FRIENDLY_MISSING_BUFF    = 16,      // SpellId, Radius, RepeatMin, RepeatMax
     SMART_EVENT_SUMMONED_UNIT            = 17,      // CreatureId(0 all), CooldownMin, CooldownMax
     SMART_EVENT_TARGET_MANA_PCT          = 18,      // ManaMin%, ManaMax%, RepeatMin, RepeatMax
-    SMART_EVENT_ACCEPTED_QUEST           = 19,      // QuestID(0any)
-    SMART_EVENT_REWARD_QUEST             = 20,      // QuestID(0any)
+    SMART_EVENT_ACCEPTED_QUEST           = 19,      // QuestID (0 = any), CooldownMin, CooldownMax
+    SMART_EVENT_REWARD_QUEST             = 20,      // QuestID (0 = any), CooldownMin, CooldownMax
     SMART_EVENT_REACHED_HOME             = 21,      // NONE
     SMART_EVENT_RECEIVE_EMOTE            = 22,      // EmoteId, CooldownMin, CooldownMax, condition, val1, val2, val3
     SMART_EVENT_HAS_AURA                 = 23,      // Param1 = SpellID, Param2 = Stack amount, Param3/4 RepeatMin, RepeatMax
@@ -276,6 +276,8 @@ struct SmartEvent
         struct
         {
             uint32 quest;
+            uint32 cooldownMin;
+            uint32 cooldownMax;
         } quest;
 
         struct
@@ -590,7 +592,7 @@ enum SMART_ACTION
     SMART_ACTION_LOAD_EQUIPMENT                     = 124,    // id
     SMART_ACTION_TRIGGER_RANDOM_TIMED_EVENT         = 125,    // id min range, id max range
     SMART_ACTION_REMOVE_ALL_GAMEOBJECTS             = 126,
-    SMART_ACTION_REMOVE_MOVEMENT                    = 127,    // movementType, forced
+    SMART_ACTION_PAUSE_MOVEMENT                     = 127,    // MovementSlot (default = 0, active = 1, controlled = 2), PauseTime (ms), Force
     SMART_ACTION_PLAY_ANIMKIT                       = 128,    // id, type (0 = oneShot, 1 = aiAnim, 2 = meleeAnim, 3 = movementAnim)
     SMART_ACTION_SCENE_PLAY                         = 129,    // sceneId
     SMART_ACTION_SCENE_CANCEL                       = 130,    // sceneId
@@ -601,8 +603,15 @@ enum SMART_ACTION
     SMART_ACTION_PLAY_CINEMATIC                     = 135,    // entry, cinematic
     SMART_ACTION_SET_MOVEMENT_SPEED                 = 136,    // movementType, speedInteger, speedFraction
     SMART_ACTION_PLAY_SPELL_VISUAL_KIT              = 137,    // spellVisualKitId, kitType (unknown values, copypaste from packet dumps), duration
+    SMART_ACTION_OVERRIDE_LIGHT                     = 138,    // zoneId, overrideLightID, transitionMilliseconds
+    SMART_ACTION_OVERRIDE_WEATHER                   = 139,    // zoneId, weatherId, intensity
     SMART_ACTION_CREATE_CONVERSATION                = 143,    // conversation_template.id
-    SMART_ACTION_END                                = 144
+    SMART_ACTION_SET_IMMUNE_PC                      = 144,    // 0/1
+    SMART_ACTION_SET_IMMUNE_NPC                     = 145,    // 0/1
+    SMART_ACTION_SET_UNINTERACTIBLE                 = 146,    // 0/1
+    SMART_ACTION_ACTIVATE_GAMEOBJECT                = 147,    // GameObjectActions
+    SMART_ACTION_ADD_TO_STORED_TARGET_LIST          = 148,    // varID
+    SMART_ACTION_END                                = 149
 };
 
 enum class SmartActionSummonCreatureFlags
@@ -998,6 +1007,7 @@ struct SmartAction
         {
             uint32 id;
             uint32 timerType;
+            uint32 allowOverride;
         } timedActionList;
 
         struct
@@ -1163,9 +1173,10 @@ struct SmartAction
 
         struct
         {
-            uint32 movementType;
-            uint32 forced;
-        } removeMovement;
+            uint32 movementSlot;
+            uint32 pauseTimer;
+            uint32 force;
+        } pauseMovement;
 
         struct
         {
@@ -1205,8 +1216,28 @@ struct SmartAction
 
         struct
         {
+            uint32 zoneId;
+            uint32 areaLightId;
+            uint32 overrideLightId;
+            uint32 transitionMilliseconds;
+        } overrideLight;
+
+        struct
+        {
+            uint32 zoneId;
+            uint32 weatherId;
+            uint32 intensity;
+        } overrideWeather;
+
+        struct
+        {
             uint32 id;
         } conversation;
+
+        struct
+        {
+            uint32 id;
+        } addToStoredTargets;
 
         //! Note for any new future actions
         //! All parameters must have type uint32
@@ -1274,8 +1305,9 @@ enum SMARTAI_TARGETS
     SMART_TARGET_LOOT_RECIPIENTS                = 27,   // all players that have tagged this creature (for kill credit)
     SMART_TARGET_FARTHEST                       = 28,   // maxDist, playerOnly, isInLos
     SMART_TARGET_VEHICLE_PASSENGER              = 29,   // seatMask (0 - all seats)
+    SMART_TARGET_CLOSEST_UNSPAWNED_GAMEOBJECT   = 30,   // entry(0any), maxDist
 
-    SMART_TARGET_END                            = 30
+    SMART_TARGET_END                            = 31
 };
 
 struct SmartTarget
@@ -1467,7 +1499,7 @@ const uint32 SmartAIEventMask[SMART_EVENT_END][2] =
 {
     {SMART_EVENT_UPDATE_IC,                 SMART_SCRIPT_TYPE_MASK_CREATURE + SMART_SCRIPT_TYPE_MASK_TIMED_ACTIONLIST},
     {SMART_EVENT_UPDATE_OOC,                SMART_SCRIPT_TYPE_MASK_CREATURE + SMART_SCRIPT_TYPE_MASK_GAMEOBJECT + SMART_SCRIPT_TYPE_MASK_INSTANCE + SMART_SCRIPT_TYPE_MASK_AREATRIGGER_ENTITY },
-    {SMART_EVENT_HEALT_PCT,                 SMART_SCRIPT_TYPE_MASK_CREATURE },
+    {SMART_EVENT_HEALTH_PCT,                SMART_SCRIPT_TYPE_MASK_CREATURE },
     {SMART_EVENT_MANA_PCT,                  SMART_SCRIPT_TYPE_MASK_CREATURE },
     {SMART_EVENT_AGGRO,                     SMART_SCRIPT_TYPE_MASK_CREATURE },
     {SMART_EVENT_KILL,                      SMART_SCRIPT_TYPE_MASK_CREATURE },
@@ -1618,6 +1650,8 @@ class ObjectGuidVector
             UpdateObjects(ref);
             return &_objectVector;
         }
+
+        void AddGuid(ObjectGuid const& guid) { _guidVector.push_back(guid); }
 
         ~ObjectGuidVector() { }
 

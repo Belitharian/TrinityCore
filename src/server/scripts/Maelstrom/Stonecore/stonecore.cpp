@@ -173,7 +173,7 @@ class npc_sc_millhouse_manastorm : public CreatureScript
 
                 me->RemoveAllAuras();
                 me->CombatStop(true);
-                me->GetThreatManager().ClearAllThreat();
+                EngagementOver();
 
                 switch (pointId)
                 {

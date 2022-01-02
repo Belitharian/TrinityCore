@@ -139,13 +139,13 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _timeSyncClockDeltaQueue(6),
     _timeSyncClockDelta(0),
     _pendingTimeSyncRequests(),
-    _battlePetMgr(std::make_unique<BattlePetMgr>(this)),
+    _timeSyncNextCounter(0),
+    _timeSyncTimer(0),
+    _calendarEventCreationCooldown(0),
+    _battlePetMgr(std::make_unique<BattlePets::BattlePetMgr>(this)),
     _collectionMgr(std::make_unique<CollectionMgr>(this))
 {
     memset(_tutorials, 0, sizeof(_tutorials));
-
-    _timeSyncNextCounter = 0;
-    _timeSyncTimer = 0;
 
     if (sock)
     {
@@ -425,6 +425,22 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
                     break;
             }
         }
+        catch (WorldPackets::InvalidHyperlinkException const& ihe)
+        {
+            TC_LOG_ERROR("network", "%s sent %s with an invalid link:\n%s", GetPlayerInfo().c_str(),
+                GetOpcodeNameForLogging(static_cast<OpcodeClient>(packet->GetOpcode())).c_str(), ihe.GetInvalidValue().c_str());
+
+            if (sWorld->getIntConfig(CONFIG_CHAT_STRICT_LINK_CHECKING_KICK))
+                KickPlayer("WorldSession::Update Invalid chat link");
+        }
+        catch (WorldPackets::IllegalHyperlinkException const& ihe)
+        {
+            TC_LOG_ERROR("network", "%s sent %s which illegally contained a hyperlink:\n%s", GetPlayerInfo().c_str(),
+                GetOpcodeNameForLogging(static_cast<OpcodeClient>(packet->GetOpcode())).c_str(), ihe.GetInvalidValue().c_str());
+
+            if (sWorld->getIntConfig(CONFIG_CHAT_STRICT_LINK_CHECKING_KICK))
+                KickPlayer("WorldSession::Update Illegal chat link");
+        }
         catch (WorldPackets::PacketArrayMaxCapacityException const& pamce)
         {
             TC_LOG_ERROR("network", "PacketArrayMaxCapacityException: %s while parsing %s from %s.",
@@ -607,16 +623,13 @@ void WorldSession::LogoutPlayer(bool save)
         ///- If the player is in a group (or invited), remove him. If the group if then only 1 person, disband the group.
         _player->UninviteFromGroup();
 
-        // remove player from the group if he is:
-        // a) in group; b) not in raid group; c) logging out normally (not being kicked or disconnected)
-        if (_player->GetGroup() && !_player->GetGroup()->isRaidGroup() && m_Socket[CONNECTION_TYPE_REALM])
-            _player->RemoveFromGroup();
-
         //! Send update to group and reset stored max enchanting level
-        if (_player->GetGroup())
+        if (Group* group = _player->GetGroup())
         {
-            _player->GetGroup()->SendUpdate();
-            _player->GetGroup()->ResetMaxEnchantingLevel();
+            group->SendUpdate();
+            group->ResetMaxEnchantingLevel();
+            if (group->GetLeaderGUID() == _player->GetGUID())
+                group->StartLeaderOfflineTimer();
         }
 
         //! Broadcast a logout message to the player's friends
@@ -633,8 +646,8 @@ void WorldSession::LogoutPlayer(bool save)
         // e.g if he got disconnected during a transfer to another map
         // calls to GetMap in this case may cause crashes
         _player->CleanupsBeforeDelete();
-        TC_LOG_INFO("entities.player.character", "Account: %u (IP: %s) Logout Character:[%s] (%s) Level: %d, XP: %u/%u (%u left)",
-            GetAccountId(), GetRemoteAddress().c_str(), _player->GetName().c_str(), _player->GetGUID().ToString().c_str(), _player->getLevel(),
+        TC_LOG_INFO("entities.player.character", "Account: %u (IP: %s) Logout Character:[%s] %s Level: %d, XP: %u/%u (%u left)",
+            GetAccountId(), GetRemoteAddress().c_str(), _player->GetName().c_str(), _player->GetGUID().ToString().c_str(), _player->GetLevel(),
             _player->GetXP(), _player->GetXPForNextLevel(), std::max(0, (int32)_player->GetXPForNextLevel() - (int32)_player->GetXP()));
 
         if (Map* _map = _player->FindMap())
@@ -666,8 +679,11 @@ void WorldSession::LogoutPlayer(bool save)
 }
 
 /// Kick a player out of the World
-void WorldSession::KickPlayer()
+void WorldSession::KickPlayer(std::string const& reason)
 {
+    TC_LOG_INFO("network.kick", "Account: %u Character: '%s' %s kicked with reason: %s", GetAccountId(), _player ? _player->GetName().c_str() : "<none>",
+        _player ? _player->GetGUID().ToString().c_str() : "", reason.c_str());
+
     for (uint8 i = 0; i < 2; ++i)
     {
         if (m_Socket[i])
@@ -683,11 +699,25 @@ bool WorldSession::ValidateHyperlinksAndMaybeKick(std::string const& str)
     if (Trinity::Hyperlinks::CheckAllLinks(str))
         return true;
 
-    TC_LOG_ERROR("network", "Player %s (%s) sent a message with an invalid link:\n%s", GetPlayer()->GetName().c_str(),
+    TC_LOG_ERROR("network", "Player %s%s sent a message with an invalid link:\n%s", GetPlayer()->GetName().c_str(),
         GetPlayer()->GetGUID().ToString().c_str(), str.c_str());
 
     if (sWorld->getIntConfig(CONFIG_CHAT_STRICT_LINK_CHECKING_KICK))
-        KickPlayer();
+        KickPlayer("WorldSession::ValidateHyperlinksAndMaybeKick Invalid chat link");
+
+    return false;
+}
+
+bool WorldSession::DisallowHyperlinksAndMaybeKick(std::string const& str)
+{
+    if (str.find('|') == std::string::npos)
+        return true;
+
+    TC_LOG_ERROR("network", "Player %s %s sent a message which illegally contained a hyperlink:\n%s", GetPlayer()->GetName().c_str(),
+                 GetPlayer()->GetGUID().ToString().c_str(), str.c_str());
+
+    if (sWorld->getIntConfig(CONFIG_CHAT_STRICT_LINK_CHECKING_KICK))
+        KickPlayer("WorldSession::DisallowHyperlinksAndMaybeKick Illegal chat link");
 
     return false;
 }
@@ -807,7 +837,7 @@ void WorldSession::LoadAccountData(PreparedQueryResult result, uint32 mask)
 
         if ((mask & (1 << type)) == 0)
         {
-            TC_LOG_ERROR("misc", "Table `%s` have non appropriate for table  account data type (%u), ignore.",
+            TC_LOG_ERROR("misc", "Table `%s` have non appropriate for table account data type (%u), ignore.",
                 mask == GLOBAL_CACHE_MASK ? "account_data" : "character_account_data", type);
             continue;
         }
@@ -1219,7 +1249,7 @@ bool WorldSession::DosProtection::EvaluateOpcode(WorldPacket& p, time_t time) co
         case POLICY_KICK:
         {
             TC_LOG_WARN("network", "AntiDOS: Player kicked!");
-            Session->KickPlayer();
+            Session->KickPlayer("WorldSession::DosProtection::EvaluateOpcode AntiDOS");
             return false;
         }
         case POLICY_BAN:
@@ -1235,7 +1265,7 @@ bool WorldSession::DosProtection::EvaluateOpcode(WorldPacket& p, time_t time) co
             }
             sWorld->BanAccount(bm, nameOrIp, duration, "DOS (Packet Flooding/Spoofing", "Server: AutoDOS");
             TC_LOG_WARN("network", "AntiDOS: Player automatically banned for %u seconds.", duration);
-            Session->KickPlayer();
+            Session->KickPlayer("WorldSession::DosProtection::EvaluateOpcode AntiDOS");
             return false;
         }
         default: // invalid policy
@@ -1331,6 +1361,14 @@ uint32 WorldSession::DosProtection::GetMaxPacketCounterAllowed(uint16 opcode) co
         case CMSG_RANDOM_ROLL:                          // not profiled
         case CMSG_TIME_SYNC_RESPONSE:                   // not profiled
         case CMSG_MOVE_FORCE_RUN_SPEED_CHANGE_ACK:      // not profiled
+        case CMSG_MOVE_FORCE_SWIM_SPEED_CHANGE_ACK:     // not profiled
+        case CMSG_MOVE_FORCE_SWIM_BACK_SPEED_CHANGE_ACK:// not profiled
+        case CMSG_MOVE_FORCE_RUN_BACK_SPEED_CHANGE_ACK: // not profiled
+        case CMSG_MOVE_FORCE_FLIGHT_SPEED_CHANGE_ACK:   // not profiled
+        case CMSG_MOVE_FORCE_FLIGHT_BACK_SPEED_CHANGE_ACK:// not profiled
+        case CMSG_MOVE_FORCE_WALK_SPEED_CHANGE_ACK:     // not profiled
+        case CMSG_MOVE_FORCE_TURN_RATE_CHANGE_ACK:      // not profiled
+        case CMSG_MOVE_FORCE_PITCH_RATE_CHANGE_ACK:     // not profiled
         {
             // "0" is a magic number meaning there's no limit for the opcode.
             // All the opcodes above must cause little CPU usage and no sync/async database queries at all
@@ -1392,7 +1430,6 @@ uint32 WorldSession::DosProtection::GetMaxPacketCounterAllowed(uint16 opcode) co
         case CMSG_SET_PARTY_LEADER:                     //   1               2         1 async db query
         case CMSG_CONVERT_RAID:                         //   1               5         1 async db query
         case CMSG_SET_ASSISTANT_LEADER:                 //   1               2         1 async db query
-        case CMSG_CALENDAR_ADD_EVENT:                   //  21              10         2 async db query
         case CMSG_MOVE_CHANGE_VEHICLE_SEATS:            // not profiled
         case CMSG_PETITION_BUY:                         // not profiled                1 sync 1 async db queries
         case CMSG_REQUEST_VEHICLE_PREV_SEAT:            // not profiled
@@ -1414,6 +1451,7 @@ uint32 WorldSession::DosProtection::GetMaxPacketCounterAllowed(uint16 opcode) co
         case CMSG_ENUM_CHARACTERS_DELETED_BY_CLIENT:    //  22               3         2 async db queries
         case CMSG_SUBMIT_USER_FEEDBACK:                 // not profiled                1 async db query
         case CMSG_SUPPORT_TICKET_SUBMIT_COMPLAINT:      // not profiled                1 async db query
+        case CMSG_CALENDAR_ADD_EVENT:                   //  21              10         2 async db query
         case CMSG_CALENDAR_UPDATE_EVENT:                // not profiled
         case CMSG_CALENDAR_REMOVE_EVENT:                // not profiled
         case CMSG_CALENDAR_COPY_EVENT:                  // not profiled

@@ -34,6 +34,7 @@
 #include "LFGMgr.h"
 #include "Log.h"
 #include "NPCPackets.h"
+#include "ObjectMgr.h"
 #include "Pet.h"
 #include "ReputationMgr.h"
 #include "SkillDiscovery.h"
@@ -43,6 +44,7 @@
 #include "SpellPackets.h"
 #include "SpellScript.h"
 #include "Vehicle.h"
+#include "World.h"
 
 class spell_gen_absorb0_hitlimit1 : public AuraScript
 {
@@ -192,7 +194,6 @@ class spell_gen_animal_blood : public AuraScript
     void OnRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
         if (Unit* owner = GetUnitOwner())
-            if (owner->IsInWater())
                 owner->CastSpell(owner, SPELL_SPAWN_BLOOD_POOL, true);
     }
 
@@ -415,7 +416,7 @@ class spell_gen_aura_service_uniform : public AuraScript
         Unit* target = GetTarget();
         if (target->GetTypeId() == TYPEID_PLAYER)
         {
-            if (target->getGender() == GENDER_MALE)
+            if (target->GetNativeGender() == GENDER_MALE)
                 target->SetDisplayId(MODEL_GOBLIN_MALE);
             else
                 target->SetDisplayId(MODEL_GOBLIN_FEMALE);
@@ -1154,7 +1155,7 @@ class spell_gen_dalaran_disguise : public SpellScriptLoader
             {
                 if (Player* player = GetHitPlayer())
                 {
-                    uint8 gender = player->getGender();
+                    uint8 gender = player->GetNativeGender();
 
                     uint32 spellId = GetSpellInfo()->Id;
 
@@ -1567,7 +1568,7 @@ class spell_ethereal_pet_aura : public AuraScript
 
     bool CheckProc(ProcEventInfo& eventInfo)
     {
-        uint32 levelDiff = std::abs(GetTarget()->getLevel() - eventInfo.GetProcTarget()->getLevel());
+        uint32 levelDiff = std::abs(GetTarget()->GetLevel() - eventInfo.GetProcTarget()->GetLevel());
         return levelDiff <= 9;
     }
 
@@ -2382,7 +2383,7 @@ class spell_gen_orc_disguise : public SpellScript
         Unit* caster = GetCaster();
         if (Player* target = GetHitPlayer())
         {
-            uint8 gender = target->getGender();
+            uint8 gender = target->GetNativeGender();
             if (!gender)
                 caster->CastSpell(target, SPELL_ORC_DISGUISE_MALE, true);
             else
@@ -2532,7 +2533,7 @@ class spell_gen_pet_summoned : public SpellScript
         Player* player = GetCaster()->ToPlayer();
         if (player->GetLastPetNumber())
         {
-            PetType newPetType = (player->getClass() == CLASS_HUNTER) ? HUNTER_PET : SUMMON_PET;
+            PetType newPetType = (player->GetClass() == CLASS_HUNTER) ? HUNTER_PET : SUMMON_PET;
             Pet* newPet = new Pet(player, newPetType);
             if (newPet->LoadPetFromDB(player, 0, player->GetLastPetNumber(), true))
             {
@@ -2564,6 +2565,11 @@ class spell_gen_pet_summoned : public SpellScript
     }
 };
 
+enum ProfessionResearch
+{
+    SPELL_NORTHREND_INSCRIPTION_RESEARCH = 61177
+};
+
 class spell_gen_profession_research : public SpellScript
 {
     PrepareSpellScript(spell_gen_profession_research);
@@ -2575,7 +2581,9 @@ class spell_gen_profession_research : public SpellScript
 
     SpellCastResult CheckRequirement()
     {
-        if (HasDiscoveredAllSpells(GetSpellInfo()->Id, GetCaster()->ToPlayer()))
+        Player* player = GetCaster()->ToPlayer();
+
+        if (HasDiscoveredAllSpells(GetSpellInfo()->Id, player))
         {
             SetCustomCastResultMessage(SPELL_CUSTOM_ERROR_NOTHING_TO_DISCOVER);
             return SPELL_FAILED_CUSTOM_ERROR;
@@ -2589,11 +2597,15 @@ class spell_gen_profession_research : public SpellScript
         Player* caster = GetCaster()->ToPlayer();
         uint32 spellId = GetSpellInfo()->Id;
 
-        // learn random explicit discovery recipe (if any)
+        // Learn random explicit discovery recipe (if any)
+        // Players will now learn 3 recipes the very first time they perform Northrend Inscription Research (3.3.0 patch notes)
+        if (spellId == SPELL_NORTHREND_INSCRIPTION_RESEARCH && !HasDiscoveredAnySpell(spellId, caster))
+            for (int i = 0; i < 2; ++i)
+                if (uint32 discoveredSpellId = GetExplicitDiscoverySpell(spellId, caster))
+                    caster->LearnSpell(discoveredSpellId, false);
+
         if (uint32 discoveredSpellId = GetExplicitDiscoverySpell(spellId, caster))
             caster->LearnSpell(discoveredSpellId, false);
-
-        caster->UpdateCraftSkill(spellId);
     }
 
     void Register() override
@@ -2679,19 +2691,19 @@ class spell_gen_restoration : public AuraScript
     {
         PreventDefaultAction();
 
-        Unit* caster = GetCaster();
-        if (!caster)
+        Unit* target = GetTarget();
+        if (!target)
             return;
 
-        int32 heal = caster->CountPctFromMaxHealth(10);
-        HealInfo healInfo(caster, GetTarget(), heal, GetSpellInfo(), GetSpellInfo()->GetSchoolMask());
-        caster->HealBySpell(healInfo);
+        int32 heal = target->CountPctFromMaxHealth(10);
+        HealInfo healInfo(target, target, heal, GetSpellInfo(), GetSpellInfo()->GetSchoolMask());
+        target->HealBySpell(healInfo);
 
         /// @todo: should proc other auras?
-        if (int32 mana = caster->GetMaxPower(POWER_MANA))
+        if (int32 mana = target->GetMaxPower(POWER_MANA))
         {
             mana /= 10;
-            caster->EnergizeBySpell(caster, GetSpellInfo(), mana, POWER_MANA);
+            target->EnergizeBySpell(target, GetSpellInfo(), mana, POWER_MANA);
         }
     }
 
@@ -3231,6 +3243,38 @@ class spell_gen_tournament_pennant : public AuraScript
     }
 };
 
+enum Teleporting
+{
+    AREA_VIOLET_CITADEL_SPIRE   = 4637,
+
+    SPELL_TELEPORT_SPIRE_DOWN   = 59316,
+    SPELL_TELEPORT_SPIRE_UP     = 59314
+};
+
+class spell_gen_teleporting : public SpellScript
+{
+    PrepareSpellScript(spell_gen_teleporting);
+
+    void HandleScript(SpellEffIndex /* effIndex */)
+    {
+        Unit* target = GetHitUnit();
+        if (target->GetTypeId() != TYPEID_PLAYER)
+            return;
+
+        // return from top
+        if (target->ToPlayer()->GetAreaId() == AREA_VIOLET_CITADEL_SPIRE)
+            target->CastSpell(target, SPELL_TELEPORT_SPIRE_DOWN, true);
+            // teleport atop
+        else
+            target->CastSpell(target, SPELL_TELEPORT_SPIRE_UP, true);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_gen_teleporting::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
 class spell_gen_trigger_exclude_caster_aura_spell : public SpellScript
 {
     PrepareSpellScript(spell_gen_trigger_exclude_caster_aura_spell);
@@ -3356,12 +3400,17 @@ class spell_gen_turkey_marker : public AuraScript
 
     void OnPeriodic(AuraEffect const* /*aurEff*/)
     {
-        if (_applyTimes.empty())
-            return;
+        int32 removeCount = 0;
 
-        // pop stack if it expired for us
-        if (_applyTimes.front() + GetMaxDuration() < GameTime::GetGameTimeMS())
-            ModStackAmount(-1, AURA_REMOVE_BY_EXPIRE);
+        // pop expired times off of the stack
+        while (!_applyTimes.empty() && _applyTimes.front() + GetMaxDuration() < GameTime::GetGameTimeMS())
+        {
+            _applyTimes.pop_front();
+            removeCount++;
+        }
+
+        if (removeCount)
+            ModStackAmount(-removeCount, AURA_REMOVE_BY_EXPIRE);
     }
 
     void Register() override
@@ -3628,7 +3677,7 @@ class spell_gen_gm_freeze : public AuraScript
             player->AddUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
 
             // if player class = hunter || warlock remove pet if alive
-            if ((player->getClass() == CLASS_HUNTER) || (player->getClass() == CLASS_WARLOCK))
+            if ((player->GetClass() == CLASS_HUNTER) || (player->GetClass() == CLASS_WARLOCK))
             {
                 if (Pet* pet = player->GetPet())
                 {
@@ -3647,7 +3696,7 @@ class spell_gen_gm_freeze : public AuraScript
         if (Player* player = GetTarget()->ToPlayer())
         {
             // Reset player faction + allow combat + allow duels
-            player->setFactionForRace(player->getRace());
+            player->SetFactionForRace(player->GetRace());
             player->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
             // save player
             player->SaveToDB();
@@ -4265,6 +4314,35 @@ class spell_gen_charmed_unit_spell_cooldown : public SpellScript
     }
 };
 
+enum CannonBlast
+{
+    SPELL_CANNON_BLAST          = 42578,
+    SPELL_CANNON_BLAST_DAMAGE   = 42576
+};
+
+class spell_gen_cannon_blast : public SpellScript
+{
+    PrepareSpellScript(spell_gen_cannon_blast);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_CANNON_BLAST });
+    }
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        int32 bp = GetEffectValue();
+        Unit* target = GetHitUnit();
+        CastSpellExtraArgs args(TRIGGERED_FULL_MASK);
+        args.AddSpellBP0(bp);
+        target->CastSpell(target, SPELL_CANNON_BLAST_DAMAGE, args);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_gen_cannon_blast::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
 // 169869 - Transformation Sickness
 class spell_gen_decimatus_transformation_sickness : public SpellScript
 {
@@ -4420,6 +4498,48 @@ class spell_gen_impatient_mind : public AuraScript
     }
 };
 
+// 269083 - Enlisted
+// 282559 - Enlisted
+class spell_gen_war_mode_enlisted : public AuraScript
+{
+    PrepareAuraScript(spell_gen_war_mode_enlisted);
+
+    void CalcWarModeBonus(AuraEffect const* /*aurEff*/, int32& amount, bool& /*canBeRecalculated*/)
+    {
+        Player* target = GetUnitOwner()->ToPlayer();
+        if (!target)
+            return;
+
+        if (target->GetTeamId() == sWorld->GetWarModeDominantFaction())
+            return;
+
+        amount += sWorld->GetWarModeOutnumberedFactionReward();
+    }
+
+    void Register() override
+    {
+        SpellInfo const* spellInfo = sSpellMgr->AssertSpellInfo(m_scriptSpellId, DIFFICULTY_NONE);
+
+        if (spellInfo->HasAura(SPELL_AURA_MOD_XP_PCT))
+            DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_gen_war_mode_enlisted::CalcWarModeBonus, EFFECT_ALL, SPELL_AURA_MOD_XP_PCT);
+
+        if (spellInfo->HasAura(SPELL_AURA_MOD_XP_QUEST_PCT))
+            DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_gen_war_mode_enlisted::CalcWarModeBonus, EFFECT_ALL, SPELL_AURA_MOD_XP_QUEST_PCT);
+
+        if (spellInfo->HasAura(SPELL_AURA_MOD_CURRENCY_GAIN_FROM_SOURCE))
+            DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_gen_war_mode_enlisted::CalcWarModeBonus, EFFECT_ALL, SPELL_AURA_MOD_CURRENCY_GAIN_FROM_SOURCE);
+
+        if (spellInfo->HasAura(SPELL_AURA_MOD_MONEY_GAIN))
+            DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_gen_war_mode_enlisted::CalcWarModeBonus, EFFECT_ALL, SPELL_AURA_MOD_MONEY_GAIN);
+
+        if (spellInfo->HasAura(SPELL_AURA_MOD_ANIMA_GAIN))
+            DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_gen_war_mode_enlisted::CalcWarModeBonus, EFFECT_ALL, SPELL_AURA_MOD_ANIMA_GAIN);
+
+        if (spellInfo->HasAura(SPELL_AURA_DUMMY))
+            DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_gen_war_mode_enlisted::CalcWarModeBonus, EFFECT_ALL, SPELL_AURA_DUMMY);
+    }
+};
+
 enum DefenderOfAzerothData
 {
     SPELL_DEATH_GATE_TELEPORT_STORMWIND = 316999,
@@ -4507,6 +4627,34 @@ class spell_defender_of_azeroth_speak_with_mograine : public SpellScript
     void Register() override
     {
         OnEffectHitTarget += SpellEffectFn(spell_defender_of_azeroth_speak_with_mograine::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 118301 - Summon Battle Pet
+class spell_summon_battle_pet : public SpellScript
+{
+    PrepareSpellScript(spell_summon_battle_pet);
+
+    void HandleSummon(SpellEffIndex effIndex)
+    {
+        uint32 creatureId = uint32(GetSpellValue()->EffectBasePoints[effIndex]);
+        if (sObjectMgr->GetCreatureTemplate(creatureId))
+        {
+            PreventHitDefaultEffect(effIndex);
+
+            Unit* caster = GetCaster();
+            SummonPropertiesEntry const* properties = sSummonPropertiesStore.LookupEntry(uint32(GetEffectInfo().MiscValueB));
+            uint32 duration = uint32(GetSpellInfo()->CalcDuration(caster));
+            Position pos = GetHitDest()->GetPosition();
+
+            if (Creature* summon = caster->GetMap()->SummonCreature(creatureId, pos, properties, duration, caster, GetSpellInfo()->Id))
+                summon->SetImmuneToAll(true);
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_summon_battle_pet::HandleSummon, EFFECT_0, SPELL_EFFECT_SUMMON);
     }
 };
 
@@ -4612,6 +4760,7 @@ void AddSC_generic_spell_scripts()
     RegisterSpellScript(spell_gen_throw_shield);
     RegisterSpellScript(spell_gen_tournament_duel);
     RegisterAuraScript(spell_gen_tournament_pennant);
+    RegisterSpellScript(spell_gen_teleporting);
     RegisterSpellScript(spell_gen_trigger_exclude_caster_aura_spell);
     RegisterSpellScript(spell_gen_trigger_exclude_target_aura_spell);
     new spell_pvp_trinket_wotf_shared_cd<SPELL_WILL_OF_THE_FORSAKEN_COOLDOWN_TRIGGER>("spell_pvp_trinket_shared_cd");
@@ -4636,12 +4785,15 @@ void AddSC_generic_spell_scripts()
     RegisterAuraScript(spell_gen_vehicle_control_link);
     RegisterSpellScript(spell_freezing_circle);
     RegisterSpellScript(spell_gen_charmed_unit_spell_cooldown);
+    RegisterSpellScript(spell_gen_cannon_blast);
     RegisterSpellScript(spell_gen_decimatus_transformation_sickness);
     RegisterSpellScript(spell_gen_anetheron_summon_towering_infernal);
     RegisterSpellAndAuraScriptPair(spell_gen_mark_of_kazrogal_hellfire, spell_gen_mark_of_kazrogal_hellfire_aura);
     RegisterSpellScript(spell_gen_azgalor_rain_of_fire_hellfire_citadel);
     RegisterAuraScript(spell_gen_face_rage);
     RegisterAuraScript(spell_gen_impatient_mind);
+    RegisterAuraScript(spell_gen_war_mode_enlisted);
     RegisterSpellScript(spell_defender_of_azeroth_death_gate_selector);
     RegisterSpellScript(spell_defender_of_azeroth_speak_with_mograine);
+    RegisterSpellScript(spell_summon_battle_pet);
 }

@@ -93,9 +93,9 @@ public:
             Talk(SAY_DEATH);
         }
 
-        void JustEngagedWith(Unit* /*who*/) override
+        void JustEngagedWith(Unit* who) override
         {
-            _JustEngagedWith();
+            BossAI::JustEngagedWith(who);
             Enraged = false;
             Talk(SAY_AGGRO);
             events.ScheduleEvent(EVENT_HATEFUL, 1s);
@@ -122,7 +122,7 @@ public:
                         ThreatReference* secondThreat = nullptr;
                         ThreatReference* thirdThreat = nullptr;
 
-                        ThreatManager const& mgr = me->GetThreatManager();
+                        ThreatManager& mgr = me->GetThreatManager();
                         Unit* currentVictim = mgr.GetCurrentVictim();
                         auto list = mgr.GetModifiableThreatList();
                         auto it = list.begin(), end = list.end();

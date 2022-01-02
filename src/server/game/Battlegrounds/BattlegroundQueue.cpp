@@ -130,7 +130,7 @@ bool BattlegroundQueue::SelectionPool::AddGroup(GroupQueueInfo* ginfo, uint32 de
 /*********************************************************/
 
 // add group or player (grp == NULL) to bg queue with the given leader and bg specifications
-GroupQueueInfo* BattlegroundQueue::AddGroup(Player* leader, Group* grp, PVPDifficultyEntry const*  bracketEntry, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating, uint32 arenateamid)
+GroupQueueInfo* BattlegroundQueue::AddGroup(Player* leader, Group* grp, PVPDifficultyEntry const* bracketEntry, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating, uint32 arenateamid)
 {
     BattlegroundBracketId bracketId = bracketEntry->GetBracketId();
 
@@ -473,8 +473,8 @@ bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg,
 
             uint32 queueSlot = player->GetBattlegroundQueueIndex(bgQueueTypeId);
 
-            TC_LOG_DEBUG("bg.battleground", "Battleground: invited player %s (%s) to BG instance %u queueindex %u bgtype %u",
-                player->GetName().c_str(), player->GetGUID().ToString().c_str(), bg->GetInstanceID(), queueSlot, bg->GetTypeID());
+            TC_LOG_DEBUG("bg.battleground", "Battleground: invited player %s %s to BG instance %u queueindex %u bgtype %u",
+                 player->GetName().c_str(), player->GetGUID().ToString().c_str(), bg->GetInstanceID(), queueSlot, bg->GetTypeID());
 
             WorldPackets::Battleground::BattlefieldStatusNeedConfirmation battlefieldStatus;
             sBattlegroundMgr->BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(bgQueueTypeId), INVITE_ACCEPT_WAIT_TIME, m_queueId.TeamSize);
@@ -1065,7 +1065,7 @@ bool BGQueueRemoveEvent::Execute(uint64 /*e_time*/, uint32 /*p_time*/)
         BattlegroundQueue &bgQueue = sBattlegroundMgr->GetBattlegroundQueue(m_BgQueueTypeId);
         if (bgQueue.IsPlayerInvited(m_PlayerGuid, m_BgInstanceGUID, m_RemoveTime))
         {
-            TC_LOG_DEBUG("bg.battleground", "Battleground: removing %s from bg queue for instance %u because of not pressing enter battle in time.", player->GetGUID().ToString().c_str(), m_BgInstanceGUID);
+            TC_LOG_DEBUG("bg.battleground", "Battleground: removing player %s from bg queue for instance %u because of not pressing enter battle in time.", player->GetGUID().ToString().c_str(), m_BgInstanceGUID);
 
             player->RemoveBattlegroundQueueId(m_BgQueueTypeId);
             bgQueue.RemovePlayer(m_PlayerGuid, true);
