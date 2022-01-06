@@ -20,8 +20,6 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         CustomAI(Creature* creature, AI_Type type = AI_Type::Distance);
         virtual ~CustomAI() { }
 
-        void ReleaseFocus();
-
         virtual void Initialize();
 
         virtual float GetDistance() { return 20.f; };
@@ -36,8 +34,6 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         void Reset() override;
         void AttackStart(Unit* who) override;
-        void JustEngagedWith(Unit* /*who*/) override;
-        void JustExitedCombat() override;
         void JustDied(Unit* /*killer*/) override;
         void UpdateAI(uint32 diff) override;
 

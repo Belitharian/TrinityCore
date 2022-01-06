@@ -205,11 +205,19 @@ struct TC_GAME_API ScriptedAI : public CreatureAI
         // Returns friendly unit with the most amount of hp missing from max hp
         Unit* DoSelectLowestHpFriendly(float range, uint32 minHPDiff = 1);
 
+        Unit* DoSelectBelowHpPctFriendly(float range, uint8 minHPDiff = 1);
+
+        Unit* DoSelectCastingUnit(uint32 uiSpellid, float range);
+
         // Returns friendly unit with hp pct below specified and with specified entry
         Unit* DoSelectBelowHpPctFriendlyWithEntry(uint32 entry, float range, uint8 hpPct = 1, bool excludeSelf = true);
 
+        Unit* DoFindEnemyMissingDot(SpellInfo const* spellInfo);
+
         // Returns a list of friendly CC'd units within range
         std::list<Creature*> DoFindFriendlyCC(float range);
+
+        std::list<Creature*> DoFindFriendlyMissingBuff(uint32 uiSpellid);
 
         // Returns a list of all friendly units missing a specific buff within range
         std::list<Creature*> DoFindFriendlyMissingBuff(float range, uint32 spellId);

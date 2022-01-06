@@ -383,7 +383,7 @@ class npc_theramore_officier : public CreatureScript
 			{
 				scheduler.Schedule(2s, [caster, this](TaskContext /*blessing_of_freedom*/)
 				{
-					me->AttackedTarget(caster, true);
+					me->Attack(caster, true);
 					DoCastSelf(SPELL_BLESSING_OF_FREEDOM);
 				});
 			}

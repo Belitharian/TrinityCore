@@ -8,13 +8,6 @@ CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
     Initialize();
 }
 
-void CustomAI::ReleaseFocus()
-{
-    me->ReleaseFocus(nullptr, false);   // remove spellcast focus
-    me->DoNotReacquireTarget();         // cancel delayed re-target
-    me->SetTarget(ObjectGuid::Empty);   // drop target - dead mobs shouldn't ever target things
-}
-
 void CustomAI::Initialize()
 {
     if (type == AI_Type::Distance)
@@ -76,8 +69,6 @@ void CustomAI::SpellHit(Unit* caster, SpellInfo const* spellInfo)
 
 void CustomAI::EnterEvadeMode(EvadeReason why)
 {
-    ReleaseFocus();
-
     summons.DespawnAll();
     scheduler.CancelAll();
 
@@ -87,7 +78,6 @@ void CustomAI::EnterEvadeMode(EvadeReason why)
 void CustomAI::Reset()
 {
     Initialize();
-    ReleaseFocus();
 
     summons.DespawnAll();
     scheduler.CancelAll();
@@ -114,22 +104,8 @@ void CustomAI::AttackStart(Unit* who)
     }
 }
 
-void CustomAI::JustEngagedWith(Unit* who)
-{
-    ScriptedAI::JustEngagedWith(who);
-}
-
-void CustomAI::JustExitedCombat()
-{
-    ScriptedAI::JustExitedCombat();
-
-    ReleaseFocus();
-}
-
 void CustomAI::JustDied(Unit* killer)
 {
-    ReleaseFocus();
-
     summons.DespawnAll();
     scheduler.CancelAll();
 
