@@ -17,7 +17,6 @@
 
 #include "SpellMgr.h"
 #include "BattlefieldMgr.h"
-#include "BattlefieldWG.h"
 #include "BattlegroundMgr.h"
 #include "Chat.h"
 #include "Containers.h"
@@ -4000,6 +3999,12 @@ void SpellMgr::LoadSpellInfoCorrections()
         spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(6);  // 100yd
     });
 
+    // Chrono Shift (enemy slow part)
+    ApplySpellFix({ 236299 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(6);  // 100yd
+    });
+
     //
     // VIOLET HOLD SPELLS
     //
@@ -4266,13 +4271,6 @@ void SpellMgr::LoadSpellInfoCorrections()
         {
             spellEffectInfo->TargetB = SpellImplicitTargetInfo(TARGET_UNIT_TARGET_ENEMY);
         });
-    });
-
-    // Mutated Transformation (Professor Putricide)
-    ApplySpellFix({ 70402 }, [](SpellInfo* spellInfo)
-    {
-        // Resistance is calculated inside of SpellScript
-        spellInfo->AttributesEx4 |= SPELL_ATTR4_IGNORE_RESISTANCES;
     });
 
     // Empowered Flare (Blood Prince Council)
