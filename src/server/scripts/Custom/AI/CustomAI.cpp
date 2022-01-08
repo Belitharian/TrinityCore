@@ -49,18 +49,21 @@ void CustomAI::SummonedCreatureDies(Creature* summon, Unit* killer)
     ScriptedAI::SummonedCreatureDies(summon, killer);
 }
 
-void CustomAI::SpellHit(Unit* caster, SpellInfo const* spellInfo)
+void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
 {
-    if (type == AI_Type::Distance)
+    if (Unit* unit = caster->ToUnit())
     {
-        if (spellInfo->HasEffect(SPELL_EFFECT_INTERRUPT_CAST))
+        if (type == AI_Type::Distance)
         {
-            int32 duration = spellInfo->GetDuration() / IN_MILLISECONDS;
-            DoStartMovement(caster);
-            scheduler.Schedule(Seconds(duration), [caster, this](TaskContext /*context*/)
+            if (spellInfo->HasEffect(SPELL_EFFECT_INTERRUPT_CAST))
             {
-                DoStartMovement(caster, GetDistance());
-            });
+                int32 duration = spellInfo->GetDuration() / IN_MILLISECONDS;
+                DoStartMovement(unit);
+                scheduler.Schedule(Seconds(duration), [unit, this](TaskContext /*context*/)
+                {
+                    DoStartMovement(unit, GetDistance());
+                });
+            }
         }
     }
 

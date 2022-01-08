@@ -28,7 +28,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void SummonedCreatureDespawn(Creature* /*summon*/) override;
         void SummonedCreatureDies(Creature* /*summon*/, Unit* /*killer*/) override;
 
-        void SpellHit(Unit* /*caster*/, SpellInfo const* /*spellInfo*/) override;
+        void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override;
 
         void EnterEvadeMode(EvadeReason why = EVADE_REASON_OTHER) override;
 

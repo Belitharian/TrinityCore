@@ -625,7 +625,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		{
 			InstanceScript::OnCreatureCreate(creature);
 
-			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
+			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
 
 			switch (creature->GetEntry())
 			{
@@ -664,7 +664,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		{
 			InstanceScript::OnGameObjectCreate(go);
 
-			go->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
+			go->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
 
 			switch (go->GetEntry())
 			{
@@ -1217,12 +1217,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						if (Creature* creature = GetCreature(actorsRelocation[i].dataId))
 						{
-							creature->GetMotionMaster()->Clear();
+                            creature->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                            creature->SetSheath(SHEATH_STATE_MELEE);
+                            creature->GetMotionMaster()->Clear();
 							creature->GetMotionMaster()->MoveIdle();
 							creature->NearTeleportTo(actorsRelocation[i].destination);
 							creature->SetHomePosition(actorsRelocation[i].destination);
-							creature->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-							creature->SetSheath(SHEATH_STATE_MELEE);
 
 							switch (creature->GetEntry())
 							{

@@ -61,7 +61,7 @@ class npc_jaina_theramore : public CreatureScript
 			}
 		}
 
-		void SpellHitTarget(Unit* target, SpellInfo const* spellInfo)
+        void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 		{
 			if (target->GetEntry() == NPC_THERAMORE_FIRE_CREDIT
 				&& spellInfo->Id == SPELL_FROSTBOLT_COSMETIC)
@@ -89,7 +89,7 @@ class npc_jaina_theramore : public CreatureScript
 				})
 				.Schedule(3s, [this](TaskContext fireblast)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						DoCast(target, SPELL_FIREBLAST);
 					fireblast.Repeat(8s, 14s);
 				})
@@ -97,7 +97,7 @@ class npc_jaina_theramore : public CreatureScript
 				{
 					if (roll_chance_i(10))
 						Talk(SAY_JAINA_BLIZZARD_01);
-					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						DoCast(target, SPELL_BLIZZARD);
 					blizzard.Repeat(14s, 22s);
 				})
@@ -269,9 +269,9 @@ class npc_archmage_tervosh : public CreatureScript
 			}
 		}
 
-		void SpellHitTarget(Unit* target, SpellInfo const* spell) override
+        void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 		{
-			switch (spell->Id)
+			switch (spellInfo->Id)
 			{
 				case SPELL_FIREBALL:
 				case SPELL_FLAMESTRIKE:
@@ -304,13 +304,13 @@ class npc_archmage_tervosh : public CreatureScript
 				})
 				.Schedule(8s, 10s, [this](TaskContext fireblast)
 				{
-					if (Unit* target = SelectTarget(SelectAggroTarget::SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						DoCast(target, SPELL_SCORCH);
 					fireblast.Repeat(14s, 22s);
 				})
 				.Schedule(12s, 18s, [this](TaskContext pyroblast)
 				{
-					if (Unit* target = SelectTarget(SelectAggroTarget::SELECT_TARGET_MAXDISTANCE, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 						DoCast(target, SPELL_FLAMESTRIKE);
 					pyroblast.Repeat(22s, 35s);
 				})
@@ -378,7 +378,7 @@ class npc_amara_leeson : public CreatureScript
 				})
 				.Schedule(3s, [this](TaskContext greater_pyroblast)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 					{
 						me->CastStop();
 						DoCast(target, SPELL_GREATER_PYROBLAST);
@@ -614,7 +614,7 @@ class npc_kinndy_sparkshine : public CreatureScript
 			scheduler
 				.Schedule(8s, 10s, [this](TaskContext supernova)
 				{
-					if (Unit* target = SelectTarget(SelectAggroTarget::SELECT_TARGET_MAXDISTANCE, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 						DoCast(target, SPELL_SUPERNOVA);
 					supernova.Repeat(14s, 22s);
 				})
@@ -726,13 +726,13 @@ class npc_kalecgos_theramore : public CreatureScript
 			scheduler
 				.Schedule(8s, 10s, [this](TaskContext chilled)
 				{
-					if (Unit* target = SelectTarget(SelectAggroTarget::SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						DoCast(target, SPELL_CHILLED);
 					chilled.Repeat(14s, 22s);
 				})
 				.Schedule(12s, 18s, [this](TaskContext comet_barrage)
 				{
-					if (Unit* target = SelectTarget(SelectAggroTarget::SELECT_TARGET_MAXDISTANCE, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 						DoCast(target, SPELL_COMET_STORM);
 					comet_barrage.Repeat(30s, 35s);
 				})

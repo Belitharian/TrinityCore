@@ -142,7 +142,7 @@ class npc_unmanned_tank : public CreatureScript
 		{
 		}
 
-		void SpellHit(Unit* /*caster*/, SpellInfo const* spellInfo) override
+        void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
 		{
 			if (spellInfo->Id != SPELL_REPAIR)
 				return;
@@ -180,7 +180,7 @@ class npc_wounded_theramore_troop : public CreatureScript
         InstanceScript* instance;
 		bool preventClick;
 
-		void SpellHit(Unit* caster, SpellInfo const* spellInfo) override
+        void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
 		{
 			if (spellInfo->Id != SPELL_TELEPORT_TROOP)
 				return;
@@ -377,13 +377,17 @@ class npc_theramore_officier : public CreatureScript
 			SPELL_DIVINE_STORM          = 183897
 		};
 
-		void SpellHit(Unit* caster, SpellInfo const* spellInfo) override
+        void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
 		{
+            Unit* unit = caster->ToUnit();
+            if (!unit)
+                return;
+
 			if (spellInfo->Id == SPELL_FROST_NOVA)
 			{
-				scheduler.Schedule(2s, [caster, this](TaskContext /*blessing_of_freedom*/)
+				scheduler.Schedule(2s, [unit, this](TaskContext /*blessing_of_freedom*/)
 				{
-					me->Attack(caster, true);
+					me->Attack(unit, true);
 					DoCastSelf(SPELL_BLESSING_OF_FREEDOM);
 				});
 			}
@@ -570,7 +574,7 @@ class npc_theramore_arcanist : public CreatureScript
 				})
 				.Schedule(4s, 8s, [this](TaskContext arcane_missiles)
 				{
-					if (Unit* victim = SelectTarget(SELECT_TARGET_RANDOM))
+					if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
 						DoCast(victim, SPELL_ARCANE_MISSILES);
 					arcane_missiles.Repeat(8s, 12s);
 				})
@@ -860,9 +864,9 @@ class npc_roknah_hag : public CreatureScript
 		bool closeTarget;
 		bool iceblock;
 
-		void SpellHitTarget(Unit* /*target*/, SpellInfo const* spell) override
+        void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 		{
-			switch (spell->Id)
+			switch (spellInfo->Id)
 			{
 				case SPELL_GLACIAL_SPIKE:
 					me->RemoveAurasDueToSpell(SPELL_ICICLES);
@@ -944,7 +948,7 @@ class npc_roknah_hag : public CreatureScript
 				})
 				.Schedule(12s, 15s, GROUP_NORMAL, [this](TaskContext flurry)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random))
 						DoCast(target, SPELL_FLURRY);
 					flurry.Repeat(12s, 14s);
 				})
@@ -1088,13 +1092,13 @@ class npc_roknah_grunt : public CreatureScript
 				})
 				.Schedule(14s, 22s, [this](TaskContext overpower)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						DoCast(target, SPELL_REND);
 					overpower.Repeat(8s, 10s);
 				})
 				.Schedule(32s, 38s, [this](TaskContext rend_slam)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						DoCast(target, RAND(SPELL_REND, SPELL_SLAM));
 					rend_slam.Repeat(2s, 8s);
 				});
@@ -1159,7 +1163,7 @@ class npc_roknah_loasinger : public CreatureScript
 			scheduler
 				.Schedule(8s, 14s, [this](TaskContext chain_lightning)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						DoCast(target, SPELL_CHAIN_LIGHTNING);
 					chain_lightning.Repeat(3s, 5s);
 				})
@@ -1287,7 +1291,7 @@ class npc_roknah_felcaster : public CreatureScript
 				{
 					if (HealthBelowPct(20))
 					{
-						if (Unit* target = SelectTarget(SELECT_TARGET_MAXDISTANCE, 0))
+						if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 						{
 							me->CastStop();
 							DoCast(target, SPELL_DRAIN_LIFE);
@@ -1299,7 +1303,7 @@ class npc_roknah_felcaster : public CreatureScript
 				})
 				.Schedule(2s, 6s, [this](TaskContext conflagrate)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						DoCast(target, SPELL_CONFLAGRATE);
                     conflagrate.Repeat(1s, 3s);
 				})
@@ -1329,7 +1333,7 @@ class npc_roknah_felcaster : public CreatureScript
 				{
 					if (HealthBelowPct(15))
 					{
-						if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+						if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						{
 							me->CastStop();
 							DoCast(target, SPELL_MORTAL_COIL);

@@ -49,7 +49,7 @@ class npc_water_elementals_theramore : public CreatureScript
 				})
 				.Schedule(12s, 22s, [this](TaskContext water_spout)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						DoCast(target, SPELL_WATER_SPOUT);
 					water_spout.Repeat(18s, 20s);
 				});
@@ -154,13 +154,13 @@ class npc_roknah_warlord : public CreatureScript
 				})
 				.Schedule(14s, 22s, [this](TaskContext overpower)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						DoCast(target, SPELL_REND);
 					overpower.Repeat(8s, 10s);
 				})
 				.Schedule(25s, 32s, [this](TaskContext rend_slam)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						DoCast(target, RAND(SPELL_REND, SPELL_SLAM));
 					rend_slam.Repeat(2s, 8s);
 				});

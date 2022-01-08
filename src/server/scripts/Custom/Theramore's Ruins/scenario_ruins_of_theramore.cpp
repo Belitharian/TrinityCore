@@ -514,15 +514,11 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						jaina->SetImmuneToAll(true);
 						jaina->SetWalk(true);
 
-						if (GameObject* brokenGlass = GetGameObject(DATA_BROKEN_GLASS))
-							if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, brokenGlass->GetPosition()))
-							{
-								jaina->SetWalk(true);
-								if (brokenGlass->IsWithinDist(jaina, 15.f))
-									jaina->SetWalk(false);
-
-								jaina->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_01, trigger, 0.8f);
-							}
+                        if (GameObject* brokenGlass = GetGameObject(DATA_BROKEN_GLASS))
+                        {
+                            if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, brokenGlass->GetPosition()))
+                                jaina->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_01, trigger, 0.8f);
+                        }
 					}
 					break;
 				case 40:

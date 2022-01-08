@@ -124,7 +124,7 @@ class npc_jaina_ruins : public CreatureScript
 				})
 				.Schedule(2s, [this](TaskContext frigid_shard)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						DoCast(target, SPELL_FRIGID_SHARD);
 					frigid_shard.Repeat(5s, 8s);
 				})
@@ -135,7 +135,7 @@ class npc_jaina_ruins : public CreatureScript
 				})
 				.Schedule(14s, [this](TaskContext blink)
 				{
-					if (Unit* target = SelectTarget(SELECT_TARGET_MAXDISTANCE, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 					{
 						if (me->IsWithinDist(target, 15.f))
 						{
@@ -185,8 +185,13 @@ class npc_jaina_ruins : public CreatureScript
 								context.Repeat(2s);
 								break;
 							case 1:
-								if (Creature* warlord = instance->GetCreature(DATA_ROKNAH_WARLORD))
-									me->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_02, warlord, 1.3f);
+                                if (Creature* warlord = instance->GetCreature(DATA_ROKNAH_WARLORD))
+                                {
+                                    if (!warlord->IsWithinDist(warlord, 8.f))
+                                        me->SetWalk(false);
+
+                                    me->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_02, warlord, 1.3f);
+                                }
 								break;
 						}
 					});
