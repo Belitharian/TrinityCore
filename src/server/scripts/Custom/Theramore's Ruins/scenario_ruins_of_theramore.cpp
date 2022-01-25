@@ -42,7 +42,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 	struct scenario_ruins_of_theramore_InstanceScript : public InstanceScript
 	{
 		scenario_ruins_of_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map),
-			eventId(0), phase(RFTPhases::FindJaina_Isle)
+			eventId(1), phase(RFTPhases::FindJaina_Isle)
 		{
 			SetHeaders(DataHeader);
 			LoadObjectData(creatureData, gameobjectData);
@@ -407,9 +407,9 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(5s);
 					break;
 				case 29:
-					if (TempSummon* zeppelin = instance->SummonCreature(NPC_BOMBARDING_ZEPPELIN, ZeppelinPoint.spawn, nullptr, 15 * IN_MILLISECONDS))
+					if (TempSummon* zeppelin = instance->SummonCreature(NPC_BOMBARDING_ZEPPELIN, ZeppelinPoint.spawn, nullptr, 10 * IN_MILLISECONDS))
 					{
-						zeppelin->SetSpeedRate(MOVE_RUN, 3.f);
+						zeppelin->SetSpeedRate(MOVE_RUN, 5.f);
 						zeppelin->PlayDirectSound(SOUND_ZEPPELIN_FLIGHT);
 						zeppelin->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, ZeppelinPoint.destination, false);
 					}
@@ -423,7 +423,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						horde->UpdateGroundPositionZ(pos.GetPositionX(), pos.GetPositionY(), pos.m_positionZ);
 						horde->NearTeleportTo(pos);
 						horde->SetImmuneToAll(true);
-						horde->CastSpell(horde, SPELL_TELEPORT_VISUAL_ONLY);
+						horde->CastSpell(horde, SPELL_THALYSSRA_SPAWNS);
 					}
 					Next(4s);
 					break;
@@ -462,9 +462,9 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						else
 						{
 							if (horde->GetPositionY() <= -4468.18f)
-								horde->AI()->AttackStart(elementals[0]);
-							else
 								horde->AI()->AttackStart(elementals[1]);
+							else
+								horde->AI()->AttackStart(elementals[0]);
 						}
 					}
 					Next(1s);
@@ -556,10 +556,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					if (Creature* jaina = GetJaina())
 					{
 						for (Creature* elemental : elementals)
-						{
-							elemental->CastSpell(elemental, SPELL_WATER_BOSS_ENTRANCE);
 							elemental->DespawnOrUnsummon(1s);
-						}
 
 						jaina->CastSpell(jaina, SPELL_COSMETIC_ARCANE_DISSOLVE);
 						jaina->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);

@@ -181,17 +181,15 @@ class npc_jaina_ruins : public CreatureScript
 						switch (context.GetRepeatCounter())
 						{
 							case 0:
-								me->SetStandState(UNIT_STAND_STATE_STAND);
+                                me->SetWalk(false);
+                                me->SetStandState(UNIT_STAND_STATE_STAND);
+                                if (Creature* warlord = me->FindNearestCreature(NPC_ROKNAH_WARLORD, 10.f))
+                                    me->SetWalk(true);
 								context.Repeat(2s);
 								break;
 							case 1:
                                 if (Creature* warlord = instance->GetCreature(DATA_ROKNAH_WARLORD))
-                                {
-                                    if (!warlord->IsWithinDist(warlord, 8.f))
-                                        me->SetWalk(false);
-
                                     me->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_02, warlord, 1.3f);
-                                }
 								break;
 						}
 					});

@@ -24,6 +24,10 @@ void AddSC_ruins_of_theramore();
 void AddSC_scenario_ruins_of_theramore();
 void AddSC_npcs_ruins_of_theramore();
 
+void AddSC_dalaran_purge();
+void AddSC_scenario_dalaran_purge();
+void AddSC_npcs_dalaran_purge();
+
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
 void AddCustomScripts()
@@ -35,4 +39,8 @@ void AddCustomScripts()
     AddSC_ruins_of_theramore();
     AddSC_scenario_ruins_of_theramore();
     AddSC_npcs_ruins_of_theramore();
+
+    AddSC_dalaran_purge();
+    AddSC_scenario_dalaran_purge();
+    AddSC_npcs_dalaran_purge();
 }

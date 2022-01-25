@@ -261,23 +261,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				}
 				// Step 3 : Waiting
 				case CRITERIA_TREE_WAITING:
-				{
-					for (uint8 i = 0; i < PERITH_LOCATION; i++)
-					{
-						if (Creature* creature = GetCreature(perithLocation[i].dataId))
-						{
-							creature->NearTeleportTo(perithLocation[i].position);
-							if (creature->GetEntry() == NPC_KNIGHT_OF_THERAMORE)
-							{
-								creature->SetSheath(SHEATH_STATE_UNARMED);
-								creature->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
-							}
-						}
-					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::UnknownTauren);
 					events.ScheduleEvent(25, 1s);
 					break;
-				}
 				// Step 4 : The Unknow Tauren
 				case CRITERIA_TREE_UNKNOW_TAUREN:
 				{
@@ -343,15 +329,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						kalecgos->SetHomePosition(KalecgosPoint01);
 						kalecgos->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
 						kalecgos->RemoveAllAuras();
-					}
-					for (uint8 i = 0; i < ARCHMAGES_LOCATION; i++)
-					{
-						if (Creature* creature = GetCreature(archmagesLocation[i].dataId))
-						{
-							creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-							creature->SetVisible(false);
-							creature->NearTeleportTo(PortalPoint01);
-						}
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
 					break;
@@ -830,8 +807,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case 25:
 					for (uint8 i = 0; i < PERITH_LOCATION; i++)
 					{
-						if (Creature* creature = GetCreature(perithLocation[i].dataId))
+						if (Creature* creature = instance->SummonCreature(perithLocation[i].dataId, perithLocation[i].position))
 						{
+                            if (creature->GetEntry() == NPC_KNIGHT_OF_THERAMORE)
+                            {
+                                creature->SetSheath(SHEATH_STATE_UNARMED);
+                                creature->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
+                            }
+
 							creature->SetWalk(true);
 							creature->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
 							creature->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, perithLocation[i].destination, false, perithLocation[i].destination.GetOrientation());
@@ -1124,11 +1107,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							Next(2s);
 						#endif
 					}
-					else if (Creature* creature = GetCreature(archmagesLocation[archmagesIndex].dataId))
+					else if (Creature* creature = instance->SummonCreature(archmagesLocation[archmagesIndex].dataId, PortalPoint01))
 					{
+                        creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 						creature->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
 						creature->SetSheath(SHEATH_STATE_UNARMED);
-						creature->SetVisible(true);
 						creature->CastSpell(creature, SPELL_TELEPORT_DUMMY);
 						creature->SetWalk(true);
 						creature->GetMotionMaster()->Clear();
@@ -1195,8 +1178,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* jaina = GetJaina())
 					{
 						Talk(jaina, SAY_PRE_BATTLE_15);
-						if (Player* player = jaina->SelectNearestPlayer(150.f))
-							SetTarget(player);
+                        if (Player* player = instance->GetPlayers().begin()->GetSource())
+                            SetTarget(player);
 					}
 					if (Creature* vereesa = GetVereesa())
 					{
@@ -1213,6 +1196,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 90:
 					EnsureBarrierHaveDamage();
+                    if (Creature* kalecgos = instance->SummonCreature(NPC_KALECGOS_DRAGON, KalecgosPoint02))
+                    {
+                        kalecgos->GetMotionMaster()->Clear();
+                        kalecgos->GetMotionMaster()->MoveIdle();
+
+                        kalecgos->m_Events.AddEvent(new KalecgosLoopEvent(kalecgos),
+                            kalecgos->m_Events.CalculateTime(1 * IN_MILLISECONDS));
+                    }
 					for (uint8 i = 0; i < ACTORS_RELOCATION; i++)
 					{
 						if (Creature* creature = GetCreature(actorsRelocation[i].dataId))
@@ -1244,9 +1235,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 								case NPC_JAINA_PROUDMOORE:
 									GetBarrier01()->UseDoorOrButton();
 									TeleportPlayers(GetJaina(), actorsRelocation[i].destination, 15.0f);
-									break;
-								case NPC_KALECGOS_DRAGON:
-									creature->m_Events.AddEvent(new KalecgosLoopEvent(creature), creature->m_Events.CalculateTime(1 * IN_MILLISECONDS));
 									break;
 								case NPC_KALECGOS:
 									creature->SetVisible(false);

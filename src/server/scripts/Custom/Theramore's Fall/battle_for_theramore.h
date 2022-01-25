@@ -26,7 +26,7 @@
 #define PERITH_LOCATION          3
 #define ARCHMAGES_LOCATION       6
 #define ARCHMAGES_RELOCATION     6
-#define ACTORS_RELOCATION       11
+#define ACTORS_RELOCATION       10
 #define BARRIERS_LOCATION        2
 
 #define FIRE_LOCATION           32
@@ -351,19 +351,19 @@ struct Location
 
 Location const perithLocation[PERITH_LOCATION] =
 {
-	{ DATA_KNIGHT_OF_THERAMORE,  { -3733.33f, -4422.51f, 30.51f, 3.92f }, { -3746.61f, -4435.87f, 30.55f, 3.17f } },
-	{ DATA_PAINED,               { -3734.16f, -4425.18f, 30.55f, 3.92f }, { -3746.69f, -4437.91f, 30.55f, 3.57f } },
-	{ DATA_PERITH_STORMHOOVE,    { -3731.74f, -4422.76f, 30.49f, 3.92f }, { -3744.75f, -4435.91f, 30.55f, 3.49f } }
+	{ NPC_KNIGHT_OF_THERAMORE,  { -3733.33f, -4422.51f, 30.51f, 3.92f }, { -3746.61f, -4435.87f, 30.55f, 3.17f } },
+	{ NPC_PAINED,               { -3734.16f, -4425.18f, 30.55f, 3.92f }, { -3746.69f, -4437.91f, 30.55f, 3.57f } },
+	{ NPC_PERITH_STORMHOOVE,    { -3731.74f, -4422.76f, 30.49f, 3.92f }, { -3744.75f, -4435.91f, 30.55f, 3.49f } }
 };
 
 Location const archmagesLocation[ARCHMAGES_LOCATION] =
 {
-	{ DATA_RHONIN,		         { 0.f, 0.f, 0.f, 0.f }, { -3718.51f, -4542.53f, 25.82f, 3.59f } },
-	{ DATA_VEREESA_WINDRUNNER,	 { 0.f, 0.f, 0.f, 0.f }, { -3716.33f, -4543.03f, 25.82f, 3.59f } },
-	{ DATA_THALEN_SONGWEAVER,    { 0.f, 0.f, 0.f, 0.f }, { -3715.66f, -4544.08f, 25.82f, 3.59f } },
-	{ DATA_TARI_COGG,		     { 0.f, 0.f, 0.f, 0.f }, { -3717.86f, -4539.88f, 25.82f, 3.59f } },
-	{ DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3716.01f, -4540.03f, 25.82f, 3.59f } },
-	{ DATA_THADER_WINDERMERE,	 { 0.f, 0.f, 0.f, 0.f }, { -3717.01f, -4538.31f, 25.82f, 3.59f } }
+	{ NPC_RHONIN,		        { 0.f, 0.f, 0.f, 0.f }, { -3718.51f, -4542.53f, 25.82f, 3.59f } },
+	{ NPC_VEREESA_WINDRUNNER,	{ 0.f, 0.f, 0.f, 0.f }, { -3716.33f, -4543.03f, 25.82f, 3.59f } },
+	{ NPC_THALEN_SONGWEAVER,    { 0.f, 0.f, 0.f, 0.f }, { -3715.66f, -4544.08f, 25.82f, 3.59f } },
+	{ NPC_TARI_COGG,		    { 0.f, 0.f, 0.f, 0.f }, { -3717.86f, -4539.88f, 25.82f, 3.59f } },
+	{ NPC_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3716.01f, -4540.03f, 25.82f, 3.59f } },
+	{ NPC_THADER_WINDERMERE,	{ 0.f, 0.f, 0.f, 0.f }, { -3717.01f, -4538.31f, 25.82f, 3.59f } }
 };
 
 Location const actorsRelocation[ACTORS_RELOCATION] =
@@ -377,7 +377,6 @@ Location const actorsRelocation[ACTORS_RELOCATION] =
 	{ DATA_TARI_COGG,            { 0.f, 0.f, 0.f, 0.f }, { -3786.33f, -4256.64f,  6.52f, 1.59f } },
 	{ DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3649.58f, -4369.21f,  9.57f, 0.69f } },
 	{ DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3778.19f, -4256.27f,  6.51f, 1.53f } },
-	{ DATA_KALECGOS_DRAGON,      { 0.f, 0.f, 0.f, 0.f }, { -3717.96f, -4356.52f, 90.82f, 0.00f } },
 	{ DATA_KALECGOS,             { 0.f, 0.f, 0.f, 0.f }, { -3730.39f, -4550.39f, 27.11f, 0.54f } }
 };
 
@@ -642,6 +641,7 @@ Position const OfficerPoint01   = { -3748.43f, -4432.99f, 30.54f, 4.66f };
 Position const QuillPoint01     = { -3751.32f, -4438.13f, 31.26f, 3.33f };
 Position const TervoshPoint01   = { -3720.83f, -4551.10f, 25.82f, 1.35f };
 Position const KalecgosPoint01  = { -3730.39f, -4550.39f, 27.11f, 0.54f };
+Position const KalecgosPoint02  = { -3717.96f, -4356.52f, 90.82f, 0.00f };
 Position const PortalPoint01    = { -3712.42f, -4539.62f, 25.82f, 3.59f };
 Position const PortalPoint02    = { -3783.17f, -4205.77f,  7.60f, 4.71f };
 Position const PortalPoint03    = { -3750.82f, -4449.65f, 64.90f, 0.63f };
