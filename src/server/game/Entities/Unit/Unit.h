@@ -20,7 +20,6 @@
 
 #include "Object.h"
 #include "CombatManager.h"
-#include "OptionalFwd.h"
 #include "SpellAuraDefines.h"
 #include "ThreatManager.h"
 #include "Timer.h"
@@ -1982,7 +1981,7 @@ class TC_GAME_API Unit : public WorldObject
     private:
 
         uint32 m_state;                                     // Even derived shouldn't modify
-        TimeTrackerSmall m_splineSyncTimer;
+        TimeTracker m_splineSyncTimer;
 
         Diminishing m_Diminishing;
 

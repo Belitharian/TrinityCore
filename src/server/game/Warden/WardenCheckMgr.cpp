@@ -23,10 +23,8 @@
 #include "WardenCheckMgr.h"
 #include "Warden.h"
 #include "World.h"
-#include <boost/thread/locks.hpp>
-#include <boost/thread/shared_mutex.hpp>
 
-WardenCheckMgr::WardenCheckMgr() : _checkStoreLock(new boost::shared_mutex())
+WardenCheckMgr::WardenCheckMgr()
 {
 }
 
@@ -37,8 +35,6 @@ WardenCheckMgr::~WardenCheckMgr()
 
     for (CheckResultContainer::iterator itr = CheckResultStore.begin(); itr != CheckResultStore.end(); ++itr)
         delete itr->second;
-
-    delete _checkStoreLock;
 }
 
 void WardenCheckMgr::LoadWardenChecks()
@@ -151,7 +147,7 @@ void WardenCheckMgr::LoadWardenOverrides()
 
     uint32 count = 0;
 
-    boost::unique_lock<boost::shared_mutex> lock(*sWardenCheckMgr->_checkStoreLock);
+    std::unique_lock<std::shared_mutex> lock(sWardenCheckMgr->_checkStoreLock);
 
     do
     {
@@ -164,7 +160,7 @@ void WardenCheckMgr::LoadWardenOverrides()
         if (action > WARDEN_ACTION_BAN)
             TC_LOG_ERROR("warden", "Warden check override action out of range (ID: %u, action: %u)", checkId, action);
         // Check if check actually exists before accessing the CheckStore vector
-        else if (checkId > CheckStore.size())
+        else if (checkId >= CheckStore.size())
             TC_LOG_ERROR("warden", "Warden check action override for non-existing check (ID: %u, action: %u), skipped", checkId, action);
         else
         {
