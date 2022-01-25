@@ -51,7 +51,7 @@ class npc_jaina_theramore : public CreatureScript
 			Initialize();
 		}
 
-		void DamageTaken(Unit* attacker, uint32& damage) override
+		void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
 		{
 			if (HealthBelowPct(20)
 				&& !me->HasAura(SPELL_FROST_BARRIER))
@@ -77,7 +77,7 @@ class npc_jaina_theramore : public CreatureScript
 				Talk(SAY_JAINA_SLAY_01);
 		}
 
-		void JustEngagedWith(Unit* who) override
+		void JustEngagedWith(Unit* /*who*/) override
 		{
 			scheduler
 				.Schedule(5ms, [this](TaskContext fireball)
@@ -146,7 +146,7 @@ class npc_jaina_theramore : public CreatureScript
 						{
 							me->SetVisible(true);
 							me->NearTeleportTo(JainaPoint05);
-							if (GameObject* portal = me->SummonGameObject(GOB_PORTAL_TO_STORMWIND, PortalPoint03, QuaternionData::fromEulerAnglesZYX(PortalPoint03.GetOrientation(), 0.f, 0.f), 0))
+							if (GameObject* portal = me->SummonGameObject(GOB_PORTAL_TO_STORMWIND, PortalPoint03, QuaternionData::fromEulerAnglesZYX(PortalPoint03.GetOrientation(), 0.f, 0.f), 0s))
 								portal->SetObjectScale(0.8f);
 							if (TempSummon* summon = me->SummonCreature(WORLD_TRIGGER, PortalPoint03, TEMPSUMMON_MANUAL_DESPAWN))
 							{
@@ -359,7 +359,7 @@ class npc_amara_leeson : public CreatureScript
 			return 15.f;
 		}
 
-		void JustEngagedWith(Unit* who) override
+		void JustEngagedWith(Unit* /*who*/) override
 		{
 			DoCastSelf(SPELL_BLAZING_BARRIER, true);
 			DoCastSelf(SPELL_PRISMATIC_BARRIER, true);
@@ -498,7 +498,7 @@ class npc_rhonin : public CreatureScript
 			}
 		}
 
-		void JustEngagedWith(Unit* who) override
+		void JustEngagedWith(Unit* /*who*/) override
 		{
 			DoCastSelf(SPELL_PRISMATIC_BARRIER, CastSpellExtraArgs(SPELLVALUE_BASE_POINT0, 256E3));
 

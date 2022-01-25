@@ -94,7 +94,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					instance->SummonCreature(NPC_KALECGOS, KalecgosPath01[0]);
 					if (Creature* kalecgos = GetKalecgos())
 					{
-						kalecgos->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+						kalecgos->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						kalecgos->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, KalecgosPath01, KALECGOS_PATH_01, false, false, KalecgosPath01[KALECGOS_PATH_01 - 1].GetOrientation());
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::FindJaina_Isle_Valided);
@@ -113,7 +113,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						jaina->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
 						jaina->SetStandState(UNIT_STAND_STATE_KNEEL);
 						jaina->RemoveAllAuras();
-                        jaina->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                        jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 
 						// Distance minimale pour déclencher l'event
 						jaina->AI()->SetData(0U, 50U);
@@ -203,7 +203,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					if (Creature* jaina = GetJaina())
 					{
 						jaina->SetWalk(true);
-						jaina->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+						jaina->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						jaina->GetMotionMaster()->MovePoint(0, JainaPoint01, true, JainaPoint01.GetOrientation());
 					}
 					Next(3s);
@@ -297,7 +297,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					if (Creature* kalecgos = GetKalecgos())
 					{
 						Talk(kalecgos, SAY_AFTER_BATTLE_KALECGOS_13);
-						kalecgos->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+						kalecgos->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						if (Player* player = instance->GetPlayers().begin()->GetSource())
 							kalecgos->SetFacingToObject(player);
 					}
@@ -542,7 +542,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case 42:
 					if (Creature* jaina = GetJaina())
 					{
-						GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_STORMWIND, jaina->GetPosition(), QuaternionData::fromEulerAnglesZYX(jaina->GetOrientation(), 0.f, 0.f), 0);
+						GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_STORMWIND, jaina->GetPosition(), QuaternionData::fromEulerAnglesZYX(jaina->GetOrientation(), 0.f, 0.f), 0s);
 						if (portal)
 						{
 							portal->SetGoState(GO_STATE_ACTIVE);

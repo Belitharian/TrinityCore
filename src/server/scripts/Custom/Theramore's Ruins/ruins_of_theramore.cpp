@@ -108,13 +108,13 @@ class npc_jaina_ruins : public CreatureScript
 			}
 		}
 
-		void DamageTaken(Unit* attacker, uint32& damage) override
+		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
 		{
 			if (HealthBelowPct(10))
 				damage = 0;
 		}
 
-		void JustEngagedWith(Unit* who) override
+		void JustEngagedWith(Unit* /*who*/) override
 		{
 			scheduler
 				.Schedule(5ms, [this](TaskContext frostbolt)
@@ -165,12 +165,12 @@ class npc_jaina_ruins : public CreatureScript
 				});
 		}
 
-		bool CanAIAttack(Unit const* who) const override
+		bool CanAIAttack(Unit const* /*who*/) const override
 		{
 			return true;
 		}
 
-		void MovementInform(uint32 type, uint32 id) override
+		void MovementInform(uint32 /*type*/, uint32 id) override
 		{
 			switch (id)
 			{

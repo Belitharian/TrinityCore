@@ -393,7 +393,7 @@ class npc_theramore_officier : public CreatureScript
 			}
 		}
 
-		void JustEngagedWith(Unit* who) override
+		void JustEngagedWith(Unit* /*who*/) override
 		{
 			if (roll_chance_i(30))
 				DoCastSelf(SPELL_AVENGING_WRATH);
@@ -479,7 +479,7 @@ class npc_theramore_footman : public CreatureScript
 			SPELL_HAMMER_STUN           = 36138
 		};
 
-		void JustEngagedWith(Unit* who) override
+		void JustEngagedWith(Unit* /*who*/) override
 		{
 			scheduler
 				.Schedule(5ms, [this](TaskContext hammer_stun)
@@ -551,7 +551,7 @@ class npc_theramore_arcanist : public CreatureScript
 			});
 		}
 
-		void JustEngagedWith(Unit* who) override
+		void JustEngagedWith(Unit* /*who*/) override
 		{
 			DoCast(SPELL_ARCANE_HASTE);
 
@@ -864,7 +864,7 @@ class npc_roknah_hag : public CreatureScript
 		bool closeTarget;
 		bool iceblock;
 
-        void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
+        void SpellHitTarget(WorldObject* /*target*/, SpellInfo const* spellInfo) override
 		{
 			switch (spellInfo->Id)
 			{
@@ -1424,7 +1424,7 @@ class spell_theramore_throw_bucket : public SpellScript
                         KillRewarder(player, nullptr, false).Reward(NPC_THERAMORE_FIRE_CREDIT);
                 }
             #else
-                if (Creature* trigger = caster->SummonTrigger(x, y, z, 0.0f, 5 * IN_MILLISECONDS))
+                if (Creature* trigger = caster->SummonTrigger(x, y, z, 0.0f, 5s))
                 {
                     std::list<Creature*> fires;
                     trigger->GetCreatureListWithEntryInGrid(fires, NPC_THERAMORE_FIRE_CREDIT, radius);
@@ -1512,7 +1512,7 @@ class at_blizzard_theramore : public AreaTriggerEntityScript
 			if (timeInterval < interval)
 				return;
 
-			if (TempSummon* tempSumm = caster->SummonCreature(WORLD_TRIGGER, at->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 200))
+			if (TempSummon* tempSumm = caster->SummonCreature(WORLD_TRIGGER, at->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 200ms))
 			{
 				tempSumm->SetFaction(caster->GetFaction());
 				tempSumm->SetOwnerGUID(caster->GetGUID());

@@ -37,7 +37,7 @@ class npc_water_elementals_theramore : public CreatureScript
 			return 12.f;
 		}
 
-		void JustEngagedWith(Unit* who) override
+		void JustEngagedWith(Unit* /*who*/) override
 		{
 			DoCast(SPELL_FROST_BARRIER);
 
@@ -128,7 +128,7 @@ class npc_roknah_warlord : public CreatureScript
 			damage = 0;
 		}
 
-		void JustEngagedWith(Unit* who) override
+		void JustEngagedWith(Unit* /*who*/) override
 		{
 			scheduler
 				.Schedule(5s, 8s, [this](TaskContext execute)

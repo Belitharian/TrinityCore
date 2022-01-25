@@ -53,7 +53,7 @@ class HordeDoorsEvent : public BasicEvent
 	{
 	}
 
-	bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
+	bool Execute(uint64 timer, uint32 /*updateTime*/) override
 	{
 		float x = minPosX + (rand() % static_cast<int>(maxPosX - minPosX + 1));
 		float y = -4248.63f;
@@ -68,7 +68,7 @@ class HordeDoorsEvent : public BasicEvent
 			creature->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_03, { x, y, z });
 		}
 
-		owner->m_Events.AddEvent(this, eventTime + urand(3 * IN_MILLISECONDS, 5 * IN_MILLISECONDS));
+		owner->m_Events.AddEventAtOffset(this, Milliseconds(timer + urand(3000, 5000)));
 
 		return false;
 	}
@@ -87,14 +87,14 @@ class KalecgosSpellEvent : public BasicEvent
 		owner->SetReactState(REACT_PASSIVE);
 	}
 
-	bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
+	bool Execute(uint64 timer, uint32 /*updateTime*/) override
 	{
 		if (roll_chance_i(20))
 			owner->AI()->Talk(SAY_KALECGOS_SPELL_01);
 
 		owner->CastSpell(owner, SPELL_FROST_BREATH);
 		owner->GetThreatManager().RemoveMeFromThreatLists();
-		owner->m_Events.AddEvent(this, eventTime + urand(8 * IN_MILLISECONDS, 10 * IN_MILLISECONDS));
+		owner->m_Events.AddEventAtOffset(this, Milliseconds(timer + urand(8000, 10000)));
 		return false;
 	}
 
@@ -115,16 +115,16 @@ class KalecgosLoopEvent : public BasicEvent
 		m_loopTime = (perimeter / owner->GetSpeed(MOVE_RUN)) * IN_MILLISECONDS;
 	}
 
-	bool Execute(uint64 eventTime, uint32 /*updateTime*/) override
+	bool Execute(uint64 timer, uint32 /*updateTime*/) override
 	{
 		owner->GetMotionMaster()->MoveCirclePath(TheramorePoint01.GetPositionX(), TheramorePoint01.GetPositionY(), TheramorePoint01.GetPositionZ(), KALECGOS_CIRCLE_RADIUS, true, 16);
-		owner->m_Events.AddEvent(this, eventTime + m_loopTime);
+		owner->m_Events.AddEventAtOffset(this, Milliseconds(timer + m_loopTime));
 		return false;
 	}
 
 	private:
 	Creature* owner;
-	float m_loopTime;
+    uint64 m_loopTime;
 };
 
 class scenario_battle_for_theramore : public InstanceMapScript
@@ -239,12 +239,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case CRITERIA_TREE_FIND_JAINA:
 				{
 					ClosePortal(DATA_PORTAL_TO_STORMWIND);
-					GetTervosh()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-					GetKinndy()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
-					GetKalec()->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+					GetTervosh()->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+					GetKinndy()->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+					GetKalec()->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					if (Creature* jaina = GetCreature(DATA_JAINA_PROUDMOORE))
 					{
-						jaina->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+						jaina->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						Talk(jaina, SAY_REUNION_1);
 						SetTarget(jaina);
 					}
@@ -418,8 +418,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						jaina->AI()->Talk(SAY_BATTLE_01);
 						jaina->SetRegenerateHealth(false);
 
-						if (GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_ORGRIMMAR, PortalPoint02, QuaternionData::QuaternionData(), 0))
-							portal->m_Events.AddEvent(new HordeDoorsEvent(portal), portal->m_Events.CalculateTime(15 * IN_MILLISECONDS));
+						if (GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_ORGRIMMAR, PortalPoint02, QuaternionData::QuaternionData(), 0s))
+							portal->m_Events.AddEvent(new HordeDoorsEvent(portal), portal->m_Events.CalculateTime(15s));
 					}
 					if (Creature* rhonin = GetRhonin())
 					{
@@ -504,7 +504,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							{
 								creature->SetEmoteState(EMOTE_STATE_EAT);
 								creature->SetStandState(UNIT_STAND_STATE_SIT);
-								creature->SummonGameObject(GOB_REFRESHMENT, TablePoint01, QuaternionData::fromEulerAnglesZYX(TablePoint01.GetOrientation(), 0.f, 0.f), 0);
+								creature->SummonGameObject(GOB_REFRESHMENT, TablePoint01, QuaternionData::fromEulerAnglesZYX(TablePoint01.GetOrientation(), 0.f, 0.f), 0s);
 							}
 							else if (creature->GetEntry() == NPC_KINNDY_SPARKSHINE)
 							{
@@ -572,7 +572,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					for (uint8 i = 0; i < CREATURE_DATA_SIZE; i++)
 					{
 						if (Creature* creature = GetCreature(creatureData[i].type))
-							creature->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+							creature->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::WaitForAmara_JoinJaina);
 					events.ScheduleEvent(142, 500ms);
@@ -816,7 +816,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                             }
 
 							creature->SetWalk(true);
-							creature->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+							creature->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 							creature->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, perithLocation[i].destination, false, perithLocation[i].destination.GetOrientation());
 						}
 					}
@@ -989,7 +989,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* jaina = GetJaina())
 					{
 						jaina->RemoveAurasDueToSpell(SPELL_ARCANE_CANALISATION);
-						jaina->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+						jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						jaina->SetFacingToObject(GetPerith());
 					}
 					Next(2s);
@@ -1024,7 +1024,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 66:
 					ClearTarget();
-					GetPained()->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+					GetPained()->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					if (Creature* perith = GetPerith())
 					{
 						perith->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, OfficerPath01, OFFICER_PATH_01, true);
@@ -1063,7 +1063,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						EnsurePlayerHaveShaker();
 						if (Creature* hedric = GetHedric())
 						{
-							hedric->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+							hedric->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 							hedric->GetMotionMaster()->Clear();
 							hedric->GetMotionMaster()->MoveIdle();
 							hedric->NearTeleportTo(HedricPoint01);
@@ -1087,7 +1087,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					Next(4s);
 					break;
 				case 75:
-					GetJaina()->SummonGameObject(GOB_PORTAL_TO_DALARAN, PortalPoint01, QuaternionData::QuaternionData(), 0);
+					GetJaina()->SummonGameObject(GOB_PORTAL_TO_DALARAN, PortalPoint01, QuaternionData::QuaternionData(), 0s);
 					Next(500ms);
 					break;
 				case 76:
@@ -1110,7 +1110,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					else if (Creature* creature = instance->SummonCreature(archmagesLocation[archmagesIndex].dataId, PortalPoint01))
 					{
                         creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-						creature->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+						creature->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						creature->SetSheath(SHEATH_STATE_UNARMED);
 						creature->CastSpell(creature, SPELL_TELEPORT_DUMMY);
 						creature->SetWalk(true);
@@ -1170,7 +1170,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						Talk(jaina, SAY_PRE_BATTLE_14);
 						SetTarget(jaina);
 						jaina->SetTarget(ObjectGuid::Empty);
-						jaina->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+						jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					}
 					Next(2s);
 					break;
@@ -1202,13 +1202,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         kalecgos->GetMotionMaster()->MoveIdle();
 
                         kalecgos->m_Events.AddEvent(new KalecgosLoopEvent(kalecgos),
-                            kalecgos->m_Events.CalculateTime(1 * IN_MILLISECONDS));
+                            kalecgos->m_Events.CalculateTime(1s));
                     }
 					for (uint8 i = 0; i < ACTORS_RELOCATION; i++)
 					{
 						if (Creature* creature = GetCreature(actorsRelocation[i].dataId))
 						{
-                            creature->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+                            creature->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
                             creature->SetSheath(SHEATH_STATE_MELEE);
                             creature->GetMotionMaster()->Clear();
 							creature->GetMotionMaster()->MoveIdle();
@@ -1336,7 +1336,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					}
 					if (Creature* kalecgos = GetKalecgos())
 					{
-						kalecgos->m_Events.AddEvent(new KalecgosSpellEvent(kalecgos), kalecgos->m_Events.CalculateTime(2 * IN_MILLISECONDS));
+						kalecgos->m_Events.AddEvent(new KalecgosSpellEvent(kalecgos), kalecgos->m_Events.CalculateTime(2s));
 					}
 					GetJaina()->CastSpell(actorsRelocation[0].destination, SPELL_TELEPORT);
 					Next(2s);
@@ -1646,14 +1646,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* jaina = GetJaina())
 					{
 						jaina->AI()->Talk(SAY_IRIS_XPLOSION_01);
-						jaina->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+						jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					}
 					Next(3s);
 					break;
 				case 162:
 					if (Creature* jaina = GetJaina())
 					{
-						jaina->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+						jaina->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						jaina->SetFacingToObject(GetRhonin());
 						jaina->RemoveAllAuras();
 
@@ -1662,7 +1662,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							jaina->SetTarget(rhonin->GetGUID());
 
 							rhonin->SetTarget(jaina->GetGUID());
-							rhonin->AddUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+							rhonin->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						}
 					}
 					Next(3s);
@@ -1703,7 +1703,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* rhonin = GetRhonin())
 					{
 						rhonin->AI()->Talk(SAY_IRIS_XPLOSION_10);
-						rhonin->RemoveUnitFlag2(UNIT_FLAG2_DISABLE_TURN);
+						rhonin->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						rhonin->RemoveAllAuras();
 					}
 					Next(5s);
@@ -1807,7 +1807,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				args.SetTriggerFlags(TRIGGERED_CAST_DIRECTLY);
 
 				const Position pos = portal->GetPosition();
-				if (Creature* special = portal->SummonTrigger(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), pos.GetOrientation(), 5 * IN_MILLISECONDS))
+				if (Creature* special = portal->SummonTrigger(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), pos.GetOrientation(), 5s))
 				{
 					special->CastSpell(special, SPELL_CLOSE_PORTAL, args);
 				}

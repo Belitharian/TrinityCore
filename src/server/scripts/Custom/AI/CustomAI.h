@@ -28,16 +28,16 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void SummonedCreatureDespawn(Creature* /*summon*/) override;
         void SummonedCreatureDies(Creature* /*summon*/, Unit* /*killer*/) override;
 
-        void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override;
+        void SpellHit(WorldObject* /*caster*/, SpellInfo const* /*spellInfo*/) override;
 
         void EnterEvadeMode(EvadeReason why = EVADE_REASON_OTHER) override;
 
         void Reset() override;
-        void AttackStart(Unit* who) override;
+        void AttackStart(Unit* /*who*/) override;
         void JustDied(Unit* /*killer*/) override;
-        void UpdateAI(uint32 diff) override;
+        void UpdateAI(uint32 /*diff*/) override;
 
-        bool CanAIAttack(Unit const* who) const override;
+        bool CanAIAttack(Unit const* /*who*/) const override;
 
     protected:
         TaskScheduler scheduler;
