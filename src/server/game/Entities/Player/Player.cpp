@@ -258,8 +258,6 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
 
     m_movementForceModMagnitudeChanges = 0;
 
-    m_stableSlots = 0;
-
     /////////////////// Instance System /////////////////////
 
     m_HomebindTimer = 0;
@@ -3909,7 +3907,7 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
 
             // Unsummon and delete for pets in world is not required: player deleted from CLI or character list with not loaded pet.
             // NOW we can finally clear other DB data related to character
-            stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHAR_PETS);
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHAR_PET_IDS);
             stmt->setUInt64(0, guid);
             PreparedQueryResult resultPets = CharacterDatabase.Query(stmt);
 
@@ -14627,7 +14625,7 @@ void Player::PrepareGossipMenu(WorldObject* source, uint32 menuId /*= 0*/, bool 
                         canTalk = false;
                     break;
                 default:
-                    TC_LOG_ERROR("sql.sql", "Creature entry %u has unknown gossip option %u for menu %u.", creature->GetEntry(), itr->second.OptionType, itr->second.MenuId);
+                    TC_LOG_ERROR("sql.sql", "Creature entry %u has unknown gossip option %u for menu %u.", creature->GetEntry(), itr->second.OptionType, itr->second.MenuID);
                     canTalk = false;
                     break;
             }
@@ -14649,8 +14647,8 @@ void Player::PrepareGossipMenu(WorldObject* source, uint32 menuId /*= 0*/, bool 
         if (canTalk)
         {
             std::string strOptionText, strBoxText;
-            BroadcastTextEntry const* optionBroadcastText = sBroadcastTextStore.LookupEntry(itr->second.OptionBroadcastTextId);
-            BroadcastTextEntry const* boxBroadcastText = sBroadcastTextStore.LookupEntry(itr->second.BoxBroadcastTextId);
+            BroadcastTextEntry const* optionBroadcastText = sBroadcastTextStore.LookupEntry(itr->second.OptionBroadcastTextID);
+            BroadcastTextEntry const* boxBroadcastText = sBroadcastTextStore.LookupEntry(itr->second.BoxBroadcastTextID);
             LocaleConstant locale = GetSession()->GetSessionDbLocaleIndex();
 
             if (optionBroadcastText)
@@ -14668,20 +14666,20 @@ void Player::PrepareGossipMenu(WorldObject* source, uint32 menuId /*= 0*/, bool 
                 if (!optionBroadcastText)
                 {
                     /// Find localizations from database.
-                    if (GossipMenuItemsLocale const* gossipMenuLocale = sObjectMgr->GetGossipMenuItemsLocale(menuId, itr->second.OptionIndex))
+                    if (GossipMenuItemsLocale const* gossipMenuLocale = sObjectMgr->GetGossipMenuItemsLocale(menuId, itr->second.OptionID))
                         ObjectMgr::GetLocaleString(gossipMenuLocale->OptionText, locale, strOptionText);
                 }
 
                 if (!boxBroadcastText)
                 {
                     /// Find localizations from database.
-                    if (GossipMenuItemsLocale const* gossipMenuLocale = sObjectMgr->GetGossipMenuItemsLocale(menuId, itr->second.OptionIndex))
+                    if (GossipMenuItemsLocale const* gossipMenuLocale = sObjectMgr->GetGossipMenuItemsLocale(menuId, itr->second.OptionID))
                         ObjectMgr::GetLocaleString(gossipMenuLocale->BoxText, locale, strBoxText);
                 }
             }
 
-            menu->GetGossipMenu().AddMenuItem(itr->second.OptionIndex, itr->second.OptionIcon, strOptionText, 0, itr->second.OptionType, strBoxText, itr->second.BoxMoney, itr->second.BoxCoded);
-            menu->GetGossipMenu().AddGossipMenuItemData(itr->second.OptionIndex, itr->second.ActionMenuId, itr->second.ActionPoiId);
+            menu->GetGossipMenu().AddMenuItem(itr->second.OptionID, itr->second.OptionIcon, strOptionText, 0, itr->second.OptionType, strBoxText, itr->second.BoxMoney, itr->second.BoxCoded);
+            menu->GetGossipMenu().AddGossipMenuItemData(itr->second.OptionID, itr->second.ActionMenuID, itr->second.ActionPoiID);
         }
     }
 }
@@ -14711,7 +14709,7 @@ void Player::SendPreparedGossip(WorldObject* source)
     PlayerTalkClass->SendGossipMenu(textId, source->GetGUID());
 }
 
-void Player::OnGossipSelect(WorldObject* source, uint32 optionIndex, uint32 menuId)
+void Player::OnGossipSelect(WorldObject* source, uint32 gossipListId, uint32 menuId)
 {
     GossipMenu& gossipMenu = PlayerTalkClass->GetGossipMenu();
 
@@ -14719,7 +14717,7 @@ void Player::OnGossipSelect(WorldObject* source, uint32 optionIndex, uint32 menu
     if (menuId != gossipMenu.GetMenuId())
         return;
 
-    GossipMenuItem const* item = gossipMenu.GetItem(optionIndex);
+    GossipMenuItem const* item = gossipMenu.GetItem(gossipListId);
     if (!item)
         return;
 
@@ -14736,7 +14734,7 @@ void Player::OnGossipSelect(WorldObject* source, uint32 optionIndex, uint32 menu
         }
     }
 
-    GossipMenuItemData const* menuItemData = gossipMenu.GetItemData(optionIndex);
+    GossipMenuItemData const* menuItemData = gossipMenu.GetItemData(gossipListId);
     if (!menuItemData)
         return;
 
@@ -14764,7 +14762,7 @@ void Player::OnGossipSelect(WorldObject* source, uint32 optionIndex, uint32 menu
             break;
         }
         case GOSSIP_OPTION_OUTDOORPVP:
-            sOutdoorPvPMgr->HandleGossipOption(this, source->ToCreature(), optionIndex);
+            sOutdoorPvPMgr->HandleGossipOption(this, source->ToCreature(), gossipListId);
             break;
         case GOSSIP_OPTION_SPIRITHEALER:
             if (isDead())
@@ -14783,7 +14781,7 @@ void Player::OnGossipSelect(WorldObject* source, uint32 optionIndex, uint32 menu
             GetSession()->SendStablePet(guid);
             break;
         case GOSSIP_OPTION_TRAINER:
-            GetSession()->SendTrainerList(source->ToCreature(), sObjectMgr->GetCreatureTrainerForGossipOption(source->GetEntry(), menuId, optionIndex));
+            GetSession()->SendTrainerList(source->ToCreature(), sObjectMgr->GetCreatureTrainerForGossipOption(source->GetEntry(), menuId, gossipListId));
             break;
         case GOSSIP_OPTION_LEARNDUALSPEC:
             break;
@@ -14858,7 +14856,7 @@ uint32 Player::GetGossipTextId(uint32 menuId, WorldObject* source)
     for (GossipMenusContainer::const_iterator itr = menuBounds.first; itr != menuBounds.second; ++itr)
     {
         if (sConditionMgr->IsObjectMeetToConditions(this, source, itr->second.Conditions))
-            textId = itr->second.TextId;
+            textId = itr->second.TextID;
     }
 
     return textId;
@@ -17821,7 +17819,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder* holder)
     {
         // "SELECT c.guid, account, name, race, class, gender, level, xp, money, inventorySlots, bankSlots, restState, playerFlags, playerFlagsEx, "
         // "position_x, position_y, position_z, map, orientation, taximask, createTime, createMode, cinematic, totaltime, leveltime, rest_bonus, logout_time, is_logout_resting, resettalents_cost, "
-        // "resettalents_time, primarySpecialization, trans_x, trans_y, trans_z, trans_o, transguid, extra_flags, stable_slots, at_login, zone, online, death_expire_time, taxi_path, dungeonDifficulty, "
+        // "resettalents_time, primarySpecialization, trans_x, trans_y, trans_z, trans_o, transguid, extra_flags, summonedPetNumber, at_login, zone, online, death_expire_time, taxi_path, dungeonDifficulty, "
         // "totalKills, todayKills, yesterdayKills, chosenTitle, watchedFaction, drunk, "
         // "health, power1, power2, power3, power4, power5, power6, power7, instance_id, activeTalentGroup, lootSpecId, exploredZones, knownTitles, actionBars, raidDifficulty, legacyRaidDifficulty, fishingSteps, "
         // "honor, honorLevel, honorRestState, honorRestBonus, numRespecs "
@@ -17864,7 +17862,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder* holder)
         float trans_o;
         ObjectGuid::LowType transguid;
         uint16 extra_flags;
-        uint8 stable_slots;
+        uint32 summonedPetNumber;
         uint16 at_login;
         uint16 zone;
         uint8 online;
@@ -17934,7 +17932,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder* holder)
             trans_o = fields[i++].GetFloat();
             transguid = fields[i++].GetUInt64();
             extra_flags = fields[i++].GetUInt16();
-            stable_slots = fields[i++].GetUInt8();
+            summonedPetNumber = fields[i++].GetUInt32();
             at_login = fields[i++].GetUInt16();
             zone = fields[i++].GetUInt16();
             online = fields[i++].GetUInt8();
@@ -18415,13 +18413,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder* holder)
 
     uint32 extraflags = fields.extra_flags;
 
-    m_stableSlots = fields.stable_slots;
-    if (m_stableSlots > MAX_PET_STABLES)
-    {
-        TC_LOG_ERROR("entities.player", "Player::LoadFromDB: Player (%s) can't have more stable slots than %u, but has %u in DB",
-            GetGUID().ToString().c_str(), MAX_PET_STABLES, uint32(m_stableSlots));
-        m_stableSlots = MAX_PET_STABLES;
-    }
+    _LoadPetStable(fields.summonedPetNumber, holder->GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_PET_SLOTS));
 
     if (HasAtLoginFlag(AT_LOGIN_RENAME))
     {
@@ -19463,18 +19455,6 @@ void Player::_LoadMail(PreparedQueryResult mailsResult, PreparedQueryResult mail
     UpdateNextMailTimeAndUnreads();
 }
 
-void Player::LoadPet()
-{
-    //fixme: the pet should still be loaded if the player is not in world
-    // just not added to the map
-    if (IsInWorld())
-    {
-        Pet* pet = new Pet(this);
-        if (!pet->LoadPetFromDB(this, 0, 0, true))
-            delete pet;
-    }
-}
-
 void Player::_LoadQuestStatus(PreparedQueryResult result)
 {
     uint16 slot = 0;
@@ -20485,7 +20465,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
         stmt->setInt64(index++, GetTalentResetTime());
         stmt->setUInt32(index++, GetPrimarySpecialization());
         stmt->setUInt16(index++, (uint16)m_ExtraFlags);
-        stmt->setUInt8(index++,  m_stableSlots);
+        stmt->setUInt32(index++, 0); // summonedPetNumber
         stmt->setUInt16(index++, (uint16)m_atLoginFlags);
         stmt->setInt64(index++, m_deathExpireTime);
 
@@ -20629,7 +20609,10 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
         stmt->setUInt8(index++, GetNumRespecs());
         stmt->setUInt32(index++, GetPrimarySpecialization());
         stmt->setUInt16(index++, (uint16)m_ExtraFlags);
-        stmt->setUInt8(index++,  m_stableSlots);
+        if (PetStable const* petStable = GetPetStable())
+            stmt->setUInt32(index++, petStable->GetCurrentPet() && petStable->GetCurrentPet()->Health > 0 ? petStable->GetCurrentPet()->PetNumber : 0); // summonedPetNumber
+        else
+            stmt->setUInt32(index++, 0); // summonedPetNumber
         stmt->setUInt16(index++, (uint16)m_atLoginFlags);
         stmt->setUInt16(index++, GetZoneId());
         stmt->setInt64(index++, m_deathExpireTime);
@@ -21882,7 +21865,7 @@ void Player::UpdatePvPFlag(time_t currTime)
     if (!pvpInfo.EndTimer || (currTime < pvpInfo.EndTimer +300) || pvpInfo.IsHostile)
         return;
 
-    if (pvpInfo.EndTimer && pvpInfo.EndTimer <= currTime)
+    if (pvpInfo.EndTimer <= currTime)
     {
         pvpInfo.EndTimer = 0;
         RemovePlayerFlag(PLAYER_FLAGS_PVP_TIMER);
@@ -21969,27 +21952,26 @@ void Player::RemovePet(Pet* pet, PetSaveMode mode, bool returnreagent)
         m_temporaryUnsummonedPetNumber = 0;
     }
 
-    if (!pet || pet->GetOwnerGUID() != GetGUID())
+    if (!pet)
+    {
+        // Handle removing pet while it is in "temporarily unsummoned" state, for example on mount
+        if (mode == PET_SAVE_NOT_IN_SLOT && m_petStable && m_petStable->CurrentPetIndex)
+            m_petStable->CurrentPetIndex.reset();
+
         return;
+    }
 
     pet->CombatStop();
 
-    if (returnreagent)
-    {
-        switch (pet->GetEntry())
-        {
-            //warlock pets except imp are removed(?) when logging out
-            case 1860:
-            case 1863:
-            case 417:
-            case 17252:
-                mode = PET_SAVE_NOT_IN_SLOT;
-                break;
-        }
-    }
-
     // only if current pet in slot
     pet->SavePetToDB(mode);
+
+    PetStable::PetInfo const* currentPet = m_petStable->GetCurrentPet();
+    ASSERT(currentPet && currentPet->PetNumber == pet->GetCharmInfo()->GetPetNumber());
+    if (mode == PET_SAVE_NOT_IN_SLOT || mode == PET_SAVE_AS_DELETED)
+        m_petStable->CurrentPetIndex.reset();
+    // else if (stable slots) handled in opcode handlers due to required swaps
+    // else (current pet) doesnt need to do anything
 
     SetMinion(pet, false);
 
@@ -22406,13 +22388,40 @@ bool Player::IsAffectedBySpellmod(SpellInfo const* spellInfo, SpellModifier cons
     if (spell && mod->ownerAura->IsUsingCharges() && !mod->ownerAura->GetCharges() && !spell->m_appliedMods.count(mod->ownerAura))
         return false;
 
-    // +duration to infinite duration spells making them limited
-    if (mod->op == SpellModOp::Duration && spellInfo->GetDuration() == -1)
-        return false;
-
-    // mod crit to spells that can't crit
-    if (mod->op == SpellModOp::CritChance && !spellInfo->HasAttribute(SPELL_ATTR0_CU_CAN_CRIT))
-        return false;
+    switch (mod->op)
+    {
+        case SpellModOp::Duration: // +duration to infinite duration spells making them limited
+            if (spellInfo->GetDuration() == -1)
+                return false;
+            break;
+        case SpellModOp::CritChance: // mod crit to spells that can't crit
+            if (!spellInfo->HasAttribute(SPELL_ATTR0_CU_CAN_CRIT))
+                return false;
+            break;
+        case SpellModOp::PointsIndex0: // check if spell has any effect at that index
+        case SpellModOp::Points:
+            if (spellInfo->GetEffects().size() <= EFFECT_0)
+                return false;
+            break;
+        case SpellModOp::PointsIndex1: // check if spell has any effect at that index
+            if (spellInfo->GetEffects().size() <= EFFECT_1)
+                return false;
+            break;
+        case SpellModOp::PointsIndex2: // check if spell has any effect at that index
+            if (spellInfo->GetEffects().size() <= EFFECT_2)
+                return false;
+            break;
+        case SpellModOp::PointsIndex3: // check if spell has any effect at that index
+            if (spellInfo->GetEffects().size() <= EFFECT_3)
+                return false;
+            break;
+        case SpellModOp::PointsIndex4: // check if spell has any effect at that index
+            if (spellInfo->GetEffects().size() <= EFFECT_4)
+                return false;
+            break;
+        default:
+            break;
+    }
 
     return spellInfo->IsAffectedBySpellMod(mod);
 }
@@ -22518,7 +22527,11 @@ void Player::GetSpellModValues(SpellInfo const* spellInfo, SpellModOp op, Spell*
         if (!IsAffectedBySpellmod(spellInfo, mod, spell))
             continue;
 
-        *flat += static_cast<SpellModifierByClassMask*>(mod)->value;
+        int32 value = static_cast<SpellModifierByClassMask*>(mod)->value;
+        if (value == 0)
+            continue;
+
+        *flat += value;
         Player::ApplyModToSpell(mod, spell);
     }
 
@@ -22527,7 +22540,11 @@ void Player::GetSpellModValues(SpellInfo const* spellInfo, SpellModOp op, Spell*
         if (!IsAffectedBySpellmod(spellInfo, mod, spell))
             continue;
 
-        *flat += static_cast<SpellFlatModifierByLabel*>(mod)->value.ModifierValue;
+        int32 value = static_cast<SpellFlatModifierByLabel*>(mod)->value.ModifierValue;
+        if (value == 0)
+            continue;
+
+        *flat += value;
         Player::ApplyModToSpell(mod, spell);
     }
 
@@ -22540,14 +22557,18 @@ void Player::GetSpellModValues(SpellInfo const* spellInfo, SpellModOp op, Spell*
         if (base + *flat == T(0))
             continue;
 
+        int32 value = static_cast<SpellModifierByClassMask*>(mod)->value;
+        if (value == 0)
+            continue;
+
         // special case (skip > 10sec spell casts for instant cast setting)
         if (op == SpellModOp::ChangeCastTime)
         {
-            if (base >= T(10000) && static_cast<SpellModifierByClassMask*>(mod)->value <= -100)
+            if (base >= T(10000) && value <= -100)
                 continue;
         }
 
-        *pct *= 1.0f + CalculatePct(1.0f, static_cast<SpellModifierByClassMask*>(mod)->value);
+        *pct *= 1.0f + CalculatePct(1.0f, value);
         Player::ApplyModToSpell(mod, spell);
     }
 
@@ -22560,14 +22581,18 @@ void Player::GetSpellModValues(SpellInfo const* spellInfo, SpellModOp op, Spell*
         if (base + *flat == T(0))
             continue;
 
+        float value = static_cast<SpellPctModifierByLabel*>(mod)->value.ModifierValue;
+        if (value == 1.0f)
+            continue;
+
         // special case (skip > 10sec spell casts for instant cast setting)
         if (op == SpellModOp::ChangeCastTime)
         {
-            if (base >= T(10000) && static_cast<SpellPctModifierByLabel*>(mod)->value.ModifierValue <= -1.0f)
+            if (base >= T(10000) && value <= -1.0f)
                 continue;
         }
 
-        *pct *= static_cast<SpellPctModifierByLabel*>(mod)->value.ModifierValue;
+        *pct *= value;
         Player::ApplyModToSpell(mod, spell);
     }
 }
@@ -24134,6 +24159,61 @@ inline void BeforeVisibilityDestroy<Creature>(Creature* t, Player* p)
         t->ToPet()->Remove(PET_SAVE_NOT_IN_SLOT, true);
 }
 
+void Player::UpdateVisibilityOf(Trinity::IteratorPair<WorldObject**> targets)
+{
+    if (targets.begin() == targets.end())
+        return;
+
+    UpdateData udata(GetMapId());
+    std::set<Unit*> newVisibleUnits;
+
+    for (WorldObject* target : targets)
+    {
+        if (target == this)
+            continue;
+
+        switch (target->GetTypeId())
+        {
+            case TYPEID_UNIT:
+                UpdateVisibilityOf(target->ToCreature(), udata, newVisibleUnits);
+                break;
+            case TYPEID_PLAYER:
+                UpdateVisibilityOf(target->ToPlayer(), udata, newVisibleUnits);
+                break;
+            case TYPEID_GAMEOBJECT:
+                UpdateVisibilityOf(target->ToGameObject(), udata, newVisibleUnits);
+                break;
+            case TYPEID_DYNAMICOBJECT:
+                UpdateVisibilityOf(target->ToDynObject(), udata, newVisibleUnits);
+                break;
+            case TYPEID_CORPSE:
+                UpdateVisibilityOf(target->ToCorpse(), udata, newVisibleUnits);
+                break;
+            case TYPEID_AREATRIGGER:
+                UpdateVisibilityOf(target->ToAreaTrigger(), udata, newVisibleUnits);
+                break;
+            case TYPEID_SCENEOBJECT:
+                UpdateVisibilityOf(target->ToSceneObject(), udata, newVisibleUnits);
+                break;
+            case TYPEID_CONVERSATION:
+                UpdateVisibilityOf(target->ToConversation(), udata, newVisibleUnits);
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (!udata.HasData())
+        return;
+
+    WorldPacket packet;
+    udata.BuildPacket(&packet);
+    SendDirectMessage(&packet);
+
+    for (Unit* visibleUnit : newVisibleUnits)
+        SendInitialVisiblePackets(visibleUnit);
+}
+
 void Player::UpdateVisibilityOf(WorldObject* target)
 {
     if (HaveAtClient(target))
@@ -24143,7 +24223,11 @@ void Player::UpdateVisibilityOf(WorldObject* target)
             if (target->GetTypeId() == TYPEID_UNIT)
                 BeforeVisibilityDestroy<Creature>(target->ToCreature(), this);
 
-            target->DestroyForPlayer(this);
+            if (!target->IsDestroyedObject())
+                target->SendOutOfRangeForPlayer(this);
+            else
+                target->DestroyForPlayer(this);
+
             m_clientGUIDs.erase(target->GetGUID());
 
             #ifdef TRINITY_DEBUG
@@ -24230,7 +24314,11 @@ void Player::UpdateVisibilityOf(T* target, UpdateData& data, std::set<Unit*>& vi
         {
             BeforeVisibilityDestroy<T>(target, this);
 
-            target->BuildOutOfRangeUpdateBlock(&data);
+            if (!target->IsDestroyedObject())
+                target->BuildOutOfRangeUpdateBlock(&data);
+            else
+                target->BuildDestroyUpdateBlock(&data);
+
             m_clientGUIDs.erase(target->GetGUID());
 
             #ifdef TRINITY_DEBUG
@@ -24238,7 +24326,7 @@ void Player::UpdateVisibilityOf(T* target, UpdateData& data, std::set<Unit*>& vi
             #endif
         }
     }
-    else //if (visibleNow.size() < 30 || target->GetTypeId() == TYPEID_UNIT && target->ToCreature()->IsVehicle())
+    else
     {
         if (CanSeeOrDetect(target, false, true))
         {
@@ -27964,6 +28052,14 @@ bool Player::AddItem(uint32 itemId, uint32 count)
     return true;
 }
 
+PetStable& Player::GetOrInitPetStable()
+{
+    if (!m_petStable)
+        m_petStable = std::make_unique<PetStable>();
+
+    return *m_petStable;
+}
+
 void Player::SendItemRefundResult(Item* item, ItemExtendedCostEntry const* iece, uint8 error) const
 {
     WorldPackets::Item::ItemPurchaseRefundResult itemPurchaseRefundResult;
@@ -28162,6 +28258,51 @@ void Player::_LoadInstanceTimeRestrictions(PreparedQueryResult result)
         Field* fields = result->Fetch();
         _instanceResetTimes.insert(InstanceTimeMap::value_type(fields[0].GetUInt32(), fields[1].GetUInt64()));
     } while (result->NextRow());
+}
+
+void Player::_LoadPetStable(uint32 summonedPetNumber, PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    m_petStable = std::make_unique<PetStable>();
+
+    //         0      1        2      3    4           5     6     7        8          9       10      11        12              13       14              15
+    // SELECT id, entry, modelid, level, exp, Reactstate, slot, name, renamed, curhealth, curmana, abdata, savetime, CreatedBySpell, PetType, specialization FROM character_pet WHERE owner = ?
+    if (result)
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            PetStable::PetInfo petInfo;
+            petInfo.PetNumber = fields[0].GetUInt32();
+            petInfo.CreatureId = fields[1].GetUInt32();
+            petInfo.DisplayId = fields[2].GetUInt32();
+            petInfo.Level = fields[3].GetUInt16();
+            petInfo.Experience = fields[4].GetUInt32();
+            petInfo.ReactState = ReactStates(fields[5].GetUInt8());
+            PetSaveMode slot = PetSaveMode(fields[6].GetInt16());
+            petInfo.Name = fields[7].GetString();
+            petInfo.WasRenamed = fields[8].GetBool();
+            petInfo.Health = fields[9].GetUInt32();
+            petInfo.Mana = fields[10].GetUInt32();
+            petInfo.ActionBar = fields[11].GetString();
+            petInfo.LastSaveTime = fields[12].GetUInt32();
+            petInfo.CreatedBySpellId = fields[13].GetUInt32();
+            petInfo.Type = PetType(fields[14].GetUInt8());
+            petInfo.SpecializationId = fields[15].GetUInt16();
+            if (slot >= PET_SAVE_FIRST_ACTIVE_SLOT && slot < PET_SAVE_LAST_ACTIVE_SLOT)
+                m_petStable->ActivePets[slot] = std::move(petInfo);
+            else if (slot >= PET_SAVE_FIRST_STABLE_SLOT && slot < PET_SAVE_LAST_STABLE_SLOT)
+                m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT] = std::move(petInfo);
+            else if (slot == PET_SAVE_NOT_IN_SLOT)
+                m_petStable->UnslottedPets.push_back(std::move(petInfo));
+
+        } while (result->NextRow());
+    }
+
+    if (Pet::GetLoadPetInfo(*m_petStable, 0, summonedPetNumber, {}).first)
+        m_temporaryUnsummonedPetNumber = summonedPetNumber;
 }
 
 void Player::_SaveInstanceTimeRestrictions(CharacterDatabaseTransaction& trans)
@@ -28499,23 +28640,21 @@ Guild const* Player::GetGuild() const
     return guildId ? sGuildMgr->GetGuildById(guildId) : nullptr;
 }
 
-Pet* Player::SummonPet(uint32 entry, float x, float y, float z, float ang, PetType petType, uint32 duration, bool aliveOnly)
+Pet* Player::SummonPet(uint32 entry, Optional<PetSaveMode> slot, float x, float y, float z, float ang, uint32 duration, bool* isNew /*= nullptr*/)
 {
-    Pet* pet = new Pet(this, petType);
+    PetStable& petStable = GetOrInitPetStable();
 
-    if (petType == SUMMON_PET && pet->LoadPetFromDB(this, entry))
+    Pet* pet = new Pet(this, SUMMON_PET);
+
+    if (pet->LoadPetFromDB(this, entry, 0, false, slot))
     {
-        if (aliveOnly && !pet->IsAlive())
-        {
-            pet->DespawnOrUnsummon();
-            SendTameFailure(PetTameResult::Dead);
-            return nullptr;
-        }
-
         if (duration > 0)
             pet->SetDuration(duration);
 
-        return nullptr;
+        if (isNew)
+            *isNew = false;
+
+        return pet;
     }
 
     // petentry == 0 for hunter "call pet" (current pet summoned if any)
@@ -28524,6 +28663,8 @@ Pet* Player::SummonPet(uint32 entry, float x, float y, float z, float ang, PetTy
         delete pet;
         return nullptr;
     }
+
+    // only SUMMON_PET are handled here
 
     pet->Relocate(x, y, z, ang);
     if (!pet->IsPositionValid())
@@ -28535,12 +28676,15 @@ Pet* Player::SummonPet(uint32 entry, float x, float y, float z, float ang, PetTy
 
     Map* map = GetMap();
     uint32 pet_number = sObjectMgr->GeneratePetNumber();
-    if (!pet->Create(map->GenerateLowGuid<HighGuid::Pet>(), map, entry))
+    if (!pet->Create(map->GenerateLowGuid<HighGuid::Pet>(), map, entry, pet_number))
     {
         TC_LOG_ERROR("misc", "Player::SummonPet: No such creature entry %u", entry);
         delete pet;
         return nullptr;
     }
+
+    if (petStable.GetCurrentPet())
+        RemovePet(nullptr, PET_SAVE_NOT_IN_SLOT);
 
     PhasingHandler::InheritPhaseShift(pet, this);
 
@@ -28553,39 +28697,32 @@ Pet* Player::SummonPet(uint32 entry, float x, float y, float z, float ang, PetTy
 
     SetMinion(pet, true);
 
-    switch (petType)
-    {
-        case SUMMON_PET:
-            // this enables pet details window (Shift+P)
-            pet->GetCharmInfo()->SetPetNumber(pet_number, true);
-            pet->SetClass(CLASS_MAGE);
-            pet->SetPetExperience(0);
-            pet->SetPetNextLevelExperience(1000);
-            pet->SetFullHealth();
-            pet->SetFullPower(POWER_MANA);
-            pet->SetPetNameTimestamp(uint32(GameTime::GetGameTime()));
-            break;
-        default:
-            break;
-    }
+    // this enables pet details window (Shift+P)
+    pet->GetCharmInfo()->SetPetNumber(pet_number, true);
+    pet->SetClass(CLASS_MAGE);
+    pet->SetPetExperience(0);
+    pet->SetPetNextLevelExperience(1000);
+    pet->SetFullHealth();
+    pet->SetFullPower(POWER_MANA);
+    pet->SetPetNameTimestamp(uint32(GameTime::GetGameTime()));
 
     map->AddToMap(pet->ToCreature());
 
-    switch (petType)
-    {
-        case SUMMON_PET:
-            pet->InitPetCreateSpells();
-            pet->SavePetToDB(PET_SAVE_AS_CURRENT);
-            PetSpellInitialize();
-            break;
-        default:
-            break;
-    }
+    ASSERT(!petStable.CurrentPetIndex);
+    petStable.SetCurrentUnslottedPetIndex(petStable.UnslottedPets.size());
+    pet->FillPetInfo(&petStable.UnslottedPets.emplace_back());
+
+    pet->InitPetCreateSpells();
+    pet->SavePetToDB(PET_SAVE_AS_CURRENT);
+    PetSpellInitialize();
 
     if (duration > 0)
         pet->SetDuration(duration);
 
     //ObjectAccessor::UpdateObjectVisibility(pet);
+
+    if (isNew)
+        *isNew = true;
 
     return pet;
 }

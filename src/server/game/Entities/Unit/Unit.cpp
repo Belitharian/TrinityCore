@@ -400,6 +400,7 @@ Unit::Unit(bool isWorldObject) :
     _oldFactionId = 0;
     _isWalkingBeforeCharm = false;
     _instantCast = false;
+    _isIgnoringCombat = false;
 }
 
 ////////////////////////////////////////////////////////////
@@ -720,20 +721,18 @@ bool Unit::HasBreakableByDamageCrowdControlAura(Unit* excludeCasterChannel) cons
     // Hook for OnDamage Event
     sScriptMgr->OnDamage(attacker, victim, damage);
 
-    if (victim->GetTypeId() == TYPEID_PLAYER)
+    // Signal to pets that their owner was attacked - except when DOT.
+    if (attacker != victim && damagetype != DOT)
     {
-        // Signal to pets that their owner was attacked - except when DOT.
-        if (attacker != victim && damagetype != DOT)
-        {
-            for (Unit* controlled : victim->m_Controlled)
-                if (Creature* cControlled = controlled->ToCreature())
-                    if (CreatureAI* controlledAI = cControlled->AI())
-                        controlledAI->OwnerAttackedBy(attacker);
-        }
-
-        if (victim->ToPlayer()->GetCommandStatus(CHEAT_GOD))
-            return 0;
+        for (Unit* controlled : victim->m_Controlled)
+            if (Creature* cControlled = controlled->ToCreature())
+                if (CreatureAI* controlledAI = cControlled->AI())
+                    controlledAI->OwnerAttackedBy(attacker);
     }
+
+    if (Player* player = victim->ToPlayer())
+        if (player->GetCommandStatus(CHEAT_GOD))
+            return 0;
 
     if (damagetype != NODAMAGE)
     {
@@ -1514,7 +1513,7 @@ void Unit::DealMeleeDamage(CalcDamageInfo* damageInfo, bool durabilityLoss)
     }
 }
 
-void Unit::HandleEmoteCommand(uint32 emoteId, Player* target /*=nullptr*/, Trinity::IteratorPair<int32 const*> spellVisualKitIds /*= {}*/)
+void Unit::HandleEmoteCommand(Emote emoteId, Player* target /*=nullptr*/, Trinity::IteratorPair<int32 const*> spellVisualKitIds /*= {}*/)
 {
     WorldPackets::Chat::Emote packet;
     packet.Guid = GetGUID();
@@ -5821,8 +5820,8 @@ void Unit::SetMinion(Minion *minion, bool apply)
                 if (oldPet != minion && (oldPet->IsPet() || minion->IsPet() || oldPet->GetEntry() != minion->GetEntry()))
                 {
                     // remove existing minion pet
-                    if (oldPet->IsPet())
-                        ((Pet*)oldPet)->Remove(PET_SAVE_AS_CURRENT);
+                    if (Pet* oldPetAsPet = oldPet->ToPet())
+                        oldPetAsPet->Remove(PET_SAVE_NOT_IN_SLOT);
                     else
                         oldPet->UnSummon();
                     SetPetGUID(minion->GetGUID());
@@ -6718,16 +6717,6 @@ float Unit::SpellCritChanceTaken(Unit const* caster, Spell* spell, AuraEffect co
                         // Shiv-applied poisons can't crit
                         if (caster->FindCurrentSpellBySpellId(5938))
                             crit_chance = 0.0f;
-                        break;
-                    case SPELLFAMILY_SHAMAN:
-                        // Lava Burst
-                        if (spellInfo->SpellFamilyFlags[1] & 0x00001000)
-                        {
-                            if (GetAuraEffect(SPELL_AURA_PERIODIC_DAMAGE, SPELLFAMILY_SHAMAN, flag128(0x10000000, 0, 0), caster->GetGUID()))
-                                if (GetTotalAuraModifier(SPELL_AURA_MOD_ATTACKER_SPELL_AND_WEAPON_CRIT_CHANCE) > -100)
-                                    return 100.0f;
-                            break;
-                        }
                         break;
                 }
 
@@ -10294,7 +10283,11 @@ Pet* Unit::CreateTamedPetFrom(Creature* creatureTarget, uint32 spell_id)
 
     uint8 level = creatureTarget->GetLevelForTarget(this) + 5 < GetLevel() ? (GetLevel() - 5) : creatureTarget->GetLevelForTarget(this);
 
-    InitTamedPet(pet, level, spell_id);
+    if (!InitTamedPet(pet, level, spell_id))
+    {
+        delete pet;
+        return nullptr;
+    }
 
     return pet;
 }
@@ -10321,6 +10314,16 @@ Pet* Unit::CreateTamedPetFrom(uint32 creatureEntry, uint32 spell_id)
 
 bool Unit::InitTamedPet(Pet* pet, uint8 level, uint32 spell_id)
 {
+    Player* player = ToPlayer();
+    PetStable& petStable = player->GetOrInitPetStable();
+    auto freeActiveSlotItr = std::find_if(petStable.ActivePets.begin(), petStable.ActivePets.end(), [](Optional<PetStable::PetInfo> const& petInfo)
+    {
+        return !petInfo.has_value();
+    });
+
+    if (freeActiveSlotItr == petStable.ActivePets.end())
+        return false;
+
     pet->SetCreatorGUID(GetGUID());
     pet->SetFaction(GetFaction());
     pet->SetCreatedBySpell(spell_id);
@@ -10341,6 +10344,9 @@ bool Unit::InitTamedPet(Pet* pet, uint8 level, uint32 spell_id)
     pet->InitPetCreateSpells();
     //pet->InitLevelupSpellsForLevel();
     pet->SetFullHealth();
+
+    petStable.SetCurrentActivePetIndex(std::distance(petStable.ActivePets.begin(), freeActiveSlotItr));
+    pet->FillPetInfo(&freeActiveSlotItr->emplace());
     return true;
 }
 
@@ -11111,7 +11117,7 @@ void Unit::RemoveCharmedBy(Unit* charmer)
     CharmType type;
     if (HasUnitState(UNIT_STATE_POSSESSED))
         type = CHARM_TYPE_POSSESS;
-    else if (charmer && charmer->IsOnVehicle(this))
+    else if (charmer->IsOnVehicle(this))
         type = CHARM_TYPE_VEHICLE;
     else
         type = CHARM_TYPE_CHARM;

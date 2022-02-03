@@ -67,6 +67,7 @@ enum EncounterFrameType
     ENCOUNTER_FRAME_ADD_COMBAT_RES_LIMIT    = 10
 };
 
+// EnumUtils: DESCRIBE THIS
 enum EncounterState
 {
     NOT_STARTED   = 0,

@@ -310,6 +310,10 @@ bool LoginQueryHolder::Initialize()
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_CORPSE_LOCATION, stmt);
 
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHAR_PETS);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_PET_SLOTS, stmt);
+
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_GARRISON);
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_GARRISON, stmt);
@@ -361,8 +365,7 @@ public:
 
         bool result = true;
         CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(statements[isDeletedCharacters ? 1 : 0][withDeclinedNames ? 1 : 0]);
-        stmt->setUInt8(0, PET_SAVE_AS_CURRENT);
-        stmt->setUInt32(1, accountId);
+        stmt->setUInt32(0, accountId);
         result &= SetPreparedQuery(CHARACTERS, stmt);
 
         stmt = CharacterDatabase.GetPreparedStatement(statements[isDeletedCharacters ? 1 : 0][2]);
@@ -1143,6 +1146,10 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder* holder)
         pCurrChar->SetGuildLevel(0);
     }
 
+    // Send stable contents to display icons on Call Pet spells
+    if (pCurrChar->HasSpell(CALL_PET_SPELL_ID))
+        SendStablePet(ObjectGuid::Empty);
+
     pCurrChar->GetSession()->GetBattlePetMgr()->SendJournalLockStatus();
 
     pCurrChar->SendInitialPacketsBeforeAddToMap();
@@ -1293,7 +1300,7 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder* holder)
     }
 
     // Load pet if any (if player not alive and in taxi flight or another then pet will remember as temporary unsummoned)
-    pCurrChar->LoadPet();
+    pCurrChar->ResummonPetTemporaryUnSummonedIfAny();
 
     // Set FFA PvP for non GM in non-rest mode
     if (sWorld->IsFFAPvPRealm() && !pCurrChar->IsGameMaster() && !pCurrChar->HasPlayerFlag(PLAYER_FLAGS_RESTING))

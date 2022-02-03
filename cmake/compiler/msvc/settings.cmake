@@ -21,6 +21,11 @@ target_compile_options(trinity-warning-interface
   INTERFACE
     /W3)
 
+# disable permissive mode to make msvc more eager to reject code that other compilers don't already accept
+target_compile_options(trinity-compile-option-interface
+  INTERFACE
+    /permissive-)
+
 # set up output paths ofr static libraries etc (commented out - shown here as an example only)
 #set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 #set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -157,6 +162,14 @@ macro(DisableIncrementalLinking variable)
   string(REGEX REPLACE "/INCREMENTAL *" "" ${variable} "${${variable}}")
   set(${variable} "${${variable}} /INCREMENTAL:NO")
 endmacro()
+
+# Disable Visual Studio 2022 build process management
+# This will make compiler behave like in 2019 - compiling num_cpus * num_projects at the same time
+# it is neccessary because of a bug in current implementation that makes scripts build only a single
+# file at the same time after game project finishes building
+if (NOT MSVC_TOOLSET_VERSION LESS 143)
+  file(COPY "${CMAKE_CURRENT_LIST_DIR}/Directory.Build.props" DESTINATION "${CMAKE_BINARY_DIR}")
+endif()
 
 DisableIncrementalLinking(CMAKE_EXE_LINKER_FLAGS_DEBUG)
 DisableIncrementalLinking(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO)

@@ -889,6 +889,7 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_CURRENCY,
     PLAYER_LOGIN_QUERY_LOAD_CUF_PROFILES,
     PLAYER_LOGIN_QUERY_LOAD_CORPSE_LOCATION,
+    PLAYER_LOGIN_QUERY_LOAD_PET_SLOTS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_BLUEPRINTS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_BUILDINGS,
@@ -1205,8 +1206,12 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
 
         void setDeathState(DeathState s) override;                   // overwrite Unit::setDeathState
 
+        PetStable* GetPetStable() { return m_petStable.get(); }
+        PetStable& GetOrInitPetStable();
+        PetStable const* GetPetStable() const { return m_petStable.get(); }
+
         Pet* GetPet() const;
-        Pet* SummonPet(uint32 entry, float x, float y, float z, float ang, PetType petType, uint32 despwtime, bool aliveOnly = false);
+        Pet* SummonPet(uint32 entry, Optional<PetSaveMode> slot, float x, float y, float z, float ang, uint32 despwtime, bool* isNew = nullptr);
         void RemovePet(Pet* pet, PetSaveMode mode, bool returnreagent = false);
         void SendTameFailure(PetTameResult result);
 
@@ -1486,11 +1491,8 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void RemoveItemDurations(Item* item);
         void SendItemDurations();
         void LoadCorpse(PreparedQueryResult result);
-        void LoadPet();
 
         bool AddItem(uint32 itemId, uint32 count);
-
-        uint32 m_stableSlots;
 
         /*********************************************************/
         /***                    GOSSIP SYSTEM                  ***/
@@ -1498,7 +1500,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
 
         void PrepareGossipMenu(WorldObject* source, uint32 menuId = 0, bool showQuests = false);
         void SendPreparedGossip(WorldObject* source);
-        void OnGossipSelect(WorldObject* source, uint32 optionIndex, uint32 menuId);
+        void OnGossipSelect(WorldObject* source, uint32 gossipListId, uint32 menuId);
 
         uint32 GetGossipTextId(uint32 menuId, WorldObject* source);
         uint32 GetGossipTextId(WorldObject* source);
@@ -2426,6 +2428,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void UpdateObjectVisibility(bool forced = true) override;
         void UpdateVisibilityForPlayer();
         void UpdateVisibilityOf(WorldObject* target);
+        void UpdateVisibilityOf(Trinity::IteratorPair<WorldObject**> targets);
         void UpdateTriggerVisibility();
 
         template<class T>
@@ -2832,6 +2835,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void _LoadTalents(PreparedQueryResult result);
         void _LoadPvpTalents(PreparedQueryResult result);
         void _LoadInstanceTimeRestrictions(PreparedQueryResult result);
+        void _LoadPetStable(uint32 summonedPetNumber, PreparedQueryResult result);
         void _LoadCurrency(PreparedQueryResult result);
         void _LoadCUFProfiles(PreparedQueryResult result);
 
@@ -3071,6 +3075,8 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         uint32 m_DelayedOperations;
         bool m_bCanDelayTeleport;
         bool m_bHasDelayedTeleport;
+
+        std::unique_ptr<PetStable> m_petStable;
 
         // Temporary removed pet cache
         uint32 m_temporaryUnsummonedPetNumber;

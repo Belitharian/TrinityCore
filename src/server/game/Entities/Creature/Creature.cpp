@@ -425,7 +425,7 @@ void Creature::RemoveCorpse(bool setSpawnTime, bool destroyForNearbyPlayers)
             ai->CorpseRemoved(respawnDelay);
 
         if (destroyForNearbyPlayers)
-            DestroyForNearbyPlayers();
+            UpdateObjectVisibilityOnDestroy();
 
         // Should get removed later, just keep "compatibility" with scripts
         if (setSpawnTime)
@@ -679,6 +679,8 @@ bool Creature::UpdateEntry(uint32 entry, CreatureData const* data /*= nullptr*/,
         ApplySpellImmune(0, IMMUNITY_STATE, SPELL_AURA_MOD_TAUNT, true);
         ApplySpellImmune(0, IMMUNITY_EFFECT, SPELL_EFFECT_ATTACK_ME, true);
     }
+
+    SetIgnoringCombat((cInfo->flags_extra & CREATURE_FLAG_EXTRA_NO_COMBAT) != 0);
 
     LoadTemplateRoot();
     InitializeMovementFlags();
@@ -2013,7 +2015,7 @@ bool Creature::CanStartAttack(Unit const* who, bool force) const
         if (!_IsTargetAcceptable(who))
             return false;
 
-        if (!force && (IsNeutralToAll() || !IsWithinDistInMap(who, GetAttackDistance(who) + m_CombatDistance)))
+        if (IsNeutralToAll() || !IsWithinDistInMap(who, GetAttackDistance(who) + m_CombatDistance))
             return false;
     }
 
@@ -2199,7 +2201,7 @@ void Creature::Respawn(bool force)
 
     if (m_respawnCompatibilityMode)
     {
-        DestroyForNearbyPlayers();
+        UpdateObjectVisibilityOnDestroy();
         RemoveCorpse(false, false);
 
         if (getDeathState() == DEAD)
@@ -2264,7 +2266,7 @@ void Creature::ForcedDespawn(uint32 timeMSToDespawn, Seconds forceRespawnTimer)
         uint32 respawnDelay = GetRespawnDelay();
 
         // do it before killing creature
-        DestroyForNearbyPlayers();
+        UpdateObjectVisibilityOnDestroy();
 
         bool overrideRespawnTime = false;
         if (IsAlive())

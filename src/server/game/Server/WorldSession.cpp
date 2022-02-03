@@ -119,7 +119,6 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     m_expansion(std::min<uint8>(expansion, sWorld->getIntConfig(CONFIG_EXPANSION))),
     _os(os),
     _battlenetRequestToken(0),
-    _warden(nullptr),
     _logoutTime(0),
     m_inQueue(false),
     m_playerLogout(false),
@@ -175,7 +174,6 @@ WorldSession::~WorldSession()
         }
     }
 
-    delete _warden;
     delete _RBACData;
 
     ///- empty incoming packet queue
@@ -475,7 +473,7 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
     _recvQueue.readd(requeuePackets.begin(), requeuePackets.end());
 
     if (m_Socket[CONNECTION_TYPE_REALM] && m_Socket[CONNECTION_TYPE_REALM]->IsOpen() && _warden)
-        _warden->Update();
+        _warden->Update(diff);
 
     if (!updater.ProcessUnsafe()) // <=> updater is of type MapSessionFilter
     {
@@ -499,13 +497,13 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
         if (ShouldLogOut(currentTime) && m_playerLoading.IsEmpty())
             LogoutPlayer(true);
 
-        if (m_Socket[CONNECTION_TYPE_REALM] && GetPlayer() && _warden)
-            _warden->Update();
-
         ///- Cleanup socket pointer if need
         if ((m_Socket[CONNECTION_TYPE_REALM] && !m_Socket[CONNECTION_TYPE_REALM]->IsOpen()) ||
             (m_Socket[CONNECTION_TYPE_INSTANCE] && !m_Socket[CONNECTION_TYPE_INSTANCE]->IsOpen()))
         {
+            if (GetPlayer() && _warden)
+                _warden->Update(diff);
+
             expireTime -= expireTime > diff ? diff : expireTime;
             if (expireTime < diff || forceExit || !GetPlayer())
             {
@@ -648,6 +646,7 @@ void WorldSession::LogoutPlayer(bool save)
         // the player may not be in the world when logging out
         // e.g if he got disconnected during a transfer to another map
         // calls to GetMap in this case may cause crashes
+        _player->SetDestroyedObject(true);
         _player->CleanupsBeforeDelete();
         TC_LOG_INFO("entities.player.character", "Account: %u (IP: %s) Logout Character:[%s] %s Level: %d, XP: %u/%u (%u left)",
             GetAccountId(), GetRemoteAddress().c_str(), _player->GetName().c_str(), _player->GetGUID().ToString().c_str(), _player->GetLevel(),
@@ -997,7 +996,7 @@ void WorldSession::InitWarden(SessionKey const& k)
 {
     if (_os == "Win")
     {
-        _warden = new WardenWin();
+        _warden = std::make_unique<WardenWin>();
         _warden->Init(this, k);
     }
     else if (_os == "Wn64")
