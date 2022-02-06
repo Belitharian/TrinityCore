@@ -452,14 +452,14 @@ class npc_rhonin : public CreatureScript
 			return 15.f;
 		}
 
-		bool GossipHello(Player* player) override
+		bool OnGossipHello(Player* player) override
 		{
 			player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
 			player->SendPreparedGossip(me);
 			return true;
 		}
 
-		bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
+		bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
 		{
 			ClearGossipMenuFor(player);
 

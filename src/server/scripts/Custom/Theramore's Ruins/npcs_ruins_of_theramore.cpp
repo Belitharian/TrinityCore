@@ -198,7 +198,7 @@ class go_theramore_banner : public GameObjectScript
 
 		InstanceScript* instance;
 
-		bool GossipHello(Player* player) override
+		bool OnGossipHello(Player* player) override
 		{
 			RFTPhases phase = (RFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
 			if (phase != RFTPhases::Standards)
@@ -267,6 +267,5 @@ void AddSC_npcs_ruins_of_theramore()
 	new go_theramore_banner();
 
 	RegisterSpellScript(spell_ruins_comet_barrage);
-
-	RegisterAuraScript(spell_ruins_frigid_shards);
+    RegisterSpellScript(spell_ruins_frigid_shards);
 }
