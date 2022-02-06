@@ -147,6 +147,7 @@ enum BFTMisc
 	SPELL_RUNIC_SHIELD                  = 346057,
 	SPELL_FROST_BREATH                  = 300548,
 	SPELL_THERAMORE_EXPLOSION_SCENE     = 128446,
+    SPELL_THALYSSRA_SPAWNS              = 302492,
 
 	// GameObjects
 	GOB_MYSTIC_BARRIER_01               = 323860,

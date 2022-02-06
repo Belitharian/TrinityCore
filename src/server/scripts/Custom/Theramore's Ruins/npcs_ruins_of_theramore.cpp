@@ -21,7 +21,7 @@ class npc_water_elementals_theramore : public CreatureScript
 
 	struct npc_water_elementals_theramoreAI : public CustomAI
 	{
-		npc_water_elementals_theramoreAI(Creature* creature) : CustomAI(creature, AI_Type::Melee)
+		npc_water_elementals_theramoreAI(Creature* creature) : CustomAI(creature)
 		{
 		}
 
@@ -39,18 +39,22 @@ class npc_water_elementals_theramore : public CreatureScript
 
 		void JustEngagedWith(Unit* /*who*/) override
 		{
-			DoCast(SPELL_FROST_BARRIER);
+            if (!me->HasAura(SPELL_FROST_BARRIER))
+                DoCast(SPELL_FROST_BARRIER);
 
 			scheduler
-				.Schedule(5s, 8s, [this](TaskContext water_bolt)
+				.Schedule(5ms, [this](TaskContext water_bolt)
 				{
 					DoCastVictim(SPELL_WATER_BOLT);
-					water_bolt.Repeat(8s, 10s);
+					water_bolt.Repeat(3s);
 				})
 				.Schedule(12s, 22s, [this](TaskContext water_spout)
 				{
-					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-						DoCast(target, SPELL_WATER_SPOUT);
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    {
+                        me->CastStop();
+                        DoCast(target, SPELL_WATER_SPOUT);
+                    }
 					water_spout.Repeat(18s, 20s);
 				});
 		}

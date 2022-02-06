@@ -4,28 +4,33 @@
 #include "CreatureAIImpl.h"
 #include "Position.h"
 
-#define DLJScriptName "scenario_dalaran_purge"
-#define DataHeader "DLJ"
+#define DLPScriptName "scenario_dalaran_purge"
+#define DataHeader "DLP"
 
 //#define DEBUG
 
-enum DLJCreatures
+enum DLPCreatures
 {
 	NPC_JAINA_PROUDMOORE               = 68677,
+    NPC_JAINA_PROUDMOORE_PATROL        = 68609,
 	NPC_AETHAS_SUNREAVER               = 68679,
 	NPC_HIGH_SUNREAVER_MAGE            = 68680,
+    NPC_SUNREAVER_CITIZEN              = 68695,
 	NPC_SUMMONED_WATER_ELEMENTAL       = 68678,
+	NPC_BOUND_WATER_ELEMENTAL          = 68956,
 };
 
-enum DLJData
+enum DLPData
 {
 	DATA_JAINA_PROUDMOORE,
+    DATA_JAINA_PROUDMOORE_PATROL,
 	DATA_AETHAS_SUNREAVER,               
 	DATA_SUMMONED_WATER_ELEMENTAL,
+	DATA_BOUND_WATER_ELEMENTAL,
 	DATA_SCENARIO_PHASE
 };
 
-enum DLJTalks
+enum DLPTalks
 {
 	// Aethas
 	SAY_PURGE_JAINA_01                 = 0,
@@ -35,9 +40,13 @@ enum DLJTalks
 	SAY_PURGE_AETHAS_05                = 1,
 	SAY_PURGE_JAINA_06                 = 3,
 	SAY_PURGE_JAINA_07                 = 4,
+
+    // Purge
+    SAY_JAINA_PURGE_SLAIN              = 0,
+    SAY_JAINA_PURGE_TELEPORT           = 1,
 };
 
-enum DLJSpells
+enum DLPSpells
 {
 	SPELL_TELEPORT_VISUAL_ONLY		   = 51347,
     SPELL_FROSTBOLT                    = 135285,
@@ -49,15 +58,21 @@ enum DLJSpells
 	SPELL_ARCANE_BOMBARDMENT           = 352556,
     SPELL_ICY_GLARE                    = 338517,
     SPELL_CHILLING_BLAST               = 337053,
+    SPELL_TELEPORT_CITIZEN             = 135176,
 };
 
-enum DLJMisc
+enum DLPMisc
 {
 	// Events
 	EVENT_FIND_JAINA_01                 = 65817,
+	EVENT_ASSIST_JAINA                  = 65818,
+
+    // Gob
+	GOB_MYSTIC_BARRIER_01               = 323860,
 
 	// Criteria Trees
-	CRITERIA_TREE_FIND_JAINA_01         = 1000047,  // Purple Citadel
+	CRITERIA_TREE_DALARAN               = 1000047,  // Purple Citadel
+	CRITERIA_TREE_FINDING_THE_THIEVES   = 1000049,
 
 	// Point Id
 	MOVEMENT_INFO_POINT_NONE            = 0,
@@ -66,10 +81,10 @@ enum DLJMisc
 	MOVEMENT_INFO_POINT_03              = 89644942
 };
 
-enum class DLJPhases
+enum class DLPPhases
 {
-	FindJaina_Aethas,
-	FindJaina_Convo,
+	FindJaina,
+    FindingTheThieves,
 };
 
 struct SpawnPoint
@@ -113,7 +128,7 @@ inline void DoTeleportPlayers(Map::PlayerList const& players, const Position cen
 template <class AI, class T>
 inline AI* GetDalaranAI(T* obj)
 {
-	return GetInstanceAI<AI>(obj, DLJScriptName);
+	return GetInstanceAI<AI>(obj, DLPScriptName);
 }
 
 #endif // RUINS_OF_THERAMORE_H_

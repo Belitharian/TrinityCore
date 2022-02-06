@@ -1224,6 +1224,39 @@ class spell_mage_water_elemental_freeze : public SpellScript
     }
 };
 
+// 352278 Ice Wall
+class spell_ice_wall : public SpellScript
+{
+    PrepareSpellScript(spell_ice_wall);
+
+    void HandleSummon(SpellEffIndex effIndex)
+    {
+        PreventHitDefaultEffect(effIndex);
+        Unit* caster = GetCaster();
+        uint32 entry = uint32(GetEffectInfo().MiscValue);
+        SummonPropertiesEntry const* properties = sSummonPropertiesStore.LookupEntry(uint32(GetEffectInfo().MiscValueB));
+        uint32 duration = uint32(GetSpellInfo()->GetDuration());
+        uint32 healthPct = GetSpellInfo()->GetEffect(EFFECT_3).BasePoints;
+
+        WorldLocation* pos = GetHitDest();
+        if (Creature* summon = caster->GetMap()->SummonCreature(entry, pos->GetPosition(), properties, duration, caster, GetSpellInfo()->Id))
+        {
+            uint32 maxHealth = caster->CountPctFromMaxHealth(healthPct);
+            summon->SetMaxHealth(maxHealth);
+            summon->SetFullHealth();
+            summon->SetFaction(caster->GetFaction());
+
+            UnitState cannotMove = UnitState(UNIT_STATE_ROOT | UNIT_STATE_CANNOT_TURN);
+            summon->SetControlled(true, cannotMove);
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_ice_wall::HandleSummon, EFFECT_0, SPELL_EFFECT_SUMMON);
+    }
+};
+
 void AddSC_mage_spell_scripts()
 {
     RegisterAuraScript(spell_mage_alter_time_aura);
@@ -1259,4 +1292,5 @@ void AddSC_mage_spell_scripts()
     RegisterAuraScript(spell_mage_touch_of_the_magi_aura);
     RegisterSpellScript(spell_mage_trigger_chilled);
     RegisterSpellScript(spell_mage_water_elemental_freeze);
+    RegisterSpellScript(spell_ice_wall);
 }

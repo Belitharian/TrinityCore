@@ -1,4 +1,5 @@
 #include "CriteriaHandler.h"
+#include "CreatureGroups.h"
 #include "EventMap.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
@@ -17,108 +18,115 @@
 const ObjectData creatureData[] =
 {
     { NPC_JAINA_PROUDMOORE,             DATA_JAINA_PROUDMOORE           },
+    { NPC_JAINA_PROUDMOORE_PATROL,      DATA_JAINA_PROUDMOORE_PATROL    },
     { NPC_AETHAS_SUNREAVER,             DATA_AETHAS_SUNREAVER           },
     { NPC_SUMMONED_WATER_ELEMENTAL,     DATA_SUMMONED_WATER_ELEMENTAL   },
+    { NPC_BOUND_WATER_ELEMENTAL,        DATA_BOUND_WATER_ELEMENTAL      },
 	{ 0,                                0                               }   // END
 };
 
 const ObjectData gameobjectData[] =
 {
-	{ 0,                                0                               }   // END
+    { 0,                                0                               }   // END
 };
 
 class scenario_dalaran_purge : public InstanceMapScript
 {
-	public:
-	scenario_dalaran_purge() : InstanceMapScript(DLJScriptName, 5002)
-	{
-	}
+    public:
+    scenario_dalaran_purge() : InstanceMapScript(DLPScriptName, 5002)
+    {
+    }
 
-	struct scenario_dalaran_purge_InstanceScript : public InstanceScript
-	{
-		scenario_dalaran_purge_InstanceScript(InstanceMap* map) : InstanceScript(map),
-			eventId(1), phase(DLJPhases::FindJaina_Aethas)
-		{
-			SetHeaders(DataHeader);
-			LoadObjectData(creatureData, gameobjectData);
-		}
+    struct scenario_dalaran_purge_InstanceScript : public InstanceScript
+    {
+        scenario_dalaran_purge_InstanceScript(InstanceMap* map) : InstanceScript(map),
+            eventId(1), phase(DLPPhases::FindJaina)
+        {
+            SetHeaders(DataHeader);
+            LoadObjectData(creatureData, gameobjectData);
+        }
 
-		uint32 GetData(uint32 dataId) const override
-		{
-			if (dataId == DATA_SCENARIO_PHASE)
-				return (uint32)phase;
-			return 0U;
-		}
+        uint32 GetData(uint32 dataId) const override
+        {
+            if (dataId == DATA_SCENARIO_PHASE)
+                return (uint32)phase;
+            return 0U;
+        }
 
-		void SetData(uint32 dataId, uint32 value) override
-		{
-			switch (dataId)
-			{
-                case 100:
-                    for (Creature* highmage : highmages)
-                        highmage->AddAura(RAND(SPELL_CASTER_READY_01, SPELL_CASTER_READY_02), highmage);
+        void SetData(uint32 dataId, uint32 value) override
+        {
+            switch (dataId)
+            {
+                case DATA_SCENARIO_PHASE:
+                    phase = (DLPPhases)value;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        void OnCompletedCriteriaTree(CriteriaTree const* tree) override
+        {
+            switch (tree->ID)
+            {
+                // Dalaran
+                case CRITERIA_TREE_DALARAN:
                     if (Creature* aethas = instance->SummonCreature(NPC_AETHAS_SUNREAVER, AethasPoint01.spawn))
-                    {
                         aethas->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, AethasPoint01.destination, true, AethasPoint01.destination.GetOrientation());
-                        aethas->AddAura(SPELL_CASTER_READY_03, aethas);
-                    }
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLJPhases::FindJaina_Convo);
+                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FindingTheThieves);
                     events.ScheduleEvent(1, 10s);
                     break;
-				case DATA_SCENARIO_PHASE:
-					phase = (DLJPhases)value;
-					break;
-				default:
-					break;
-			}
-		}
-
-		void OnCompletedCriteriaTree(CriteriaTree const* tree) override
-		{
-			switch (tree->ID)
-			{
-                case CRITERIA_TREE_FIND_JAINA_01:
-                    for (Creature* highmage : highmages)
-                        highmage->AddAura(RAND(SPELL_CASTER_READY_01, SPELL_CASTER_READY_02), highmage);
-                    if (Creature* aethas = instance->SummonCreature(NPC_AETHAS_SUNREAVER, AethasPoint01.spawn))
-                    {
-                        aethas->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, AethasPoint01.destination, true, AethasPoint01.destination.GetOrientation());
-                        aethas->AddAura(SPELL_CASTER_READY_03, aethas);
-                    }
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLJPhases::FindJaina_Convo);
-                    events.ScheduleEvent(1, 10s);
+                    // Finding the thieves
+                case CRITERIA_TREE_FINDING_THE_THIEVES:
+                    for (Creature* creature : patrol)
+                        creature->SetVisible(true);
                     break;
-				default:
-					break;
-			}
-		}
+                default:
+                    break;
+            }
+        }
 
-		void OnCreatureCreate(Creature* creature) override
-		{
-			InstanceScript::OnCreatureCreate(creature);
+        void OnCreatureCreate(Creature* creature) override
+        {
+            InstanceScript::OnCreatureCreate(creature);
 
-			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
+            creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
 
-			switch (creature->GetEntry())
-			{
+            switch (creature->GetEntry())
+            {
+                case NPC_JAINA_PROUDMOORE_PATROL:
+                case NPC_BOUND_WATER_ELEMENTAL:
+                case NPC_SUNREAVER_CITIZEN:
+                    creature->SetVisible(false);
+                    patrol.push_back(creature);
+                    break;
                 case NPC_AETHAS_SUNREAVER:
                     creature->SetWalk(true);
                     creature->SetImmuneToAll(true);
+                    creature->AddAura(SPELL_CASTER_READY_03, creature);
                     break;
                 case NPC_HIGH_SUNREAVER_MAGE:
+                    creature->AddAura(RAND(SPELL_CASTER_READY_01, SPELL_CASTER_READY_02), creature);
                     creature->SetImmuneToAll(true);
                     highmages.push_back(creature);
                     break;
-				default:
-					break;
-			}
-		}
+                default:
+                    break;
+            }
+        }
 
-		void OnGameObjectCreate(GameObject* go) override
-		{
-			InstanceScript::OnGameObjectCreate(go);
+        void OnGameObjectCreate(GameObject* go) override
+        {
+            InstanceScript::OnGameObjectCreate(go);
 
             go->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
+
+            switch (go->GetEntry())
+            {
+                case GOB_MYSTIC_BARRIER_01:
+                    go->SetFlags(GO_FLAG_NOT_SELECTABLE);
+                    break;
+            }
         }
 
 		void Update(uint32 diff) override
@@ -151,13 +159,15 @@ class scenario_dalaran_purge : public InstanceMapScript
                     Next(5s);
                     break;
                 case 7:
-                {
                     Talk(GetJaina(), SAY_PURGE_JAINA_07);
-                    CastSpellExtraArgs args(SPELLVALUE_BASE_POINT0, 1056.f);
-                    GetElemental()->CastSpell(GetAethas(), SPELL_FROSTBOLT, args);
-                    Next(4s);
+                    if (Creature* aethas = GetAethas())
+                    {
+                        int32 val = aethas->CountPctFromMaxHealth(95);
+                        CastSpellExtraArgs args(SPELLVALUE_BASE_POINT0, val);
+                        GetElemental()->CastSpell(GetAethas(), SPELL_FROSTBOLT, args);
+                    }
+                    Next(2s);
                     break;
-                }
                 case 8:
                     for (Creature* highmage : highmages)
                     {
@@ -179,7 +189,7 @@ class scenario_dalaran_purge : public InstanceMapScript
                     if (Creature* jaina = GetJaina())
                     {
                         jaina->SetWalk(true);
-                        jaina->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, GetAethas(), 1.6f);
+                        jaina->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, GetAethas(), 3.6f);
                     }
                     Next(6s);
                     break;
@@ -193,6 +203,7 @@ class scenario_dalaran_purge : public InstanceMapScript
                     GetJaina()->SetVisible(false);
                     GetAethas()->SetVisible(false);
                     GetElemental()->SetVisible(false);
+                    DoSendScenarioEvent(EVENT_ASSIST_JAINA);
                     break;
 				default:
 					break;
@@ -201,8 +212,9 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 		EventMap events;
 		uint32 eventId;
-		DLJPhases phase;
+		DLPPhases phase;
         std::vector<Creature*> highmages;
+        std::vector<Creature*> patrol;
 
 		// Accesseurs
 		#pragma region ACCESSORS

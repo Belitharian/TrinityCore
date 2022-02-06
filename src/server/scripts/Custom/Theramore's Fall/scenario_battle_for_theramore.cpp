@@ -227,7 +227,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
             else if (dataId == DATA_WOUNDED_TROOPS)
             {
                 woundedTroops = value;
-                printf("woundedTroops: %u\n", woundedTroops);
             }
 		}
 
@@ -363,18 +362,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						if (Creature* citizen = instance->GetCreature(guid))
 						{
 							citizen->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-							if (roll_chance_i(60))
-								citizen->SetVisible(false);
-							else
-							{
-								citizen->RemoveAllAuras();
-								citizen->SetRegenerateHealth(false);
-								citizen->SetHealth(0U);
-								citizen->SetStandState(UNIT_STAND_STATE_DEAD);
-								citizen->AddUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
-								citizen->AddUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
-								citizen->SetImmuneToAll(true);
-							}
+                            citizen->SetVisible(false);
 						}
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Preparation);
@@ -1851,7 +1839,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					dps++;
 				}
 
-				if (healers < 2)
+				if (healers < 3)
 				{
 					entry = NPC_ROKNAH_LOA_SINGER;
 					healers++;
@@ -1881,7 +1869,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					temp->UpdateGroundPositionZ(x, y, z);
 					temp->NearTeleportTo(x, y, z, pos.GetOrientation());
 					temp->SetHomePosition(x, y, z, pos.GetOrientation());
-					temp->CastSpell(temp, SPELL_TELEPORT_DUMMY, true);
+					temp->CastSpell(temp, SPELL_THALYSSRA_SPAWNS, true);
 
 					if (Unit * target = temp->SelectNearestHostileUnitInAggroRange())
 						temp->AI()->AttackStart(target);
@@ -2117,7 +2105,7 @@ class scene_theramore_explosion : public SceneScript
 	const Position Center = { -3009.70f, -4334.41f, 6.73f, 4.24f };
 	const float Distance = 8.f;
 
-	void OnSceneStart(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* sceneTemplate) override
+	void OnSceneStart(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/) override
 	{
 		player->SetControlled(true, UNIT_STATE_ROOT);
 	}

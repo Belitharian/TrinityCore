@@ -23,7 +23,8 @@ void CustomAI::Initialize()
     {
         scheduler.SetValidator([this]
         {
-            return !me->HasUnitState(UNIT_STATE_FLEEING) || !me->HasUnitState(UNIT_STATE_FLEEING_MOVE);
+            return !me->HasUnitState(UNIT_STATE_FLEEING)
+                || !me->HasUnitState(UNIT_STATE_FLEEING_MOVE);
         });
     }
 }

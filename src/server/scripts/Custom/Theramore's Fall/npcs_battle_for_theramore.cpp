@@ -1146,7 +1146,7 @@ class npc_roknah_loasinger : public CreatureScript
 
 		void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
 		{
-			if (HealthBelowPct(40) && !me->HasAura(SPELL_ASTRAL_SHIFT))
+			if (HealthBelowPct(50) && !me->HasAura(SPELL_ASTRAL_SHIFT))
 			{
 				scheduler.Schedule(1ms, [this](TaskContext astral_shift)
 				{
@@ -1196,7 +1196,7 @@ class npc_roknah_loasinger : public CreatureScript
                         me->CastStop(SPELL_HEALING_SURGE);
                         DoCast(target, SPELL_HEALING_SURGE);
                     }
-					healing_surge.Repeat(1s);
+					healing_surge.Repeat(3s);
 				})
 				.Schedule(1ms, [this](TaskContext riptide)
 				{
@@ -1205,13 +1205,13 @@ class npc_roknah_loasinger : public CreatureScript
 						if (!target->HasAura(SPELL_RIPTIDE))
 							DoCast(target, SPELL_RIPTIDE);
 					}
-					riptide.Repeat(3s);
+					riptide.Repeat(5s);
 				})
 				.Schedule(1ms, [this](TaskContext chain_heal)
 				{
-					if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 40))
+					if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 50))
 						DoCast(target, SPELL_CHAIN_HEAL);
-					chain_heal.Repeat(3s);
+					chain_heal.Repeat(2s);
 				})
 				.Schedule(11s, 15s, [this](TaskContext lava_burst)
 				{
@@ -1233,7 +1233,7 @@ class npc_roknah_loasinger : public CreatureScript
 				.Schedule(1ms, [this](TaskContext lightning_bolt)
 				{
 					DoCastVictim(SPELL_LIGHTNING_BOLT);
-					lightning_bolt.Repeat(2s);
+					lightning_bolt.Repeat(2800ms);
 				});
 		}
 	};
@@ -1289,11 +1289,11 @@ class npc_roknah_felcaster : public CreatureScript
 			scheduler
 				.Schedule(5s, 8s, [this](TaskContext drain_life)
 				{
-					if (HealthBelowPct(20))
+					if (HealthBelowPct(30))
 					{
 						if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 						{
-							me->CastStop();
+							me->CastStop(SPELL_DRAIN_LIFE);
 							DoCast(target, SPELL_DRAIN_LIFE);
 							drain_life.Repeat(8s, 15s);
 						}
@@ -1331,11 +1331,11 @@ class npc_roknah_felcaster : public CreatureScript
 				})
 				.Schedule(12s, 14s, [this](TaskContext mortal_coil)
 				{
-					if (HealthBelowPct(15))
+					if (HealthBelowPct(20))
 					{
 						if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 						{
-							me->CastStop();
+							me->CastStop(SPELL_DRAIN_LIFE);
 							DoCast(target, SPELL_MORTAL_COIL);
 							mortal_coil.Repeat(25s, 45s);
 						}
@@ -1449,34 +1449,6 @@ class spell_theramore_throw_bucket : public SpellScript
 	}
 };
 
-// 295238 - Blazing Barrier
-// 198094 - Ice Barrier
-class spell_theramore_barrier : public AuraScript
-{
-	PrepareAuraScript(spell_theramore_barrier);
-
-    void OnAbsorb(AuraEffect* /*aurEff*/, DamageInfo& dmgInfo, uint32& absorbAmount)
-    {
-        // Prevent default action (which would remove the aura)
-        PreventDefaultAction();
-
-        absorbAmount = dmgInfo.GetDamage();
-    }
-
-	void CalculateAmount(AuraEffect const* /*aurEff*/, int32& amount, bool& canBeRecalculated)
-	{
-		canBeRecalculated = false;
-		if (Unit* caster = GetCaster())
-            amount = caster->CountPctFromMaxHealth(20);
-	}
-
-	void Register() override
-	{
-		DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_theramore_barrier::CalculateAmount, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB);
-        OnEffectAbsorb += AuraEffectAbsorbFn(spell_theramore_barrier::OnAbsorb, EFFECT_0);
-    }
-};
-
 // Blizzard - 284968
 // AreaTriggerID - 15411
 class at_blizzard_theramore : public AreaTriggerEntityScript
@@ -1572,8 +1544,6 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterSpellScript(spell_theramore_light_of_dawn);
 	RegisterSpellScript(spell_theramore_greater_pyroblast);
 	RegisterSpellScript(spell_theramore_throw_bucket);
-
-	RegisterAuraScript(spell_theramore_barrier);
 
 	new at_blizzard_theramore();
 }
