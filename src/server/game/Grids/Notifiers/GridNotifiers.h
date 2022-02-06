@@ -221,26 +221,27 @@ namespace Trinity
 
     // Generic base class to insert elements into arbitrary containers using push_back
     template<typename Type>
-    class ContainerInserter {
+    class ContainerInserter
+    {
         using InserterType = void(*)(void*, Type&&);
 
         void* ref;
         InserterType inserter;
 
-        // MSVC workaround
-        template<typename T>
-        static void InserterOf(void* ref, Type&& type)
-        {
-            static_cast<T*>(ref)->push_back(std::move(type));
-        }
-
     protected:
         template<typename T>
-        ContainerInserter(T& ref_) : ref(&ref_), inserter(&InserterOf<T>) { }
-
-        void Insert(Type type)
+        ContainerInserter(T& ref_) : ref(&ref_)
         {
-            inserter(ref, std::move(type));
+            inserter = [](void* containerRaw, Type&& object)
+            {
+                T* container = reinterpret_cast<T*>(containerRaw);
+                container->insert(container->end(), std::move(object));
+            };
+        }
+
+        void Insert(Type object)
+        {
+            inserter(ref, std::move(object));
         }
     };
 
@@ -793,11 +794,11 @@ namespace Trinity
     class NearestGameObjectEntryInObjectRangeCheck
     {
         public:
-            NearestGameObjectEntryInObjectRangeCheck(WorldObject const& obj, uint32 entry, float range) : i_obj(obj), i_entry(entry), i_range(range) { }
+            NearestGameObjectEntryInObjectRangeCheck(WorldObject const& obj, uint32 entry, float range, bool spawnedOnly = true) : i_obj(obj), i_entry(entry), i_range(range), i_spawnedOnly(spawnedOnly) { }
 
             bool operator()(GameObject* go)
             {
-                if (go->isSpawned() && go->GetEntry() == i_entry && go->GetGUID() != i_obj.GetGUID() && i_obj.IsWithinDistInMap(go, i_range))
+                if ((!i_spawnedOnly || go->isSpawned()) && go->GetEntry() == i_entry && go->GetGUID() != i_obj.GetGUID() && i_obj.IsWithinDistInMap(go, i_range))
                 {
                     i_range = i_obj.GetDistance(go);        // use found GO range as new range limit for next check
                     return true;
@@ -809,6 +810,7 @@ namespace Trinity
             WorldObject const& i_obj;
             uint32 i_entry;
             float  i_range;
+            bool   i_spawnedOnly;
 
             // prevent clone this object
             NearestGameObjectEntryInObjectRangeCheck(NearestGameObjectEntryInObjectRangeCheck const&) = delete;
@@ -887,42 +889,25 @@ namespace Trinity
             uint64 i_hp;
     };
 
-    class FriendlyBelowHpPctInRange
+    class MostHPPercentMissingInRange
     {
-        public:
-            FriendlyBelowHpPctInRange(Unit const* obj, float range, uint8 pct) : i_obj(obj), i_range(range), i_pct(pct) { }
+    public:
+        MostHPPercentMissingInRange(Unit const* obj, float range, uint32 minHpPct, uint32 maxHpPct) : i_obj(obj), i_range(range), i_minHpPct(minHpPct), i_maxHpPct(maxHpPct), i_hpPct(101.f) { }
 
-            bool operator()(Unit* u)
+        bool operator()(Unit* u)
+        {
+            if (u->IsAlive() && u->IsInCombat() && !i_obj->IsHostileTo(u) && i_obj->IsWithinDistInMap(u, i_range) && i_minHpPct <= u->GetHealthPct() && u->GetHealthPct() <= i_maxHpPct && u->GetHealthPct() < i_hpPct)
             {
-                if (u->IsAlive() && u->IsInCombat() && !i_obj->IsHostileTo(u) && i_obj->IsWithinDistInMap(u, i_range) && u->HealthBelowPct(i_pct))
-                    return true;
-                return false;
+                i_hpPct = u->GetHealthPct();
+                return true;
             }
+            return false;
+        }
 
-        private:
-            Unit const* i_obj;
-            float i_range;
-            uint8 i_pct;
-    };
-
-    class CastingUnitInRange
-    {
-        public:
-            CastingUnitInRange(Unit const* obj, uint32 spellid, float range) : i_obj(obj), i_spell(spellid), i_range(range){ }
-
-            bool operator()(Unit* u)
-            {
-                if (u->IsAlive() && i_obj->IsHostileTo(u) && u->IsInCombat() && i_obj->IsWithinDistInMap(u, i_range) && u->HasUnitState(UNIT_STATE_CASTING) && !u->HasAura(i_spell))
-                {
-                    return true;
-                }
-                return false;
-            }
-
-        private:
-            Unit const* i_obj;
-            uint32 i_spell;
-            float i_range;
+    private:
+        Unit const* i_obj;
+        float i_range;
+        float i_minHpPct, i_maxHpPct, i_hpPct;
     };
 
     class FriendlyBelowHpPctEntryInRange
@@ -947,6 +932,81 @@ namespace Trinity
             bool i_excludeSelf;
     };
 
+    class FriendlyCreatureMissingBuff
+    {
+        public:
+            FriendlyCreatureMissingBuff(Unit const* obj, uint32 spellid) : i_obj(obj), i_spell(spellid) { }
+
+            bool operator()(Creature* c) const
+            {
+                if (c->IsTrigger() && !c->IsPvP())
+                    return false;
+                if (c->IsAlive() && !i_obj->IsHostileTo(c) && i_obj->IsWithinDistInMap(c, 30.f) && !c->HasAura(i_spell))
+                    return true;
+                return false;
+            }
+
+        private:
+            Unit const* i_obj;
+            uint32 i_spell;
+    };
+
+    class EnemyMissingDotInRange
+    {
+        public:
+            EnemyMissingDotInRange(Unit const* obj, SpellInfo const* spellInfo) : i_obj(obj), i_spellInfo(spellInfo) { }
+
+            bool operator()(Unit* u) const
+            {
+                if (u->IsAlive() && u->IsInCombat() && i_obj->IsHostileTo(u) && i_obj->IsWithinDistInMap(u, i_spellInfo->GetMaxRange()) && !u->HasAura(i_spellInfo->Id))
+                    return true;
+
+                return false;
+            }
+
+        private:
+            Unit const* i_obj;
+            SpellInfo const* i_spellInfo;
+    };
+
+    class CastingUnitInRange
+    {
+        public:
+            CastingUnitInRange(Unit const* obj, uint32 spellid, float range) : i_obj(obj), i_spell(spellid), i_range(range){ }
+
+            bool operator()(Unit* u)
+            {
+                if (u->IsAlive() && i_obj->IsHostileTo(u) && u->IsInCombat() && i_obj->IsWithinDistInMap(u, i_range) && u->HasUnitState(UNIT_STATE_CASTING) && !u->HasAura(i_spell))
+                    return true;
+
+                return false;
+            }
+
+        private:
+            Unit const* i_obj;
+            uint32 i_spell;
+            float i_range;
+    };
+
+    class FriendlyBelowHpPctInRange
+    {
+        public:
+            FriendlyBelowHpPctInRange(Unit const* obj, float range, uint8 pct) : i_obj(obj), i_range(range), i_pct(pct) { }
+
+            bool operator()(Unit* u)
+            {
+                if (u->IsAlive() && u->IsInCombat() && !i_obj->IsHostileTo(u) && i_obj->IsWithinDistInMap(u, i_range) && u->HealthBelowPct(i_pct))
+                    return true;
+
+                return false;
+            }
+
+        private:
+            Unit const* i_obj;
+            float i_range;
+            uint8 i_pct;
+    };
+
     class FriendlyCCedInRange
     {
         public:
@@ -967,26 +1027,6 @@ namespace Trinity
             float i_range;
     };
 
-    class FriendlyCreatureMissingBuff
-    {
-        public:
-            FriendlyCreatureMissingBuff(Unit const* obj, uint32 spellid) : i_obj(obj), i_spell(spellid) { }
-
-            bool operator()(Creature* c) const
-            {
-                if (c->IsTrigger() && !c->IsPvP())
-                    return false;
-                if (c->IsAlive() && !i_obj->IsHostileTo(c) && i_obj->IsWithinDistInMap(c, 30.f) && !c->HasAura(i_spell))
-                    return true;
-
-                return false;
-            }
-
-        private:
-            Unit const* i_obj;
-            uint32 i_spell;
-    };
-
     class FriendlyMissingBuffInRange
     {
         public:
@@ -1004,24 +1044,6 @@ namespace Trinity
             Unit const* i_obj;
             float i_range;
             uint32 i_spell;
-    };
-
-    class EnemyMissingDotInRange
-    {
-        public:
-            EnemyMissingDotInRange(Unit const* obj, SpellInfo const* spellInfo) : i_obj(obj), i_spellInfo(spellInfo) { }
-
-            bool operator()(Unit* u) const
-            {
-                if (u->IsAlive() && u->IsInCombat() && i_obj->IsHostileTo(u) && i_obj->IsWithinDistInMap(u, i_spellInfo->GetMaxRange()) && !u->HasAura(i_spellInfo->Id))
-                    return true;
-
-                return false;
-            }
-
-        private:
-            Unit const* i_obj;
-            SpellInfo const* i_spellInfo;
     };
 
     class AnyUnfriendlyUnitInObjectRangeCheck
