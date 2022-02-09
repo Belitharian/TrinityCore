@@ -4158,9 +4158,14 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
 
+            loginStmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BATTLE_PET_DECLINED_NAME_BY_OWNER);
+            loginStmt->setInt64(0, guid);
+            loginStmt->setInt32(1, realm.Id.Realm);
+            loginTransaction->Append(loginStmt);
+
             loginStmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BATTLE_PETS_BY_OWNER);
             loginStmt->setInt64(0, guid);
-            loginStmt->setInt32(0, realm.Id.Realm);
+            loginStmt->setInt32(1, realm.Id.Realm);
             loginTransaction->Append(loginStmt);
 
             Corpse::DeleteFromDB(playerguid, trans);
@@ -8114,8 +8119,8 @@ void Player::ApplyArtifactPowerRank(Item* artifact, ArtifactPowerRankEntry const
         else if (apply)
         {
             CastSpellExtraArgs args;
-            args.TriggerFlags = TRIGGERED_FULL_MASK;
-            args.CastItem = artifact;
+            args.SetTriggerFlags(TRIGGERED_FULL_MASK);
+            args.SetCastItem(artifact);
             if (artifactPowerRank->AuraPointsOverride)
                 for (SpellEffectInfo const& spellEffectInfo : spellInfo->GetEffects())
                     args.AddSpellMod(SpellValueMod(SPELLVALUE_BASE_POINT0 + spellEffectInfo.EffectIndex), artifactPowerRank->AuraPointsOverride);
