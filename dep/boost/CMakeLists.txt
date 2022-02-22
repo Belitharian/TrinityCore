@@ -32,9 +32,9 @@ include (CheckCXXSourceCompiles)
 
 if (WIN32)
   # On windows the requirements are higher according to the wiki.
-  set(BOOST_REQUIRED_VERSION 1.70)
+  set(BOOST_REQUIRED_VERSION 1.73)
 else()
-  set(BOOST_REQUIRED_VERSION 1.67)
+  set(BOOST_REQUIRED_VERSION 1.71)
 endif()
 
 find_package(Boost ${BOOST_REQUIRED_VERSION} REQUIRED system filesystem program_options iostreams regex)
@@ -65,10 +65,7 @@ target_include_directories(boost
 
 target_compile_definitions(boost
   INTERFACE
-    -DBOOST_DATE_TIME_NO_LIB
-    -DBOOST_REGEX_NO_LIB
-    -DBOOST_CHRONO_NO_LIB
-    -DBOOST_SERIALIZATION_NO_LIB
+    -DBOOST_ALL_NO_LIB
     -DBOOST_CONFIG_SUPPRESS_OUTDATED_MESSAGE
     -DBOOST_ASIO_NO_DEPRECATED
     -DBOOST_BIND_NO_PLACEHOLDERS

@@ -71,6 +71,7 @@
 #include "InstanceScript.h"
 #include "ItemPackets.h"
 #include "KillRewarder.h"
+#include "Language.h"
 #include "LanguageMgr.h"
 #include "LFGMgr.h"
 #include "Log.h"
@@ -114,14 +115,11 @@
 #include "TalentPackets.h"
 #include "ToyPackets.h"
 #include "TradeData.h"
-#include "TransmogrificationPackets.h"
 #include "Transport.h"
 #include "UpdateData.h"
 #include "Util.h"
 #include "Vehicle.h"
 #include "VehiclePackets.h"
-#include "Weather.h"
-#include "WeatherMgr.h"
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
@@ -646,6 +644,8 @@ uint32 Player::EnvironmentalDamage(EnviromentalDamage type, uint32 damage)
 {
     if (IsImmuneToEnvironmentalDamage())
         return 0;
+
+    damage *= GetTotalAuraMultiplier(SPELL_AURA_MOD_ENVIRONMENTAL_DAMAGE_TAKEN);
 
     // Absorb, resist some environmental damage type
     uint32 absorb = 0;
@@ -2730,7 +2730,7 @@ bool Player::AddTalent(TalentEntry const* talent, uint8 spec, bool learning)
         return false;
     }
 
-    if (talent->OverridesSpellID)
+    if (spec == GetActiveTalentGroup() && talent->OverridesSpellID)
         AddOverrideSpell(talent->OverridesSpellID, talent->SpellID);
 
     PlayerTalentMap::iterator itr = GetTalentMap(spec)->find(talent->ID);
@@ -26509,6 +26509,8 @@ void Player::AutoStoreLoot(uint8 bag, uint8 slot, uint32 loot_id, LootStore cons
         Item* pItem = StoreNewItem(dest, lootItem->itemid, true, lootItem->randomBonusListId, GuidSet(), lootItem->context, lootItem->BonusListIDs);
         SendNewItem(pItem, lootItem->count, false, createdByPlayer, broadcast);
     }
+
+    Unit::ProcSkillsAndAuras(this, nullptr, PROC_FLAG_LOOTED, PROC_FLAG_NONE, PROC_SPELL_TYPE_MASK_ALL, PROC_SPELL_PHASE_NONE, PROC_HIT_NONE, nullptr, nullptr, nullptr);
 }
 
 void Player::StoreLootItem(uint8 lootSlot, Loot* loot, AELootResult* aeResult/* = nullptr*/)
