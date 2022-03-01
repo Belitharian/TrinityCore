@@ -79,7 +79,11 @@ class scenario_dalaran_purge : public InstanceMapScript
                     // Finding the thieves
                 case CRITERIA_TREE_FINDING_THE_THIEVES:
                     for (Creature* creature : patrol)
+                    {
+                        creature->SetFaction(FACTION_DALARAN_PATROL);
+                        creature->setActive(true);
                         creature->SetVisible(true);
+                    }
                     break;
                 default:
                     break;
@@ -94,11 +98,23 @@ class scenario_dalaran_purge : public InstanceMapScript
 
             switch (creature->GetEntry())
             {
+                case NPC_ARCHMAGE_LAN_DALOCK:
+                    creature->SetImmuneToAll(true);
+                    creature->CastSpell(creature, SPELL_FROST_CANALISATION);
+                    break;
+                case NPC_ICE_WALL:
+                    creature->SetImmuneToAll(true);
+                    creature->SetUnitFlags(UNIT_FLAG_NOT_SELECTABLE);
+                    break;
                 case NPC_JAINA_PROUDMOORE_PATROL:
                 case NPC_BOUND_WATER_ELEMENTAL:
-                case NPC_SUNREAVER_CITIZEN:
+                    creature->SetFaction(FACTION_FRIENDLY);
+                    creature->setActive(false);
                     creature->SetVisible(false);
                     patrol.push_back(creature);
+                    break;
+                case NPC_VEREESA_WINDRUNNER:
+                    creature->SetNpcFlags(UNIT_NPC_FLAG_NONE);
                     break;
                 case NPC_AETHAS_SUNREAVER:
                     creature->SetWalk(true);
@@ -162,8 +178,9 @@ class scenario_dalaran_purge : public InstanceMapScript
                     Talk(GetJaina(), SAY_PURGE_JAINA_07);
                     if (Creature* aethas = GetAethas())
                     {
-                        int32 val = aethas->CountPctFromMaxHealth(95);
+                        int32 val = aethas->CountPctFromMaxHealth(60);
                         CastSpellExtraArgs args(SPELLVALUE_BASE_POINT0, val);
+                        args.SetTriggerFlags(TRIGGERED_DISALLOW_PROC_EVENTS);
                         GetElemental()->CastSpell(GetAethas(), SPELL_FROSTBOLT, args);
                     }
                     Next(2s);
@@ -203,6 +220,8 @@ class scenario_dalaran_purge : public InstanceMapScript
                     GetJaina()->SetVisible(false);
                     GetAethas()->SetVisible(false);
                     GetElemental()->SetVisible(false);
+                    for (Creature* highmage : highmages)
+                        highmage->SetVisible(false);
                     DoSendScenarioEvent(EVENT_ASSIST_JAINA);
                     break;
 				default:

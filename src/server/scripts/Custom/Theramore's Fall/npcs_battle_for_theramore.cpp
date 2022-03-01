@@ -263,17 +263,6 @@ struct npc_theramore_troopAI : public CustomAI
 			#endif
 		}
 	}
-
-	protected:
-
-	uint32 EnemiesInRange(float distance)
-	{
-		uint32 count = 0;
-		for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
-			if (me->IsWithinDist(ref->GetVictim(), distance))
-				++count;
-		return count;
-	}
 };
 
 class npc_thader_windermere : public CreatureScript
@@ -804,17 +793,6 @@ struct npc_theramore_hordeAI : public CustomAI
         if (Player* player = killer->ToPlayer())
             KillRewarder(player, me, false).Reward(killCredit);
     }
-
-	protected:
-
-	uint32 EnemiesInRange(float distance)
-	{
-		uint32 count = 0;
-		for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
-			if (ref->GetVictim()->IsWithinDist(me, distance, false))
-				++count;
-		return count;
-	}
 };
 
 class npc_roknah_hag : public CreatureScript
@@ -1451,79 +1429,59 @@ class spell_theramore_throw_bucket : public SpellScript
 
 // Blizzard - 284968
 // AreaTriggerID - 15411
-class at_blizzard_theramore : public AreaTriggerEntityScript
+struct at_blizzard_theramore : AreaTriggerAI
 {
-	public:
-	at_blizzard_theramore() : AreaTriggerEntityScript("at_blizzard_theramore")
+    static constexpr Milliseconds TICK_PERIOD = Milliseconds(1000);
+
+    at_blizzard_theramore(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger), _tickTimer(TICK_PERIOD)
 	{
 	}
 
-	struct at_blizzard_theramoreAI : AreaTriggerAI
+	enum Spells
 	{
-		at_blizzard_theramoreAI(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
-		{
-			timeInterval = interval;
-		}
-
-		const int32 interval = 1000;
-
-		int32 timeInterval;
-
-		enum Spells
-		{
-			SPELL_BLIZZARD_DAMAGE = 335953
-		};
-
-		void OnUpdate(uint32 diff) override
-		{
-			Unit* caster = at->GetCaster();
-			if (!caster)
-				return;
-
-			timeInterval += diff;
-			if (timeInterval < interval)
-				return;
-
-			if (TempSummon* tempSumm = caster->SummonCreature(WORLD_TRIGGER, at->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 200ms))
-			{
-				tempSumm->SetFaction(caster->GetFaction());
-				tempSumm->SetOwnerGUID(caster->GetGUID());
-
-				PhasingHandler::InheritPhaseShift(tempSumm, caster);
-
-				for (ObjectGuid unit : at->GetInsideUnits())
-				{
-					if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
-					{
-						if (!caster->IsHostileTo(target))
-							continue;
-
-						caster->CastSpell(target, SPELL_BLIZZARD_DAMAGE, true);
-
-						if (target->GetTypeId() == TYPEID_PLAYER)
-							continue;
-
-						if (target->HasUnitState(UNIT_STATE_FLEEING) || target->HasUnitState(UNIT_STATE_FLEEING_MOVE))
-							continue;
-
-						if (roll_chance_i(60))
-						{
-							target->CastStop();
-							target->GetMotionMaster()->Clear();
-							target->GetMotionMaster()->MoveFleeing(tempSumm, 5 * IN_MILLISECONDS);
-						}
-					}
-				}
-			}
-
-			timeInterval -= interval;
-		}
+		SPELL_BLIZZARD_DAMAGE   = 335953
 	};
 
-	AreaTriggerAI* GetAI(AreaTrigger* areatrigger) const override
-	{
-		return new at_blizzard_theramoreAI(areatrigger);
-	}
+    void OnUpdate(uint32 diff) override
+    {
+        _tickTimer -= Milliseconds(diff);
+
+        while (_tickTimer <= 0s)
+        {
+            if (Unit* caster = at->GetCaster())
+            {
+                for (ObjectGuid unit : at->GetInsideUnits())
+                {
+                    if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
+                    {
+                        if (!caster->IsHostileTo(target))
+                            continue;
+
+                        caster->CastSpell(target, SPELL_BLIZZARD_DAMAGE);
+
+                        if (target->GetTypeId() == TYPEID_PLAYER)
+                            continue;
+
+                        if (target->HasUnitState(UNIT_STATE_FLEEING) || target->HasUnitState(UNIT_STATE_FLEEING_MOVE))
+                            continue;
+
+                        if (roll_chance_i(60))
+                        {
+                            target->CastStop();
+                            target->GetMotionMaster()->Clear();
+                            target->GetMotionMaster()->MoveFleeing(caster, 5 * IN_MILLISECONDS);
+                        }
+                    }
+                }
+            }
+
+            _tickTimer += TICK_PERIOD;
+        }
+    }
+
+    private:
+    Milliseconds _tickTimer;
+    int32 timeInterval;
 };
 
 void AddSC_npcs_battle_for_theramore()
@@ -1545,5 +1503,5 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterSpellScript(spell_theramore_greater_pyroblast);
 	RegisterSpellScript(spell_theramore_throw_bucket);
 
-	new at_blizzard_theramore();
+	RegisterAreaTriggerAI(at_blizzard_theramore);
 }

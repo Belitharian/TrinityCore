@@ -68,9 +68,9 @@ class HordeDoorsEvent : public BasicEvent
 			creature->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_03, { x, y, z });
 		}
 
-		owner->m_Events.AddEventAtOffset(this, Milliseconds(timer + urand(3000, 5000)));
+        owner->m_Events.AddEvent(this, Milliseconds(timer) + randtime(3s, 5s));
 
-		return false;
+        return false;
 	}
 
 	private:
@@ -94,8 +94,8 @@ class KalecgosSpellEvent : public BasicEvent
 
 		owner->CastSpell(owner, SPELL_FROST_BREATH);
 		owner->GetThreatManager().RemoveMeFromThreatLists();
-		owner->m_Events.AddEventAtOffset(this, Milliseconds(timer + urand(8000, 10000)));
-		return false;
+        owner->m_Events.AddEvent(this, Milliseconds(timer) + randtime(8s, 10s));
+        return false;
 	}
 
 	private:
@@ -118,8 +118,8 @@ class KalecgosLoopEvent : public BasicEvent
 	bool Execute(uint64 timer, uint32 /*updateTime*/) override
 	{
 		owner->GetMotionMaster()->MoveCirclePath(TheramorePoint01.GetPositionX(), TheramorePoint01.GetPositionY(), TheramorePoint01.GetPositionZ(), KALECGOS_CIRCLE_RADIUS, true, 16);
-		owner->m_Events.AddEventAtOffset(this, Milliseconds(timer + m_loopTime));
-		return false;
+        owner->m_Events.AddEvent(this, Milliseconds(timer + m_loopTime));
+        return false;
 	}
 
 	private:

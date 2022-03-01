@@ -48,6 +48,11 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			LoadObjectData(creatureData, gameobjectData);
 		}
 
+        void OnPlayerEnter(Player* player) override
+        {
+
+        }
+
 		uint32 GetData(uint32 dataId) const override
 		{
 			if (dataId == DATA_SCENARIO_PHASE)

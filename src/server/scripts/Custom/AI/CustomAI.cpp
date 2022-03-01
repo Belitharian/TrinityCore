@@ -52,9 +52,9 @@ void CustomAI::SummonedCreatureDies(Creature* summon, Unit* killer)
 
 void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
 {
-    if (Unit* unit = caster->ToUnit())
+    if (type == AI_Type::Distance)
     {
-        if (type == AI_Type::Distance)
+        if (Unit* unit = caster->ToUnit())
         {
             if (spellInfo->HasEffect(SPELL_EFFECT_INTERRUPT_CAST))
             {
@@ -141,4 +141,22 @@ bool CustomAI::CanAIAttack(Unit const* who) const
         && !who->HasAuraType(SPELL_AURA_MOD_FEAR_2)
         && !who->HasBreakableByDamageCrowdControlAura(me)
         && ScriptedAI::CanAIAttack(who);
+}
+
+uint32 CustomAI::EnemiesInRange(float distance)
+{
+    uint32 count = 0;
+    for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
+        if (me->IsWithinDist(ref->GetVictim(), distance))
+            ++count;
+    return count;
+}
+
+uint32 CustomAI::EnemiesInFront(float distance)
+{
+    uint32 count = 0;
+    for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
+        if (me->isInFrontInMap(ref->GetVictim(), distance))
+            ++count;
+    return count;
 }

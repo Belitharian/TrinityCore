@@ -43,6 +43,9 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         TaskScheduler scheduler;
         SummonList summons;
         AI_Type type;
+
+        uint32 EnemiesInRange(float distance);
+        uint32 EnemiesInFront(float distance);
 };
 
 #endif // CUSTOM_CUSTOMAI_H

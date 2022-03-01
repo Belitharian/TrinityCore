@@ -1367,8 +1367,59 @@ class spell_ice_wall : public SpellScript
     }
 };
 
+// Ring of Fire - 353084
+class spell_ring_of_fire : public AuraScript
+{
+    PrepareAuraScript(spell_ring_of_fire);
+
+    void HandlePeriodicTick(AuraEffect const* /*aurEff*/)
+    {
+        PreventDefaultAction();
+
+        Unit* caster = GetCaster();
+        if (Unit* target = GetTarget())
+        {
+            int32 percent = GetSpellInfo()->GetEffect(EFFECT_1).BasePoints;
+            uint32 damages = target->CountPctFromMaxHealth(percent);
+            Unit::DealDamage(caster, target, damages);
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_ring_of_fire::HandlePeriodicTick, EFFECT_0, SPELL_AURA_PERIODIC_DAMAGE_PERCENT);
+    }
+};
+
+// Ring of Fire - 353082
+// AreaTriggerID - 22981
+struct at_ring_of_fire : AreaTriggerAI
+{
+    at_ring_of_fire(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
+    {
+    }
+
+    enum Spells
+    {
+        SPELL_RING_OF_FIRE_DAMAGE = 353084
+    };
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        unit->AddAura(SPELL_RING_OF_FIRE_DAMAGE, unit);
+    }
+
+    void OnUnitExit(Unit* unit) override
+    {
+        if (unit->HasAura(SPELL_RING_OF_FIRE_DAMAGE))
+            unit->RemoveAurasDueToSpell(SPELL_RING_OF_FIRE_DAMAGE);
+    }
+};
+
 void AddSC_mage_spell_scripts()
 {
+    RegisterAreaTriggerAI(at_ring_of_fire);
+    RegisterSpellScript(spell_ring_of_fire);
     RegisterSpellScript(spell_mage_alter_time_aura);
     RegisterSpellScript(spell_mage_alter_time_active);
     RegisterSpellScript(spell_mage_arcane_barrage);

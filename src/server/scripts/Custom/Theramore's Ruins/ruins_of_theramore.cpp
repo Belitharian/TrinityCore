@@ -1,5 +1,6 @@
 #include "GameObject.h"
 #include "InstanceScript.h"
+#include "TemporarySummon.h"
 #include "KillRewarder.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
@@ -299,40 +300,43 @@ class event_ruins_warlock : public CreatureScript
                         DoAction(1U);
                         return;
                     }
+                    else
+                    {
+                        if (!dummy->HasAura(SPELL_SHADOWY_TEAR))
+                            dummy->AddAura(SPELL_SHADOWY_TEAR, dummy);
 
-                    if (!dummy->HasAura(SPELL_SHADOWY_TEAR)) dummy->AddAura(SPELL_SHADOWY_TEAR, dummy);
-
-                    scheduler
-                        .Schedule(3s, 5s, GROUP_WARLOCK,[this, warlock, dummy](TaskContext context)
-                        {
-                            switch (context.GetRepeatCounter())
+                        scheduler
+                            .Schedule(3s, 5s, GROUP_WARLOCK, [this, warlock, dummy](TaskContext context)
                             {
-                                case 0:
-                                    warlock->CastSpell(warlock, SPELL_SHADOW_CHANNELING);
-                                    context.Repeat(3s);
-                                    break;
-                                case 1:
-                                    warlock->CastStop();
-                                    if (Creature* felhunter = warlock->SummonCreature(NPC_FELHUNTER, dummy->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 20s))
-                                    {
-                                        felhunter->CastSpell(felhunter, SPELL_FEL_DISSOLVE_IN);
-                                        felhunter->SetMaxHealth(warlock->CountPctFromMaxHealth(80));
-                                        felhunter->SetFullHealth();
-                                        felhunter->SetOwnerGUID(warlock->GetGUID());
-                                        felhunter->SetFaction(warlock->GetFaction());
-                                        felhunter->SetImmuneToAll(true);
+                                switch (context.GetRepeatCounter())
+                                {
+                                    case 0:
+                                        warlock->CastSpell(warlock, SPELL_SHADOW_CHANNELING);
+                                        context.Repeat(3s);
+                                        break;
+                                    case 1:
+                                        warlock->CastStop();
+                                        if (Creature* felhunter = warlock->SummonCreature(NPC_FELHUNTER, dummy->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 20s))
+                                        {
+                                            felhunter->CastSpell(felhunter, SPELL_FEL_DISSOLVE_IN);
+                                            felhunter->SetMaxHealth(warlock->CountPctFromMaxHealth(80));
+                                            felhunter->SetFullHealth();
+                                            felhunter->SetOwnerGUID(warlock->GetGUID());
+                                            felhunter->SetFaction(warlock->GetFaction());
+                                            felhunter->SetImmuneToAll(true);
 
-                                        felhunter->GetMotionMaster()->Clear();
-                                        felhunter->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, FelhunterPath01, FELHUNTER_PATH_01);
-                                    }
-                                    context.Repeat(5s, 14s);
-                                    break;
-                                case 2:
-                                    scheduler.CancelGroup(GROUP_WARLOCK);
-                                    DoAction(1U);
-                                    break;
-                            }
-                        });
+                                            felhunter->GetMotionMaster()->Clear();
+                                            felhunter->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, FelhunterPath01, FELHUNTER_PATH_01);
+                                        }
+                                        context.Repeat(5s, 14s);
+                                        break;
+                                    case 2:
+                                        scheduler.CancelGroup(GROUP_WARLOCK);
+                                        DoAction(1U);
+                                        break;
+                                }
+                            });
+                    }
                 }
             }
             else if (param == 2)
@@ -346,39 +350,40 @@ class event_ruins_warlock : public CreatureScript
                     {
                         scheduler.CancelGroup(GROUP_HAG);
                         DoAction(2U);
-                        return;
                     }
-
-                    scheduler
-                        .Schedule(2s, GROUP_HAG, [hag, grunt, loa, this](TaskContext context)
-                        {
-                            switch (context.GetRepeatCounter())
+                    else
+                    {
+                        scheduler
+                            .Schedule(2s, GROUP_HAG, [hag, grunt, loa, this](TaskContext context)
                             {
-                                case 0:
-                                    hag->SetFacingToObject(grunt);
-                                    context.Repeat(1s);
-                                    break;
-                                case 1:
-                                    hag->CastSpell(grunt, SPELL_POLYMORPH);
-                                    context.Repeat(1s);
-                                    break;
-                                case 2:
-                                    loa->SetFacingToObject(grunt);
-                                    hag->HandleEmoteCommand(EMOTE_ONESHOT_LAUGH);
-                                    context.Repeat(31s);
-                                    break;
-                                case 3:
-                                    loa->AI()->EnterEvadeMode();
-                                    hag->AI()->EnterEvadeMode();
-                                    grunt->AI()->EnterEvadeMode();
-                                    context.Repeat(25s, 60s);
-                                    break;
-                                case 4:
-                                    scheduler.CancelGroup(GROUP_HAG);
-                                    DoAction(2U);
-                                    break;
-                            }
-                        });
+                                switch (context.GetRepeatCounter())
+                                {
+                                    case 0:
+                                        hag->SetFacingToObject(grunt);
+                                        context.Repeat(1s);
+                                        break;
+                                    case 1:
+                                        hag->CastSpell(grunt, SPELL_POLYMORPH);
+                                        context.Repeat(1s);
+                                        break;
+                                    case 2:
+                                        loa->SetFacingToObject(grunt);
+                                        hag->HandleEmoteCommand(EMOTE_ONESHOT_LAUGH);
+                                        context.Repeat(31s);
+                                        break;
+                                    case 3:
+                                        loa->AI()->EnterEvadeMode();
+                                        hag->AI()->EnterEvadeMode();
+                                        grunt->AI()->EnterEvadeMode();
+                                        context.Repeat(25s, 60s);
+                                        break;
+                                    case 4:
+                                        scheduler.CancelGroup(GROUP_HAG);
+                                        DoAction(2U);
+                                        break;
+                                }
+                            });
+                    }
                 }
             }
         }
@@ -390,13 +395,13 @@ class event_ruins_warlock : public CreatureScript
 
         void UpdateAI(uint32 diff) override
         {
-            if (!launched)
-            {
-                DoAction(1U);
-                DoAction(2U);
+            //if (!launched)
+            //{
+            //    DoAction(1U);
+            //    DoAction(2U);
 
-                launched = true;
-            }
+            //    launched = true;
+            //}
 
             scheduler.Update(diff);
         }

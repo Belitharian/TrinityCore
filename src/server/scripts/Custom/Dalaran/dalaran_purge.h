@@ -13,11 +13,14 @@ enum DLPCreatures
 {
 	NPC_JAINA_PROUDMOORE               = 68677,
     NPC_JAINA_PROUDMOORE_PATROL        = 68609,
+    NPC_VEREESA_WINDRUNNER             = 68687,
+    NPC_ARCHMAGE_LAN_DALOCK            = 68617,
 	NPC_AETHAS_SUNREAVER               = 68679,
 	NPC_HIGH_SUNREAVER_MAGE            = 68680,
     NPC_SUNREAVER_CITIZEN              = 68695,
 	NPC_SUMMONED_WATER_ELEMENTAL       = 68678,
 	NPC_BOUND_WATER_ELEMENTAL          = 68956,
+    NPC_ICE_WALL                       = 178819,
 };
 
 enum DLPData
@@ -58,7 +61,7 @@ enum DLPSpells
 	SPELL_ARCANE_BOMBARDMENT           = 352556,
     SPELL_ICY_GLARE                    = 338517,
     SPELL_CHILLING_BLAST               = 337053,
-    SPELL_TELEPORT_CITIZEN             = 135176,
+    SPELL_FROST_CANALISATION           = 192353,
 };
 
 enum DLPMisc
@@ -67,8 +70,12 @@ enum DLPMisc
 	EVENT_FIND_JAINA_01                 = 65817,
 	EVENT_ASSIST_JAINA                  = 65818,
 
+    // Factions
+    FACTION_DALARAN_PATROL              = 2618,
+
     // Gob
 	GOB_MYSTIC_BARRIER_01               = 323860,
+    GOB_ICE_WALL_COLLISION              = 368620,
 
 	// Criteria Trees
 	CRITERIA_TREE_DALARAN               = 1000047,  // Purple Citadel

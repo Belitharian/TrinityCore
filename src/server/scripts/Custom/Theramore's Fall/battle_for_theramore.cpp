@@ -11,6 +11,7 @@
 #include "SpellHistory.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "TemporarySummon.h"
 #include "Custom/AI/CustomAI.h"
 #include "battle_for_theramore.h"
 
