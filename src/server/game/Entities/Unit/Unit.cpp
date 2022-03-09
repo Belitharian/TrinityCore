@@ -1040,8 +1040,8 @@ bool Unit::HasBreakableByDamageCrowdControlAura(Unit* excludeCasterChannel) cons
         }
     }
 
-    // check to see if victim is sitting
-    if (victim->GetStandState())
+    // make player victims stand up automatically
+    if (victim->GetStandState() && victim->IsPlayer())
         victim->SetStandState(UNIT_STAND_STATE_STAND);
 
     return damage;
@@ -2189,7 +2189,7 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(Unit const* victim, WeaponAttackTy
     if (attackerLevel >= victimLevel + 4 &&
         // can be from by creature (if can) or from controlled player that considered as creature
         !IsControlledByPlayer() &&
-        !(GetTypeId() == TYPEID_UNIT && ToCreature()->GetCreatureTemplate()->flags_extra & CREATURE_FLAG_EXTRA_NO_CRUSH))
+        !(GetTypeId() == TYPEID_UNIT && ToCreature()->GetCreatureTemplate()->flags_extra & CREATURE_FLAG_EXTRA_NO_CRUSHING_BLOWS))
     {
         // add 2% chance per level, min. is 15%
         tmp = attackerLevel - victimLevel * 1000 - 1500;
@@ -8416,7 +8416,7 @@ bool Unit::ApplyDiminishingToDuration(SpellInfo const* auraSpellInfo, int32& dur
     {
         case DIMINISHING_TAUNT:
         {
-            if (GetTypeId() == TYPEID_UNIT && (ToCreature()->GetCreatureTemplate()->flags_extra & CREATURE_FLAG_EXTRA_TAUNT_DIMINISH))
+            if (GetTypeId() == TYPEID_UNIT && (ToCreature()->GetCreatureTemplate()->flags_extra & CREATURE_FLAG_EXTRA_OBEYS_TAUNT_DIMINISHING_RETURNS))
             {
                 DiminishingLevels diminish = previousLevel;
                 switch (diminish)
@@ -12028,6 +12028,12 @@ void Unit::_ExitVehicle(Position const* exitPosition)
     // This should be done before dismiss, because there may be some aura removal
     VehicleSeatAddon const* seatAddon = m_vehicle->GetSeatAddonForSeatOfPassenger(this);
     Vehicle* vehicle = m_vehicle->RemovePassenger(this);
+
+    if (!vehicle)
+    {
+        TC_LOG_ERROR("entities.vehicle", "RemovePassenger() couldn't remove current unit from vehicle. Debug info: %s", GetDebugInfo().c_str());
+        return;
+    }
 
     Player* player = ToPlayer();
 

@@ -62,6 +62,7 @@ SmartScript::SmartScript()
     mCurrentPriority = 0;
     mEventSortingRequired = false;
     mNestedEventsCounter = 0;
+    mAllEventFlags = 0;
 }
 
 SmartScript::~SmartScript()
@@ -2241,7 +2242,7 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
             for (WorldObject* const target : targets)
             {
                 if (IsCreature(target))
-                    target->ToCreature()->SetCorpseDelay(e.action.corpseDelay.timer);
+                    target->ToCreature()->SetCorpseDelay(e.action.corpseDelay.timer, !e.action.corpseDelay.includeDecayRatio);
             }
 
             break;
@@ -2496,7 +2497,7 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
         {
             if (WorldObject* obj = GetBaseObject())
             {
-                obj->GetMap()->SetZoneOverrideLight(e.action.overrideLight.zoneId, e.action.overrideLight.areaLightId, e.action.overrideLight.overrideLightId, e.action.overrideLight.transitionMilliseconds);
+                obj->GetMap()->SetZoneOverrideLight(e.action.overrideLight.zoneId, e.action.overrideLight.areaLightId, e.action.overrideLight.overrideLightId, Milliseconds(e.action.overrideLight.transitionMilliseconds));
                 TC_LOG_DEBUG("scripts.ai", "SmartScript::ProcessAction: SMART_ACTION_OVERRIDE_LIGHT: %s sets zone override light (zoneId: %u, areaLightId: %u, overrideLightId: %u, transitionMilliseconds: %u)",
                     obj->GetGUID().ToString().c_str(), e.action.overrideLight.zoneId, e.action.overrideLight.areaLightId, e.action.overrideLight.overrideLightId, e.action.overrideLight.transitionMilliseconds);
             }
@@ -4133,35 +4134,35 @@ void SmartScript::FillScript(SmartAIEventList e, WorldObject* obj, AreaTriggerEn
 
         if (scriptholder.event.event_flags & SMART_EVENT_FLAG_DIFFICULTY_ALL)//if has instance flag add only if in it
         {
-            if (obj && obj->GetMap()->IsDungeon())
+            if (!(obj && obj->GetMap()->IsDungeon()))
+                continue;
+
+            // TODO: fix it for new maps and difficulties
+            switch (obj->GetMap()->GetDifficultyID())
             {
-                // TODO: fix it for new maps and difficulties
-                switch (obj->GetMap()->GetDifficultyID())
-                {
-                    case DIFFICULTY_NORMAL:
-                    case DIFFICULTY_10_N:
-                        if (scriptholder.event.event_flags & SMART_EVENT_FLAG_DIFFICULTY_0)
-                            mEvents.emplace_back(std::move(scriptholder));
-                        break;
-                    case DIFFICULTY_HEROIC:
-                    case DIFFICULTY_25_N:
-                        if (scriptholder.event.event_flags & SMART_EVENT_FLAG_DIFFICULTY_1)
-                            mEvents.emplace_back(std::move(scriptholder));
-                        break;
-                    case DIFFICULTY_10_HC:
-                        if (scriptholder.event.event_flags & SMART_EVENT_FLAG_DIFFICULTY_2)
-                            mEvents.emplace_back(std::move(scriptholder));
-                        break;
-                    case DIFFICULTY_25_HC:
-                        if (scriptholder.event.event_flags & SMART_EVENT_FLAG_DIFFICULTY_3)
-                            mEvents.emplace_back(std::move(scriptholder));
-                        break;
-                    default:
-                        break;
-                }
+                case DIFFICULTY_NORMAL:
+                case DIFFICULTY_10_N:
+                    if (!(scriptholder.event.event_flags & SMART_EVENT_FLAG_DIFFICULTY_0))
+                        continue;
+                    break;
+                case DIFFICULTY_HEROIC:
+                case DIFFICULTY_25_N:
+                    if (!(scriptholder.event.event_flags & SMART_EVENT_FLAG_DIFFICULTY_1))
+                        continue;
+                    break;
+                case DIFFICULTY_10_HC:
+                    if (!(scriptholder.event.event_flags & SMART_EVENT_FLAG_DIFFICULTY_2))
+                        continue;
+                    break;
+                case DIFFICULTY_25_HC:
+                    if (!(scriptholder.event.event_flags & SMART_EVENT_FLAG_DIFFICULTY_3))
+                        continue;
+                    break;
+                default:
+                    break;
             }
-            continue;
         }
+        mAllEventFlags |= scriptholder.event.event_flags;
         mEvents.push_back(scriptholder);//NOTE: 'world(0)' events still get processed in ANY instance mode
     }
 }

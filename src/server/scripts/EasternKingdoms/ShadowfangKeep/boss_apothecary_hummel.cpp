@@ -153,7 +153,6 @@ class boss_apothecary_hummel : public CreatureScript
                             _isDead = true;
                             me->RemoveAurasDueToSpell(SPELL_ALLURING_PERFUME);
                             DoCastSelf(SPELL_PERMANENT_FEIGN_DEATH, true);
-                            me->AddUnitFlag(UNIT_FLAG_UNK_29);
                             me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
                             Talk(SAY_HUMMEL_DEATH);
                         }
@@ -175,7 +174,6 @@ class boss_apothecary_hummel : public CreatureScript
                     Talk(SAY_HUMMEL_DEATH);
 
                 events.Reset();
-                me->RemoveUnitFlag(UNIT_FLAG_UNK_29);
                 me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
                 instance->SetBossState(DATA_APOTHECARY_HUMMEL, DONE);
 
