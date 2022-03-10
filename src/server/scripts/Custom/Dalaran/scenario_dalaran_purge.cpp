@@ -95,9 +95,18 @@ class scenario_dalaran_purge : public InstanceMapScript
             InstanceScript::OnCreatureCreate(creature);
 
             creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
+            creature->AddPvpFlag(UNIT_BYTE2_FLAG_PVP);
+            creature->AddUnitFlag(UNIT_FLAG_PVP);
 
             switch (creature->GetEntry())
             {
+                case NPC_ARCANIST_RATHAELLA:
+                    creature->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+                    creature->CastSpell(creature, SPELL_ATTACHED);
+                    break;
+                case NPC_SORIN_MAGEHAND:
+                    creature->SetReactState(REACT_PASSIVE);
+                    break;
                 case NPC_ARCHMAGE_LAN_DALOCK:
                     creature->SetImmuneToAll(true);
                     creature->CastSpell(creature, SPELL_FROST_CANALISATION);

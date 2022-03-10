@@ -1406,7 +1406,11 @@ struct at_ring_of_fire : AreaTriggerAI
 
     void OnUnitEnter(Unit* unit) override
     {
-        unit->AddAura(SPELL_RING_OF_FIRE_DAMAGE, unit);
+        if (Unit* caster = at->GetCaster())
+        {
+            if (unit->IsHostileTo(caster))
+                unit->AddAura(SPELL_RING_OF_FIRE_DAMAGE, unit);
+        }
     }
 
     void OnUnitExit(Unit* unit) override

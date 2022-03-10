@@ -15,11 +15,13 @@ enum DLPCreatures
     NPC_JAINA_PROUDMOORE_PATROL        = 68609,
     NPC_VEREESA_WINDRUNNER             = 68687,
     NPC_ARCHMAGE_LAN_DALOCK            = 68617,
+    NPC_SORIN_MAGEHAND                 = 68587,
 	NPC_AETHAS_SUNREAVER               = 68679,
 	NPC_HIGH_SUNREAVER_MAGE            = 68680,
     NPC_SUNREAVER_CITIZEN              = 68695,
 	NPC_SUMMONED_WATER_ELEMENTAL       = 68678,
 	NPC_BOUND_WATER_ELEMENTAL          = 68956,
+    NPC_ARCANIST_RATHAELLA             = 68049,
     NPC_ICE_WALL                       = 178819,
 };
 
@@ -62,6 +64,7 @@ enum DLPSpells
     SPELL_ICY_GLARE                    = 338517,
     SPELL_CHILLING_BLAST               = 337053,
     SPELL_FROST_CANALISATION           = 192353,
+    SPELL_ATTACHED                     = 262121
 };
 
 enum DLPMisc

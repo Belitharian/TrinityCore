@@ -1,3 +1,5 @@
+#include "AreaTrigger.h"
+#include "AreaTriggerAI.h"
 #include "DB2Stores.h"
 #include "InstanceScript.h"
 #include "MotionMaster.h"
@@ -291,7 +293,7 @@ class npc_sunreaver_aegis : public CreatureScript
             SPELL_DIVINE_SHIELD         = 642,
             SPELL_HEAL                  = 225638,
             SPELL_AVENGING_WRATH        = 292266,
-            SPELL_HOLY_LIGHT            = 295698,
+            SPELL_HOLY_LIGHT            = 324471,
             SPELL_BLESSING_OF_FREEDOM   = 299256,
             SPELL_BLESSING_OF_MIGHT     = 79977,
             SPELL_DIVINE_STORM          = 183897,
@@ -417,6 +419,32 @@ class spell_purge_teleport : public SpellScript
 	{
 		OnEffectHitTarget += SpellEffectFn(spell_purge_teleport::HandleTeleport, EFFECT_0, SPELL_EFFECT_TELEPORT_UNITS);
 	}
+};
+
+// Arcane Barrier - 264849
+// AreaTriggerID - 12833
+struct at_arcane_barrier : AreaTriggerAI
+{
+    at_arcane_barrier(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
+    {
+    }
+
+    enum Spells
+    {
+        SPELL_ARCANE_BARRIER_DAMAGE = 264848
+    };
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        if (Unit* caster = at->GetCaster())
+        {
+            if (caster->GetGUID() == unit->GetGUID())
+                return;
+
+            if (unit->IsHostileTo(caster))
+                unit->CastSpell(unit, SPELL_ARCANE_BARRIER_DAMAGE);
+        }
+    }
 };
 
 // Glacial Spike - 338488
@@ -553,6 +581,8 @@ void AddSC_npcs_dalaran_purge()
 	new npc_sunreaver_aegis();
 
     new npc_glacial_spike();
+
+    RegisterAreaTriggerAI(at_arcane_barrier);
 
 	RegisterSpellScript(spell_purge_teleport);
 	RegisterSpellScript(spell_purge_glacial_spike);
