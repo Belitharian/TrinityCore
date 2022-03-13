@@ -1,112 +1,83 @@
+#include "Custom/AI/CustomAI.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
-#include "KillRewarder.h"
-#include "MotionMaster.h"
-#include "ObjectAccessor.h"
-#include "Scenario.h"
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "ScriptedGossip.h"
-#include "Custom/AI/CustomAI.h"
 #include "dalaran_purge.h"
 
-class npc_jaina_dalaran_purge : public CreatureScript
+struct npc_jaina_dalaran_purge : public CustomAI
 {
-	public:
-	npc_jaina_dalaran_purge() : CreatureScript("npc_jaina_dalaran_purge")
+	npc_jaina_dalaran_purge(Creature* creature) : CustomAI(creature)
 	{
+		Initialize();
 	}
 
-	struct npc_jaina_dalaran_purgeAI : public CustomAI
+	void Initialize()
 	{
-		npc_jaina_dalaran_purgeAI(Creature* creature) : CustomAI(creature)
+		instance = me->GetInstanceScript();
+	}
+
+	InstanceScript* instance;
+
+	void MoveInLineOfSight(Unit* who) override
+	{
+		ScriptedAI::MoveInLineOfSight(who);
+
+		if (me->IsEngaged())
+			return;
+
+		if (who->GetTypeId() != TYPEID_PLAYER)
+			return;
+
+		if (Player* player = who->ToPlayer())
 		{
-			Initialize();
-		}
-
-		void Initialize()
-		{
-			instance = me->GetInstanceScript();
-		}
-
-		InstanceScript* instance;
-
-		void MoveInLineOfSight(Unit* who) override
-		{
-			ScriptedAI::MoveInLineOfSight(who);
-
-			if (me->IsEngaged())
+			if (player->IsGameMaster())
 				return;
 
-			if (who->GetTypeId() != TYPEID_PLAYER)
-				return;
-
-			if (Player* player = who->ToPlayer())
+			if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 5.f))
 			{
-				if (player->IsGameMaster())
-					return;
-
-				if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 5.f))
+				DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
+				switch (phase)
 				{
-					DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
-					switch (phase)
-					{
-						case DLPPhases::FindJaina:
-							instance->DoSendScenarioEvent(EVENT_FIND_JAINA_01);
-							break;
-						default:
-							break;
-					}
+					case DLPPhases::FindJaina01:
+						instance->DoSendScenarioEvent(EVENT_FIND_JAINA_01);
+						break;
+                    case DLPPhases::FindJaina02:
+                        instance->DoSendScenarioEvent(EVENT_FIND_JAINA_02);
+                        break;
+                    default:
+						break;
 				}
 			}
 		}
-	};
-
-	CreatureAI* GetAI(Creature* creature) const override
-	{
-		return GetDalaranAI<npc_jaina_dalaran_purgeAI>(creature);
 	}
 };
 
-class npc_aethas_sunreaver_purge : public CreatureScript
+struct npc_aethas_sunreaver_purge : public CustomAI
 {
-	public:
-	npc_aethas_sunreaver_purge() : CreatureScript("npc_aethas_sunreaver_purge")
+	npc_aethas_sunreaver_purge(Creature* creature) : CustomAI(creature)
 	{
+		Initialize();
 	}
 
-	struct npc_aethas_sunreaver_purgeAI : public CustomAI
+	void Initialize()
 	{
-		npc_aethas_sunreaver_purgeAI(Creature* creature) : CustomAI(creature)
-		{
-			Initialize();
-		}
+		instance = me->GetInstanceScript();
+	}
 
-		void Initialize()
-		{
-			instance = me->GetInstanceScript();
-		}
+	InstanceScript* instance;
 
-		InstanceScript* instance;
-
-		void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
-		{
-			if (spellInfo->Id == SPELL_FROSTBOLT)
-			{
-				DoCastSelf(SPELL_ICY_GLARE);
-				DoCastSelf(SPELL_CHILLING_BLAST, true);
-			}
-		}
-	};
-
-	CreatureAI* GetAI(Creature* creature) const override
+	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
 	{
-		return GetDalaranAI<npc_aethas_sunreaver_purgeAI>(creature);
+		if (spellInfo->Id == SPELL_FROSTBOLT)
+		{
+			DoCastSelf(SPELL_ICY_GLARE);
+			DoCastSelf(SPELL_CHILLING_BLAST, true);
+		}
 	}
 };
 
 void AddSC_dalaran_purge()
 {
-	new npc_jaina_dalaran_purge();
-	new npc_aethas_sunreaver_purge();
+    RegisterDalaranAI(npc_jaina_dalaran_purge);
+    RegisterDalaranAI(npc_aethas_sunreaver_purge);
 }

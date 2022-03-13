@@ -158,6 +158,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			InstanceScript::OnCreatureCreate(creature);
 
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
+            creature->AddPvpFlag(UNIT_BYTE2_FLAG_PVP);
+            creature->AddUnitFlag(UNIT_FLAG_PVP);
 
 			switch (creature->GetEntry())
 			{

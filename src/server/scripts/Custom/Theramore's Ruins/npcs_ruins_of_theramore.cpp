@@ -102,7 +102,7 @@ class npc_roknah_warlord : public CreatureScript
 
 		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
 		{
-			if (HealthAbovePct(30))
+			if (!me->HealthBelowPctDamaged(25, damage))
 				return;
 
 			if (!sendEvent)

@@ -478,8 +478,8 @@ std::list<Creature*> ScriptedAI::DoFindFriendlyCC(float range)
 std::list<Creature*> ScriptedAI::DoFindFriendlyMissingBuff(uint32 uiSpellid)
 {
     std::list<Creature*> list;
-    Trinity::FriendlyCreatureMissingBuff u_check(me, uiSpellid);
-    Trinity::CreatureListSearcher<Trinity::FriendlyCreatureMissingBuff> searcher(me, list, u_check);
+    Trinity::FriendlyMissingBuff u_check(me, uiSpellid);
+    Trinity::CreatureListSearcher<Trinity::FriendlyMissingBuff> searcher(me, list, u_check);
     Cell::VisitAllObjects(me, searcher, SIZE_OF_GRIDS);
 
     return list;

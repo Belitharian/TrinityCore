@@ -22,6 +22,10 @@ const ObjectData creatureData[] =
     { NPC_AETHAS_SUNREAVER,             DATA_AETHAS_SUNREAVER           },
     { NPC_SUMMONED_WATER_ELEMENTAL,     DATA_SUMMONED_WATER_ELEMENTAL   },
     { NPC_BOUND_WATER_ELEMENTAL,        DATA_BOUND_WATER_ELEMENTAL      },
+    { NPC_SORIN_MAGEHAND,               DATA_SORIN_MAGEHAND             },
+    { NPC_MAGE_COMMANDER_ZUROS,         DATA_MAGE_COMMANDER_ZUROS       },
+    { NPC_ARCHMAGE_LANDALOCK,           DATA_ARCHMAGE_LANDALOCK         },
+    { NPC_MAGISTER_HATHOREL,            DATA_MAGISTER_HATHOREL          },
 	{ 0,                                0                               }   // END
 };
 
@@ -40,10 +44,22 @@ class scenario_dalaran_purge : public InstanceMapScript
     struct scenario_dalaran_purge_InstanceScript : public InstanceScript
     {
         scenario_dalaran_purge_InstanceScript(InstanceMap* map) : InstanceScript(map),
-            eventId(1), phase(DLPPhases::FindJaina)
+            eventId(1), phase(DLPPhases::FindJaina01)
         {
             SetHeaders(DataHeader);
             LoadObjectData(creatureData, gameobjectData);
+        }
+
+        void OnPlayerEnter(Player* player) override
+        {
+            player->CastSpell(player, SPELL_PHASE_CITIZENS, true);
+            player->CastSpell(player, SPELL_PHASE_HIGH_SUNREAVER_MAGES, true);
+        }
+
+        void OnPlayerLeave(Player* player) override
+        {
+            player->RemoveAurasDueToSpell(SPELL_PHASE_CITIZENS);
+            player->RemoveAurasDueToSpell(SPELL_PHASE_HIGH_SUNREAVER_MAGES);
         }
 
         uint32 GetData(uint32 dataId) const override
@@ -84,6 +100,25 @@ class scenario_dalaran_purge : public InstanceMapScript
                         creature->setActive(true);
                         creature->SetVisible(true);
                     }
+                    DoRemoveAurasDueToSpellOnPlayers(SPELL_PHASE_HIGH_SUNREAVER_MAGES, true, true);
+                    break;
+                case CRITERIA_TREE_A_FACELIFT:
+                    if (Creature* jaina = GetJaina())
+                    {
+                        jaina->NearTeleportTo(JainaPos01);
+                        jaina->SetVisible(true);
+                        jaina->SetImmuneToAll(true);
+                        jaina->RemoveAllAuras();
+                    }
+                    for (Creature* creature : patrol)
+                    {
+                        creature->CombatStop();
+                        creature->SetFaction(FACTION_FRIENDLY);
+                        creature->setActive(false);
+                        creature->SetVisible(false);
+                    }
+                    DoRemoveAurasDueToSpellOnPlayers(SPELL_PHASE_CITIZENS, true, true);
+                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FindJaina02);
                     break;
                 default:
                     break;
@@ -104,11 +139,13 @@ class scenario_dalaran_purge : public InstanceMapScript
                     creature->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
                     creature->CastSpell(creature, SPELL_ATTACHED);
                     break;
-                case NPC_SORIN_MAGEHAND:
-                    creature->SetReactState(REACT_PASSIVE);
-                    break;
-                case NPC_ARCHMAGE_LAN_DALOCK:
+                case NPC_MAGISTER_HATHOREL:
                     creature->SetImmuneToAll(true);
+                    break;
+                case NPC_ARCHMAGE_LANDALOCK:
+                    creature->SetImmuneToAll(true);
+                    creature->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+                    creature->SetNpcFlags(UNIT_NPC_FLAG_GOSSIP);
                     creature->CastSpell(creature, SPELL_FROST_CANALISATION);
                     break;
                 case NPC_ICE_WALL:
@@ -126,30 +163,16 @@ class scenario_dalaran_purge : public InstanceMapScript
                     creature->SetNpcFlags(UNIT_NPC_FLAG_NONE);
                     break;
                 case NPC_AETHAS_SUNREAVER:
-                    creature->SetWalk(true);
                     creature->SetImmuneToAll(true);
+                    creature->SetWalk(true);
                     creature->AddAura(SPELL_CASTER_READY_03, creature);
                     break;
                 case NPC_HIGH_SUNREAVER_MAGE:
-                    creature->AddAura(RAND(SPELL_CASTER_READY_01, SPELL_CASTER_READY_02), creature);
                     creature->SetImmuneToAll(true);
+                    creature->AddAura(SPELL_CASTER_READY_02, creature);
                     highmages.push_back(creature);
                     break;
                 default:
-                    break;
-            }
-        }
-
-        void OnGameObjectCreate(GameObject* go) override
-        {
-            InstanceScript::OnGameObjectCreate(go);
-
-            go->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
-
-            switch (go->GetEntry())
-            {
-                case GOB_MYSTIC_BARRIER_01:
-                    go->SetFlags(GO_FLAG_NOT_SELECTABLE);
                     break;
             }
         }

@@ -657,6 +657,27 @@ Position const CitadelPoint01   = { -3668.74f, -4511.64f, 10.09f, 1.54f };
 Position const DocksPoint01     = { -3826.84f, -4539.05f,  9.21f, 5.96f };
 Position const TheramorePoint01 = { -3753.48f, -4444.54f, 55.23f, 0.00f };
 
+class FriendlyMissingBuff
+{
+    public:
+    FriendlyMissingBuff(Unit const* obj, uint32 spellid) : i_obj(obj), i_spell(spellid)
+    {
+    }
+
+    bool operator()(Creature* c) const
+    {
+        if (c->IsTrigger() && !c->IsPvP())
+            return false;
+        if (c->IsAlive() && !i_obj->IsHostileTo(c) && i_obj->IsWithinDistInMap(c, 30.f) && !c->HasAura(i_spell))
+            return true;
+        return false;
+    }
+
+    private:
+    Unit const* i_obj;
+    uint32 i_spell;
+};
+
 template <class AI, class T>
 inline AI* GetBattleForTheramoreAI(T* obj)
 {

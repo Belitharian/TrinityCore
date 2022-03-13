@@ -1,5 +1,6 @@
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
+#include "CellImpl.h"
 #include "CreatureData.h"
 #include "GameObject.h"
 #include "GridNotifiersImpl.h"
@@ -18,6 +19,8 @@
 #include "SpellMgr.h"
 #include "SpellScript.h"
 #include "TemporarySummon.h"
+#include "Totem.h"
+#include "TotemAI.h"
 #include "Custom/AI/CustomAI.h"
 #include "battle_for_theramore.h"
 
@@ -240,6 +243,14 @@ struct npc_theramore_troopAI : public CustomAI
 	InstanceScript* instance;
 	bool emoteReceived;
 
+    Unit* SelectRandomMissingBuff(uint32 spell)
+    {
+        std::list<Unit*> list = DoFindMissingBuff(spell);
+        if (list.empty())
+            return nullptr;
+        return Trinity::Containers::SelectRandomContainerElement(list);
+    }
+
 	void ReceiveEmote(Player* player, uint32 emoteId) override
 	{
 		BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
@@ -363,8 +374,25 @@ class npc_theramore_officier : public CreatureScript
 			SPELL_JUDGMENT              = 295671,
 			SPELL_LIGHT_OF_DAWN         = 295710,
 			SPELL_REBUKE                = 173085,
-			SPELL_DIVINE_STORM          = 183897
+			SPELL_DIVINE_STORM          = 183897,
+            SPELL_BLESSING_OF_KINGS     = 211283
 		};
+
+        void Reset() override
+        {
+            npc_theramore_troopAI::Reset();
+
+            scheduler.Schedule(1s, 5s, [this](TaskContext blessing_of_kings)
+            {
+                BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+                if (phase < BFTPhases::HelpTheWounded)
+                {
+                    if (!me->HasAura(SPELL_BLESSING_OF_KINGS))
+                        DoCast(SPELL_BLESSING_OF_KINGS);
+                    blessing_of_kings.Repeat(5s);
+                }
+            });
+        }
 
         void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
 		{
@@ -612,9 +640,9 @@ class npc_theramore_faithful : public CreatureScript
 		bool ascension;
 		InstanceScript* instance;
 
-		void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
+		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
 		{
-			if (!ascension && HealthBelowPct(30))
+			if (!ascension && me->HealthBelowPctDamaged(10, damage))
 			{
 				ascension = true;
 
@@ -656,7 +684,7 @@ class npc_theramore_faithful : public CreatureScript
 					CastSpellExtraArgs args(true);
 					args.SetTriggerFlags(TRIGGERED_IGNORE_SET_FACING);
 
-					if (Unit* target = SelectRandomFriendlyMissingBuff(SPELL_POWER_WORD_FORTITUDE))
+					if (Unit* target = SelectRandomMissingBuff(SPELL_POWER_WORD_FORTITUDE))
 						DoCast(target, SPELL_POWER_WORD_FORTITUDE, args);
 
 					fortitude.Repeat(5s, 8s);
@@ -726,16 +754,6 @@ class npc_theramore_faithful : public CreatureScript
 						DoCast(target, SPELL_FLASH_HEAL);
 					flash_heal.Repeat(2s);
 				});
-		}
-
-		private:
-
-		Unit* SelectRandomFriendlyMissingBuff(uint32 spell)
-		{
-			std::list<Creature*> list = DoFindFriendlyMissingBuff(spell);
-			if (list.empty())
-				return nullptr;
-			return Trinity::Containers::SelectRandomContainerElement(list);
 		}
 	};
 
@@ -879,7 +897,10 @@ class npc_roknah_hag : public CreatureScript
 
 		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
 		{
-			if (!iceblock && HealthBelowPct(20))
+            if (roll_chance_i(50))
+                return;
+
+			if (!iceblock && me->HealthBelowPctDamaged(10, damage))
 			{
 				damage = 0;
 
@@ -1117,14 +1138,15 @@ class npc_roknah_loasinger : public CreatureScript
 			SPELL_LIGHTNING_BOLT    = 290395,
 			SPELL_RIPTIDE           = 241892,
 			SPELL_CHAIN_HEAL        = 258099,
+			SPELL_HEALING_TIDE      = 127945,
 		};
 
 		const SpellInfo* flameShock;
 		const SpellInfo* frostShock;
 
-		void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
+		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
 		{
-			if (HealthBelowPct(50) && !me->HasAura(SPELL_ASTRAL_SHIFT))
+			if (me->HealthBelowPctDamaged(50, damage) && !me->HasAura(SPELL_ASTRAL_SHIFT))
 			{
 				scheduler.Schedule(1ms, [this](TaskContext astral_shift)
 				{
@@ -1167,7 +1189,7 @@ class npc_roknah_loasinger : public CreatureScript
 					else
 						earthquake.Repeat(1s);
 				})
-				.Schedule(1ms, [this](TaskContext healing_surge)
+				.Schedule(3s, [this](TaskContext healing_surge)
 				{
                     if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
                     {
@@ -1176,7 +1198,7 @@ class npc_roknah_loasinger : public CreatureScript
                     }
 					healing_surge.Repeat(3s);
 				})
-				.Schedule(1ms, [this](TaskContext riptide)
+				.Schedule(5s, [this](TaskContext riptide)
 				{
 					if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 80))
 					{
@@ -1185,7 +1207,17 @@ class npc_roknah_loasinger : public CreatureScript
 					}
 					riptide.Repeat(5s);
 				})
-				.Schedule(1ms, [this](TaskContext chain_heal)
+                .Schedule(2s, [this](TaskContext healing_tide)
+                {
+                    if (Unit* target = DoSelectBelowHpPctFriendly(60.f, 20))
+                    {
+                        DoCast(SPELL_HEALING_TIDE);
+                        healing_tide.Repeat(30s);
+                    }
+                    else
+                        healing_tide.Repeat(2s);
+                })
+				.Schedule(2s, [this](TaskContext chain_heal)
 				{
 					if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 50))
 						DoCast(target, SPELL_CHAIN_HEAL);
@@ -1196,7 +1228,7 @@ class npc_roknah_loasinger : public CreatureScript
 					DoCastVictim(SPELL_LAVA_BURST);
 					lava_burst.Repeat(8s, 10s);
 				})
-				.Schedule(1ms, [this](TaskContext wind_shear)
+				.Schedule(1s, [this](TaskContext wind_shear)
 				{
 					if (Unit* target = DoSelectCastingUnit(SPELL_WIND_SHEAR, 35.f))
 					{
@@ -1328,6 +1360,50 @@ class npc_roknah_felcaster : public CreatureScript
 	{
 		return new npc_roknah_felcasterAI(creature);
 	}
+};
+
+// Healing Tide Totem - 65349
+struct npc_healing_tide_totem : public TotemAI
+{
+    npc_healing_tide_totem(Creature* creature) : TotemAI(creature)
+    {
+        Initialize();
+    }
+
+    enum Spells
+    {
+        SPELL_HEALING_TIDE_TOTEM_DUMMY      = 114941,
+        SPELL_HEALING_TIDE_TOTEM_HEAL       = 114942,
+    };
+
+    void Initialize()
+    {
+        scheduler.SetValidator([this]
+        {
+            return me->ToTotem()->GetTotemType() != TOTEM_ACTIVE || !me->IsAlive() || me->IsNonMeleeSpellCast(false);
+        });
+    }
+
+    void Reset() override
+    {
+        DoCastSelf(SPELL_HEALING_TIDE_TOTEM_DUMMY, true);
+
+        DoCast(SPELL_HEALING_TIDE_TOTEM_HEAL);
+
+        scheduler.Schedule(2s, [this](TaskContext spell)
+        {
+            DoCast(SPELL_HEALING_TIDE_TOTEM_HEAL);
+            spell.Repeat(2s);
+        });
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        scheduler.Update(diff);
+    }
+
+    private:
+    TaskScheduler scheduler;
 };
 
 // Light of Dawn - 295712
@@ -1498,6 +1574,8 @@ void AddSC_npcs_battle_for_theramore()
 	new npc_roknah_grunt();
 	new npc_roknah_loasinger();
 	new npc_roknah_felcaster();
+
+    RegisterCreatureAI(npc_healing_tide_totem);
 
 	RegisterSpellScript(spell_theramore_light_of_dawn);
 	RegisterSpellScript(spell_theramore_greater_pyroblast);

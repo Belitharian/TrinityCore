@@ -160,3 +160,12 @@ uint32 CustomAI::EnemiesInFront(float distance)
             ++count;
     return count;
 }
+
+std::list<Unit*> CustomAI::DoFindMissingBuff(uint32 spellId)
+{
+    std::list<Unit*> list;
+    Trinity::FriendlyMissingBuff u_check(me, spellId);
+    Trinity::CreatureListSearcher<Trinity::FriendlyMissingBuff> searcher(me, list, u_check);
+    Cell::VisitAllObjects(me, searcher, SIZE_OF_GRIDS);
+    return list;
+}

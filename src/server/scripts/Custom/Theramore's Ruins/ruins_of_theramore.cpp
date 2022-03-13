@@ -114,7 +114,7 @@ class npc_jaina_ruins : public CreatureScript
 
 		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
 		{
-			if (HealthBelowPct(10))
+			if (me->HealthBelowPctDamaged(10, damage))
 				damage = 0;
 		}
 

@@ -52,9 +52,9 @@ class npc_jaina_theramore : public CreatureScript
 			Initialize();
 		}
 
-		void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
+		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
 		{
-			if (HealthBelowPct(20)
+			if (me->HealthBelowPctDamaged(10, damage)
 				&& !me->HasAura(SPELL_FROST_BARRIER))
 			{
 				me->CastStop();

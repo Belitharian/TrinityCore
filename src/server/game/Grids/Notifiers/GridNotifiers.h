@@ -931,14 +931,14 @@ namespace Trinity
             bool i_excludeSelf;
     };
 
-    class FriendlyCreatureMissingBuff
+    class FriendlyMissingBuff
     {
         public:
-            FriendlyCreatureMissingBuff(Unit const* obj, uint32 spellid) : i_obj(obj), i_spell(spellid) { }
+            FriendlyMissingBuff(Unit const* obj, uint32 spellid) : i_obj(obj), i_spell(spellid) { }
 
             bool operator()(Creature* c) const
             {
-                if (c->IsTrigger() && !c->IsPvP())
+                if (c->IsTrigger())
                     return false;
                 if (c->IsAlive() && !i_obj->IsHostileTo(c) && i_obj->IsWithinDistInMap(c, 30.f) && !c->HasAura(i_spell))
                     return true;

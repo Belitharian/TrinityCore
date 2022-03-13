@@ -39,6 +39,8 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         bool CanAIAttack(Unit const* /*who*/) const override;
 
+        std::list<Unit*> DoFindMissingBuff(uint32 spellId);
+
     protected:
         TaskScheduler scheduler;
         SummonList summons;
