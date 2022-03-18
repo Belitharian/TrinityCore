@@ -315,7 +315,7 @@ struct boss_urom : public BossAI
         }
     }
 
-    void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         // If killed while in center, teleport to a valid ground position before dying
         if (damage >= me->GetHealth())
@@ -335,6 +335,7 @@ private:
     std::vector<uint8> _group;
 };
 
+// 51103 - Frostbomb
 class spell_urom_frostbomb : public AuraScript
 {
     PrepareAuraScript(spell_urom_frostbomb);

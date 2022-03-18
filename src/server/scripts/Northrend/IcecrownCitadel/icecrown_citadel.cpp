@@ -1300,6 +1300,7 @@ class spell_generic_remove_empowered_blood : public SpellScript
     }
 };
 
+// 70733 - Stoneform
 class spell_icc_stoneform : public AuraScript
 {
     PrepareAuraScript(spell_icc_stoneform);
@@ -1309,7 +1310,7 @@ class spell_icc_stoneform : public AuraScript
         if (Creature* target = GetTarget()->ToCreature())
         {
             target->SetReactState(REACT_PASSIVE);
-            target->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+            target->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
             target->SetImmuneToPC(true);
             target->SetEmoteState(EMOTE_STATE_CUSTOM_SPELL_02);
         }
@@ -1320,7 +1321,7 @@ class spell_icc_stoneform : public AuraScript
         if (Creature* target = GetTarget()->ToCreature())
         {
             target->SetReactState(REACT_AGGRESSIVE);
-            target->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+            target->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
             target->SetImmuneToPC(false);
             target->SetEmoteState(EMOTE_ONESHOT_NONE);
         }
@@ -1333,6 +1334,7 @@ class spell_icc_stoneform : public AuraScript
     }
 };
 
+// 70536, 70545, 70546, 70547 - Spirit Alarm
 class spell_icc_sprit_alarm : public SpellScript
 {
     PrepareSpellScript(spell_icc_sprit_alarm);
@@ -1449,6 +1451,7 @@ private:
     std::list<WorldObject*> _sharedList;
 };
 
+// 72155, 72162 - Harvest Blight Specimen
 class spell_icc_harvest_blight_specimen : public SpellScript
 {
     PrepareSpellScript(spell_icc_harvest_blight_specimen);

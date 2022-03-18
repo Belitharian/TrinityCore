@@ -309,7 +309,7 @@ Creature::Creature(bool isWorldObject): Unit(isWorldObject), MapObject(), m_grou
     m_defaultMovementType(IDLE_MOTION_TYPE), m_spawnId(UI64LIT(0)), m_equipmentId(0), m_originalEquipmentId(0), m_AlreadyCallAssistance(false), m_AlreadySearchedAssistance(false), m_cannotReachTarget(false), m_cannotReachTimer(0),
     m_meleeDamageSchoolMask(SPELL_SCHOOL_MASK_NORMAL), m_originalEntry(0), m_homePosition(), m_transportHomePosition(), m_creatureInfo(nullptr), m_creatureData(nullptr), _waypointPathId(0), _currentWaypointNodeInfo(0, 0),
     m_formation(nullptr), m_triggerJustAppeared(true), m_respawnCompatibilityMode(false), _lastDamagedTime(0),
-    _regenerateHealth(true), _regenerateHealthLock(false), _isMissingSwimmingFlagOutOfCombat(false)
+    _regenerateHealth(true), _regenerateHealthLock(false), _isMissingCanSwimFlagOutOfCombat(false)
 {
     m_regenTimer = CREATURE_REGEN_INTERVAL;
 
@@ -673,9 +673,9 @@ bool Creature::UpdateEntry(uint32 entry, CreatureData const* data /*= nullptr*/,
         }
     }
 
-    // trigger creature is always not selectable and can not be attacked
+    // trigger creature is always uninteractible and can not be attacked
     if (IsTrigger())
-        AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+        AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 
     InitializeReactState();
 
@@ -685,7 +685,7 @@ bool Creature::UpdateEntry(uint32 entry, CreatureData const* data /*= nullptr*/,
         ApplySpellImmune(0, IMMUNITY_EFFECT, SPELL_EFFECT_ATTACK_ME, true);
     }
 
-    SetIgnoringCombat((cInfo->flags_extra & CREATURE_FLAG_EXTRA_IGNORE_COMBAT) != 0);
+    SetIsCombatDisallowed((cInfo->flags_extra & CREATURE_FLAG_EXTRA_CANNOT_ENTER_COMBAT) != 0);
 
     LoadTemplateRoot();
     InitializeMovementFlags();
@@ -1805,9 +1805,12 @@ bool Creature::LoadFromDB(ObjectGuid::LowType spawnId, Map* map, bool addToMap, 
                 return false;
             }
         }
+        else
+        {
+            // compatibility mode creatures will be respawned in ::Update()
+            m_deathState = DEAD;
+        }
 
-        // compatibility mode creatures will be respawned in ::Update()
-        m_deathState = DEAD;
         if (CanFly())
         {
             float tz = map->GetHeight(GetPhaseShift(), data->spawnPoint, true, MAX_FALL_DISTANCE);
@@ -2515,7 +2518,7 @@ bool Creature::CanAssistTo(Unit const* u, Unit const* enemy, bool checkfaction /
     if (IsCivilian())
         return false;
 
-    if (HasUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE)) || IsImmuneToNPC())
+    if (HasUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_UNINTERACTIBLE)) || IsImmuneToNPC())
         return false;
 
     // skip fighting creature
@@ -2863,14 +2866,14 @@ bool Creature::CanEnterWater() const
     return GetMovementTemplate().IsSwimAllowed();
 }
 
-void Creature::RefreshSwimmingFlag(bool recheck)
+void Creature::RefreshCanSwimFlag(bool recheck)
 {
-    if (!_isMissingSwimmingFlagOutOfCombat || recheck)
-        _isMissingSwimmingFlagOutOfCombat = !HasUnitFlag(UNIT_FLAG_CAN_SWIM);
+    if (!_isMissingCanSwimFlagOutOfCombat || recheck)
+        _isMissingCanSwimFlagOutOfCombat = !HasUnitFlag(UNIT_FLAG_CAN_SWIM);
 
-    // Check if the creature has UNIT_FLAG_SWIMMING and add it if it's missing
+    // Check if the creature has UNIT_FLAG_CAN_SWIM and add it if it's missing
     // Creatures must be able to chase a target in water if they can enter water
-    if (_isMissingSwimmingFlagOutOfCombat && CanEnterWater())
+    if (_isMissingCanSwimFlagOutOfCombat && CanEnterWater())
         AddUnitFlag(UNIT_FLAG_CAN_SWIM);
 }
 
@@ -3018,7 +3021,7 @@ uint32 Creature::GetScriptId() const
         if (uint32 scriptId = creatureData->scriptId)
             return scriptId;
 
-    return sObjectMgr->GetCreatureTemplate(GetEntry())->ScriptID;
+    return ASSERT_NOTNULL(sObjectMgr->GetCreatureTemplate(GetEntry()))->ScriptID;
 }
 
 VendorItemData const* Creature::GetVendorItems() const
@@ -3453,7 +3456,7 @@ void Creature::AtEngage(Unit* target)
     if (!(GetCreatureTemplate()->type_flags & CREATURE_TYPE_FLAG_ALLOW_MOUNTED_COMBAT))
         Dismount();
 
-    RefreshSwimmingFlag();
+    RefreshCanSwimFlag();
 
     if (IsPet() || IsGuardian()) // update pets' speed for catchup OOC speed
     {

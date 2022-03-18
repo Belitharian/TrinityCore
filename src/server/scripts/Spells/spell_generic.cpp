@@ -204,7 +204,7 @@ class spell_gen_animal_blood : public AuraScript
     }
 };
 
-// 63471 -Spawn Blood Pool
+// 63471 - Spawn Blood Pool
 class spell_spawn_blood_pool : public SpellScript
 {
     PrepareSpellScript(spell_spawn_blood_pool);
@@ -823,6 +823,23 @@ class spell_gen_chaos_blast : public SpellScript
     void Register() override
     {
         OnEffectHitTarget += SpellEffectFn(spell_gen_chaos_blast::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 28471 - ClearAll
+class spell_clear_all : public SpellScript
+{
+    PrepareSpellScript(spell_clear_all);
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        caster->RemoveAllAurasOnDeath();
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_clear_all::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
     }
 };
 
@@ -1823,6 +1840,37 @@ class spell_gen_gnomish_transporter : public SpellScript
     void Register() override
     {
         OnEffectHitTarget += SpellEffectFn(spell_gen_gnomish_transporter::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 69641 - Gryphon/Wyvern Pet - Mounting Check Aura
+class spell_gen_gryphon_wyvern_mount_check : public AuraScript
+{
+    PrepareAuraScript(spell_gen_gryphon_wyvern_mount_check);
+
+    void HandleEffectPeriodic(AuraEffect const* /*aurEff*/)
+    {
+        Unit* target = GetTarget();
+        Unit* owner = target->GetOwner();
+
+        if (!owner)
+            return;
+
+        if (owner->IsMounted())
+        {
+            target->SetAnimTier(AnimTier::Fly);
+            target->SetDisableGravity(true);
+        }
+        else
+        {
+            target->SetAnimTier(AnimTier::Ground);
+            target->SetDisableGravity(false);
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_gen_gryphon_wyvern_mount_check::HandleEffectPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
     }
 };
 
@@ -4313,7 +4361,6 @@ class spell_gen_vehicle_control_link : public AuraScript
     }
 };
 
-// 34779 - Freezing Circle
 enum FreezingCircleMisc
 {
     SPELL_FREEZING_CIRCLE_PIT_OF_SARON_NORMAL = 69574,
@@ -4323,6 +4370,7 @@ enum FreezingCircleMisc
     MAP_ID_BLOOD_IN_THE_SNOW_SCENARIO         = 1130
 };
 
+// 34779 - Freezing Circle
 class spell_freezing_circle : public SpellScript
 {
     PrepareSpellScript(spell_freezing_circle);
@@ -4410,6 +4458,23 @@ class spell_gen_cannon_blast : public SpellScript
     void Register() override
     {
         OnEffectHitTarget += SpellEffectFn(spell_gen_cannon_blast::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+// 37751 - Submerged
+class spell_gen_submerged : public SpellScript
+{
+    PrepareSpellScript(spell_gen_submerged);
+
+    void HandleScript(SpellEffIndex /*eff*/)
+    {
+        if (Creature* target = GetHitCreature())
+            target->SetStandState(UNIT_STAND_STATE_SUBMERGED);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_gen_submerged::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
     }
 };
 
@@ -4768,6 +4833,7 @@ void AddSC_generic_spell_scripts()
     RegisterSpellScript(spell_gen_cannibalize);
     RegisterSpellScript(spell_gen_chains_of_ice);
     RegisterSpellScript(spell_gen_chaos_blast);
+    RegisterSpellScript(spell_clear_all);
     RegisterSpellScript(spell_gen_clone);
     RegisterSpellScript(spell_gen_clone_weapon);
     RegisterSpellScript(spell_gen_clone_weapon_aura);
@@ -4796,6 +4862,7 @@ void AddSC_generic_spell_scripts()
     RegisterSpellScript(spell_gen_gadgetzan_transporter_backfire);
     RegisterSpellScript(spell_gen_gift_of_naaru);
     RegisterSpellScript(spell_gen_gnomish_transporter);
+    RegisterSpellScript(spell_gen_gryphon_wyvern_mount_check);
     RegisterSpellScriptWithArgs(spell_gen_increase_stats_buff, "spell_pal_blessing_of_kings");
     RegisterSpellScriptWithArgs(spell_gen_increase_stats_buff, "spell_pal_blessing_of_might");
     RegisterSpellScriptWithArgs(spell_gen_increase_stats_buff, "spell_dru_mark_of_the_wild");
@@ -4881,6 +4948,7 @@ void AddSC_generic_spell_scripts()
     RegisterSpellScript(spell_freezing_circle);
     RegisterSpellScript(spell_gen_charmed_unit_spell_cooldown);
     RegisterSpellScript(spell_gen_cannon_blast);
+    RegisterSpellScript(spell_gen_submerged);
     RegisterSpellScript(spell_gen_decimatus_transformation_sickness);
     RegisterSpellScript(spell_gen_anetheron_summon_towering_infernal);
     RegisterSpellAndAuraScriptPair(spell_gen_mark_of_kazrogal_hellfire, spell_gen_mark_of_kazrogal_hellfire_aura);

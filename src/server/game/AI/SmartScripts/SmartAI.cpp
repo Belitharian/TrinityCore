@@ -625,7 +625,7 @@ void SmartAI::SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo)
     GetScript()->ProcessEventsFor(SMART_EVENT_SPELLHIT_TARGET, target->ToUnit(), 0, 0, false, spellInfo, target->ToGameObject());
 }
 
-void SmartAI::DamageTaken(Unit* doneBy, uint32& damage)
+void SmartAI::DamageTaken(Unit* doneBy, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/)
 {
     GetScript()->ProcessEventsFor(SMART_EVENT_DAMAGED, doneBy, damage);
 
@@ -1244,7 +1244,7 @@ public:
         {
             SmartScript smartScript;
             smartScript.OnInitialize(nullptr, nullptr, nullptr, quest);
-            smartScript.ProcessEventsFor(SMART_EVENT_QUEST_OBJ_COPLETETION, player, objective.ID);
+            smartScript.ProcessEventsFor(SMART_EVENT_QUEST_OBJ_COMPLETION, player, objective.ID);
         }
     }
 };

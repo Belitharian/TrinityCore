@@ -627,7 +627,8 @@ INSERT INTO `build_info` VALUES
 (42521,9,2,0,NULL,NULL,'5FE6C12FC407C6B15B4A5D3B5B4A5D3B',NULL,NULL,NULL),
 (42538,9,2,0,NULL,NULL,'71A7504BD53F8DE518F24265D37310AE',NULL,NULL,NULL),
 (42560,9,2,0,NULL,NULL,'115FE8C38A8D67CA4664BB192E0F0DFE',NULL,NULL,NULL),
-(42614,9,2,0,NULL,NULL,'772BE726FEEF42124255D2EA7973CA18',NULL,NULL,NULL);
+(42614,9,2,0,NULL,NULL,'772BE726FEEF42124255D2EA7973CA18',NULL,NULL,NULL),
+(42698,9,2,0,NULL,NULL,'B4497B1CD11FC974C5FB09548AC27269',NULL,NULL,NULL);
 /*!40000 ALTER TABLE `build_info` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -883,8 +884,11 @@ INSERT INTO `rbac_linked_permissions` VALUES
 (195,199),
 (196,7),
 (196,10),
-(196,200),
-(196,201),
+(196,202),
+(196,203),
+(196,204),
+(196,205),
+(196,206),
 (196,208),
 (196,212),
 (196,213),
@@ -2230,7 +2234,7 @@ CREATE TABLE `realmlist` (
   `timezone` tinyint unsigned NOT NULL DEFAULT '0',
   `allowedSecurityLevel` tinyint unsigned NOT NULL DEFAULT '0',
   `population` float unsigned NOT NULL DEFAULT '0',
-  `gamebuild` int unsigned NOT NULL DEFAULT '42614',
+  `gamebuild` int unsigned NOT NULL DEFAULT '42698',
   `Region` tinyint unsigned NOT NULL DEFAULT '1',
   `Battlegroup` tinyint unsigned NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
@@ -2245,7 +2249,7 @@ CREATE TABLE `realmlist` (
 LOCK TABLES `realmlist` WRITE;
 /*!40000 ALTER TABLE `realmlist` DISABLE KEYS */;
 INSERT INTO `realmlist` VALUES
-(1,'Trinity','127.0.0.1','127.0.0.1','255.255.255.0',8085,0,0,1,0,0,42614,1,1);
+(1,'Trinity','127.0.0.1','127.0.0.1','255.255.255.0',8085,0,0,1,0,0,42698,1,1);
 /*!40000 ALTER TABLE `realmlist` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -2505,6 +2509,7 @@ INSERT INTO `updates` VALUES
 ('2021_02_09_00_auth.sql','F00ABFF6E3C3F5ACE3444C9D70BADC764C8B3CE2','ARCHIVED','2021-02-09 17:22:24',0),
 ('2021_04_10_00_auth.sql','7B92AC4F76507940EF2257897F25304CF0F306EB','ARCHIVED','2021-04-10 19:42:42',0),
 ('2021_05_12_00_auth.sql','7F37DAD1777D62FDB00C19C0DF5E7DB742CCD5AD','ARCHIVED','2021-05-12 01:08:42',0),
+('2021_06_20_00_auth.sql','7CA418D570DC1444C19AAD18F4A50FF187642310','ARCHIVED','2021-06-20 17:29:17',0),
 ('2021_07_04_00_auth.sql','3CF056F8F04E49C1E236060202AA8DA7E186B590','ARCHIVED','2021-07-04 22:23:24',0),
 ('2021_08_07_00_auth.sql','D615C2CACC999FF8804AEF56BAAA08D02217D671','ARCHIVED','2021-08-07 23:18:57',0),
 ('2021_08_18_00_auth.sql','162590897AC0020E68EB6845637901C3EB6509B4','ARCHIVED','2021-08-18 15:14:17',0),
@@ -2543,7 +2548,8 @@ INSERT INTO `updates` VALUES
 ('2022_03_02_00_auth.sql','928C11D145B98E90FB82D2A871C2456C848AB6C1','ARCHIVED','2022-03-02 10:10:19',0),
 ('2022_03_03_00_auth.sql','408CCCF7D47FB5C876E976F883B4BDBFFEC5D146','ARCHIVED','2022-03-03 01:09:55',0),
 ('2022_03_06_00_auth.sql','2883FD8D2CB8B2FC3DF7D20D3216301262E7A7C3','ARCHIVED','2022-03-06 15:12:24',0),
-('2022_03_08_00_auth.sql','E2C6B4E26FE55F5827C587CD668F6518EB2B51E8','RELEASED','2022-03-08 15:24:10',0);
+('2022_03_08_00_auth.sql','E2C6B4E26FE55F5827C587CD668F6518EB2B51E8','RELEASED','2022-03-08 15:24:10',0),
+('2022_03_12_00_auth.sql','1A476DB06BC1F096E6F15225078373B3AD094C1B','RELEASED','2022-03-12 05:52:02',0);
 /*!40000 ALTER TABLE `updates` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -2622,6 +2628,21 @@ SET @saved_cs_client     = @@character_set_client;
 SET character_set_client = @saved_cs_client;
 
 --
+-- Temporary table structure for view `vw_rbac`
+--
+
+DROP TABLE IF EXISTS `vw_rbac`;
+/*!50001 DROP VIEW IF EXISTS `vw_rbac`*/;
+SET @saved_cs_client     = @@character_set_client;
+SET character_set_client = utf8;
+/*!50001 CREATE VIEW `vw_rbac` AS SELECT 
+ 1 AS `Permission ID`,
+ 1 AS `Permission Group`,
+ 1 AS `Security Level`,
+ 1 AS `Permission`*/;
+SET character_set_client = @saved_cs_client;
+
+--
 -- Dumping routines for database 'auth'
 --
 
@@ -2639,6 +2660,24 @@ SET character_set_client = @saved_cs_client;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
 /*!50013 */
 /*!50001 VIEW `vw_log_history` AS select from_unixtime(min(`logs`.`time`)) AS `First Logged`,from_unixtime(max(`logs`.`time`)) AS `Last Logged`,count(0) AS `Occurrences`,`realmlist`.`name` AS `Realm`,`logs`.`type` AS `type`,`logs`.`level` AS `level`,`logs`.`string` AS `string` from (`logs` left join `realmlist` on((`logs`.`realm` = `realmlist`.`id`))) group by `logs`.`string`,`logs`.`type`,`logs`.`realm` */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `vw_rbac`
+--
+
+/*!50001 DROP VIEW IF EXISTS `vw_rbac`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8 */;
+/*!50001 SET character_set_results     = utf8 */;
+/*!50001 SET collation_connection      = utf8_general_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 */
+/*!50001 VIEW `vw_rbac` AS (select `t1`.`linkedId` AS `Permission ID`,`t1`.`id` AS `Permission Group`,ifnull(`t2`.`secId`,'linked') AS `Security Level`,`t3`.`name` AS `Permission` from ((`rbac_linked_permissions` `t1` left join `rbac_default_permissions` `t2` on((`t1`.`id` = `t2`.`permissionId`))) left join `rbac_permissions` `t3` on((`t1`.`linkedId` = `t3`.`id`)))) */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;

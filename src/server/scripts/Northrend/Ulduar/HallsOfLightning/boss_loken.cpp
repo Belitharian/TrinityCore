@@ -172,7 +172,7 @@ struct boss_loken : public BossAI
         DoMeleeAttackIfReady();
     }
 
-    void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         if (me->HealthBelowPctDamaged(100 - 25 * _healthAmountModifier, damage))
         {
@@ -199,6 +199,7 @@ struct boss_loken : public BossAI
         bool _isIntroDone;
 };
 
+// 52942, 59837 - Pulsing Shockwave
 class spell_loken_pulsing_shockwave : public SpellScript
 {
     PrepareSpellScript(spell_loken_pulsing_shockwave);

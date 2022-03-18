@@ -173,7 +173,7 @@ struct boss_eregos : public BossAI
         summon->CastSpell(summon, SPELL_PLANAR_BLAST, true);
     }
 
-    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
+    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         if (!IsHeroic())
             return;
@@ -251,6 +251,7 @@ private:
     bool _amberVoid;
 };
 
+// 51162 - Planar Shift
 class spell_eregos_planar_shift : public AuraScript
 {
     PrepareAuraScript(spell_eregos_planar_shift);

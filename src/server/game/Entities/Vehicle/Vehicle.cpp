@@ -31,9 +31,10 @@
 #include "SpellAuraEffects.h"
 #include "TemporarySummon.h"
 #include "Unit.h"
+#include <sstream>
 
 Vehicle::Vehicle(Unit* unit, VehicleEntry const* vehInfo, uint32 creatureEntry) :
-UsableSeatNum(0), _me(unit), _vehicleInfo(vehInfo), _creatureEntry(creatureEntry), _status(STATUS_NONE), _lastShootPos()
+UsableSeatNum(0), _me(unit), _vehicleInfo(vehInfo), _creatureEntry(creatureEntry), _status(STATUS_NONE)
 {
     for (int8 i = 0; i < MAX_VEHICLE_SEATS; ++i)
     {
@@ -505,9 +506,9 @@ Vehicle* Vehicle::RemovePassenger(Unit* unit)
     if (seat->second.SeatInfo->Flags & VEHICLE_SEAT_FLAG_DISABLE_GRAVITY && !seat->second.Passenger.IsGravityDisabled)
         unit->SetDisableGravity(false);
 
-    // Remove UNIT_FLAG_NOT_SELECTABLE if passenger did not have it before entering vehicle
-    if (seat->second.SeatInfo->Flags & VEHICLE_SEAT_FLAG_PASSENGER_NOT_SELECTABLE && !seat->second.Passenger.IsUnselectable)
-        unit->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+    // Remove UNIT_FLAG_UNINTERACTIBLE if passenger did not have it before entering vehicle
+    if (seat->second.SeatInfo->Flags & VEHICLE_SEAT_FLAG_PASSENGER_NOT_SELECTABLE && !seat->second.Passenger.IsUninteractible)
+        unit->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 
     seat->second.Passenger.Reset();
 
@@ -814,7 +815,7 @@ bool VehicleJoinEvent::Execute(uint64, uint32)
 
     Passenger->SetVehicle(Target);
     Seat->second.Passenger.Guid = Passenger->GetGUID();
-    Seat->second.Passenger.IsUnselectable = Passenger->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+    Seat->second.Passenger.IsUninteractible = Passenger->HasUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
     Seat->second.Passenger.IsGravityDisabled = Passenger->HasUnitMovementFlag(MOVEMENTFLAG_DISABLE_GRAVITY);
     if (Seat->second.SeatInfo->CanEnterOrExit())
     {
@@ -955,4 +956,31 @@ Milliseconds Vehicle::GetDespawnDelay()
         return vehicleTemplate->DespawnDelay;
 
     return 1ms;
+}
+
+std::string Vehicle::GetDebugInfo() const
+{
+    std::stringstream sstr;
+    sstr << "Vehicle seats:\n";
+    for (SeatMap::const_iterator itr = Seats.begin(); itr != Seats.end(); itr++)
+    {
+        sstr << "seat " << std::to_string(itr->first) << ": " << (itr->second.IsEmpty() ? "empty" : itr->second.Passenger.Guid.ToString()) << "\n";
+    }
+
+    sstr << "Vehicle pending events:";
+
+    if (_pendingJoinEvents.empty())
+    {
+        sstr << " none";
+    }
+    else
+    {
+        sstr << "\n";
+        for (PendingJoinEventContainer::const_iterator itr = _pendingJoinEvents.begin(); itr != _pendingJoinEvents.end(); ++itr)
+        {
+            sstr << "seat " << std::to_string((*itr)->Seat->first) << ": " << (*itr)->Passenger->GetGUID().ToString() << "\n";
+        }
+    }
+
+    return sstr.str();
 }

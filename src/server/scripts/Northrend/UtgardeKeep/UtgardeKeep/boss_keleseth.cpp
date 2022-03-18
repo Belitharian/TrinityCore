@@ -232,7 +232,7 @@ struct npc_vrykul_skeleton : public ScriptedAI
         events.ScheduleEvent(EVENT_DECREPIFY, 4s, 6s);
     }
 
-    void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         if (damage >= me->GetHealth())
         {
@@ -240,10 +240,10 @@ struct npc_vrykul_skeleton : public ScriptedAI
 
             // There are some issues with pets
             // they will still attack. I would say it is a PetAI bug
-            if (!me->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+            if (!me->HasUnitFlag(UNIT_FLAG_UNINTERACTIBLE))
             {
                 // from sniffs
-                me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                me->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
                 me->SetStandState(UNIT_STAND_STATE_DEAD);
 
                 events.Reset();
@@ -284,7 +284,7 @@ struct npc_vrykul_skeleton : public ScriptedAI
                 case EVENT_SHADOW_FISSURE:
                     DoCast(me, SPELL_SHADOW_FISSURE, true);
                     DoCastAOE(SPELL_BONE_ARMOR, true);
-                    me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                    me->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
                     me->SetStandState(UNIT_STAND_STATE_STAND);
                     me->GetMotionMaster()->MoveChase(me->GetVictim());
                     events.ScheduleEvent(EVENT_DECREPIFY, 4s, 6s);
@@ -297,7 +297,7 @@ struct npc_vrykul_skeleton : public ScriptedAI
                 return;
         }
 
-        if (!me->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+        if (!me->HasUnitFlag(UNIT_FLAG_UNINTERACTIBLE))
             DoMeleeAttackIfReady();
     }
 
@@ -305,6 +305,7 @@ private:
     EventMap events;
 };
 
+// 48400 - Frost Tomb
 class spell_frost_tomb : public AuraScript
 {
     PrepareAuraScript(spell_frost_tomb);

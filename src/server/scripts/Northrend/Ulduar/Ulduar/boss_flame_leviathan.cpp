@@ -250,7 +250,7 @@ class boss_flame_leviathan : public CreatureScript
 
                 DoCast(SPELL_INVIS_AND_STEALTH_DETECT);
 
-                me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_STUNNED));
+                me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_UNINTERACTIBLE | UNIT_FLAG_STUNNED));
                 me->SetReactState(REACT_PASSIVE);
             }
 
@@ -327,9 +327,6 @@ class boss_flame_leviathan : public CreatureScript
             void JustDied(Unit* /*killer*/) override
             {
                 _JustDied();
-                // Set Field Flags 67108928 = 64 | 67108864 = UNIT_FLAG_UNK_6 | UNIT_FLAG_SKINNABLE
-                // Set DynFlags 12
-                // Set NPCFlags 0
                 Talk(SAY_DEATH);
             }
 
@@ -573,7 +570,7 @@ class boss_flame_leviathan : public CreatureScript
                 if (id != ACTION_MOVE_TO_CENTER_POSITION)
                     return;
                 me->SetReactState(REACT_AGGRESSIVE);
-                me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_STUNNED));
+                me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_UNINTERACTIBLE | UNIT_FLAG_STUNNED));
             }
 
             private:
@@ -647,10 +644,10 @@ class boss_flame_leviathan_seat : public CreatureScript
                         if (Creature* device = devicePassenger->ToCreature())
                         {
                             device->AddNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-                            device->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                            device->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
                         }
 
-                    me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                    me->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
                 }
                 else if (seatId == SEAT_TURRET)
                 {
@@ -737,7 +734,7 @@ class boss_flame_leviathan_defense_turret : public CreatureScript
         {
             boss_flame_leviathan_defense_turretAI(Creature* creature) : TurretAI(creature) { }
 
-            void DamageTaken(Unit* who, uint32 &damage) override
+            void DamageTaken(Unit* who, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
             {
                 if (!CanAIAttack(who))
                     damage = 0;
@@ -776,7 +773,7 @@ class boss_flame_leviathan_overload_device : public CreatureScript
                 if (me->GetVehicle())
                 {
                     me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-                    me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                    me->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 
                     if (Unit* player = me->GetVehicle()->GetPassenger(SEAT_PLAYER))
                     {
@@ -903,12 +900,12 @@ class npc_pool_of_tar : public CreatureScript
         {
             npc_pool_of_tarAI(Creature* creature) : ScriptedAI(creature)
             {
-                me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                me->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
                 me->SetReactState(REACT_PASSIVE);
                 me->CastSpell(me, SPELL_TAR_PASSIVE, true);
             }
 
-            void DamageTaken(Unit* /*who*/, uint32& damage) override
+            void DamageTaken(Unit* /*who*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
             {
                 damage = 0;
             }
@@ -972,7 +969,7 @@ class npc_thorims_hammer : public CreatureScript
         {
             npc_thorims_hammerAI(Creature* creature) : ScriptedAI(creature)
             {
-                me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                me->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
                 me->CastSpell(me, AURA_DUMMY_BLUE, true);
             }
 
@@ -1011,7 +1008,7 @@ public:
         npc_mimirons_infernoAI(Creature* creature) : EscortAI(creature)
         {
             Initialize();
-            me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
+            me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_UNINTERACTIBLE));
             me->CastSpell(me, AURA_DUMMY_YELLOW, true);
             me->SetReactState(REACT_PASSIVE);
         }
@@ -1068,7 +1065,7 @@ class npc_hodirs_fury : public CreatureScript
         {
             npc_hodirs_furyAI(Creature* creature) : ScriptedAI(creature)
             {
-                me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                me->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
                 me->CastSpell(me, AURA_DUMMY_GREEN, true);
             }
 
@@ -1497,7 +1494,7 @@ class achievement_orbit_uary : public AchievementCriteriaScript
         }
 };
 
-// 62399 Overload Circuit
+// 62399 - Overload Circuit
 class spell_overload_circuit : public AuraScript
 {
     PrepareAuraScript(spell_overload_circuit);
@@ -1523,7 +1520,7 @@ class spell_overload_circuit : public AuraScript
     }
 };
 
-// 62292 Blaze
+// 62292 - Blaze
 class spell_tar_blaze : public AuraScript
 {
     PrepareAuraScript(spell_tar_blaze);
@@ -1545,6 +1542,7 @@ class spell_tar_blaze : public AuraScript
     }
 };
 
+// 64414 - Load into Catapult
 class spell_load_into_catapult : public SpellScriptLoader
 {
     enum Spells
@@ -1590,6 +1588,7 @@ class spell_load_into_catapult : public SpellScriptLoader
         }
 };
 
+// 62705 - Auto-repair
 class spell_auto_repair : public SpellScriptLoader
 {
     enum Spells
@@ -1659,6 +1658,7 @@ class spell_auto_repair : public SpellScriptLoader
         }
 };
 
+// 62475 - Systems Shutdown
 class spell_systems_shutdown : public SpellScriptLoader
 {
     public:
@@ -1741,6 +1741,7 @@ class FlameLeviathanPursuedTargetSelector
         }
 };
 
+// 62374 - Pursued
 class spell_pursue : public SpellScriptLoader
 {
     public:
@@ -1788,6 +1789,7 @@ class spell_pursue : public SpellScriptLoader
         }
 };
 
+// 62324 - Throw Passenger
 class spell_vehicle_throw_passenger : public SpellScriptLoader
 {
     public:

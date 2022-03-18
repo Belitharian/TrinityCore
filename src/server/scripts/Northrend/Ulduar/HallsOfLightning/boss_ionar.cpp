@@ -37,8 +37,10 @@ enum Spells
     SPELL_SPARK_DESPAWN                           = 52776,
 
     // Spark of Ionar
-    SPELL_SPARK_VISUAL_TRIGGER                    = 52667
+    SPELL_RANDOM_LIGHTNING_VISUAL                 = 52663
 };
+
+#define SPELL_SPARK_VISUAL_TRIGGER DUNGEON_MODE<uint32>(52667,59833)
 
 enum Yells
 {
@@ -105,7 +107,7 @@ struct boss_ionar : public ScriptedAI
 
         Initialize();
 
-        me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
+        me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_UNINTERACTIBLE));
         me->SetControlled(false, UNIT_STATE_ROOT);
 
         if (!me->IsVisible())
@@ -145,7 +147,7 @@ struct boss_ionar : public ScriptedAI
 
             me->AttackStop();
             me->SetVisible(false);
-            me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
+            me->AddUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_UNINTERACTIBLE));
             me->SetControlled(true, UNIT_STATE_ROOT);
 
             me->GetMotionMaster()->Clear();
@@ -168,6 +170,7 @@ struct boss_ionar : public ScriptedAI
             {
                 if (pSpark->IsAlive())
                 {
+                    pSpark->SetReactState(REACT_PASSIVE);
                     pSpark->SetSpeedRate(MOVE_RUN, 2.0f);
                     pSpark->GetMotionMaster()->Clear();
                     pSpark->GetMotionMaster()->MovePoint(DATA_POINT_CALLBACK, pos);
@@ -178,7 +181,7 @@ struct boss_ionar : public ScriptedAI
         }
     }
 
-    void DamageTaken(Unit* /*pDoneBy*/, uint32 &uiDamage) override
+    void DamageTaken(Unit* /*pDoneBy*/, uint32 &uiDamage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         if (!me->IsVisible())
             uiDamage = 0;
@@ -189,8 +192,6 @@ struct boss_ionar : public ScriptedAI
         if (summoned->GetEntry() == NPC_SPARK_OF_IONAR)
         {
             lSparkList.Summon(summoned);
-
-            summoned->CastSpell(summoned, SPELL_SPARK_VISUAL_TRIGGER, true);
 
             if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
             {
@@ -230,7 +231,7 @@ struct boss_ionar : public ScriptedAI
                 else if (lSparkList.empty())
                 {
                     me->SetVisible(true);
-                    me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE));
+                    me->RemoveUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_UNINTERACTIBLE));
                     me->SetControlled(false, UNIT_STATE_ROOT);
 
                     DoCast(me, SPELL_SPARK_DESPAWN, false);
@@ -307,7 +308,8 @@ struct npc_spark_of_ionar : public ScriptedAI
     void Reset() override
     {
         Initialize();
-        me->SetReactState(REACT_PASSIVE);
+        DoCastSelf(SPELL_SPARK_VISUAL_TRIGGER);
+        DoCastSelf(SPELL_RANDOM_LIGHTNING_VISUAL);
     }
 
     void MovementInform(uint32 uiType, uint32 uiPointId) override
@@ -317,11 +319,6 @@ struct npc_spark_of_ionar : public ScriptedAI
 
         if (uiPointId == DATA_POINT_CALLBACK)
             me->DespawnOrUnsummon();
-    }
-
-    void DamageTaken(Unit* /*pDoneBy*/, uint32 &uiDamage) override
-    {
-        uiDamage = 0;
     }
 
     void UpdateAI(uint32 uiDiff) override
@@ -343,6 +340,7 @@ struct npc_spark_of_ionar : public ScriptedAI
                 {
                     Position pos = ionar->GetPosition();
 
+                    me->SetReactState(REACT_PASSIVE);
                     me->SetSpeedRate(MOVE_RUN, 2.0f);
                     me->GetMotionMaster()->Clear();
                     me->GetMotionMaster()->MovePoint(DATA_POINT_CALLBACK, pos);

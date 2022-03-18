@@ -240,6 +240,7 @@ private:
     InstanceScript* instance;
 };
 
+// 50053 - Centrifuge Shield
 class spell_varos_centrifuge_shield : public AuraScript
 {
     PrepareAuraScript(spell_varos_centrifuge_shield);
@@ -253,25 +254,13 @@ class spell_varos_centrifuge_shield : public AuraScript
     void OnApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
         if (Unit* caster = GetCaster())
-        {
-            // flags taken from sniffs
-            if (caster->HasUnitFlag(UnitFlags(UNIT_FLAG_CAN_SWIM | UNIT_FLAG_IMMUNE_TO_NPC | UNIT_FLAG_IMMUNE_TO_PC | UNIT_FLAG_UNK_6)))
-            {
-                caster->ToCreature()->SetReactState(REACT_PASSIVE);
-                caster->AddUnitFlag(UnitFlags(UNIT_FLAG_CAN_SWIM | UNIT_FLAG_UNK_6));
-                caster->SetImmuneToAll(true, true);
-            }
-        }
+            caster->SetImmuneToAll(true, true);
     }
 
     void OnRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
         if (Unit* caster = GetCaster())
-        {
-            caster->ToCreature()->SetReactState(REACT_AGGRESSIVE);
-            caster->RemoveUnitFlag(UnitFlags(UNIT_FLAG_CAN_SWIM | UNIT_FLAG_UNK_6));
             caster->SetImmuneToAll(false);
-        }
     }
 
     void Register() override
@@ -281,6 +270,7 @@ class spell_varos_centrifuge_shield : public AuraScript
     }
 };
 
+// 50785, 59372 - Energize Cores
 class spell_varos_energize_core_area_enemy : public SpellScript
 {
     PrepareSpellScript(spell_varos_energize_core_area_enemy);
@@ -314,6 +304,8 @@ class spell_varos_energize_core_area_enemy : public SpellScript
     }
 };
 
+// 54069, 56251 - Energize Cores
+// 61407, 62136 - Energize Cores
 class spell_varos_energize_core_area_entry : public SpellScript
 {
     PrepareSpellScript(spell_varos_energize_core_area_entry);

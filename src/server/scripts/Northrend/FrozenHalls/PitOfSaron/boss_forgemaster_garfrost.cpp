@@ -124,7 +124,7 @@ struct boss_garfrost : public BossAI
             tyrannus->AI()->Talk(SAY_TYRANNUS_DEATH);
     }
 
-    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
+    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         if (events.IsInPhase(PHASE_ONE) && !HealthAbovePct(66))
         {
@@ -247,6 +247,7 @@ private:
     uint32 _permafrostStack;
 };
 
+// 68786, 70336 - Permafrost
 class spell_garfrost_permafrost : public SpellScript
 {
     PrepareSpellScript(spell_garfrost_permafrost);

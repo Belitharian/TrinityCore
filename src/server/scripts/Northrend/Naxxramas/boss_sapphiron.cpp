@@ -163,7 +163,7 @@ struct boss_sapphiron : public BossAI
         Initialize();
     }
 
-    void DamageTaken(Unit* /*who*/, uint32& damage) override
+    void DamageTaken(Unit* /*who*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         if (damage < me->GetHealth() || !events.IsInPhase(PHASE_FLIGHT))
             return;
@@ -474,6 +474,7 @@ struct go_sapphiron_birth : public GameObjectAI
     InstanceScript* instance;
 };
 
+// 24780 - Dream Fog
 class spell_sapphiron_change_blizzard_target : public AuraScript
 {
     PrepareAuraScript(spell_sapphiron_change_blizzard_target);
@@ -503,6 +504,7 @@ class spell_sapphiron_change_blizzard_target : public AuraScript
     }
 };
 
+// 28522 - Icebolt
 class spell_sapphiron_icebolt : public AuraScript
 {
     PrepareAuraScript(spell_sapphiron_icebolt);
@@ -542,6 +544,7 @@ class spell_sapphiron_icebolt : public AuraScript
     ObjectGuid _block;
 };
 
+// 28560 - Summon Blizzard
 class spell_sapphiron_summon_blizzard : public SpellScript
 {
     PrepareSpellScript(spell_sapphiron_summon_blizzard);

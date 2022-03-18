@@ -206,9 +206,7 @@ public:
 
         sObjectMgr->AddVendorItem(vendor_entry, vItem);
 
-        ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemId);
-
-        handler->PSendSysMessage(LANG_ITEM_ADDED_TO_LIST, itemId, itemTemplate->GetDefaultLocaleName(), maxcount, incrtime, extendedcost);
+        handler->PSendSysMessage(LANG_ITEM_ADDED_TO_LIST, itemId, item->GetDefaultLocaleName(), maxcount, incrtime, extendedcost);
         return true;
     }
 
@@ -219,7 +217,7 @@ public:
         CreatureData const* data = sObjectMgr->GetCreatureData(lowGuid);
         if (!data)
         {
-            handler->PSendSysMessage(LANG_COMMAND_CREATGUIDNOTFOUND, std::to_string(lowGuid).c_str());
+            handler->PSendSysMessage(LANG_COMMAND_CREATGUIDNOTFOUND, std::to_string(*lowGuid).c_str());
             handler->SetSentErrorMessage(true);
             return false;
         }
@@ -360,9 +358,7 @@ public:
             return false;
         }
 
-        ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemId);
-
-        handler->PSendSysMessage(LANG_ITEM_DELETED_FROM_LIST, itemId, itemTemplate->GetDefaultLocaleName());
+        handler->PSendSysMessage(LANG_ITEM_DELETED_FROM_LIST, itemId, item->GetDefaultLocaleName());
         return true;
     }
 

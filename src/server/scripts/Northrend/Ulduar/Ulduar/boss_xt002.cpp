@@ -208,7 +208,7 @@ struct boss_xt002 : public BossAI
     {
         Talk(SAY_DEATH);
         _JustDied();
-        me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+        me->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
     }
 
     void ExposeHeart()
@@ -239,7 +239,7 @@ struct boss_xt002 : public BossAI
 
         DoCastSelf(SPELL_STAND);
         DoCastSelf(SPELL_COOLDOWN_CREATURE_SPECIAL_2);
-        me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+        me->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
         if (Creature* heart = instance->GetCreature(DATA_XT002_HEART))
         {
             if (heart->IsAlive())
@@ -347,6 +347,7 @@ struct boss_xt002 : public BossAI
                     break;
                 case EVENT_SUBMERGE:
                     DoCastSelf(SPELL_SUBMERGE);
+                    me->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
                     Talk(EMOTE_HEART_OPENED);
                     if (Creature* heart = instance->GetCreature(DATA_XT002_HEART))
                         heart->AI()->DoAction(ACTION_START_PHASE_HEART);
@@ -409,13 +410,13 @@ struct npc_xt002_heart : public NullCreatureAI
             DoCastSelf(SPELL_FULL_HEAL);
             DoCast(xt002, SPELL_RIDE_VEHICLE_EXPOSED, true);
             DoCastSelf(SPELL_HEART_OVERLOAD);
-            me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+            me->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
             me->AddUnitFlag(UNIT_FLAG_PREVENT_EMOTES_FROM_CHAT_TEXT);
         }
         else if (action == ACTION_DISPOSE_HEART)
         {
             DoCast(xt002, SPELL_HEART_RIDE_VEHICLE, true);
-            me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+            me->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
             me->RemoveUnitFlag(UNIT_FLAG_PREVENT_EMOTES_FROM_CHAT_TEXT);
         }
     }
@@ -585,7 +586,7 @@ struct npc_boombot : public ScriptedAI
             });
     }
 
-    void DamageTaken(Unit* /*who*/, uint32& damage) override
+    void DamageTaken(Unit* /*who*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         if (damage >= (me->GetHealth() - me->GetMaxHealth() * 0.5f) && !_boomed)
         {
@@ -674,8 +675,7 @@ private:
     TaskScheduler _scheduler;
 };
 
-/* 63018 - Searing Light
-   65121 - Searing Light */
+// 63018, 65121 - Searing Light
 class spell_xt002_searing_light_spawn_life_spark : public AuraScript
 {
     PrepareAuraScript(spell_xt002_searing_light_spawn_life_spark);
@@ -698,8 +698,7 @@ class spell_xt002_searing_light_spawn_life_spark : public AuraScript
     }
 };
 
-/* 63024 - Gravity Bomb
-   64234 - Gravity Bomb */
+// 63024, 64234 - Gravity Bomb
 class spell_xt002_gravity_bomb_aura : public AuraScript
 {
     PrepareAuraScript(spell_xt002_gravity_bomb_aura);
@@ -734,8 +733,7 @@ class spell_xt002_gravity_bomb_aura : public AuraScript
     }
 };
 
-/*  63025 - Gravity Bomb
-    64233 - Gravity Bomb */
+// 63025, 64233 - Gravity Bomb (Damage)
 class spell_xt002_gravity_bomb_damage : public SpellScript
 {
     PrepareSpellScript(spell_xt002_gravity_bomb_damage);
@@ -800,7 +798,7 @@ class spell_xt002_heart_overload_periodic : public SpellScript
     }
 };
 
-// 62826 Energy Orb
+// 62826 - Energy Orb
 class spell_xt002_energy_orb : public SpellScript
 {
     PrepareSpellScript(spell_xt002_energy_orb);
@@ -868,27 +866,6 @@ class spell_xt002_tympanic_tantrum : public SpellScript
         OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_xt002_tympanic_tantrum::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENEMY);
         OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_xt002_tympanic_tantrum::FilterTargets, EFFECT_1, TARGET_UNIT_SRC_AREA_ENEMY);
         OnHit += SpellHitFn(spell_xt002_tympanic_tantrum::RecalculateDamage);
-    }
-};
-
-// 37751 - Submerged
-class spell_xt002_submerged : public SpellScript
-{
-    PrepareSpellScript(spell_xt002_submerged);
-
-    void HandleScript(SpellEffIndex /*eff*/)
-    {
-        Creature* target = GetHitCreature();
-        if (!target)
-            return;
-
-        target->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
-        target->SetStandState(UNIT_STAND_STATE_SUBMERGED);
-    }
-
-    void Register() override
-    {
-        OnEffectHitTarget += SpellEffectFn(spell_xt002_submerged::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
     }
 };
 
@@ -1018,7 +995,6 @@ void AddSC_boss_xt002()
     RegisterSpellScript(spell_xt002_heart_overload_periodic);
     RegisterSpellScript(spell_xt002_energy_orb);
     RegisterSpellScript(spell_xt002_tympanic_tantrum);
-    RegisterSpellScript(spell_xt002_submerged);
     RegisterSpellScript(spell_xt002_321_boombot_aura);
     RegisterSpellScript(spell_xt002_exposed_heart);
 

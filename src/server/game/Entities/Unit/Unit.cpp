@@ -397,7 +397,7 @@ Unit::Unit(bool isWorldObject) :
     _oldFactionId = 0;
     _isWalkingBeforeCharm = false;
     _instantCast = false;
-    _isIgnoringCombat = false;
+    _isCombatDisallowed = false;
 }
 
 ////////////////////////////////////////////////////////////
@@ -715,7 +715,7 @@ bool Unit::HasBreakableByDamageCrowdControlAura(Unit* excludeCasterChannel) cons
 /*static*/ uint32 Unit::DealDamage(Unit* attacker, Unit* victim, uint32 damage, CleanDamage const* cleanDamage, DamageEffectType damagetype, SpellSchoolMask damageSchoolMask, SpellInfo const* spellProto, bool durabilityLoss)
 {
     if (UnitAI* victimAI = victim->GetAI())
-        victimAI->DamageTaken(attacker, damage);
+        victimAI->DamageTaken(attacker, damage, damagetype, spellProto);
 
     if (UnitAI* attackerAI = attacker ? attacker->GetAI() : nullptr)
         attackerAI->DamageDealt(victim, damage, damagetype);
@@ -5815,6 +5815,12 @@ void Unit::SetMinion(Minion *minion, bool apply)
             return;
         }
 
+        if (!IsInWorld())
+        {
+            TC_LOG_FATAL("entities.unit", "SetMinion: Minion being added to owner not in world. Minion: %s, Owner: %s", minion->GetGUID().ToString().c_str(), GetDebugInfo().c_str());
+            return;
+        }
+
         minion->SetOwnerGUID(GetGUID());
 
         m_Controlled.insert(minion);
@@ -7246,23 +7252,23 @@ bool Unit::IsImmunedToSpellEffect(SpellInfo const* spellInfo, SpellEffectInfo co
             return true;
     }
 
-    if (!spellInfo->HasAttribute(SPELL_ATTR3_IGNORE_HIT_RESULT))
+    if (AuraType aura = spellEffectInfo.ApplyAuraName)
     {
-        if (AuraType aura = spellEffectInfo.ApplyAuraName)
+        if (!spellInfo->HasAttribute(SPELL_ATTR3_IGNORE_HIT_RESULT))
         {
             SpellImmuneContainer const& list = m_spellImmune[IMMUNITY_STATE];
             if (list.count(aura) > 0)
                 return true;
+        }
 
-            if (!spellInfo->HasAttribute(SPELL_ATTR2_UNAFFECTED_BY_AURA_SCHOOL_IMMUNE))
-            {
-                // Check for immune to application of harmful magical effects
-                AuraEffectList const& immuneAuraApply = GetAuraEffectsByType(SPELL_AURA_MOD_IMMUNE_AURA_APPLY_SCHOOL);
-                for (AuraEffectList::const_iterator iter = immuneAuraApply.begin(); iter != immuneAuraApply.end(); ++iter)
-                    if (((*iter)->GetMiscValue() & spellInfo->GetSchoolMask()) &&                   // Check school
-                        ((caster && !IsFriendlyTo(caster)) || !spellInfo->IsPositiveEffect(spellEffectInfo.EffectIndex))) // Harmful
-                        return true;
-            }
+        if (!spellInfo->HasAttribute(SPELL_ATTR2_UNAFFECTED_BY_AURA_SCHOOL_IMMUNE))
+        {
+            // Check for immune to application of harmful magical effects
+            AuraEffectList const& immuneAuraApply = GetAuraEffectsByType(SPELL_AURA_MOD_IMMUNE_AURA_APPLY_SCHOOL);
+            for (AuraEffectList::const_iterator iter = immuneAuraApply.begin(); iter != immuneAuraApply.end(); ++iter)
+                if (((*iter)->GetMiscValue() & spellInfo->GetSchoolMask()) &&                   // Check school
+                    ((caster && !IsFriendlyTo(caster)) || !spellInfo->IsPositiveEffect(spellEffectInfo.EffectIndex))) // Harmful
+                    return true;
         }
     }
 
@@ -7807,7 +7813,7 @@ bool Unit::isTargetableForAttack(bool checkFakeDeath) const
     if (!IsAlive())
         return false;
 
-    if (HasUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE)))
+    if (HasUnitFlag(UnitFlags(UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_UNINTERACTIBLE)))
         return false;
 
     if (GetTypeId() == TYPEID_PLAYER && ToPlayer()->IsGameMaster())
@@ -8259,19 +8265,8 @@ void Unit::setDeathState(DeathState s)
         // Don't clear the movement if the Unit was on a vehicle as we are exiting now
         if (!isOnVehicle)
         {
-            if (IsInWorld())
-            {
-                // Only clear MotionMaster for entities that exists in world
-                // Avoids crashes in the following conditions :
-                //  * Using 'call pet' on dead pets
-                //  * Using 'call stabled pet'
-                //  * Logging in with dead pets
-                GetMotionMaster()->Clear();
-                GetMotionMaster()->MoveIdle();
-            }
-
-            StopMoving();
-            DisableSpline();
+            if (GetMotionMaster()->StopOnDeath())
+                DisableSpline();
         }
 
         // without this when removing IncreaseMaxHealth aura player may stuck with 1 hp
@@ -11151,7 +11146,7 @@ bool Unit::SetCharmedBy(Unit* charmer, CharmType type, AuraApplication const* au
     AddUnitState(UNIT_STATE_CHARMED);
 
     if (Creature* creature = ToCreature())
-        creature->RefreshSwimmingFlag();
+        creature->RefreshCanSwimFlag();
 
     if ((GetTypeId() != TYPEID_PLAYER) || (charmer->GetTypeId() != TYPEID_PLAYER))
     {
@@ -13458,6 +13453,18 @@ std::string Unit::GetDebugInfo() const
         << "IsAIEnabled: " << IsAIEnabled() << " DeathState: " << std::to_string(getDeathState())
         << " UnitMovementFlags: " << GetUnitMovementFlags() << " ExtraUnitMovementFlags: " << GetExtraUnitMovementFlags()
         << " Class: " << std::to_string(GetClass()) << "\n"
-        << " " << (movespline ? movespline->ToString() : "Movespline: <none>");
+        << "" << (movespline ? movespline->ToString() : "Movespline: <none>\n")
+        << "GetCharmedGUID(): " << GetCharmedGUID().ToString() << "\n"
+        << "GetCharmerGUID(): " << GetCharmerGUID().ToString() << "\n"
+        << "" << (GetVehicleKit() ? GetVehicleKit()->GetDebugInfo() : "No vehicle kit") << "\n"
+        << "m_Controlled size: " << m_Controlled.size();
+
+    size_t controlledCount = 0;
+    for (Unit* controlled : m_Controlled)
+    {
+        ++controlledCount;
+        sstr << "\n" << "m_Controlled " << controlledCount << " : " << controlled->GetGUID().ToString();
+    }
+
     return sstr.str();
 }

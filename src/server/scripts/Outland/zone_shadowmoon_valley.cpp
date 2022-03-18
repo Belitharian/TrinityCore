@@ -168,7 +168,7 @@ public:
         {
             if (spellInfo->Id == SPELL_SUMMON_INFERNAL)
             {
-                me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                me->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
                 me->SetImmuneToPC(false);
                 me->RemoveAurasDueToSpell(SPELL_SPAWN_AND_PACIFY);
                 // handle by the spell below when such auras will be not removed after evade
@@ -1506,6 +1506,7 @@ enum ZuluhedChains
     NPC_KARYNAKU    = 22112,
 };
 
+// 38790 - Unlocking Zuluhed's Chains
 class spell_unlocking_zuluheds_chains : public SpellScriptLoader
 {
     public:
