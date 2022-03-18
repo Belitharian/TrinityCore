@@ -1204,23 +1204,20 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							creature->GetMotionMaster()->MoveIdle();
 							creature->NearTeleportTo(actorsRelocation[i].destination);
 							creature->SetHomePosition(actorsRelocation[i].destination);
+                            creature->RemoveAllAuras();
 
 							switch (creature->GetEntry())
 							{
 								case NPC_AMARA_LEESON:
 									creature->CastSpell(creature, SPELL_PORTAL_CHANNELING_03);
 									break;
-								case NPC_THADER_WINDERMERE:
+                                case NPC_RHONIN:
+                                case NPC_THADER_WINDERMERE:
+                                    creature->CastSpell(creature, SPELL_CHAT_BUBBLE, true);
 									creature->AddNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 									break;
 								case NPC_THALEN_SONGWEAVER:
 									creature->CastSpell(creature, SPELL_PORTAL_CHANNELING_02);
-									break;
-								case NPC_RHONIN:
-									creature->AddNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-									break;
-								case NPC_ARCHMAGE_TERVOSH:
-									creature->RemoveAllAuras();
 									break;
 								case NPC_JAINA_PROUDMOORE:
 									GetBarrier01()->UseDoorOrButton();

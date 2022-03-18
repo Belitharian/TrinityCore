@@ -467,6 +467,7 @@ class npc_rhonin : public CreatureScript
 			switch (gossipListId)
 			{
 				case 0:
+					me->RemoveAurasDueToSpell(SPELL_CHAT_BUBBLE);
 					me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 					instance->DoCastSpellOnPlayers(SPELL_RUNIC_SHIELD);
 					DoCast(SPELL_ARCANE_CAST_INSTANT);

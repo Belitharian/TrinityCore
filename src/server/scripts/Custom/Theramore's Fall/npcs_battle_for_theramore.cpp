@@ -311,7 +311,8 @@ class npc_thader_windermere : public CreatureScript
 			switch (gossipListId)
 			{
 				case 0:
-					me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                    me->RemoveAurasDueToSpell(SPELL_CHAT_BUBBLE);
+                    me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 					KillRewarder(player, me, false).Reward(me->GetEntry());
 					scheduler.Schedule(2s, [this](TaskContext context)
 					{

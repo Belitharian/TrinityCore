@@ -42,7 +42,7 @@ struct npc_jaina_dalaran_purge : public CustomAI
 						instance->DoSendScenarioEvent(EVENT_FIND_JAINA_01);
 						break;
                     case DLPPhases::FindJaina02:
-                        instance->DoSendScenarioEvent(EVENT_FIND_JAINA_02);
+                        instance->SetData(EVENT_FIND_JAINA_02, 1U);
                         break;
                     default:
 						break;
@@ -65,6 +65,11 @@ struct npc_aethas_sunreaver_purge : public CustomAI
 	}
 
 	InstanceScript* instance;
+
+    void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+    {
+        damage = 0;
+    }
 
 	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
 	{
