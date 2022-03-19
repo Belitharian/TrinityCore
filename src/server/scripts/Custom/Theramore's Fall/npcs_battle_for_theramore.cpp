@@ -641,7 +641,7 @@ class npc_theramore_faithful : public CreatureScript
 		bool ascension;
 		InstanceScript* instance;
 
-		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+        void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 		{
 			if (!ascension && me->HealthBelowPctDamaged(10, damage))
 			{
@@ -896,7 +896,7 @@ class npc_roknah_hag : public CreatureScript
 			}
 		}
 
-		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+        void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 		{
             if (roll_chance_i(50))
                 return;
@@ -1145,7 +1145,7 @@ class npc_roknah_loasinger : public CreatureScript
 		const SpellInfo* flameShock;
 		const SpellInfo* frostShock;
 
-		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+        void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 		{
 			if (me->HealthBelowPctDamaged(50, damage) && !me->HasAura(SPELL_ASTRAL_SHIFT))
 			{

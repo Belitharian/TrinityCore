@@ -100,7 +100,7 @@ class npc_roknah_warlord : public CreatureScript
 			instance->DoSendScenarioEvent(EVENT_WARLORD_ROKNAH_SLAIN);
 		}
 
-		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+        void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 		{
 			if (!me->HealthBelowPctDamaged(25, damage))
 				return;

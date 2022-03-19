@@ -66,9 +66,12 @@ struct npc_aethas_sunreaver_purge : public CustomAI
 
 	InstanceScript* instance;
 
-    void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* spellInfo) override
     {
-        damage = 0;
+        if (spellInfo->Id == SPELL_ARCANE_BOMBARDMENT || spellInfo->Id == SPELL_FROSTBOLT)
+        {
+            damage = 0;
+        }
     }
 
 	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override

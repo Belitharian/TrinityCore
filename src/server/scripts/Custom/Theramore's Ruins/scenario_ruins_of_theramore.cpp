@@ -115,7 +115,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					if (Creature* jaina = GetJaina())
 					{
 						jaina->LoadEquipment(2);
-						jaina->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+						jaina->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 						jaina->SetStandState(UNIT_STAND_STATE_KNEEL);
 						jaina->RemoveAllAuras();
                         jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
@@ -159,7 +159,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
             creature->AddPvpFlag(UNIT_BYTE2_FLAG_PVP);
-            creature->AddUnitFlag(UNIT_FLAG_PVP);
+            creature->AddUnitFlag(UNIT_FLAG_PVP_ENABLING);
 
 			switch (creature->GetEntry())
 			{
@@ -181,7 +181,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case NPC_ARCHMAGE_TERVOSH:
 				case NPC_KINNDY_SPARKSHINE:
 					FeingDeath(creature);
-					creature->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+					creature->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 					creature->AddAura(SPELL_SHIMMERDUST, creature);
 					creature->AddAura(SPELL_COSMETIC_PURPLE_VERTEX_STATE, creature);
 					break;
@@ -296,7 +296,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					break;
 				case 16:
 					if (Creature* jaina = GetJaina())
-						jaina->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+						jaina->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 					Next(2s);
 					break;
 				case 17:
@@ -566,7 +566,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 							elemental->DespawnOrUnsummon(1s);
 
 						jaina->CastSpell(jaina, SPELL_COSMETIC_ARCANE_DISSOLVE);
-						jaina->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+						jaina->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 					}
 					break;
 

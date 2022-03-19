@@ -326,7 +326,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         kalecgos->GetMotionMaster()->MoveIdle();
 						kalecgos->NearTeleportTo(KalecgosPoint01);
 						kalecgos->SetHomePosition(KalecgosPoint01);
-						kalecgos->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+						kalecgos->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 						kalecgos->RemoveAllAuras();
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
@@ -592,7 +592,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
             creature->AddPvpFlag(UNIT_BYTE2_FLAG_PVP);
-            creature->AddUnitFlag(UNIT_FLAG_PVP);
+            creature->AddUnitFlag(UNIT_FLAG_PVP_ENABLING);
 
 			switch (creature->GetEntry())
 			{

@@ -16,6 +16,7 @@
 enum DLPCreatures
 {
     NPC_WANTON_HOSTESS				    = 16459,
+    NPC_INVISIBLE_STALKER               = 32780,
     NPC_ARCANIST_RATHAELLA			    = 68049,
     NPC_SORIN_MAGEHAND				    = 68587,
     NPC_JAINA_PROUDMOORE_PATROL		    = 68609,
@@ -33,6 +34,7 @@ enum DLPCreatures
     NPC_BOUND_WATER_ELEMENTAL		    = 68956,
     NPC_ICE_WALL					    = 178819,
     NPC_WANTON_HOST				        = 183317,
+    NPC_DALARAN_CITIZEN                 = 500016,
     NPC_ARCANE_BARRIER                  = 550003
 };
 
@@ -77,6 +79,7 @@ enum DLPTalks
 
 enum DLPSpells
 {
+    SPELL_TELEPORT_VISUAL               = 7077,
     SPELL_TELEPORT_VISUAL_ONLY		    = 51347,
     SPELL_PHASE_CITIZENS                = 77078,
     SPELL_PHASE_HIGH_SUNREAVER_MAGES    = 78263,
@@ -84,11 +87,15 @@ enum DLPSpells
     SPELL_CHAT_BUBBLE                   = 140812,
     SPELL_FROST_CANALISATION            = 192353,
     SPELL_RUNES_OF_SHIELDING        	= 217859,
+    SPELL_WAND_OF_DISPELLING            = 243043,
     SPELL_CASTER_READY_01               = 245843,
     SPELL_CASTER_READY_02               = 245848,
     SPELL_CASTER_READY_03               = 245849,
     SPELL_DISSOLVE                      = 255295,
     SPELL_ATTACHED                      = 262121,
+    SPELL_PORTAL_CHANNELING_01          = 286636,
+	SPELL_PORTAL_CHANNELING_02          = 287432,
+	SPELL_PORTAL_CHANNELING_03          = 288451,
     SPELL_CHILLING_BLAST                = 337053,
     SPELL_ICY_GLARE                     = 338517,
     SPELL_ARCANE_BOMBARDMENT            = 352556,
@@ -105,6 +112,18 @@ enum DLPMisc
 	// Factions
 	FACTION_DALARAN_PATROL              = 2618,
 
+    // Phases
+    PHASE_GROUP_SPECIFIC                = 368,
+    PHASE_SPECIFIC_ZONE_A               = 170,
+
+    // Guids
+    GUID_PLAYER                         = 1,
+    GUID_BARRIER                        = 2,
+    GUID_STALKER                        = 3,
+
+    // Actions
+    ACTION_DISPELL_BARRIER              = 5000000,
+
 	// Gob
 	GOB_MYSTIC_BARRIER_01               = 323860,
 	GOB_ICE_WALL_COLLISION              = 368620,
@@ -114,6 +133,9 @@ enum DLPMisc
 	CRITERIA_TREE_FINDING_THE_THIEVES   = 1000049,
 	CRITERIA_TREE_A_FACELIFT            = 1000051,
 	CRITERIA_TREE_FIRST_STEP            = 1000053,
+	CRITERIA_TREE_UNFORTUNATE_CAPTURE   = 1000055,
+	CRITERIA_TREE_SERVE_AND_PROTECT     = 1000059,
+	CRITERIA_TREE_CASHING_OUT           = 1000061,
 
 	// Point Id
 	MOVEMENT_INFO_POINT_NONE            = 0,
@@ -127,7 +149,8 @@ enum class DLPPhases
 	FindJaina01,                        // Purple Citadel (PC)
 	FindingTheThieves,                  // PC Indoors
 	FindJaina02,                        // PC Stairs
-	FreeTheAllies,
+	FreeTheArcanist,
+	FreeCitizens,
 };
 
 struct SpawnPoint

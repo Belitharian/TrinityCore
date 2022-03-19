@@ -52,7 +52,7 @@ class npc_jaina_theramore : public CreatureScript
 			Initialize();
 		}
 
-		void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+        void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 		{
 			if (me->HealthBelowPctDamaged(10, damage)
 				&& !me->HasAura(SPELL_FROST_BARRIER))
@@ -709,7 +709,7 @@ class npc_kalecgos_theramore : public CreatureScript
 				switch (id)
 				{
 					case MOVEMENT_INFO_POINT_01:
-						me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+						me->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 						me->SetImmuneToAll(true);
 						scheduler.Schedule(2s, [this](TaskContext /*context*/)
 						{

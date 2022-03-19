@@ -1620,6 +1620,9 @@ namespace Trinity
                         return false;
                 }
 
+                if (!unit->IsVisible())
+                    return false;
+
                 return true;
             }
 

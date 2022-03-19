@@ -80,7 +80,11 @@ class scenario_dalaran_purge : public InstanceMapScript
 					phase = (DLPPhases)value;
 					break;
                 case EVENT_FIND_JAINA_02:
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FreeTheAllies);
+                    #ifdef DEBUG
+                        DoSendScenarioEvent(EVENT_FIND_JAINA_02);
+                    #else
+                        SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FreeTheArcanist);
+                    #endif
                     events.ScheduleEvent(14, 2s);
                     break;
 				default:
@@ -90,58 +94,65 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 		void OnCompletedCriteriaTree(CriteriaTree const* tree) override
 		{
-			switch (tree->ID)
-			{
-				// Dalaran
-				case CRITERIA_TREE_DALARAN:
-					if (Creature* aethas = instance->SummonCreature(NPC_AETHAS_SUNREAVER, AethasPoint01.spawn))
-						aethas->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, AethasPoint01.destination, true, AethasPoint01.destination.GetOrientation());
-					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FindingTheThieves);
+            switch (tree->ID)
+            {
+                // Dalaran
+                case CRITERIA_TREE_DALARAN:
+                {
+                    if (Creature* aethas = instance->SummonCreature(NPC_AETHAS_SUNREAVER, AethasPoint01.spawn))
+                        aethas->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, AethasPoint01.destination, true, AethasPoint01.destination.GetOrientation());
+                    if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
+                    {
+                        if (Creature* zuros = GetCreature(DATA_MAGE_COMMANDER_ZUROS))
+                        {
+                            surdiel->AI()->AttackStart(zuros);
+                            zuros->AI()->AttackStart(surdiel);
+                    }
+                }
+                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FindingTheThieves);
                     #ifdef DEBUG
                         events.ScheduleEvent(13, 1s);
                     #else
-					    events.ScheduleEvent(1, 10s);
+                        events.ScheduleEvent(1, 10s);
                     #endif
-					break;
+                    break;
+                }
 				// Finding the thieves
 				case CRITERIA_TREE_FINDING_THE_THIEVES:
-					for (Creature* creature : patrol)
-					{
-						creature->SetFaction(FACTION_DALARAN_PATROL);
-						creature->setActive(true);
-						creature->SetVisible(true);
-					}
-					DoRemoveAurasDueToSpellOnPlayers(SPELL_PHASE_HIGH_SUNREAVER_MAGES, true, true);
-					break;
+                {
+                    for (Creature* creature : patrol)
+                    {
+                        creature->SetFaction(FACTION_DALARAN_PATROL);
+                        creature->setActive(true);
+                        creature->SetVisible(true);
+                    }
+                    DoRemoveAurasDueToSpellOnPlayers(SPELL_PHASE_HIGH_SUNREAVER_MAGES, true, true);
+                    break;
+                }
 				// A Facelift
 				case CRITERIA_TREE_A_FACELIFT:
-					if (Creature* jaina = GetJaina())
-					{
-						jaina->NearTeleportTo(JainaPos01);
-						jaina->SetVisible(true);
-						jaina->SetImmuneToAll(true);
-						jaina->RemoveAllAuras();
-					}
-					for (Creature* creature : patrol)
-					{
-						creature->CombatStop();
-						creature->SetFaction(FACTION_FRIENDLY);
-						creature->setActive(false);
-						creature->SetVisible(false);
-					}
-					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
-					{
-						if (Creature* zuros = GetCreature(DATA_MAGE_COMMANDER_ZUROS))
-						{
-							surdiel->AI()->AttackStart(zuros);
-							zuros->AI()->AttackStart(surdiel);
-						}
-					}
-					DoRemoveAurasDueToSpellOnPlayers(SPELL_PHASE_CITIZENS, true, true);
-					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FindJaina02);
-					break;
+                {
+                    if (Creature* jaina = GetJaina())
+                    {
+                        jaina->SetVisible(true);
+                        jaina->SetImmuneToAll(true);
+                        jaina->RemoveAllAuras();
+                        jaina->NearTeleportTo(JainaPos01);
+                    }
+                    for (Creature* creature : patrol)
+                    {
+                        creature->CombatStop();
+                        creature->SetFaction(FACTION_FRIENDLY);
+                        creature->setActive(false);
+                        creature->SetVisible(false);
+                    }
+                    DoRemoveAurasDueToSpellOnPlayers(SPELL_PHASE_CITIZENS, true, true);
+                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FindJaina02);
+                    break;
+                }
                 // First Step
                 case CRITERIA_TREE_FIRST_STEP:
+                {
                     if (Creature* rathaella = GetCreature(DATA_ARCANIST_RATHAELLA))
                         rathaella->AddNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
                     if (Creature* landalock = GetCreature(DATA_ARCHMAGE_LANDALOCK))
@@ -151,6 +162,15 @@ class scenario_dalaran_purge : public InstanceMapScript
                         landalock->CastSpell(landalock, SPELL_CHAT_BUBBLE, true);
                     }
                     break;
+                }
+                // An Unfortunate Capture
+                case CRITERIA_TREE_UNFORTUNATE_CAPTURE:
+                {
+                    DoRemoveAurasDueToSpellOnPlayers(SPELL_WAND_OF_DISPELLING);
+                    DoCastSpellOnPlayers(SPELL_WAND_OF_DISPELLING);
+                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FreeCitizens);
+                    break;
+                }
 				default:
 					break;
 			}
@@ -162,10 +182,18 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
 			creature->AddPvpFlag(UNIT_BYTE2_FLAG_PVP);
-			creature->AddUnitFlag(UNIT_FLAG_PVP);
+			creature->AddUnitFlag(UNIT_FLAG_PVP_ENABLING);
 
 			switch (creature->GetEntry())
 			{
+                case NPC_DALARAN_CITIZEN:
+                    if (roll_chance_i(30))
+                        creature->SetEmoteState(EMOTE_STATE_COWER);
+                    break;
+                case NPC_MAGE_COMMANDER_ZUROS:
+                case NPC_MAGISTER_SURDIEL:
+                    creature->SetImmuneToPC(true);
+                    break;
                 case NPC_WANTON_HOST:
                 case NPC_WANTON_HOSTESS:
                     creature->SetImmuneToAll(true);
@@ -188,7 +216,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					break;
 				case NPC_ICE_WALL:
 					creature->SetImmuneToAll(true);
-					creature->SetUnitFlags(UNIT_FLAG_NOT_SELECTABLE);
+					creature->SetUnitFlags(UNIT_FLAG_UNINTERACTIBLE);
 					break;
 				case NPC_JAINA_PROUDMOORE_PATROL:
 				case NPC_BOUND_WATER_ELEMENTAL:
@@ -250,12 +278,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 				case 7:
 					Talk(GetJaina(), SAY_PURGE_JAINA_07);
 					if (Creature* aethas = GetAethas())
-					{
-						int32 val = aethas->CountPctFromMaxHealth(60);
-						CastSpellExtraArgs args(SPELLVALUE_BASE_POINT0, val);
-						args.SetTriggerFlags(TRIGGERED_DISALLOW_PROC_EVENTS);
-						GetElemental()->CastSpell(GetAethas(), SPELL_FROSTBOLT, args);
-					}
+                        GetElemental()->CastSpell(GetAethas(), SPELL_FROSTBOLT);
 					Next(2s);
 					break;
 				case 8:
