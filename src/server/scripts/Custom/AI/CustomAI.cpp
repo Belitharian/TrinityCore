@@ -96,13 +96,21 @@ void CustomAI::AttackStart(Unit* who)
 
     if (me->Attack(who, true))
     {
-        if (type == AI_Type::None)
-            return;
-
-        if (type != AI_Type::Distance)
-            DoStartMovement(who);
-        else
-            DoStartMovement(who, GetDistance());
+        switch (type)
+        {
+            case AI_Type::Melee:
+                DoStartMovement(who);
+                break;
+            case AI_Type::Distance:
+                DoStartMovement(who, GetDistance());
+                break;
+            case AI_Type::NoMovement:
+                SetCombatMovement(false);
+                return;
+            case AI_Type::None:
+            default:
+                return;
+        }
 
         SetCombatMovement(true);
     }
@@ -124,8 +132,17 @@ void CustomAI::UpdateAI(uint32 diff)
     {
         if (UpdateVictim())
         {
-            if (type != AI_Type::Distance)
-                DoMeleeAttackIfReady();
+            switch (type)
+            {
+                case AI_Type::None:
+                case AI_Type::Melee:
+                    DoMeleeAttackIfReady();
+                    break;
+                case AI_Type::Distance:
+                case AI_Type::NoMovement:
+                default:
+                    break;
+            }
         }
     });
 }
@@ -141,6 +158,40 @@ bool CustomAI::CanAIAttack(Unit const* who) const
         && !who->HasAuraType(SPELL_AURA_MOD_FEAR_2)
         && !who->HasBreakableByDamageCrowdControlAura(me)
         && ScriptedAI::CanAIAttack(who);
+}
+
+void CustomAI::CastStop()
+{
+    for (uint32 i = CURRENT_FIRST_NON_MELEE_SPELL; i < CURRENT_MAX_SPELL; i++)
+        me->InterruptSpell(CurrentSpellTypes(i), false);
+}
+
+void CustomAI::CastStop(const std::vector<uint32>& exceptions)
+{
+    for (uint32 i = CURRENT_FIRST_NON_MELEE_SPELL; i < CURRENT_MAX_SPELL; i++)
+    {
+        if (const Spell* spell = me->GetCurrentSpell(i))
+        {
+            if (std::find(exceptions.begin(), exceptions.end(), spell->m_spellInfo->Id) != exceptions.end())
+                continue;
+
+            me->InterruptSpell(CurrentSpellTypes(i), false);
+        }
+    }
+}
+
+void CustomAI::CastStop(uint32 exception)
+{
+    for (uint32 i = CURRENT_FIRST_NON_MELEE_SPELL; i < CURRENT_MAX_SPELL; i++)
+    {
+        if (const Spell* spell = me->GetCurrentSpell(i))
+        {
+            if (spell->m_spellInfo->Id == exception)
+                continue;
+
+            me->InterruptSpell(CurrentSpellTypes(i), false);
+        }
+    }
 }
 
 uint32 CustomAI::EnemiesInRange(float distance)

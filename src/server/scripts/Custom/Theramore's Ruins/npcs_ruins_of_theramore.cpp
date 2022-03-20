@@ -27,9 +27,11 @@ class npc_water_elementals_theramore : public CreatureScript
 
 		enum Spells
 		{
-			SPELL_FROST_BARRIER = 69787,
-			SPELL_WATER_BOLT    = 125995,
-			SPELL_WATER_SPOUT   = 39207
+			SPELL_FROST_BARRIER         = 69787,
+            SPELL_WATER_SPOUT           = 271287,
+            SPELL_WATERY_DOME           = 258153,
+			SPELL_WATER_BOLT_VOLLEY     = 290084,
+			SPELL_WATER_BOLT            = 355225,
 		};
 
 		float GetDistance() override
@@ -39,7 +41,7 @@ class npc_water_elementals_theramore : public CreatureScript
 
 		void JustEngagedWith(Unit* /*who*/) override
 		{
-            if (!me->HasAura(SPELL_FROST_BARRIER))
+            if (!me->HasAura(SPELL_FROST_BARRIER) && me->GetMap()->GetId() != 5002)
                 DoCast(SPELL_FROST_BARRIER);
 
 			scheduler
@@ -48,14 +50,22 @@ class npc_water_elementals_theramore : public CreatureScript
 					DoCastVictim(SPELL_WATER_BOLT);
 					water_bolt.Repeat(3s);
 				})
-				.Schedule(12s, 22s, [this](TaskContext water_spout)
-				{
+                .Schedule(3s, [this](TaskContext watery_dome)
+                {
+                    DoCastSelf(SPELL_WATERY_DOME);
+                    watery_dome.Repeat(30s, 45s);
+                })
+                .Schedule(8s, 10s, [this](TaskContext water_spout)
+                {
                     if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                    {
-                        me->CastStop();
                         DoCast(target, SPELL_WATER_SPOUT);
-                    }
-					water_spout.Repeat(18s, 20s);
+                    water_spout.Repeat(24s, 32s);
+                })
+				.Schedule(12s, 22s, [this](TaskContext water_bolt_volley)
+				{
+                    CastStop(SPELL_WATER_BOLT_VOLLEY);
+                    DoCast(SPELL_WATER_BOLT_VOLLEY);
+                    water_bolt_volley.Repeat(18s, 20s);
 				});
 		}
 	};

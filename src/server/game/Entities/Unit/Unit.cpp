@@ -6621,6 +6621,23 @@ int32 Unit::SpellBaseDamageBonusDone(SpellSchoolMask schoolMask) const
 
     int32 DoneAdvertisedBenefit = GetTotalAuraModifierByMiscMask(SPELL_AURA_MOD_DAMAGE_DONE, schoolMask);
 
+    if (Creature const* thisCreature = ToCreature())
+    {
+        switch (thisCreature->GetCreatureTemplate()->unit_class)
+        {
+            case UNIT_CLASS_MAGE:
+                DoneAdvertisedBenefit += thisCreature->GetBaseAttackTime(RANGED_ATTACK);
+                break;
+            case UNIT_CLASS_WARRIOR:
+            case UNIT_CLASS_PALADIN:
+            case UNIT_CLASS_ROGUE:
+                DoneAdvertisedBenefit += thisCreature->GetBaseAttackTime(BASE_ATTACK);
+                break;
+        }
+
+        DoneAdvertisedBenefit *= 10;
+    }
+
     if (GetTypeId() == TYPEID_PLAYER)
     {
         // Base value
@@ -6641,7 +6658,6 @@ int32 Unit::SpellBaseDamageBonusDone(SpellSchoolMask schoolMask) const
                 DoneAdvertisedBenefit += static_cast<int32>(CalculatePct(GetStat(usedStat), aurEff->GetAmount()));
             }
         }
-
     }
 
     return DoneAdvertisedBenefit;

@@ -11,7 +11,8 @@ enum class AI_Type
 {
     None,
     Melee,
-    Distance
+    Distance,
+    NoMovement
 };
 
 class TC_API_EXPORT CustomAI : public ScriptedAI
@@ -38,6 +39,9 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void UpdateAI(uint32 /*diff*/) override;
 
         bool CanAIAttack(Unit const* /*who*/) const override;
+        void CastStop();
+        void CastStop(uint32 exception);
+        void CastStop(const std::vector<uint32>& exceptions);
 
         std::list<Unit*> DoFindMissingBuff(uint32 spellId);
 

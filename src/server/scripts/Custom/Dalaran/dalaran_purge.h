@@ -72,6 +72,9 @@ enum DLPTalks
     SAY_FIRST_STEP_JAINA_03             = 6,
     SAY_FIRST_STEP_VEREESA_04           = 1,
 
+    // Brasael
+    SAY_BRASAEL_JAINA_01                = 7,
+
 	// Purge
 	SAY_JAINA_PURGE_SLAIN               = 0,
 	SAY_JAINA_PURGE_TELEPORT            = 1,
@@ -87,15 +90,18 @@ enum DLPSpells
     SPELL_CHAT_BUBBLE                   = 140812,
     SPELL_FROST_CANALISATION            = 192353,
     SPELL_RUNES_OF_SHIELDING        	= 217859,
+    SPELL_TELEPORT_CASTER               = 238689,
     SPELL_WAND_OF_DISPELLING            = 243043,
     SPELL_CASTER_READY_01               = 245843,
     SPELL_CASTER_READY_02               = 245848,
     SPELL_CASTER_READY_03               = 245849,
     SPELL_DISSOLVE                      = 255295,
     SPELL_ATTACHED                      = 262121,
+	SPELL_TELEPORT_TARGET               = 268294,
     SPELL_PORTAL_CHANNELING_01          = 286636,
 	SPELL_PORTAL_CHANNELING_02          = 287432,
 	SPELL_PORTAL_CHANNELING_03          = 288451,
+    SPELL_HOLD_BAG                      = 288787,
     SPELL_CHILLING_BLAST                = 337053,
     SPELL_ICY_GLARE                     = 338517,
     SPELL_ARCANE_BOMBARDMENT            = 352556,
@@ -118,8 +124,7 @@ enum DLPMisc
 
     // Guids
     GUID_PLAYER                         = 1,
-    GUID_BARRIER                        = 2,
-    GUID_STALKER                        = 3,
+    GUID_STALKER                        = 2,
 
     // Actions
     ACTION_DISPELL_BARRIER              = 5000000,
@@ -151,6 +156,8 @@ enum class DLPPhases
 	FindJaina02,                        // PC Stairs
 	FreeTheArcanist,
 	FreeCitizens,
+    KillBraseal,
+    KillSurdiel
 };
 
 struct SpawnPoint
@@ -165,7 +172,7 @@ struct SpawnPoint
 
 const SpawnPoint AethasPoint01 = { { 5802.03f, 840.00f, 680.07f, 4.60f }, { 5799.24f, 810.07f, 662.07f, 4.60f } };
 
-inline Position GetRandomPosition(Position center, float dist)
+inline Position const GetRandomPosition(Position center, float dist)
 {
 	float alpha = 2 * float(M_PI) * float(rand_norm());
 	float r = dist * sqrtf(float(rand_norm()));
@@ -174,7 +181,29 @@ inline Position GetRandomPosition(Position center, float dist)
 	return { x, y, center.GetPositionZ(), 0.f };
 }
 
+inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
+{
+    // Get center position
+    const Position center = target->GetPosition();
+
+    // Get X and Y position around the center with radius
+    float x = radius * cosf(angle) + center. GetPositionX();
+    float y = radius * sinf(angle) + center.GetPositionY();
+
+    // Get height map Z position
+    float z = center.GetPositionZ();
+    target->UpdateGroundPositionZ(x, y, z);
+
+    // Get orientation angle
+    const Position position = { x, y, z };
+    float o = position.GetAbsoluteAngle(center);
+
+    // Set final position
+    return { x, y, z, o };
+}
+
 const Position JainaPos01   = { 5792.42f, 732.09f, 640.20f, 4.36f };
+const Position BrasaelPos01 = { 5966.97f, 613.83f, 650.62f, 2.80f };
 
 const Position RathaellaPath01[RATHAELLA_PATH_01] =
 {

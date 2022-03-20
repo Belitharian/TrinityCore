@@ -101,6 +101,8 @@ class scenario_dalaran_purge : public InstanceMapScript
                 {
                     if (Creature* aethas = instance->SummonCreature(NPC_AETHAS_SUNREAVER, AethasPoint01.spawn))
                         aethas->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, AethasPoint01.destination, true, AethasPoint01.destination.GetOrientation());
+                    if (Creature* landalock = GetCreature(DATA_ARCHMAGE_LANDALOCK))
+                        landalock->CastSpell(landalock, SPELL_FROST_CANALISATION);
                     if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
                     {
                         if (Creature* zuros = GetCreature(DATA_MAGE_COMMANDER_ZUROS))
@@ -171,6 +173,13 @@ class scenario_dalaran_purge : public InstanceMapScript
                     SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FreeCitizens);
                     break;
                 }
+                // Serve and protect
+                case CRITERIA_TREE_SERVE_AND_PROTECT:
+                {
+                    Talk(GetJaina(), SAY_BRASAEL_JAINA_01);
+                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::KillBraseal);
+                    break;
+                }
 				default:
 					break;
 			}
@@ -180,12 +189,18 @@ class scenario_dalaran_purge : public InstanceMapScript
 		{
 			InstanceScript::OnCreatureCreate(creature);
 
-			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
+			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
 			creature->AddPvpFlag(UNIT_BYTE2_FLAG_PVP);
 			creature->AddUnitFlag(UNIT_FLAG_PVP_ENABLING);
 
 			switch (creature->GetEntry())
 			{
+                case NPC_MAGISTER_BRASAEL:
+                    creature->SetImmuneToAll(true);
+                    creature->SetSheath(SHEATH_STATE_UNARMED);
+                    creature->AddAura(SPELL_HOLD_BAG, creature);
+                    creature->SetEmoteState(EMOTE_STATE_LOOT_BITE_SOUND);
+                    break;
                 case NPC_DALARAN_CITIZEN:
                     if (roll_chance_i(30))
                         creature->SetEmoteState(EMOTE_STATE_COWER);
@@ -209,10 +224,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 					break;
 				case NPC_MAGISTER_HATHOREL:
 					creature->SetImmuneToAll(true);
-					break;
-				case NPC_ARCHMAGE_LANDALOCK:
-					creature->SetImmuneToAll(true);
-					creature->CastSpell(creature, SPELL_FROST_CANALISATION);
 					break;
 				case NPC_ICE_WALL:
 					creature->SetImmuneToAll(true);
