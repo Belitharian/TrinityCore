@@ -21,8 +21,6 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
-#include "InstanceScenario.h"
-#include "InstanceScript.h"
 #include "ScenarioMgr.h"
 #include "ScenarioPackets.h"
 
@@ -37,8 +35,6 @@ Scenario::Scenario(ScenarioData const* scenarioData) : _data(scenarioData), _cur
         SetStep(step);
     else
         TC_LOG_ERROR("scenario", "Scenario::Scenario: Could not launch Scenario (id: %u), found no valid scenario step", _data->Entry->ID);
-
-    _scenarioType = SCENARIO_INSTANCE_TYPE_SCENARIO;
 }
 
 Scenario::~Scenario()
@@ -179,58 +175,39 @@ bool Scenario::CanUpdateCriteriaTree(Criteria const * /*criteria*/, CriteriaTree
 
 bool Scenario::CanCompleteCriteriaTree(CriteriaTree const* tree)
 {
-    ScenarioStepEntry const* step = tree->ScenarioStep;
-    if (!step)
+    ScenarioStepEntry const* step = ASSERT_NOTNULL(tree->ScenarioStep);
+    ScenarioStepState const state = GetStepState(step);
+    if (state == SCENARIO_STEP_DONE)
         return false;
 
-    if (step->ScenarioID != _data->Entry->ID)
+    ScenarioStepEntry const* currentStep = GetStep();
+    if (!currentStep)
         return false;
 
-    if (step->IsBonusObjective())
-        return !IsComplete();
+    if (!step->IsBonusObjective())
+        if (step != currentStep)
+            return false;
 
-    if (step != GetStep())
-        return false;
-
-    return true;
+    return CriteriaHandler::CanCompleteCriteriaTree(tree);
 }
 
 void Scenario::CompletedCriteriaTree(CriteriaTree const* tree, Player* /*referencePlayer*/)
 {
-    OnCompletedCriteriaTree(tree);
-
-    ScenarioStepEntry const* step = tree->ScenarioStep;
-    if (!step)
-        return;
-
-    if (const CriteriaTree* parent = sCriteriaMgr->GetCriteriaTree(step->Criteriatreeid))
-    {
-        if (!IsCompletedCriteriaTree(parent))
-            return;
-
-        OnCompletedCriteriaTree(parent);
-    }
-
-    if (!step->IsBonusObjective() && step != GetStep())
-        return;
-
-    if (GetStepState(step) == SCENARIO_STEP_DONE)
+    ScenarioStepEntry const* step = ASSERT_NOTNULL(tree->ScenarioStep);
+    if (!IsCompletedStep(step))
         return;
 
     SetStepState(step, SCENARIO_STEP_DONE);
     CompleteStep(step);
 }
 
-void Scenario::OnCompletedCriteriaTree(CriteriaTree const* tree)
+bool Scenario::IsCompletedStep(ScenarioStepEntry const* step)
 {
-    if (InstanceScenario* instanceScenario = reinterpret_cast<InstanceScenario*>(this))
-    {
-        if (InstanceMap* instanceMap = instanceScenario->GetMap()->ToInstanceMap())
-        {
-            if (InstanceScript* instanceScript = instanceMap->GetInstanceScript())
-                instanceScript->OnCompletedCriteriaTree(tree);
-        }
-    }
+    CriteriaTree const* tree = sCriteriaMgr->GetCriteriaTree(step->Criteriatreeid);
+    if (!tree)
+        return false;
+
+    return IsCompletedCriteriaTree(tree);
 }
 
 void Scenario::SendPacket(WorldPacket const* data) const
@@ -357,9 +334,4 @@ void Scenario::SendBootPlayer(Player* player)
     WorldPackets::Scenario::ScenarioVacate scenarioBoot;
     scenarioBoot.ScenarioID = _data->Entry->ID;
     player->SendDirectMessage(scenarioBoot.Write());
-}
-
-void Scenario::SendScenarioEvent(Player* player, uint32 eventId)
-{
-    UpdateCriteria(CriteriaType::AnyoneTriggerGameEventScenario, eventId, 0, 0, nullptr, player);
 }

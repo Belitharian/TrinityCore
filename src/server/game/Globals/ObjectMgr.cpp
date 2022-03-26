@@ -1126,6 +1126,30 @@ void ObjectMgr::CheckCreatureTemplate(CreatureTemplate const* cInfo)
         const_cast<CreatureTemplate*>(cInfo)->flags_extra &= CREATURE_FLAG_EXTRA_DB_ALLOWED;
     }
 
+    if (uint32 disallowedUnitFlags = (cInfo->unit_flags & ~UNIT_FLAG_ALLOWED))
+    {
+        TC_LOG_ERROR("sql.sql", "Table `creature_template` lists creature (Entry: %u) with disallowed `unit_flags` %u, removing incorrect flag.", cInfo->Entry, disallowedUnitFlags);
+        const_cast<CreatureTemplate*>(cInfo)->unit_flags &= UNIT_FLAG_ALLOWED;
+    }
+
+    if (uint32 disallowedUnitFlags2 = (cInfo->unit_flags2 & ~UNIT_FLAG2_ALLOWED))
+    {
+        TC_LOG_ERROR("sql.sql", "Table `creature_template` lists creature (Entry: %u) with disallowed `unit_flags2` %u, removing incorrect flag.", cInfo->Entry, disallowedUnitFlags2);
+        const_cast<CreatureTemplate*>(cInfo)->unit_flags2 &= UNIT_FLAG2_ALLOWED;
+    }
+
+    if (uint32 disallowedUnitFlags3 = (cInfo->unit_flags3 & ~UNIT_FLAG3_ALLOWED))
+    {
+        TC_LOG_ERROR("sql.sql", "Table `creature_template` lists creature (Entry: %u) with disallowed `unit_flags2` %u, removing incorrect flag.", cInfo->Entry, disallowedUnitFlags3);
+        const_cast<CreatureTemplate*>(cInfo)->unit_flags3 &= UNIT_FLAG3_ALLOWED;
+    }
+
+    if (cInfo->dynamicflags)
+    {
+        TC_LOG_ERROR("sql.sql", "Table `creature_template` lists creature (Entry: %u) with `dynamicflags` > 0. Ignored and set to 0.", cInfo->Entry);
+        const_cast<CreatureTemplate*>(cInfo)->dynamicflags = 0;
+    }
+
     std::pair<int16, int16> levels = cInfo->GetMinMaxLevel();
     if (levels.first < 1 || levels.first > STRONG_MAX_LEVEL)
     {
@@ -1607,31 +1631,26 @@ CreatureModel const* ObjectMgr::ChooseDisplayId(CreatureTemplate const* cinfo, C
     return cinfo->GetFirstInvisibleModel();
 }
 
-void ObjectMgr::ChooseCreatureFlags(CreatureTemplate const* cInfo, uint64& npcFlags, uint32& unitFlags, uint32& unitFlags2, uint32& unitFlags3, uint32& dynamicFlags, CreatureData const* data /*= nullptr*/)
+void ObjectMgr::ChooseCreatureFlags(CreatureTemplate const* cInfo, uint64* npcFlags, uint32* unitFlags, uint32* unitFlags2, uint32* unitFlags3, uint32* dynamicFlags, CreatureData const* data /*= nullptr*/)
 {
-    npcFlags = cInfo->npcflag;
-    unitFlags = cInfo->unit_flags;
-    unitFlags2 = cInfo->unit_flags2;
-    unitFlags3 = cInfo->unit_flags3;
-    dynamicFlags = cInfo->dynamicflags;
+#define ChooseCreatureFlagSource(field) ((data && data->field) ? data->field : cInfo->field)
 
-    if (data)
-    {
-        if (data->npcflag)
-            npcFlags = data->npcflag;
+    if (npcFlags)
+        *npcFlags = ChooseCreatureFlagSource(npcflag);
 
-        if (data->unit_flags)
-            unitFlags = data->unit_flags;
+    if (unitFlags)
+        *unitFlags = ChooseCreatureFlagSource(unit_flags);
 
-        if (data->unit_flags2)
-            unitFlags2 = data->unit_flags2;
+    if (unitFlags2)
+        *unitFlags2 = ChooseCreatureFlagSource(unit_flags2);
 
-        if (data->unit_flags3)
-            unitFlags3 = data->unit_flags3;
+    if (unitFlags3)
+        *unitFlags3 = ChooseCreatureFlagSource(unit_flags3);
 
-        if (data->dynamicflags)
-            dynamicFlags = data->dynamicflags;
-    }
+    if (dynamicFlags)
+        *dynamicFlags = ChooseCreatureFlagSource(dynamicflags);
+
+#undef ChooseCreatureFlagSource
 }
 
 CreatureModelInfo const* ObjectMgr::GetCreatureModelRandomGender(CreatureModel* model, CreatureTemplate const* creatureTemplate) const
@@ -2309,6 +2328,30 @@ void ObjectMgr::LoadCreatures()
                 TC_LOG_ERROR("sql.sql", "Table `creature` have creature (GUID: " UI64FMTD " Entry: %u) with `terrainSwapMap` %u which cannot be used on spawn map, set to -1", guid, data.id, data.terrainSwapMap);
                 data.terrainSwapMap = -1;
             }
+        }
+
+        if (uint32 disallowedUnitFlags = (data.unit_flags & ~UNIT_FLAG_ALLOWED))
+        {
+            TC_LOG_ERROR("sql.sql", "Table `creature` has creature (GUID: " UI64FMTD " Entry: %u) with disallowed `unit_flags` %u, removing incorrect flag.", guid, data.id, disallowedUnitFlags);
+            data.unit_flags &= UNIT_FLAG_ALLOWED;
+        }
+
+        if (uint32 disallowedUnitFlags2 = (data.unit_flags2 & ~UNIT_FLAG2_ALLOWED))
+        {
+            TC_LOG_ERROR("sql.sql", "Table `creature` has creature (GUID: " UI64FMTD " Entry: %u) with disallowed `unit_flags2` %u, removing incorrect flag.", guid, data.id, disallowedUnitFlags2);
+            data.unit_flags2 &= UNIT_FLAG2_ALLOWED;
+        }
+
+        if (uint32 disallowedUnitFlags3 = (data.unit_flags3 & ~UNIT_FLAG3_ALLOWED))
+        {
+            TC_LOG_ERROR("sql.sql", "Table `creature` has creature (GUID: " UI64FMTD " Entry: %u) with disallowed `unit_flags2` %u, removing incorrect flag.", guid, data.id, disallowedUnitFlags3);
+            data.unit_flags3 &= UNIT_FLAG3_ALLOWED;
+        }
+
+        if (data.dynamicflags)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `creature` has creature (GUID: " UI64FMTD " Entry: %u) with `dynamicflags` > 0. Ignored and set to 0.", guid, data.id);
+            data.dynamicflags = 0;
         }
 
         if (sWorld->getBoolConfig(CONFIG_CALCULATE_CREATURE_ZONE_AREA_DATA))

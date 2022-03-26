@@ -66,6 +66,7 @@
 #include "PlayerAI.h"
 #include "QuestDef.h"
 #include "Spell.h"
+#include "ScheduledChangeAI.h"
 #include "SpellAuraEffects.h"
 #include "SpellAuras.h"
 #include "SpellHistory.h"
@@ -318,7 +319,6 @@ Unit::Unit(bool isWorldObject) :
         m_attackTimer[i] = 0;
     }
 
-    m_extraAttacks = 0;
     m_canDualWield = false;
 
     m_movementCounter = 0;
@@ -398,6 +398,8 @@ Unit::Unit(bool isWorldObject) :
     _isWalkingBeforeCharm = false;
     _instantCast = false;
     _isCombatDisallowed = false;
+
+    _lastExtraAttackSpell = 0;
 }
 
 ////////////////////////////////////////////////////////////
@@ -453,6 +455,21 @@ void Unit::Update(uint32 p_time)
 
     m_combatManager.Update(p_time);
 
+    _lastDamagedTargetGuid = ObjectGuid::Empty;
+    if (_lastExtraAttackSpell)
+    {
+        while (!extraAttacksTargets.empty())
+        {
+            auto itr = extraAttacksTargets.begin();
+            ObjectGuid targetGuid = itr->first;
+            uint32 count = itr->second;
+            extraAttacksTargets.erase(itr);
+            if (Unit* victim = ObjectAccessor::GetUnit(*this, targetGuid))
+                HandleProcExtraAttackFor(victim, count);
+        }
+        _lastExtraAttackSpell = 0;
+    }
+
     // not implemented before 3.0.2
     if (uint32 base_att = getAttackTimer(BASE_ATTACK))
         setAttackTimer(BASE_ATTACK, (p_time >= base_att ? 0 : base_att - p_time));
@@ -486,7 +503,7 @@ void Unit::Update(uint32 p_time)
     // All position info based actions have been executed, reset info
     _positionUpdateInfo.Reset();
 
-    if (!GetAI() && (GetTypeId() != TYPEID_PLAYER || (IsCharmed() && GetCharmerGUID().IsCreature())))
+    if (HasScheduledAIChange() && (GetTypeId() != TYPEID_PLAYER || (IsCharmed() && GetCharmerGUID().IsCreature())))
         UpdateCharmAI();
     RefreshAI();
 }
@@ -2001,7 +2018,10 @@ void Unit::HandleEmoteCommand(Emote emoteId, Player* target /*=nullptr*/, Trinit
 
 void Unit::AttackerStateUpdate(Unit* victim, WeaponAttackType attType, bool extra)
 {
-    if (HasUnitState(UNIT_STATE_CANNOT_AUTOATTACK) || HasUnitFlag(UNIT_FLAG_PACIFIED))
+    if (HasUnitFlag(UNIT_FLAG_PACIFIED))
+        return;
+
+    if (HasUnitState(UNIT_STATE_CANNOT_AUTOATTACK) && !extra)
         return;
 
     if (HasAuraType(SPELL_AURA_DISABLE_ATTACKING_EXCEPT_ABILITIES))
@@ -2018,6 +2038,9 @@ void Unit::AttackerStateUpdate(Unit* victim, WeaponAttackType attType, bool extr
 
     if (attType != BASE_ATTACK && attType != OFF_ATTACK)
         return;                                             // ignore ranged case
+
+    if (!extra && _lastExtraAttackSpell)
+        _lastExtraAttackSpell = 0;
 
     if (GetTypeId() == TYPEID_UNIT && !HasUnitFlag(UNIT_FLAG_POSSESSED) && !HasUnitFlag2(UNIT_FLAG2_CANNOT_TURN))
         SetFacingToObject(victim, false); // update client side facing to face the target (prevents visual glitches when casting untargeted spells)
@@ -2062,6 +2085,8 @@ void Unit::AttackerStateUpdate(Unit* victim, WeaponAttackType attType, bool extr
             Unit::DealDamageMods(damageInfo.Attacker, victim, damageInfo.Damage, &damageInfo.Absorb);
             SendAttackStateUpdate(&damageInfo);
 
+            _lastDamagedTargetGuid = victim->GetGUID();
+
             DealMeleeDamage(&damageInfo, true);
 
             DamageInfo dmgInfo(damageInfo);
@@ -2083,13 +2108,28 @@ void Unit::AttackerStateUpdate(Unit* victim, WeaponAttackType attType, bool extr
     }
 }
 
-void Unit::HandleProcExtraAttackFor(Unit* victim)
+void Unit::HandleProcExtraAttackFor(Unit* victim, uint32 count)
 {
-    while (m_extraAttacks)
+    while (count)
     {
+        --count;
         AttackerStateUpdate(victim, BASE_ATTACK, true);
-        --m_extraAttacks;
     }
+}
+
+void Unit::AddExtraAttacks(uint32 count)
+{
+    ObjectGuid targetGUID = _lastDamagedTargetGuid;
+    if (!targetGUID)
+    {
+        ObjectGuid selection = GetTarget();
+        if (!selection.IsEmpty())
+            targetGUID = selection; // Spell was cast directly (not triggered by aura)
+        else
+            return;
+    }
+
+    extraAttacksTargets[targetGUID] += count;
 }
 
 MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(Unit const* victim, WeaponAttackType attType) const
@@ -2125,7 +2165,7 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(Unit const* victim, WeaponAttackTy
     bool canDodge = victim->GetTypeId() != TYPEID_PLAYER || canParryOrBlock;
 
     // if victim is casting or cc'd it can't avoid attacks
-    if (victim->IsNonMeleeSpellCast(false) || victim->HasUnitState(UNIT_STATE_CONTROLLED))
+    if (victim->IsNonMeleeSpellCast(false, false, true) || victim->HasUnitState(UNIT_STATE_CONTROLLED))
     {
         canDodge = false;
         canParryOrBlock = false;
@@ -2373,7 +2413,7 @@ SpellMissInfo Unit::MeleeSpellHitResult(Unit* victim, SpellInfo const* spellInfo
     bool canBlock = spellInfo->HasAttribute(SPELL_ATTR3_BLOCKABLE_SPELL);
 
     // if victim is casting or cc'd it can't avoid attacks
-    if (victim->IsNonMeleeSpellCast(false) || victim->HasUnitState(UNIT_STATE_CONTROLLED))
+    if (victim->IsNonMeleeSpellCast(false, false, true) || victim->HasUnitState(UNIT_STATE_CONTROLLED))
     {
         canDodge = false;
         canParry = false;
@@ -2882,7 +2922,7 @@ void Unit::InterruptSpell(CurrentSpellTypes spellType, bool withDelayed, bool wi
         }
 
         if (GetTypeId() == TYPEID_UNIT && IsAIEnabled())
-            ToCreature()->AI()->OnSpellCastFinished(spell->GetSpellInfo(), SPELL_FINISHED_CANCELED);
+            ToCreature()->AI()->OnSpellFailed(spell->GetSpellInfo());
     }
 }
 
@@ -9195,11 +9235,11 @@ void Unit::ScheduleAIChange()
     bool const charmed = IsCharmed();
 
     if (charmed)
-        PushAI(nullptr);
+        PushAI(GetScheduledChangeAI());
     else
     {
         RestoreDisabledAI();
-        PushAI(nullptr); //This could actually be PopAI() to get the previous AI but it's required atm to trigger UpdateCharmAI()
+        PushAI(GetScheduledChangeAI()); //This could actually be PopAI() to get the previous AI but it's required atm to trigger UpdateCharmAI()
     }
 }
 
@@ -9207,8 +9247,24 @@ void Unit::RestoreDisabledAI()
 {
     // Keep popping the stack until we either reach the bottom or find a valid AI
     while (PopAI())
-        if (GetTopAI())
+        if (GetTopAI() && dynamic_cast<ScheduledChangeAI*>(GetTopAI()) == nullptr)
             return;
+}
+
+UnitAI* Unit::GetScheduledChangeAI()
+{
+    if (Creature* creature = ToCreature())
+        return sCreatureAIRegistry->GetRegistryItem("ScheduledChangeAI")->Create(creature);
+    else
+        return nullptr;
+}
+
+bool Unit::HasScheduledAIChange() const
+{
+    if (UnitAI* ai = GetAI())
+        return dynamic_cast<ScheduledChangeAI*>(ai) != nullptr;
+    else
+        return true;
 }
 
 void Unit::AddToWorld()
@@ -11045,7 +11101,7 @@ bool Unit::SetCharmedBy(Unit* charmer, CharmType type, AuraApplication const* au
     }
 
     CastStop();
-    CombatStop(); /// @todo CombatStop(true) may cause crash (interrupt spells)
+    AttackStop();
 
     Player* playerCharmer = charmer->ToPlayer();
 
@@ -11106,7 +11162,13 @@ bool Unit::SetCharmedBy(Unit* charmer, CharmType type, AuraApplication const* au
     // charm is set by aura, and aura effect remove handler was called during apply handler execution
     // prevent undefined behaviour
     if (aurApp && aurApp->GetRemoveMode())
+    {
+        // properly clean up charm changes up to this point to avoid leaving the unit in partially charmed state
+        SetFaction(_oldFactionId);
+        GetMotionMaster()->InitializeDefault();
+        charmer->SetCharm(this, false);
         return false;
+    }
 
     // Pets already have a properly initialized CharmInfo, don't overwrite it.
     if (type != CHARM_TYPE_VEHICLE && !GetCharmInfo())
@@ -11196,7 +11258,7 @@ void Unit::RemoveCharmedBy(Unit* charmer)
         type = CHARM_TYPE_CHARM;
 
     CastStop();
-    CombatStop(); /// @todo CombatStop(true) may cause crash (interrupt spells)
+    AttackStop();
 
     if (_oldFactionId)
     {
@@ -11217,6 +11279,7 @@ void Unit::RemoveCharmedBy(Unit* charmer)
     ASSERT(type != CHARM_TYPE_VEHICLE || (GetTypeId() == TYPEID_UNIT && IsVehicle()));
 
     charmer->SetCharm(this, false);
+    m_combatManager.RevalidateCombat();
 
     Player* playerCharmer = charmer->ToPlayer();
     if (playerCharmer)
@@ -12069,9 +12132,6 @@ void Unit::_ExitVehicle(Position const* exitPosition)
         pos = vehicle->GetBase()->GetPosition();
         pos.SetOrientation(GetOrientation());
 
-        // To-do: snap this hook out of existance
-        sScriptMgr->ModifyVehiclePassengerExitPos(this, vehicle, pos);
-
         // Change exit position based on seat entry addon data
         if (seatAddon)
         {
@@ -12495,7 +12555,7 @@ bool Unit::SetWalk(bool enable)
     return true;
 }
 
-bool Unit::SetDisableGravity(bool disable, bool updateAnimationTier /*= true*/)
+bool Unit::SetDisableGravity(bool disable, bool updateAnimTier /*= true*/)
 {
     if (disable == IsGravityDisabled())
         return false;
@@ -12532,7 +12592,7 @@ bool Unit::SetDisableGravity(bool disable, bool updateAnimationTier /*= true*/)
         SendMessageToSet(packet.Write(), true);
     }
 
-    if (IsCreature() && updateAnimationTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT) && !ToCreature()->GetMovementTemplate().IsRooted())
+    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT) && !ToCreature()->GetMovementTemplate().IsRooted())
     {
         if (IsGravityDisabled())
             SetAnimTier(AnimTier::Fly);
@@ -12698,7 +12758,7 @@ bool Unit::SetFeatherFall(bool enable)
     return true;
 }
 
-bool Unit::SetHover(bool enable, bool updateAnimationTier /*= true*/)
+bool Unit::SetHover(bool enable, bool updateAnimTier /*= true*/)
 {
     if (enable == HasUnitMovementFlag(MOVEMENTFLAG_HOVER))
         return false;
@@ -12748,7 +12808,7 @@ bool Unit::SetHover(bool enable, bool updateAnimationTier /*= true*/)
         SendMessageToSet(packet.Write(), true);
     }
 
-    if (IsCreature() && updateAnimationTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT) && !ToCreature()->GetMovementTemplate().IsRooted())
+    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT) && !ToCreature()->GetMovementTemplate().IsRooted())
     {
         if (IsGravityDisabled())
             SetAnimTier(AnimTier::Fly);
