@@ -706,7 +706,7 @@ class npc_kalecgos_theramore : public CreatureScript
 				switch (id)
 				{
 					case MOVEMENT_INFO_POINT_01:
-						me->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+						me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 						me->SetImmuneToAll(true);
 						scheduler.Schedule(2s, [this](TaskContext /*context*/)
 						{

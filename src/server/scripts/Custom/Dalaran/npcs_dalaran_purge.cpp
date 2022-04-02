@@ -2002,7 +2002,7 @@ struct npc_high_arcanist_savor : public CustomAI
                             player->CastSpell(player, SPELL_SPEED_NORMAL, true);
 							player->CastSpell(player, SPELL_REWIND_TIME, true);
 							player->CastSpell(player, SPELL_ETERNAL_SILENCE, true);
-							player->AddUnitFlag(UnitFlags(UNIT_FLAG_PACIFIED | UNIT_FLAG_SILENCED));
+							player->SetUnitFlag(UnitFlags(UNIT_FLAG_PACIFIED | UNIT_FLAG_SILENCED));
 							player->SetClientControl(player, false);
 							player->GetMotionMaster()->MoveCharge(clone->GetPositionX(), clone->GetPositionY(), clone->GetPositionZ(), cloneDist / 3.0f);
 							player->ToPlayer()->SetFullHealth();
@@ -2100,7 +2100,7 @@ struct npc_arcane_barrier : public NullCreatureAI
 		{
 			colliderGUID = collider->GetGUID();
 
-			collider->AddFlag(GO_FLAG_NOT_SELECTABLE);
+			collider->SetFlag(GO_FLAG_NOT_SELECTABLE);
 		}
 	}
 
@@ -2322,7 +2322,7 @@ struct npc_glacial_spike : public NullCreatureAI
 
 	void JustAppeared() override
 	{
-		me->SetUnitFlags(UNIT_FLAG_UNINTERACTIBLE);
+		me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 		me->AddAura(SPELL_GLACIAL_SPIKE_COSMETIC, me);
 		me->DespawnOrUnsummon(10s);
 

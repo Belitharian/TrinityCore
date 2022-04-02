@@ -99,7 +99,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					instance->SummonCreature(NPC_KALECGOS, KalecgosPath01[0]);
 					if (Creature* kalecgos = GetKalecgos())
 					{
-						kalecgos->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+						kalecgos->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						kalecgos->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, KalecgosPath01, KALECGOS_PATH_01, false, false, KalecgosPath01[KALECGOS_PATH_01 - 1].GetOrientation());
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::FindJaina_Isle_Valided);
@@ -158,8 +158,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			InstanceScript::OnCreatureCreate(creature);
 
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
-            creature->AddPvpFlag(UNIT_BYTE2_FLAG_PVP);
-            creature->AddUnitFlag(UNIT_FLAG_PVP_ENABLING);
+            creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
+            creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
 
 			switch (creature->GetEntry())
 			{
@@ -181,7 +181,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case NPC_ARCHMAGE_TERVOSH:
 				case NPC_KINNDY_SPARKSHINE:
 					FeingDeath(creature);
-					creature->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+					creature->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 					creature->AddAura(SPELL_SHIMMERDUST, creature);
 					creature->AddAura(SPELL_COSMETIC_PURPLE_VERTEX_STATE, creature);
 					break;
@@ -195,7 +195,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			InstanceScript::OnGameObjectCreate(go);
 
 			if (go->GetEntry() == GOB_BROKEN_GLASS)
-				go->SetFlags(GO_FLAG_NOT_SELECTABLE);
+				go->SetFlag(GO_FLAG_NOT_SELECTABLE);
 		}
 
 		void Update(uint32 diff) override
@@ -210,7 +210,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					if (Creature* jaina = GetJaina())
 					{
 						jaina->SetWalk(true);
-						jaina->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+						jaina->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						jaina->GetMotionMaster()->MovePoint(0, JainaPoint01, true, JainaPoint01.GetOrientation());
 					}
 					Next(3s);
@@ -296,7 +296,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					break;
 				case 16:
 					if (Creature* jaina = GetJaina())
-						jaina->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+						jaina->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 					Next(2s);
 					break;
 				case 17:
@@ -304,7 +304,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					if (Creature* kalecgos = GetKalecgos())
 					{
 						Talk(kalecgos, SAY_AFTER_BATTLE_KALECGOS_13);
-						kalecgos->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+						kalecgos->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						if (Player* player = instance->GetPlayers().begin()->GetSource())
 							kalecgos->SetFacingToObject(player);
 					}
@@ -566,7 +566,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 							elemental->DespawnOrUnsummon(1s);
 
 						jaina->CastSpell(jaina, SPELL_COSMETIC_ARCANE_DISSOLVE);
-						jaina->AddUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+						jaina->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 					}
 					break;
 
@@ -615,8 +615,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			creature->SetRegenerateHealth(false);
 			creature->SetHealth(0U);
 			creature->SetStandState(UNIT_STAND_STATE_DEAD);
-			creature->AddUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
-			creature->AddUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
+			creature->SetUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
+			creature->SetUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
 			creature->SetImmuneToAll(true);
 		}
 

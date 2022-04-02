@@ -238,12 +238,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case CRITERIA_TREE_FIND_JAINA:
 				{
 					ClosePortal(DATA_PORTAL_TO_STORMWIND);
-					GetTervosh()->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-					GetKinndy()->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-					GetKalec()->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+					GetTervosh()->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+					GetKinndy()->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+					GetKalec()->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					if (Creature* jaina = GetCreature(DATA_JAINA_PROUDMOORE))
 					{
-						jaina->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+						jaina->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						Talk(jaina, SAY_REUNION_1);
 						SetTarget(jaina);
 					}
@@ -274,7 +274,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 								continue;
 							if (citizen->GetEntry() == NPC_ALLIANCE_PEASANT)
 								continue;
-							citizen->SetNpcFlags(UNIT_NPC_FLAG_GOSSIP);
+							citizen->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 						}
 					}
 					if (Creature* kinndy = GetKinndy())
@@ -352,7 +352,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						if (Creature* tank = instance->GetCreature(guid))
 						{
-							tank->SetNpcFlags(UNIT_NPC_FLAG_SPELLCLICK);
+							tank->SetNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
 							tank->SetRegenerateHealth(false);
 							tank->SetHealth((float)tank->GetHealth() * frand(0.15f, 0.60f));
 						}
@@ -560,7 +560,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					for (uint8 i = 0; i < CREATURE_DATA_SIZE; i++)
 					{
 						if (Creature* creature = GetCreature(creatureData[i].type))
-							creature->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+							creature->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::WaitForAmara_JoinJaina);
 					events.ScheduleEvent(142, 500ms);
@@ -591,8 +591,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			InstanceScript::OnCreatureCreate(creature);
 
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
-            creature->AddPvpFlag(UNIT_BYTE2_FLAG_PVP);
-            creature->AddUnitFlag(UNIT_FLAG_PVP_ENABLING);
+            creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
+            creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
 
 			switch (creature->GetEntry())
 			{
@@ -640,7 +640,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case GOB_PORTAL_TO_ORGRIMMAR:
 					go->SetLootState(GO_READY);
 					go->UseDoorOrButton();
-					go->SetFlags(GO_FLAG_NOT_SELECTABLE);
+					go->SetFlag(GO_FLAG_NOT_SELECTABLE);
 					break;
 				default:
 					break;
@@ -806,7 +806,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                             }
 
 							creature->SetWalk(true);
-							creature->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+							creature->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 							creature->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, perithLocation[i].destination, false, perithLocation[i].destination.GetOrientation());
 						}
 					}
@@ -1053,7 +1053,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						EnsurePlayerHaveShaker();
 						if (Creature* hedric = GetHedric())
 						{
-							hedric->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+							hedric->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 							hedric->GetMotionMaster()->Clear();
 							hedric->GetMotionMaster()->MoveIdle();
 							hedric->NearTeleportTo(HedricPoint01);
@@ -1100,7 +1100,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					else if (Creature* creature = instance->SummonCreature(archmagesLocation[archmagesIndex].dataId, PortalPoint01))
 					{
                         creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-						creature->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+						creature->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						creature->SetSheath(SHEATH_STATE_UNARMED);
 						creature->CastSpell(creature, SPELL_TELEPORT_DUMMY);
 						creature->SetWalk(true);
@@ -1214,7 +1214,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                                 case NPC_RHONIN:
                                 case NPC_THADER_WINDERMERE:
                                     creature->CastSpell(creature, SPELL_CHAT_BUBBLE, true);
-									creature->AddNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+									creature->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 									break;
 								case NPC_THALEN_SONGWEAVER:
 									creature->CastSpell(creature, SPELL_PORTAL_CHANNELING_02);
@@ -1246,7 +1246,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case 93:
 					if (Creature* thalen = GetThalen())
 					{
-						thalen->AddUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+						thalen->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
 						thalen->SetReactState(REACT_PASSIVE);
 						thalen->SetFaction(FACTION_ENEMY);
 						thalen->RemoveAllAuras();
@@ -1640,7 +1640,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case 162:
 					if (Creature* jaina = GetJaina())
 					{
-						jaina->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+						jaina->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						jaina->SetFacingToObject(GetRhonin());
 						jaina->RemoveAllAuras();
 
@@ -1649,7 +1649,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							jaina->SetTarget(rhonin->GetGUID());
 
 							rhonin->SetTarget(jaina->GetGUID());
-							rhonin->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+							rhonin->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						}
 					}
 					Next(3s);

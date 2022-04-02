@@ -152,11 +152,11 @@ class scenario_dalaran_purge : public InstanceMapScript
                 case CRITERIA_TREE_FIRST_STEP:
                 {
                     if (Creature* rathaella = GetCreature(DATA_ARCANIST_RATHAELLA))
-                        rathaella->AddNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+                        rathaella->SetNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
                     if (Creature* landalock = GetCreature(DATA_ARCHMAGE_LANDALOCK))
                     {
-                        landalock->AddUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-                        landalock->SetNpcFlags(UNIT_NPC_FLAG_GOSSIP);
+                        landalock->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+                        landalock->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
                         landalock->CastSpell(landalock, SPELL_CHAT_BUBBLE, true);
                     }
                     break;
@@ -190,8 +190,8 @@ class scenario_dalaran_purge : public InstanceMapScript
 			InstanceScript::OnCreatureCreate(creature);
 
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
-			creature->AddPvpFlag(UNIT_BYTE2_FLAG_PVP);
-			creature->AddUnitFlag(UNIT_FLAG_PVP_ENABLING);
+			creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
+			creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
 
 			switch (creature->GetEntry())
 			{
@@ -229,7 +229,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					break;
 				case NPC_ICE_WALL:
 					creature->SetImmuneToAll(true);
-					creature->SetUnitFlags(UNIT_FLAG_UNINTERACTIBLE);
+					creature->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 					break;
 				case NPC_JAINA_PROUDMOORE_PATROL:
 				case NPC_BOUND_WATER_ELEMENTAL:
@@ -239,7 +239,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					patrol.push_back(creature);
 					break;
 				case NPC_VEREESA_WINDRUNNER:
-					creature->SetNpcFlags(UNIT_NPC_FLAG_NONE);
+					creature->SetNpcFlag(UNIT_NPC_FLAG_NONE);
 					break;
 				case NPC_AETHAS_SUNREAVER:
 					creature->SetImmuneToAll(true);
