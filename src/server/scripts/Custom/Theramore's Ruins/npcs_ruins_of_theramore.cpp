@@ -36,7 +36,7 @@ class npc_water_elementals_theramore : public CreatureScript
 
 		float GetDistance() override
 		{
-			return 12.f;
+			return 5.f;
 		}
 
 		void JustEngagedWith(Unit* /*who*/) override
@@ -50,7 +50,7 @@ class npc_water_elementals_theramore : public CreatureScript
 					DoCastVictim(SPELL_WATER_BOLT);
 					water_bolt.Repeat(3s);
 				})
-                .Schedule(3s, [this](TaskContext watery_dome)
+                .Schedule(1min, [this](TaskContext watery_dome)
                 {
                     DoCastSelf(SPELL_WATERY_DOME);
                     watery_dome.Repeat(30s, 45s);

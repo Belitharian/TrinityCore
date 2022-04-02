@@ -1803,26 +1803,23 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 		void TeleportPlayers(Creature* caster, const Position center, float minDist)
 		{
-			Map::PlayerList const& PlayerList = instance->GetPlayers();
-			if (PlayerList.isEmpty())
-				return;
+            Position pos = GetRandomPosition(center, 8.f);
+            instance->DoOnPlayers([caster, center, minDist, pos](Player* player)
+            {
+                if (player->IsWithinDist(caster, minDist))
+                {
+                    float x = pos.GetPositionX();
+                    float y = pos.GetPositionY();
 
-			Position pos = GetRandomPosition(center, 8.f);
-			for (Map::PlayerList::const_iterator i = PlayerList.begin(); i != PlayerList.end(); ++i)
-			{
-				if (Player* player = i->GetSource())
-				{
-					if (player->IsWithinDist(caster, minDist))
-					{
-						float x = pos.GetPositionX();
-						float y = pos.GetPositionY();
-						float z = pos.GetPositionZ();
+                    float z = pos.GetPositionZ();
+                    player->UpdateGroundPositionZ(x, y, z);
 
-						player->UpdateGroundPositionZ(x, y, z);
-						player->NearTeleportTo(x, y, z, pos.GetOrientation());
-					}
-				}
-			}
+                    const Position position = { x, y, z };
+                    float o = position.GetAbsoluteAngle(center);
+
+                    player->NearTeleportTo(x, y, z, o);
+                }
+            });
 		}
 
 		void HordeMembersInvoker(uint32 waveId, ObjectGuid* hordes)
@@ -1863,11 +1860,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					float x = pos.GetPositionX();
 					float y = pos.GetPositionY();
 					float z = pos.GetPositionZ();
+                    float o = pos.GetOrientation();
 
 					temp->SetBoundingRadius(20.f);
 					temp->UpdateGroundPositionZ(x, y, z);
-					temp->NearTeleportTo(x, y, z, pos.GetOrientation());
-					temp->SetHomePosition(x, y, z, pos.GetOrientation());
+					temp->NearTeleportTo(x, y, z, o);
+					temp->SetHomePosition(x, y, z, o);
 					temp->CastSpell(temp, SPELL_THALYSSRA_SPAWNS, true);
 
 					if (Unit * target = temp->SelectNearestHostileUnitInAggroRange())
@@ -1910,33 +1908,27 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				jaina->AI()->Talk(SAY_BATTLE_ALERT);
 				jaina->AI()->Talk(groupId);
 
-				Map::PlayerList const& PlayerList = instance->GetPlayers();
-				if (PlayerList.isEmpty())
-					return;
+                instance->DoOnPlayers([this, jaina, position](Player* player)
+                {
+                    if (player->IsWithinDist(jaina, 25.f))
+                    {
+                        Position playerPos = GetRandomPosition(position, 3.f);
 
-				for (Map::PlayerList::const_iterator i = PlayerList.begin(); i != PlayerList.end(); ++i)
-				{
-					if (Player* player = i->GetSource())
-					{
-						if (player->IsWithinDist(jaina, 25.f))
-						{
-							Position playerPos = GetRandomPosition(position, 3.f);
+                        // Si le joueur est à plus de 25 mètre de la destination d'attaque
+                        float distance = playerPos.GetExactDist2d(player->GetPosition());
+                        if (distance > 25.0f)
+                        {
+                            float x = playerPos.GetPositionX();
+                            float y = playerPos.GetPositionY();
+                            float z = playerPos.GetPositionZ();
+                            float o = playerPos.GetOrientation();
 
-							// Si le joueur est à plus de 25 mètre de la destination d'attaque
-							float distance = playerPos.GetExactDist2d(player->GetPosition());
-							if (distance > 25.0f)
-							{
-								float x = playerPos.GetPositionX();
-								float y = playerPos.GetPositionY();
-								float z = playerPos.GetPositionZ();
-
-								player->UpdateGroundPositionZ(x, y, z);
-								player->NearTeleportTo(playerPos);
-								player->CastSpell(player, SPELL_TELEPORT_DUMMY);
-							}
-						}
-					}
-				}
+                            player->UpdateGroundPositionZ(x, y, z);
+                            player->NearTeleportTo(x, y, z, o);
+                            player->CastSpell(player, SPELL_TELEPORT_DUMMY);
+                        }
+                    }
+                });
 			}
 		}
 
@@ -2078,7 +2070,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			float r = dist * sqrtf(float(rand_norm()));
 			float x = r * cosf(alpha) + center.GetPositionX();
 			float y = r * sinf(alpha) + center.GetPositionY();
-			return { x, y, center.GetPositionZ(), 0.f };
+            float z = center.GetPositionZ();
+
+            const Position position = { x, y, z };
+            float o = position.GetAbsoluteAngle(center);
+
+            return { x, y, z, o };
 		}
 
         #pragma endregion

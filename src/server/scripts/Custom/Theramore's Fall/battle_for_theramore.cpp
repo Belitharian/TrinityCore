@@ -479,11 +479,8 @@ class npc_rhonin : public CreatureScript
 			return true;
 		}
 
-        void OnSpellCastFinished(SpellInfo const* spell, SpellFinishReason reason) override
+        void OnSpellCast(SpellInfo const* spell) override
         {
-            if (reason != SPELL_FINISHED_SUCCESSFUL_CAST)
-                return;
-
 			switch (spell->Id)
 			{
 				case SPELL_ARCANE_BLAST:

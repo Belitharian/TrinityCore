@@ -2,6 +2,7 @@
 #include "CreatureGroups.h"
 #include "EventMap.h"
 #include "GameObject.h"
+#include "GameTime.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
 #include "Log.h"
@@ -29,6 +30,7 @@ const ObjectData creatureData[] =
 	{ NPC_MAGISTER_HATHOREL,            DATA_MAGISTER_HATHOREL          },
 	{ NPC_MAGISTER_SURDIEL,             DATA_MAGISTER_SURDIEL           },
 	{ NPC_ARCANIST_RATHAELLA,           DATA_ARCANIST_RATHAELLA         },
+	{ NPC_HIGH_ARCANIST_SAVOR,          DATA_HIGH_ARCANIST_SAVOR        },
 	{ 0,                                0                               }   // END
 };
 
@@ -53,18 +55,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 			LoadObjectData(creatureData, gameobjectData);
 		}
 
-		void OnPlayerEnter(Player* player) override
-		{
-			player->CastSpell(player, SPELL_PHASE_CITIZENS, true);
-			player->CastSpell(player, SPELL_PHASE_HIGH_SUNREAVER_MAGES, true);
-		}
-
-		void OnPlayerLeave(Player* player) override
-		{
-			player->RemoveAurasDueToSpell(SPELL_PHASE_CITIZENS);
-			player->RemoveAurasDueToSpell(SPELL_PHASE_HIGH_SUNREAVER_MAGES);
-		}
-
 		uint32 GetData(uint32 dataId) const override
 		{
 			if (dataId == DATA_SCENARIO_PHASE)
@@ -80,11 +70,10 @@ class scenario_dalaran_purge : public InstanceMapScript
 					phase = (DLPPhases)value;
 					break;
                 case EVENT_FIND_JAINA_02:
-                    #ifdef DEBUG
+                    #ifdef CUSTOM_DEBUG
                         DoSendScenarioEvent(EVENT_FIND_JAINA_02);
-                    #else
-                        SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FreeTheArcanist);
                     #endif
+                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FreeTheArcanist);
                     events.ScheduleEvent(14, 2s);
                     break;
 				default:
@@ -109,10 +98,10 @@ class scenario_dalaran_purge : public InstanceMapScript
                         {
                             surdiel->AI()->AttackStart(zuros);
                             zuros->AI()->AttackStart(surdiel);
+                        }
                     }
-                }
                     SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FindingTheThieves);
-                    #ifdef DEBUG
+                    #ifdef CUSTOM_DEBUG
                         events.ScheduleEvent(13, 1s);
                     #else
                         events.ScheduleEvent(1, 10s);
@@ -128,7 +117,12 @@ class scenario_dalaran_purge : public InstanceMapScript
                         creature->setActive(true);
                         creature->SetVisible(true);
                     }
-                    DoRemoveAurasDueToSpellOnPlayers(SPELL_PHASE_HIGH_SUNREAVER_MAGES, true, true);
+                    for (Creature* creature : highmages)
+                    {
+                        creature->SetFaction(FACTION_FRIENDLY);
+                        creature->setActive(false);
+                        creature->SetVisible(false);
+                    }
                     break;
                 }
 				// A Facelift
@@ -143,12 +137,14 @@ class scenario_dalaran_purge : public InstanceMapScript
                     }
                     for (Creature* creature : patrol)
                     {
+                        if (!creature)
+                            continue;
+
                         creature->CombatStop();
                         creature->SetFaction(FACTION_FRIENDLY);
                         creature->setActive(false);
                         creature->SetVisible(false);
                     }
-                    DoRemoveAurasDueToSpellOnPlayers(SPELL_PHASE_CITIZENS, true, true);
                     SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FindJaina02);
                     break;
                 }
@@ -180,6 +176,10 @@ class scenario_dalaran_purge : public InstanceMapScript
                     SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::KillBraseal);
                     break;
                 }
+                // The Remaining Sunreavers
+                case CRITERIA_TREE_CASHING_OUT:
+                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::RemainingSunreavers);
+                    break;
 				default:
 					break;
 			}
@@ -204,6 +204,7 @@ class scenario_dalaran_purge : public InstanceMapScript
                 case NPC_DALARAN_CITIZEN:
                     if (roll_chance_i(30))
                         creature->SetEmoteState(EMOTE_STATE_COWER);
+                    citizens.push_back(creature);
                     break;
                 case NPC_MAGE_COMMANDER_ZUROS:
                 case NPC_MAGISTER_SURDIEL:
@@ -222,7 +223,8 @@ class scenario_dalaran_purge : public InstanceMapScript
                     creature->SetStandState(UNIT_STAND_STATE_KNEEL, 14904);
 					creature->CastSpell(creature, SPELL_ATTACHED);
 					break;
-				case NPC_MAGISTER_HATHOREL:
+                case NPC_MAGISTER_HATHOREL:
+                case NPC_HIGH_ARCANIST_SAVOR:
 					creature->SetImmuneToAll(true);
 					break;
 				case NPC_ICE_WALL:
@@ -253,6 +255,24 @@ class scenario_dalaran_purge : public InstanceMapScript
 					break;
 			}
 		}
+
+        void OnGameObjectCreate(GameObject* go) override
+        {
+            InstanceScript::OnGameObjectCreate(go);
+
+            go->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
+
+            tm const* time = GameTime::GetDateAndTime();
+            for (uint8 i = 0; i < LAMPS_ARRAY_SIZE; i++)
+            {
+                if (go->GetEntry() == Lamps[i])
+                {
+                    // Nuit
+                    if (time->tm_hour >= 19 && time->tm_hour <= 7)
+                        go->UseDoorOrButton();
+                }
+            }
+        }
 
 		void Update(uint32 diff) override
 		{
@@ -384,6 +404,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 		DLPPhases phase;
 		std::vector<Creature*> highmages;
 		std::vector<Creature*> patrol;
+		std::vector<Creature*> citizens;
 
 		// Accesseurs
 		#pragma region ACCESSORS

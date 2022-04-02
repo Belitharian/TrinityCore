@@ -16,6 +16,8 @@
  */
 
 #include "Scenario.h"
+#include "InstanceScenario.h"
+#include "InstanceScript.h"
 #include "InstanceSaveMgr.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
@@ -197,6 +199,8 @@ void Scenario::CompletedCriteriaTree(CriteriaTree const* tree, Player* /*referen
     if (!IsCompletedStep(step))
         return;
 
+    OnCompletedCriteriaTree(tree);
+
     SetStepState(step, SCENARIO_STEP_DONE);
     CompleteStep(step);
 }
@@ -207,7 +211,25 @@ bool Scenario::IsCompletedStep(ScenarioStepEntry const* step)
     if (!tree)
         return false;
 
-    return IsCompletedCriteriaTree(tree);
+    if (IsCompletedCriteriaTree(tree))
+    {
+        OnCompletedCriteriaTree(tree);
+        return true;
+    }
+
+    return false;
+}
+
+void Scenario::OnCompletedCriteriaTree(CriteriaTree const* tree)
+{
+    if (InstanceScenario* instanceScenario = reinterpret_cast<InstanceScenario*>(this))
+    {
+        if (InstanceMap* instanceMap = instanceScenario->GetMap()->ToInstanceMap())
+        {
+            if (InstanceScript* instanceScript = instanceMap->GetInstanceScript())
+                instanceScript->OnCompletedCriteriaTree(tree);
+        }
+    }
 }
 
 void Scenario::SendPacket(WorldPacket const* data) const
@@ -334,4 +356,9 @@ void Scenario::SendBootPlayer(Player* player)
     WorldPackets::Scenario::ScenarioVacate scenarioBoot;
     scenarioBoot.ScenarioID = _data->Entry->ID;
     player->SendDirectMessage(scenarioBoot.Write());
+}
+
+void Scenario::SendScenarioEvent(Player* player, uint32 eventId)
+{
+    UpdateCriteria(CriteriaType::AnyoneTriggerGameEventScenario, eventId, 0, 0, nullptr, player);
 }

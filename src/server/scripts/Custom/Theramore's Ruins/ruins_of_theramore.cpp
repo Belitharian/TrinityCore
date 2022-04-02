@@ -85,11 +85,8 @@ class npc_jaina_ruins : public CreatureScript
 			}
 		}
 
-        void OnSpellCastFinished(SpellInfo const* spell, SpellFinishReason reason) override
+        void OnSpellCast(SpellInfo const* spell) override
         {
-            if (reason != SPELL_FINISHED_SUCCESSFUL_CAST)
-                return;
-
 			switch (spell->Id)
 			{
 				case SPELL_SUMMON_WATER_ELEMENTALS:

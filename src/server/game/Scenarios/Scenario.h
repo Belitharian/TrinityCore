@@ -105,7 +105,6 @@ class TC_GAME_API Scenario : public CriteriaHandler
 
         CriteriaList const& GetCriteriaByType(CriteriaType type, uint32 asset) const override;
         ScenarioData const* _data;
-        ScenarioInstanceType _scenarioType;
 
     private:
         ScenarioStepEntry const* _currentstep;
