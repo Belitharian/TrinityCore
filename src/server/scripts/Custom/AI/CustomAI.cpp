@@ -10,22 +10,24 @@ CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 
 void CustomAI::Initialize()
 {
-    if (type == AI_Type::Distance)
+    switch (type)
     {
-        scheduler.SetValidator([this]
-        {
-            return !me->HasUnitState(UNIT_STATE_CASTING)
-                || !me->HasUnitState(UNIT_STATE_FLEEING)
-                || !me->HasUnitState(UNIT_STATE_FLEEING_MOVE);
-        });
-    }
-    else
-    {
-        scheduler.SetValidator([this]
-        {
-            return !me->HasUnitState(UNIT_STATE_FLEEING)
-                || !me->HasUnitState(UNIT_STATE_FLEEING_MOVE);
-        });
+        case AI_Type::Distance:
+        case AI_Type::NoMovement:
+            scheduler.SetValidator([this]
+            {
+                return !me->HasUnitState(UNIT_STATE_CASTING)
+                    || !me->HasUnitState(UNIT_STATE_FLEEING)
+                    || !me->HasUnitState(UNIT_STATE_FLEEING_MOVE);
+            });
+            break;
+        default:
+            scheduler.SetValidator([this]
+            {
+                return !me->HasUnitState(UNIT_STATE_FLEEING)
+                    || !me->HasUnitState(UNIT_STATE_FLEEING_MOVE);
+            });
+            break;
     }
 }
 

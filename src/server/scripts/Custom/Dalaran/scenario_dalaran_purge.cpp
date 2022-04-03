@@ -173,7 +173,7 @@ class scenario_dalaran_purge : public InstanceMapScript
                 case CRITERIA_TREE_SERVE_AND_PROTECT:
                 {
                     Talk(GetJaina(), SAY_BRASAEL_JAINA_01);
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::KillBraseal);
+                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::KillMagisters);
                     break;
                 }
                 // The Remaining Sunreavers
@@ -433,7 +433,7 @@ class scenario_dalaran_purge : public InstanceMapScript
         Player* GetNearestPlayer(Creature* creature)
         {
             Player* player = instance->GetPlayers().begin()->GetSource();
-            if (player->IsWithinDist(creature, 5.f, false))
+            if (player && player->IsWithinDist(creature, 5.f, false))
                 return player;
             return nullptr;
         }

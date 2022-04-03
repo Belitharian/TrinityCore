@@ -13,7 +13,7 @@
 #define RATHAELLA_PATH_01               8
 #define RATHAELLA_PATH_02               16
 
-//#define CUSTOM_DEBUG
+#define CUSTOM_DEBUG
 
 enum DLPCreatures
 {
@@ -91,10 +91,12 @@ enum DLPSpells
     SPELL_TELEPORT_VISUAL_ONLY		    = 51347,
     SPELL_FROSTBOLT                     = 135285,
     SPELL_CHAT_BUBBLE                   = 140812,
+    SPELL_HORDE_ILLUSION                = 161013,
     SPELL_FROST_CANALISATION            = 192353,
     SPELL_RUNES_OF_SHIELDING        	= 217859,
     SPELL_TELEPORT_CASTER               = 238689,
     SPELL_WAND_OF_DISPELLING            = 243043,
+    SPELL_FACTION_OVERRIDE              = 253673,
     SPELL_CASTER_READY_01               = 245843,
     SPELL_CASTER_READY_02               = 245848,
     SPELL_CASTER_READY_03               = 245849,
@@ -108,7 +110,7 @@ enum DLPSpells
     SPELL_CHILLING_BLAST                = 337053,
     SPELL_ICY_GLARE                     = 338517,
     SPELL_ARCANE_BOMBARDMENT            = 352556,
-    SPELL_TELEPORT                      = 357601
+    SPELL_TELEPORT                      = 357601,
 };
 
 enum DLPMisc
@@ -133,6 +135,7 @@ enum DLPMisc
     ACTION_DISPELL_BARRIER              = 5000000,
     ACTION_ARCANE_ORB_DESPAWN           = 5000001,
     ACTION_HORDE_PORTAL_SPAWN           = 5000002,
+    ACTION_TRIGGER_ALERT                = 5000003,
 
 	// Gob
 	GOB_MYSTIC_BARRIER_01               = 323860,
@@ -161,8 +164,7 @@ enum class DLPPhases
 	FindJaina02,                        // PC Stairs
 	FreeTheArcanist,
 	FreeCitizens,
-    KillBraseal,
-    KillSurdiel,
+    KillMagisters,
     RemainingSunreavers,
 };
 
@@ -187,7 +189,7 @@ inline Position const GetRandomPosition(Position center, float dist)
 	return { x, y, center.GetPositionZ(), 0.f };
 }
 
-inline Position const GetRandomPosition(Unit* target, float dist)
+inline Position const GetRandomPosition(Unit* target, float dist, bool fill = true)
 {
     // Get center position
     const Position center = target->GetPosition();
@@ -196,7 +198,9 @@ inline Position const GetRandomPosition(Unit* target, float dist)
     float alpha = 2 * float(M_PI) * float(rand_norm());
 
     // Random radius
-    float r = dist * sqrtf(float(rand_norm()));
+    float r = fill
+        ? dist * sqrtf(float(rand_norm()))
+        : dist;
 
     // Get X and Y position around the center with radius
     float x = r * cosf(alpha) + center.GetPositionX();

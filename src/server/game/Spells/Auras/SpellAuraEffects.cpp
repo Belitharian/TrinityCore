@@ -2006,6 +2006,44 @@ void AuraEffect::HandleAuraTransform(AuraApplication const* aurApp, uint8 mode, 
                     case 75531:
                         target->SetDisplayId(gender == GENDER_MALE ? 31654 : 31655);
                         break;
+                    // Temporal Illusion
+                    case 35479:
+                    // Horde Illusion
+                    case 161013:
+                    {
+                        switch (target->GetClass())
+                        {
+                            // Orc
+                            case CLASS_WARRIOR:
+                            case CLASS_DEATH_KNIGHT:
+                            default:
+                                target->SetDisplayId(gender == GENDER_FEMALE ? 55256 : 55257);
+                                break;
+                            // BE
+                            case CLASS_PALADIN:
+                            case CLASS_HUNTER:
+                            case CLASS_ROGUE:
+                            case CLASS_DEMON_HUNTER:
+                                target->SetDisplayId(gender == GENDER_FEMALE ? 55264 : 55265);
+                                break;
+                                // Undead
+                            case CLASS_PRIEST:
+                            case CLASS_MAGE:
+                            case CLASS_WARLOCK:
+                                target->SetDisplayId(gender == GENDER_FEMALE ? 55258 : 55259);
+                                break;
+                                // Troll
+                            case CLASS_MONK:
+                            case CLASS_SHAMAN:
+                                target->SetDisplayId(gender == GENDER_FEMALE ? 55262 : 55263);
+                                break;
+                                // Tauren
+                            case CLASS_DRUID:
+                                target->SetDisplayId(gender == GENDER_FEMALE ? 55260 : 55261);
+                                break;
+                        }
+                        break;
+                    }
                     default:
                         break;
                 }
