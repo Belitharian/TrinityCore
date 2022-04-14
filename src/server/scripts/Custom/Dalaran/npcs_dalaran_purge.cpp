@@ -626,7 +626,8 @@ struct npc_archmage_landalock : public NullCreatureAI
 
 						float angle = slice * index;
 						const Position dest = GetRandomPositionAroundCircle(me, angle, 3.2f);
-						citizen->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, dest, true, dest.GetOrientation());
+                        citizen->SetHomePosition(dest);
+                        citizen->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, dest, true, dest.GetOrientation());
 
 						index++;
 					}
@@ -871,6 +872,7 @@ struct npc_sunreaver_mage : public CustomAI
 
 	enum Spells
 	{
+        SPELL_FIREBALL              = 79854,
         SPELL_DISPELL_ILLUSION      = 203750,
 	};
 
@@ -885,54 +887,69 @@ struct npc_sunreaver_mage : public CustomAI
         SAY_ALERT_FEMALE_02         = 3
     };
 
-    ObjectGuid whoGUID;
+    ObjectGuid disguisedGUID;
 
 	void Reset() override
 	{
         Initialize();
+
+        disguisedGUID.Clear();
 
         me->ClearUnitState(UNIT_STATE_DISTRACTED);
     }
 
     void Initialize() override { }
 
-    void SetGUID(ObjectGuid const& guid, int32 /*id*/) override
+    void MoveInLineOfSight(Unit* who) override
     {
-        whoGUID = guid;
-    }
+        CustomAI::MoveInLineOfSight(who);
 
-    void DoAction(int32 action) override
-    {
-        if (action != ACTION_TRIGGER_ALERT)
+        if (who->GetTypeId() != TYPEID_PLAYER)
+            return;
+
+        if (!me->IsVisible())
+            return;
+
+        if (!who->IsWithinDist(me, 10.0f))
             return;
 
         if (me->HasUnitState(UNIT_STATE_DISTRACTED))
             return;
 
-        Unit* who = ObjectAccessor::GetUnit(*me, whoGUID);
-        if (!who)
+        if (!disguisedGUID.IsEmpty())
             return;
 
-        me->AI()->Talk(me->GetDisplayId() == DISPLAY_MALE ? SAY_ALERT_MALE_01 : SAY_ALERT_FEMALE_01);
-        me->SendAIReaction(AI_REACTION_ALERT);
-        me->SetFacingToObject(who);
-        me->AddUnitState(UNIT_STATE_DISTRACTED);
-
-        scheduler.Schedule(5s, [who, this](TaskContext context)
+        if (who->HasAura(SPELL_HORDE_ILLUSION))
         {
-            me->ClearUnitState(UNIT_STATE_DISTRACTED);
+            disguisedGUID = who->GetGUID();
 
-            if (who->IsWithinDist(me, 15.0f))
-            {
-                DoCast(SPELL_DISPELL_ILLUSION);
+            me->AI()->Talk(me->GetDisplayId() == DISPLAY_MALE ? SAY_ALERT_MALE_01 : SAY_ALERT_FEMALE_01);
+            me->AddUnitState(UNIT_STATE_DISTRACTED);
+            me->SendAIReaction(AI_REACTION_ALERT);
+            me->SetFacingToObject(who);
 
-                me->AI()->Talk(me->GetDisplayId() == DISPLAY_MALE ? SAY_ALERT_MALE_02 : SAY_ALERT_FEMALE_02);
-            }
-            else
-            {
-                me->SetFacingTo(me->GetHomePosition().GetOrientation());
-            }
-        });
+            scheduler
+                .Schedule(2s, [this](TaskContext /*context*/)
+                {
+                    me->ClearUnitState(UNIT_STATE_DISTRACTED);
+
+                    Unit* disguised = ObjectAccessor::GetUnit(*me, disguisedGUID);
+                    if (!disguised)
+                        return;
+
+                    if (disguised->IsWithinDist(me, 10.0f))
+                    {
+                        me->AI()->Talk(me->GetDisplayId() == DISPLAY_MALE ? SAY_ALERT_MALE_02 : SAY_ALERT_FEMALE_02);
+                        DoCast(SPELL_DISPELL_ILLUSION);
+                    }
+                    else
+                        me->SetFacingTo(me->GetHomePosition().GetOrientation());
+                })
+                .Schedule(8s, [this](TaskContext /*context*/)
+                {
+                    disguisedGUID.Clear();
+                });
+        }
     }
 
     void OnSpellCast(SpellInfo const* spell)
@@ -946,9 +963,16 @@ struct npc_sunreaver_mage : public CustomAI
         }
     }
 
-	void JustEngagedWith(Unit* /*who*/) override
+	void JustEngagedWith(Unit* who) override
 	{
+        DoCast(who, SPELL_FIREBALL);
 
+		scheduler
+			.Schedule(2s, [this](TaskContext fireball)
+			{
+				DoCastVictim(SPELL_FIREBALL);
+				fireball.Repeat(2s);
+			});
 	}
 };
 
@@ -1272,12 +1296,13 @@ struct npc_sunreaver_captain : public CustomAI
 				if (host->GetEntry() == NPC_WANTON_HOSTESS)
 					host->AI()->Talk(SAY_WANTON_HOSTESS_FLEE);
 
-				const Position destination = GetRandomPosition(center, 10.f);
+				const Position dest = GetRandomPosition(center, 10.f);
 				scheduler
-					.Schedule(2s, 5s, [host, destination](TaskContext /*context*/)
+					.Schedule(2s, 5s, [host, dest](TaskContext /*context*/)
 					{
 						host->SetEmoteState(EMOTE_STATE_COWER);
-						host->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, destination);
+                        host->SetHomePosition(dest);
+                        host->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, dest);
 					});
 			}
 		}
@@ -1333,7 +1358,7 @@ struct npc_magister_brasael : public CustomAI
 		scheduler.Schedule(2s, [this](TaskContext /*context*/)
 		{
 			me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, BrasaelPos01, true, BrasaelPos01.GetOrientation());
-		});
+        });
 	}
 
 	void MovementInform(uint32 /*type*/, uint32 id) override
@@ -1486,6 +1511,8 @@ struct npc_magister_brasael : public CustomAI
         {
             if (Creature* barrier = me->SummonCreature(NPC_ARCANE_BARRIER, barrierPoint01))
                 barrier->SetObjectScale(1.2f);
+
+            TeleportPlayersAround(me);
         }
 
 		DoCast(SPELL_COMBUSTION);
@@ -1582,8 +1609,8 @@ struct npc_magister_surdiel : public CustomAI
         NPC_STORMWIND_CLERIC        = 68708,
         NPC_SILVER_ASSASSIN         = 68045,
         NPC_SILVER_SPELLBOW         = 68043,
-        NPC_GRAND_MAGISTER_ROMMATH  = 68586,
-        NPC_ROMMATH_PORTAL          = 68636
+        NPC_ROMMATH_PORTAL          = 68636,
+        NPC_TEMP_MAGISTER_ROMMATH   = 68586
     };
 
     enum Talks
@@ -1601,13 +1628,9 @@ struct npc_magister_surdiel : public CustomAI
     bool combatFinal;
 
     const Position surdielPoint01   = { 5641.17f, 687.39f, 651.99f, 5.83f };
+    const Position surdielPoint02   = { 5810.58f, 632.71f, 609.88f, 2.04f };
     const Position portalPoint01    = { 5633.24f, 702.12f, 651.99f, 5.08f };
     const Position rommathPoint01   = { 5632.37f, 698.33f, 651.99f, 5.28f };
-
-    void SetData(uint32 /*id*/, uint32 /*value*/) override
-    {
-        DoAction(ACTION_DISPELL_BARRIER);
-    }
 
 	void Reset() override
 	{
@@ -1625,6 +1648,13 @@ struct npc_magister_surdiel : public CustomAI
 			barrier->SetObjectScale(1.2f);
 		}
 	}
+
+    void EnterEvadeMode(EvadeReason why) override
+    {
+        summons.DespawnAll();
+
+        ScriptedAI::EnterEvadeMode(why);
+    }
 
     void JustDied(Unit* killer) override
     {
@@ -1664,7 +1694,6 @@ struct npc_magister_surdiel : public CustomAI
 
         me->SetReactState(REACT_PASSIVE);
         me->CombatStop(true, true);
-        me->SetImmuneToPC(false);
 
         zuros->SetReactState(REACT_PASSIVE);
         zuros->SetRegenerateHealth(false);
@@ -1672,7 +1701,7 @@ struct npc_magister_surdiel : public CustomAI
         zuros->SetImmuneToPC(false);
         zuros->SetStandState(UNIT_STAND_STATE_KNEEL);
 
-        scheduler.Schedule(1s, [zuros, cleric, allies, sunreavers, this](TaskContext context)
+        scheduler.Schedule(2s, [zuros, cleric, allies, sunreavers, this](TaskContext context)
         {
             switch (context.GetRepeatCounter())
             {
@@ -1700,6 +1729,7 @@ struct npc_magister_surdiel : public CustomAI
                     for (Creature* ally : allies)
                     {
                         const Position dest = GetRandomPosition(cleric, 5.0f, false);
+                        ally->SetHomePosition(dest);
                         ally->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, dest, true, dest.GetOrientation());
                     }
                     context.Repeat(1s);
@@ -1726,6 +1756,7 @@ struct npc_magister_surdiel : public CustomAI
                     context.Repeat(2s);
                     break;
                 case 6:
+                    me->SetImmuneToPC(false);
                     me->SetReactState(REACT_AGGRESSIVE);
                     cleric->SetImmuneToAll(false);
                     for (Creature* ally : allies)
@@ -1740,11 +1771,12 @@ struct npc_magister_surdiel : public CustomAI
         switch (id)
         {
             case MOVEMENT_INFO_POINT_01:
+                me->SetHomePosition(portalPoint01);
                 DoCast(SPELL_TELEPORT_VISUAL_ONLY);
                 if (Creature* rommath = ObjectAccessor::GetCreature(*me, rommathGUID))
                 {
                     rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, portalPoint01);
-                    scheduler.Schedule(1s, [rommath, this](TaskContext context)
+                    scheduler.Schedule(1s, [rommath, this](TaskContext /*context*/)
                     {
                         Map* map = me->GetMap();
                         if (map && map->GetPlayers().getSize() > 0)
@@ -1755,7 +1787,11 @@ struct npc_magister_surdiel : public CustomAI
 
                         rommath->DespawnOrUnsummon();
 
-                        me->DisappearAndDie();
+                        me->CombatStop();
+                        me->NearTeleportTo(surdielPoint02);
+                        me->SetHomePosition(surdielPoint02);
+                        me->SetRegenerateHealth(true);
+                        me->SetFullHealth();
                     });
                 }
                 break;
@@ -1798,7 +1834,7 @@ struct npc_magister_surdiel : public CustomAI
                                 context.Repeat(1s);
                                 break;
                             case 1:
-                                if (Creature* rommath = DoSummon(NPC_GRAND_MAGISTER_ROMMATH, portalPoint01))
+                                if (Creature* rommath = DoSummon(NPC_TEMP_MAGISTER_ROMMATH, portalPoint01))
                                 {
                                     rommathGUID = rommath->GetGUID();
                                     rommath->CastSpell(rommath, SPELL_TELEPORT_VISUAL_ONLY);
@@ -1830,6 +1866,8 @@ struct npc_magister_surdiel : public CustomAI
         {
             if (Creature* barrier = me->SummonCreature(NPC_ARCANE_BARRIER, barrierPoint01))
                 barrier->SetObjectScale(1.2f);
+
+            TeleportPlayersAround(me);
         }
 
 		scheduler
@@ -1896,7 +1934,6 @@ struct npc_high_arcanist_savor : public CustomAI
 
         // Portal
         SPELL_ARCANE_FX             = 200065,
-        SPELL_CLOSE_PORTAL          = 203542,
 
         // Final
         SPELL_BIG_BANG              = 222761,
@@ -1914,7 +1951,7 @@ struct npc_high_arcanist_savor : public CustomAI
 	enum Misc
 	{
         // NPCs
-        NPC_SUNREAVER_MAGE          = 68050,
+        NPC_SUNREAVER_PYROMANCER    = 68757,
         NPC_SUNREAVER_AEGIS         = 68051,
         NPC_SUNREAVER_SUMMONER      = 68760,
         NPC_BOOK_OF_ARCANE          = 120646,
@@ -1922,7 +1959,6 @@ struct npc_high_arcanist_savor : public CustomAI
 		NPC_PLAYER_CLONE            = 500018,
 
         // Gameobjects
-        GOB_PORTAL_TO_SILVERMOON    = 323854,
 
         // Talks
         SAY_SAVOR_SPEED_FAST        = 0,
@@ -1986,18 +2022,16 @@ struct npc_high_arcanist_savor : public CustomAI
 
         DoCastOnPlayers(SPELL_SPEED_NORMAL);
 
-        if (portal)
-            ClosePortal();
+        me->SetFullHealth();
+
+        ClosePortal(portal);
     }
 
     void JustDied(Unit* killer) override
     {
         CustomAI::JustDied(killer);
-
         DoCastOnPlayers(SPELL_SPEED_NORMAL);
-
-        if (portal)
-            ClosePortal();
+        ClosePortal(portal);
     }
 
     void JustSummoned(Creature* summon) override
@@ -2007,12 +2041,12 @@ struct npc_high_arcanist_savor : public CustomAI
         switch (summon->GetEntry())
         {
             case NPC_ARCANE_BARRIER:
-                summon->SetObjectScale(0.7f);
+                summon->SetObjectScale(0.65f);
                 break;
-            case NPC_SUNREAVER_MAGE:
+            case NPC_SUNREAVER_PYROMANCER:
             case NPC_SUNREAVER_AEGIS:
             case NPC_SUNREAVER_SUMMONER:
-                summon->SetMaxHealth(summon->GetMaxHealth() / 1.2);
+                summon->SetMaxHealth(me->CountPctFromMaxHealth(urand(20, 35)));
                 summon->SetFullHealth();
                 break;
         }
@@ -2024,7 +2058,7 @@ struct npc_high_arcanist_savor : public CustomAI
 
         switch (summon->GetEntry())
         {
-            case NPC_SUNREAVER_MAGE:
+            case NPC_SUNREAVER_PYROMANCER:
             case NPC_SUNREAVER_AEGIS:
             case NPC_SUNREAVER_SUMMONER:
                 sunreaversCount++;
@@ -2040,15 +2074,18 @@ struct npc_high_arcanist_savor : public CustomAI
                 phase = Phases::Time;
                 me->RemoveAurasDueToSpell(SPELL_IMMUNE);
                 scheduler.CancelGroup(GROUP_ORB);
-                scheduler.Schedule(2s, GROUP_TIME, [this](TaskContext spell_speed)
-                {
-                    if (Player* player = GetFirstPlayer())
+                #ifdef CUSTOM_DEBUG
+                #else
+                    scheduler.Schedule(2s, GROUP_TIME, [this](TaskContext spell_speed)
                     {
-                        lastSpeed = player->HasAura(SPELL_SPEED_SLOW) ? SPELL_SPEED_FAST : SPELL_SPEED_SLOW;
-                        DoCastOnPlayers(lastSpeed);
-                        spell_speed.Repeat(30s);
-                    }
-                });
+                        if (Player* player = GetFirstPlayer())
+                        {
+                            lastSpeed = player->HasAura(SPELL_SPEED_SLOW) ? SPELL_SPEED_FAST : SPELL_SPEED_SLOW;
+                            DoCastOnPlayers(lastSpeed);
+                            spell_speed.Repeat(30s);
+                        }
+                    });
+                #endif
                 break;
             case ACTION_HORDE_PORTAL_SPAWN:
                 SummonSunreavers();
@@ -2068,13 +2105,14 @@ struct npc_high_arcanist_savor : public CustomAI
 
                             DoCastOnPlayers(SPELL_SPEED_FAST);
 
+                            me->RemoveAurasDueToSpell(SPELL_IMMUNE);
                             me->RemoveAurasDueToSpell(SPELL_ARCANE_FX);
                             me->RemoveAurasDueToSpell(SPELL_PORTAL_CHANNELING_03);
                             me->RemoveAurasDueToSpell(SPELL_LEVITATE);
                             me->SetReactState(REACT_AGGRESSIVE);
                             me->SetImmuneToAll(false);
 
-                            ClosePortal();
+                            ClosePortal(portal);
 
                             DoCast(SPELL_BIG_BANG);
 
@@ -2121,13 +2159,12 @@ struct npc_high_arcanist_savor : public CustomAI
 
                 DoCastOnPlayers(SPELL_SPEED_NORMAL);
 
+                DoCast(me, SPELL_IMMUNE, true);
                 DoCast(me, SPELL_ARCANE_FX, true);
                 DoCast(me, SPELL_PORTAL_CHANNELING_03, true);
 
                 me->SetRegenerateHealth(false);
-                me->CombatStop(true);
                 me->SetReactState(REACT_PASSIVE);
-                me->SetImmuneToAll(true);
 
                 portal = me->SummonGameObject(GOB_PORTAL_TO_SILVERMOON, portalPoint01, QuaternionData::fromEulerAnglesZYX(portalPoint01.GetOrientation(), 0.0f, 0.0f), 0s);
 
@@ -2164,7 +2201,7 @@ struct npc_high_arcanist_savor : public CustomAI
 
 		if (Player* player = who->ToPlayer())
 		{
-			if (player->IsHostileTo(me) && player->IsWithinDist(me, 5.f))
+			if (player->IsHostileTo(me) && player->IsWithinDist(me, 10.f))
 			{
 				switch ((DLPPhases)instance->GetData(DATA_SCENARIO_PHASE))
 				{
@@ -2323,12 +2360,13 @@ struct npc_high_arcanist_savor : public CustomAI
         float slice = 2 * (float)M_PI / SAVOR_SPAWN_COUNT;
         for (uint8 i = 0; i < SAVOR_SPAWN_COUNT; i++)
         {
-            uint32 entry = RAND(NPC_SUNREAVER_MAGE, NPC_SUNREAVER_AEGIS, NPC_SUNREAVER_SUMMONER);
+            uint32 entry = RAND(NPC_SUNREAVER_PYROMANCER, NPC_SUNREAVER_AEGIS, NPC_SUNREAVER_SUMMONER);
             float angle = slice * index;
             const Position dest = GetRandomPositionAroundCircle(me, angle, 3.2f);
             if (Creature* spawn = DoSummon(entry, portalPoint01))
             {
                 spawn->CastSpell(spawn, SPELL_TELEPORT_VISUAL_ONLY);
+                spawn->SetHomePosition(dest);
                 spawn->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, dest, true, dest.GetOrientation());
             }
             index++;
@@ -2411,23 +2449,6 @@ struct npc_high_arcanist_savor : public CustomAI
 			player->CastSpell(player, spellId, true);
 		});
 	}
-
-    void ClosePortal()
-    {
-        if (!portal)
-            return;
-
-        portal->Delete();
-
-        CastSpellExtraArgs args;
-        args.SetTriggerFlags(TRIGGERED_CAST_DIRECTLY);
-
-        const Position pos = portal->GetPosition();
-        if (Creature* special = portal->SummonTrigger(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), pos.GetOrientation(), 5s))
-            special->CastSpell(special, SPELL_CLOSE_PORTAL, args);
-
-        portal = nullptr;
-    }
 
 	#pragma endregion
 };
@@ -2836,31 +2857,6 @@ struct at_fire_bomb : AreaTriggerAI
 	}
 };
 
-// Detector - 203761
-// AreaTriggerID - 500000
-struct at_detector : AreaTriggerAI
-{
-    at_detector(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
-    {
-    }
-
-    void OnUnitEnter(Unit* unit) override
-    {
-        Creature* caster = at->GetCaster()->ToCreature();
-        if (!caster)
-            return;
-
-        if (caster->HasUnitState(UNIT_STATE_DISTRACTED))
-            return;
-
-        if (unit->HasAura(SPELL_HORDE_ILLUSION))
-        {
-            caster->AI()->SetGUID(unit->GetGUID());
-            caster->AI()->DoAction(ACTION_TRIGGER_ALERT);
-        }
-    }
-};
-
 // Rain of fire - 156974
 // AreaTriggerID - 1902
 struct at_rain_of_fire : AreaTriggerAI
@@ -3050,7 +3046,7 @@ class spell_speed : public AuraScript
 // Arcane Orb - 213316
 class spell_arcane_orb : public SpellScript
 {
-    static constexpr uint32 HEALTH_PCR = 15;
+    static constexpr uint32 HEALTH_PCR = 50;
 
     PrepareSpellScript(spell_arcane_orb);
 
@@ -3084,6 +3080,29 @@ class spell_arcane_orb : public SpellScript
     }
 };
 
+// Big Band - 222761
+class spell_big_bang : public SpellScript
+{
+    PrepareSpellScript(spell_big_bang);
+
+    void FilterTargets(std::list<WorldObject*>& targets)
+    {
+        Unit* caster = GetCaster();
+        if (caster && caster->GetEntry() != NPC_HIGH_ARCANIST_SAVOR)
+            return;
+
+        targets.remove_if([](WorldObject* target)
+        {
+            return target->GetTypeId() != TYPEID_PLAYER;
+        });
+    }
+
+    void Register() override
+    {
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_big_bang::FilterTargets, EFFECT_0, TARGET_UNIT_DEST_AREA_ENEMY);
+    }
+};
+
 void AddSC_npcs_dalaran_purge()
 {
 	RegisterDalaranAI(npc_jaina_dalaran_patrol);
@@ -3113,7 +3132,6 @@ void AddSC_npcs_dalaran_purge()
 	RegisterAreaTriggerAI(at_arcane_barrier);
 	RegisterAreaTriggerAI(at_arcane_protection);
 	RegisterAreaTriggerAI(at_fire_bomb);
-	RegisterAreaTriggerAI(at_detector);
 	RegisterAreaTriggerAI(at_rain_of_fire);
 
 	RegisterSpellScript(spell_purge_teleport);
@@ -3121,4 +3139,5 @@ void AddSC_npcs_dalaran_purge()
 	RegisterSpellScript(spell_purge_glacial_spike_summon);
 	RegisterSpellScript(spell_speed);
 	RegisterSpellScript(spell_arcane_orb);
+	RegisterSpellScript(spell_big_bang);
 }

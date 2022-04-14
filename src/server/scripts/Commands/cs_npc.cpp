@@ -85,11 +85,12 @@ public:
             { "wanderdistance", HandleNpcSetWanderDistanceCommand, rbac::RBAC_PERM_COMMAND_NPC_SET_SPAWNDIST,  Console::No },
             { "spawntime",      HandleNpcSetSpawnTimeCommand,      rbac::RBAC_PERM_COMMAND_NPC_SET_SPAWNTIME,  Console::No },
             { "data",           HandleNpcSetDataCommand,           rbac::RBAC_PERM_COMMAND_NPC_SET_DATA,       Console::No },
+            { "animkit",        HandleNpcSetAnimKitCommand,        rbac::RBAC_PERM_COMMAND_NPC_SET_DATA,       Console::No },
         };
         static ChatCommandTable npcCommandTable =
         {
-            { "add", npcAddCommandTable },
-            { "set", npcSetCommandTable },
+            { "add",            npcAddCommandTable                                                                         },
+            { "set",            npcSetCommandTable                                                                         },
             { "info",           HandleNpcInfoCommand,              rbac::RBAC_PERM_COMMAND_NPC_INFO,           Console::No },
             { "near",           HandleNpcNearCommand,              rbac::RBAC_PERM_COMMAND_NPC_NEAR,           Console::No },
             { "move",           HandleNpcMoveCommand,              rbac::RBAC_PERM_COMMAND_NPC_MOVE,           Console::No },
@@ -667,6 +668,36 @@ public:
         }
 
         target->SetEmoteState(Emote(emote));
+
+        return true;
+    }
+
+    //npc set anim kit
+    static bool HandleNpcSetAnimKitCommand(ChatHandler* handler, uint8 animType, uint32 animKit)
+    {
+        Creature* target = handler->getSelectedCreature();
+        if (!target)
+        {
+            handler->SendSysMessage(LANG_SELECT_CREATURE);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        switch (animType)
+        {
+            case 1:
+                target->SetAIAnimKitId(animKit);
+                break;
+            case 2:
+                target->SetMeleeAnimKitId(animKit);
+                break;
+            case 3:
+                target->SetMovementAnimKitId(animKit);
+                break;
+            case 4:
+                target->PlayOneShotAnimKitId(animKit);
+                break;
+        }
 
         return true;
     }
@@ -1367,6 +1398,7 @@ public:
         */
         return true;
     }
+
 };
 
 void AddSC_npc_commandscript()
