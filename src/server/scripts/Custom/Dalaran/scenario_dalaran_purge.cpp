@@ -39,6 +39,7 @@ const ObjectData creatureData[] =
 
 const ObjectData gameobjectData[] =
 {
+	{ GOB_SECRET_PASSAGE,               DATA_SECRET_PASSAGE             },
 	{ 0,                                0                               }   // END
 };
 
@@ -58,6 +59,22 @@ class scenario_dalaran_purge : public InstanceMapScript
 			LoadObjectData(creatureData, gameobjectData);
 		}
 
+		enum Spells
+		{
+			SPELL_RAINY_WEATHER         = 296026,
+			SPELL_FLASHBACK_EFFECT      = 279486,
+		};
+
+		void OnPlayerEnter(Player* player) override
+		{
+			player->CastSpell(player, SPELL_RAINY_WEATHER, true);
+		}
+
+		void OnPlayerLeave(Player* player) override
+		{
+			player->RemoveAurasDueToSpell(SPELL_RAINY_WEATHER);
+		}
+
 		uint32 GetData(uint32 dataId) const override
 		{
 			if (dataId == DATA_SCENARIO_PHASE)
@@ -69,47 +86,16 @@ class scenario_dalaran_purge : public InstanceMapScript
 		{
 			switch (dataId)
 			{
-                // Data
-                case DATA_SCENARIO_PHASE:
+				case DATA_SCENARIO_PHASE:
 					phase = (DLPPhases)value;
 					break;
-                case EVENT_FIND_JAINA_02:
-                    #ifdef CUSTOM_DEBUG
-                        DoSendScenarioEvent(EVENT_FIND_JAINA_02);
-                    #endif
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FreeTheArcanist);
-                    events.ScheduleEvent(15, 2s);
-                    break;
-                case EVENT_SPEAK_TO_JAINA:
-                    DoSendScenarioEvent(EVENT_SPEAK_TO_JAINA);
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheFinalAssault_Illusion);
-                    events.ScheduleEvent(21, 2s);
-                    break;
-                case EVENT_INFILTRATE_THE_SUNREAVER:
-                    for (ObjectGuid guid : mages)
-                    {
-                        if (Creature* mage = instance->GetCreature(guid))
-                        {
-                            mage->setActive(false);
-                            mage->SetVisible(false);
-                        }
-                    }
-                    DoSendScenarioEvent(EVENT_INFILTRATE_THE_SUNREAVER);
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheFinalAssault_Infiltrate);
-                    events.CancelEvent(21);
-                    events.ScheduleEvent(22, 2s);
-                    break;
-                case EVENT_HELP_FREE_AETHAS_SUNREAVER:
-                    DoSendScenarioEvent(EVENT_HELP_FREE_AETHAS_SUNREAVER);
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheFinalAssault_Escort);
-                    events.ScheduleEvent(28, 2s);
-                    break;
-
-                // Actions
-                case ACTION_AETHAS_ESCAPED:
-                    events.ScheduleEvent(31, 2s);
-                    break;
-
+				case EVENT_FIND_JAINA_02:
+					#ifdef CUSTOM_DEBUG
+						DoSendScenarioEvent(EVENT_FIND_JAINA_02);
+					#endif
+					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FreeTheArcanist);
+					events.ScheduleEvent(15, 2s);
+					break;
 				default:
 					break;
 			}
@@ -117,122 +103,237 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 		void OnCompletedCriteriaTree(CriteriaTree const* tree) override
 		{
-            switch (tree->ID)
-            {
-                // Dalaran
-                case CRITERIA_TREE_DALARAN:
-                {
-                    if (Creature* aethas = instance->SummonCreature(NPC_AETHAS_SUNREAVER, AethasPoint01.spawn))
-                        aethas->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, AethasPoint01.destination, true, AethasPoint01.destination.GetOrientation());
-                    if (Creature* landalock = GetCreature(DATA_ARCHMAGE_LANDALOCK))
-                        landalock->CastSpell(landalock, SPELL_FROST_CANALISATION);
-                    if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
-                    {
-                        if (Creature* zuros = GetCreature(DATA_MAGE_COMMANDER_ZUROS))
-                        {
-                            surdiel->AI()->AttackStart(zuros);
-                            zuros->AI()->AttackStart(surdiel);
-                        }
-                    }
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FindingTheThieves);
-                    #ifdef CUSTOM_DEBUG
-                        events.ScheduleEvent(13, 1s);
-                    #else
-                        events.ScheduleEvent(1, 10s);
-                    #endif
-                    break;
-                }
+			switch (tree->ID)
+			{
+				// Dalaran
+				case CRITERIA_TREE_DALARAN:
+				{
+					if (Creature* aethas = GetAethas())
+						aethas->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, AethasPos01, true, AethasPos01.GetOrientation());
+					if (Creature* landalock = GetCreature(DATA_ARCHMAGE_LANDALOCK))
+						landalock->CastSpell(landalock, SPELL_FROST_CANALISATION);
+					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
+					{
+						if (Creature* zuros = GetCreature(DATA_MAGE_COMMANDER_ZUROS))
+						{
+							surdiel->AI()->AttackStart(zuros);
+							zuros->AI()->AttackStart(surdiel);
+						}
+					}
+					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FindingTheThieves);
+					#ifdef CUSTOM_DEBUG
+						events.ScheduleEvent(13, 1s);
+					#else
+						events.ScheduleEvent(1, 10s);
+					#endif
+					break;
+				}
 				// Finding the thieves
 				case CRITERIA_TREE_FINDING_THE_THIEVES:
-                {
-                    for (Creature* creature : patrol)
-                    {
-                        creature->SetFaction(FACTION_DALARAN_PATROL);
-                        creature->setActive(true);
-                        creature->SetVisible(true);
-                    }
-                    for (Creature* creature : highmages)
-                    {
-                        creature->SetFaction(FACTION_FRIENDLY);
-                        creature->setActive(false);
-                        creature->SetVisible(false);
-                    }
-                    break;
-                }
+				{
+					DoOnCreatures(patrol, [this](Creature* creature)
+					{
+						creature->SetFaction(FACTION_DALARAN_PATROL);
+						creature->setActive(true);
+						creature->SetVisible(true);
+					});
+
+					DoOnCreatures(highmages, [this](Creature* creature)
+					{
+						creature->SetFaction(FACTION_FRIENDLY);
+						creature->setActive(false);
+						creature->SetVisible(false);
+					});
+
+					break;
+				}
 				// A Facelift
 				case CRITERIA_TREE_A_FACELIFT:
-                {
-                    if (Creature* jaina = GetJaina())
-                    {
-                        jaina->SetVisible(true);
-                        jaina->SetImmuneToAll(true);
-                        jaina->RemoveAllAuras();
-                        jaina->NearTeleportTo(JainaPos01);
-                        jaina->SetHomePosition(JainaPos01);
-                    }
-                    for (Creature* creature : patrol)
-                    {
-                        if (!creature)
-                            continue;
+				{
+					if (Creature* jaina = GetJaina())
+					{
+						jaina->SetVisible(true);
+						jaina->SetImmuneToAll(true);
+						jaina->RemoveAllAuras();
+						jaina->NearTeleportTo(JainaPos01);
+						jaina->SetHomePosition(JainaPos01);
+					}
 
-                        creature->CombatStop();
-                        creature->SetFaction(FACTION_FRIENDLY);
-                        creature->setActive(false);
-                        creature->SetVisible(false);
-                    }
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FindJaina02);
-                    break;
-                }
-                // First Step
-                case CRITERIA_TREE_FIRST_STEP:
-                {
-                    if (Creature* rathaella = GetCreature(DATA_ARCANIST_RATHAELLA))
-                        rathaella->SetNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-                    if (Creature* landalock = GetCreature(DATA_ARCHMAGE_LANDALOCK))
-                    {
-                        landalock->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-                        landalock->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                        landalock->CastSpell(landalock, SPELL_CHAT_BUBBLE, true);
-                    }
-                    break;
-                }
-                // An Unfortunate Capture
-                case CRITERIA_TREE_UNFORTUNATE_CAPTURE:
-                {
-                    DoRemoveAurasDueToSpellOnPlayers(SPELL_WAND_OF_DISPELLING);
-                    DoCastSpellOnPlayers(SPELL_WAND_OF_DISPELLING);
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FreeCitizens);
-                    break;
-                }
-                // Serve and protect
-                case CRITERIA_TREE_SERVE_AND_PROTECT:
-                {
-                    Talk(GetJaina(), SAY_BRASAEL_JAINA_01);
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::KillMagisters);
-                    break;
-                }
-                // Cashing Out
-                case CRITERIA_TREE_CASHING_OUT:
-                {
-                    DoRemoveAurasDueToSpellOnPlayers(SPELL_WAND_OF_DISPELLING);
-                    Talk(GetJaina(), SAY_SAVOR_JAINA_01);
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::RemainingSunreavers);
-                    break;
-                }
-                // The Remaining Sunreavers
-                case CRITERIA_TREE_REMAINING_SUNREAVERS:
-                {
-                    if (Creature* jaina = GetJaina())
-                    {
-                        jaina->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                        jaina->CastSpell(GetJaina(), SPELL_CHAT_BUBBLE);
-                    }
-                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheFinalAssault);
-                    break;
-                }
-                // The Final Assault
-                case CRITERIA_TREE_THE_FINAL_ASSAULT:
-                    break;
+					DoOnCreatures(patrol, [this](Creature* creature)
+					{
+						creature->CombatStop();
+						creature->SetFaction(FACTION_FRIENDLY);
+						creature->setActive(false);
+						creature->SetVisible(false);
+					});
+
+					for (ObjectGuid guid : sunreavers)
+					{
+						if (Creature* creature = instance->GetCreature(guid))
+						{
+							creature->Respawn(true);
+							creature->CombatStop();
+							creature->SetFaction(FACTION_FRIENDLY);
+							creature->setActive(false);
+							creature->SetVisible(false);
+						}
+						else
+						{
+							instance->Respawn(SPAWN_TYPE_CREATURE, guid.GetCounter());
+						}
+					}
+
+					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FindJaina02);
+
+					break;
+				}
+				// First Step
+				case CRITERIA_TREE_FIRST_STEP:
+				{
+					if (Creature* rathaella = GetCreature(DATA_ARCANIST_RATHAELLA))
+						rathaella->SetNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+					if (Creature* landalock = GetCreature(DATA_ARCHMAGE_LANDALOCK))
+					{
+						landalock->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+						landalock->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+						landalock->CastSpell(landalock, SPELL_CHAT_BUBBLE, true);
+					}
+					break;
+				}
+				// An Unfortunate Capture
+				case CRITERIA_TREE_UNFORTUNATE_CAPTURE:
+				{
+					DoRemoveAurasDueToSpellOnPlayers(SPELL_WAND_OF_DISPELLING);
+					DoCastSpellOnPlayers(SPELL_WAND_OF_DISPELLING);
+					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FreeCitizens);
+					break;
+				}
+				// Serve and protect
+				case CRITERIA_TREE_SERVE_AND_PROTECT:
+				{
+					Talk(GetJaina(), SAY_BRASAEL_JAINA_01);
+					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::KillMagisters);
+					break;
+				}
+				// Cashing Out
+				case CRITERIA_TREE_CASHING_OUT:
+				{
+					DoRemoveAurasDueToSpellOnPlayers(SPELL_WAND_OF_DISPELLING);
+					Talk(GetJaina(), SAY_SAVOR_JAINA_01);
+					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::RemainingSunreavers);
+					break;
+				}
+				// The Remaining Sunreavers
+				case CRITERIA_TREE_REMAINING_SUNREAVERS:
+				{
+					if (Creature* rommath = GetRommath())
+						Talk(rommath, SAY_INFILTRATE_ROMMATH_07);
+					if (Creature* jaina = GetJaina())
+					{
+						jaina->NearTeleportTo(JainaPos02);
+						jaina->SetHomePosition(JainaPos02);
+						jaina->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+						jaina->CastSpell(jaina, SPELL_CHAT_BUBBLE);
+					}
+					if (Creature* sorin = GetCreature(DATA_SORIN_MAGEHAND))
+					{
+						sorin->RemoveAllAuras();
+						sorin->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+						sorin->CastSpell(sorin, SPELL_CHAT_BUBBLE);
+					}
+					if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
+					{
+						if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
+							narasi->CastSpell(surdiel, SPELL_ARCANE_IMPRISONMENT);
+					}
+					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape);
+					break;
+				}
+				// The Final Assault - Speak to Jaina Proudmoore
+				case CRITERIA_TREE_SPEAK_TO_JAINA:
+				{
+					if (Creature* jaina = GetJaina())
+					{
+						jaina->SetVisible(false);
+
+						Trinity::RespawnDo doRespawn;
+						Trinity::WorldObjectWorker<Trinity::RespawnDo> worker(jaina, doRespawn);
+						Cell::VisitGridObjects(jaina, worker, INFINITY);
+
+						std::vector<RespawnInfo const*> data;
+						instance->GetRespawnInfo(data, SPAWN_TYPEMASK_ALL);
+
+						if (!data.empty())
+						{
+							for (RespawnInfo const* info : data)
+								instance->Respawn(info->type, info->spawnId);
+						}
+					}
+
+					DoOnCreatures(patrol, [this](Creature* creature)
+					{
+						creature->SetFaction(FACTION_DALARAN_PATROL);
+						creature->setActive(true);
+						creature->SetVisible(true);
+					});
+					DoOnCreatures(citizens, [this](Creature* creature)
+					{
+						creature->SetFaction(FACTION_FRIENDLY);
+						creature->setActive(false);
+						creature->SetVisible(false);
+					});
+
+					if (Creature* zuros = GetCreature(DATA_MAGE_COMMANDER_ZUROS))
+						zuros->NearTeleportTo(ZurosPos01);
+
+					if (Creature* rathaella = GetCreature(DATA_ARCANIST_RATHAELLA))
+						rathaella->SetVisible(false);
+
+					if (Creature* landalock = GetCreature(DATA_ARCHMAGE_LANDALOCK))
+					{
+						if (GameObject* collider = landalock->FindNearestGameObject(GOB_ICE_WALL_COLLISION, 15.f))
+						{
+							landalock->SummonGameObject(GOB_ICE_WALL_COLLISION, collider->GetPosition(),
+														QuaternionData::fromEulerAnglesZYX(collider->GetOrientation(), 0.0f, 0.0f), 0s);
+						}
+
+						landalock->NearTeleportTo(LandalockPos01);
+						landalock->SetHomePosition(LandalockPos01);
+						landalock->CastSpell(landalock, SPELL_FROST_CANALISATION);
+					}
+
+					if (Creature* sorin = GetCreature(DATA_SORIN_MAGEHAND))
+					{
+						sorin->RemoveAllAuras();
+						sorin->CastSpell(sorin, SPELL_ARCANE_BARRIER, true);
+						sorin->CastSpell(sorin, SPELL_RUNES_OF_SHIELDING, true);
+					}
+
+					if (Creature* rommath = GetRommath())
+						rommath->CastSpell(rommath, SPELL_COSMETIC_YELLOW_ARROW);
+
+					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
+					{
+						surdiel->SetWalk(true);
+						surdiel->RemoveAllAuras();
+						surdiel->NearTeleportTo(SurdielPos01);
+						surdiel->SetHomePosition(SurdielPos01);
+					}
+
+					instance->DoOnPlayers([this](Player* player)
+					{
+						player->CastSpell(player, SPELL_FADING_TO_BLACK, true);
+					});
+
+					events.ScheduleEvent(21, 1s);
+					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape_Events);
+					break;
+				}
+				// The Final Assault - Find the Grand Magister Rommath
+				case CRITERIA_TREE_FIND_ROMMATH:
+					events.ScheduleEvent(23, 2s);
+					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape_Escort);
+					break;
 				default:
 					break;
 			}
@@ -240,6 +341,9 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 		void OnCreatureCreate(Creature* creature) override
 		{
+			if (creature->HasUnitTypeMask(UNIT_MASK_SUMMON))
+				return;
+
 			InstanceScript::OnCreatureCreate(creature);
 
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
@@ -248,36 +352,39 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 			switch (creature->GetEntry())
 			{
-                case NPC_MAGISTER_BRASAEL:
-                    creature->SetImmuneToAll(true);
-                    creature->SetSheath(SHEATH_STATE_UNARMED);
-                    creature->AddAura(SPELL_HOLD_BAG, creature);
-                    creature->SetEmoteState(EMOTE_STATE_LOOT_BITE_SOUND);
-                    break;
-                case NPC_DALARAN_CITIZEN:
-                    if (roll_chance_i(30))
-                        creature->SetEmoteState(EMOTE_STATE_COWER);
-                    citizens.push_back(creature);
-                    break;
-                case NPC_MAGE_COMMANDER_ZUROS:
-                case NPC_MAGISTER_SURDIEL:
-                    creature->SetImmuneToPC(true);
-                    break;
-                case NPC_WANTON_HOST:
-                case NPC_WANTON_HOSTESS:
-                    creature->SetImmuneToAll(true);
-                    creature->SetLevel(60);
-                    creature->SetMaxHealth(urand(15800, 35000));
-                    creature->SetFullHealth();
-                    creature->SetFaction(FACTION_HORDE_GENERIC);
-                    break;
+				case NPC_MAGISTER_BRASAEL:
+					creature->SetImmuneToAll(true);
+					creature->SetSheath(SHEATH_STATE_UNARMED);
+					creature->AddAura(SPELL_HOLD_BAG, creature);
+					creature->SetEmoteState(EMOTE_STATE_LOOT_BITE_SOUND);
+					break;
+				case NPC_DALARAN_CITIZEN:
+					if (roll_chance_i(30))
+						creature->SetEmoteState(EMOTE_STATE_COWER);
+					citizens.push_back(creature->GetGUID());
+					break;
+				case NPC_MAGE_COMMANDER_ZUROS:
+				case NPC_MAGISTER_SURDIEL:
+					creature->SetImmuneToPC(true);
+					break;
+				case NPC_WANTON_HOST:
+				case NPC_WANTON_HOSTESS:
+					creature->SetImmuneToAll(true);
+					creature->SetLevel(60);
+					creature->SetMaxHealth(urand(15800, 35000));
+					creature->SetFullHealth();
+					creature->SetFaction(FACTION_HORDE_GENERIC);
+					break;
 				case NPC_ARCANIST_RATHAELLA:
-                    creature->SetImmuneToNPC(true);
-                    creature->SetStandState(UNIT_STAND_STATE_KNEEL, 14904);
+					creature->SetImmuneToNPC(true);
+					creature->SetStandState(UNIT_STAND_STATE_KNEEL, 14904);
 					creature->CastSpell(creature, SPELL_ATTACHED);
 					break;
-                case NPC_MAGISTER_HATHOREL:
-                case NPC_HIGH_ARCANIST_SAVOR:
+				case NPC_MAGISTER_HATHOREL:
+				case NPC_HIGH_ARCANIST_SAVOR:
+				case NPC_GRAND_MAGISTER_ROMMATH:
+				case NPC_NARASI_SNOWDAWN:
+					creature->RemoveNpcFlag(UNIT_NPC_FLAG_QUESTGIVER);
 					creature->SetImmuneToAll(true);
 					break;
 				case NPC_ICE_WALL:
@@ -289,18 +396,9 @@ class scenario_dalaran_purge : public InstanceMapScript
 					creature->SetFaction(FACTION_FRIENDLY);
 					creature->setActive(false);
 					creature->SetVisible(false);
-					patrol.push_back(creature);
+					patrol.push_back(creature->GetGUID());
 					break;
-                case NPC_NARASI_SNOWDAWN:
-                    creature->SetImmuneToAll(true);
-                    creature->SetVisible(false);
-                    break;
-                case NPC_SILVER_COVENANT_JAILER:
-                    creature->SetImmuneToAll(true);
-                    creature->SetVisible(false);
-                    jailers.push_back(creature);
-                    break;
-                case NPC_VEREESA_WINDRUNNER:
+				case NPC_VEREESA_WINDRUNNER:
 					creature->SetNpcFlag(UNIT_NPC_FLAG_NONE);
 					break;
 				case NPC_AETHAS_SUNREAVER:
@@ -308,50 +406,53 @@ class scenario_dalaran_purge : public InstanceMapScript
 					creature->SetWalk(true);
 					creature->AddAura(SPELL_CASTER_READY_03, creature);
 					break;
-                case NPC_SUNREAVER_MAGE:
-                    mages.push_back(creature->GetGUID());
-                    break;
 				case NPC_HIGH_SUNREAVER_MAGE:
 					creature->SetImmuneToAll(true);
 					creature->AddAura(SPELL_CASTER_READY_02, creature);
-					highmages.push_back(creature);
+					highmages.push_back(creature->GetGUID());
+					break;
+				case NPC_SUNREAVER_CITIZEN:
+					sunreavers.push_back(creature->GetGUID());
+					break;
+				case NPC_ARCANE_BARRIER:
+					barriers.push_back(creature->GetGUID());
+					break;
+				case NPC_SUNREAVER_EXTRACTION_TROOP:
+					FeingDeath(creature);
+					if (roll_chance_i(50))
+						creature->AddAura(RAND(SPELL_FROZEN_SOLID, SPELL_BURNING), creature);
+					extraction.push_back(creature->GetGUID());
 					break;
 				default:
 					break;
 			}
 		}
 
-        void OnGameObjectCreate(GameObject* go) override
-        {
-            InstanceScript::OnGameObjectCreate(go);
+		void OnGameObjectCreate(GameObject* go) override
+		{
+			InstanceScript::OnGameObjectCreate(go);
 
-            go->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
+			go->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
 
-            tm const* time = GameTime::GetDateAndTime();
-            for (uint8 i = 0; i < LAMPS_ARRAY_SIZE; i++)
-            {
-                if (go->GetEntry() == Lamps[i])
-                {
-                    // Nuit
-                    if (time->tm_hour >= 19 || time->tm_hour <= 7)
-                    {
-                        go->SetLootState(GO_READY);
-                        go->UseDoorOrButton();
-                    }
-                }
-            }
-
-            if (go->GetEntry() == GOB_ARCANE_FIELD)
-                fields.push_back(go);
-        }
+			switch (go->GetEntry())
+			{
+				case GOB_SECRET_PASSAGE:
+					go->SetFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
+					break;
+				case GOB_LAMP_POST:
+					go->SetLootState(GO_READY);
+					go->UseDoorOrButton();
+					break;
+			}
+		}
 
 		void Update(uint32 diff) override
 		{
 			events.Update(diff);
 			switch (eventId = events.ExecuteEvent())
 			{
-                // Dalaran
-                #pragma region DALARAN
+				// Dalaran
+				#pragma region DALARAN
 
 				case 1:
 					Talk(GetJaina(), SAY_PURGE_JAINA_01);
@@ -380,15 +481,15 @@ class scenario_dalaran_purge : public InstanceMapScript
 				case 7:
 					Talk(GetJaina(), SAY_PURGE_JAINA_07);
 					if (Creature* aethas = GetAethas())
-                        GetElemental()->CastSpell(GetAethas(), SPELL_FROSTBOLT);
+						GetElemental()->CastSpell(GetAethas(), SPELL_FROSTBOLT);
 					Next(2s);
 					break;
 				case 8:
-					for (Creature* highmage : highmages)
+					DoOnCreatures(highmages, [this](Creature* creature)
 					{
-						highmage->SetSpeedRate(MOVE_RUN, 0.8f);
-						highmage->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, GetJaina(), 1.6f);
-					}
+						creature->SetSpeedRate(MOVE_RUN, 0.8f);
+						creature->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, GetJaina(), 1.6f);
+					});
 					Next(760ms);
 					break;
 				case 9:
@@ -396,8 +497,10 @@ class scenario_dalaran_purge : public InstanceMapScript
 					Next(630ms);
 					break;
 				case 10:
-					for (Creature* highmage : highmages)
-						highmage->KillSelf();
+					DoOnCreatures(highmages, [this](Creature* creature)
+					{
+						creature->KillSelf();
+					});
 					Next(1s);
 					break;
 				case 11:
@@ -418,236 +521,102 @@ class scenario_dalaran_purge : public InstanceMapScript
 					GetJaina()->SetVisible(false);
 					GetElemental()->SetVisible(false);
 					GetAethas()->SetVisible(false);
-					for (Creature* highmage : highmages)
-						highmage->SetVisible(false);
+					DoOnCreatures(highmages, [this](Creature* creature)
+					{
+						creature->SetVisible(false);
+					});
 					DoSendScenarioEvent(EVENT_ASSIST_JAINA);
-                    break;
-                // DELETED
-                case 14:
-                    break;
+					break;
+				// DELETED
+				case 14:
+					break;
 
-                #pragma endregion
+				#pragma endregion
 
-                // First Step
-                #pragma region FIRST_STEP
+				// First Step
+				#pragma region FIRST_STEP
 
-                case 15:
-                    GetVereesa()->SetFacingToObject(GetJaina());
-                    GetJaina()->SetFacingToObject(GetVereesa());
-                    Next(2s);
-                    break;
-                case 16:
-                    Talk(GetVereesa(), SAY_FIRST_STEP_VEREESA_01);
-                    Next(5s);
-                    break;
-                case 17:
-                    Talk(GetJaina(), SAY_FIRST_STEP_JAINA_02);
-                    Next(4s);
-                    break;
-                case 18:
-                    if (Creature* jaina = GetJaina())
-                    {
-                        Talk(jaina, SAY_FIRST_STEP_JAINA_03);
-                        if (Player* player = GetNearestPlayer(jaina))
-                            jaina->SetFacingToObject(player);
-                    }
-                    Next(2s);
-                    break;
-                case 19:
-                    if (Creature* vereesa = GetVereesa())
-                    {
-                        Talk(vereesa, SAY_FIRST_STEP_VEREESA_04);
-                        if (Player* player = GetNearestPlayer(vereesa))
-                            vereesa->SetFacingToObject(player);
-                    }
-                    Next(2s);
-                    break;
-                case 20:
-                    DoSendScenarioEvent(EVENT_FIND_JAINA_02);
-                    break;
+				case 15:
+					GetVereesa()->SetFacingToObject(GetJaina());
+					GetJaina()->SetFacingToObject(GetVereesa());
+					Next(2s);
+					break;
+				case 16:
+					Talk(GetVereesa(), SAY_FIRST_STEP_VEREESA_01);
+					Next(5s);
+					break;
+				case 17:
+					Talk(GetJaina(), SAY_FIRST_STEP_JAINA_02);
+					Next(4s);
+					break;
+				case 18:
+					if (Creature* jaina = GetJaina())
+					{
+						Talk(jaina, SAY_FIRST_STEP_JAINA_03);
+						if (Player* player = GetNearestPlayer(jaina))
+							jaina->SetFacingToObject(player);
+					}
+					Next(2s);
+					break;
+				case 19:
+					if (Creature* vereesa = GetVereesa())
+					{
+						Talk(vereesa, SAY_FIRST_STEP_VEREESA_04);
+						if (Player* player = GetNearestPlayer(vereesa))
+							vereesa->SetFacingToObject(player);
+					}
+					Next(2s);
+					break;
+				case 20:
+					DoSendScenarioEvent(EVENT_FIND_JAINA_02);
+					break;
 
-                #pragma endregion
+				#pragma endregion
 
-                // The Final Assault - Speak to Jaina Proudmoore
-                #pragma region FINAL_ASSAULT_ILLUSION
+				// The Escape - Events
+				#pragma region THE_ESCAPE_EVENTS
 
-                case 21:
-                    instance->DoOnPlayers([this](Player* player)
-                    {
-                        if (player->HasAura(SPELL_HORDE_ILLUSION))
-                            return;
+				case 21:
+					instance->DoOnPlayers([this](Player* player)
+					{
+						player->NearTeleportTo(SewersPos01);
+						player->CastSpell(player, SPELL_FLASHBACK_EFFECT, true);
+					});
+					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
+						surdiel->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, SurdielPos02, true, SurdielPos02.GetOrientation());
+					Next(1s);
+					break;
+				case 22:
+					DoOnCreatures(extraction, [this](Creature* creature)
+					{
+						creature->SetVisible(false);
+					});
+					instance->DoOnPlayers([this](Player* player)
+					{
+						player->CombatStop();
+						player->CastSpell(player, SPELL_HORDE_ILLUSION);
+						player->CastSpell(player, SPELL_FACTION_OVERRIDE);
+					});
+					break;
 
-                        if (Creature* jaina = GetJaina())
-                        {
-                            if (player->IsWithinDist(jaina, 10.f))
-                                return;
+				#pragma endregion
 
-                            const Position dest = GetRandomPosition(jaina, 8.0f);
-                            player->CastSpell(dest, SPELL_TELEPORT);
-                            player->CombatStop(true);
+				// The Escape - Escort
+				#pragma region THE_ESCAPE_ESCORT
 
-                            jaina->AI()->SetGUID(player->GetGUID());
-                        }
-                    });
-                    events.RescheduleEvent(21, 2s);
-                    break;
+				case 23:
+					Talk(GetRommath(), SAY_INFILTRATE_ROMMATH_01);
+					Next(12s);
+					break;
+				case 24:
+					Talk(GetRommath(), SAY_INFILTRATE_ROMMATH_02);
+					Next(5s);
+					break;
+				case 25:
+					GetRommath()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, RommathPath01, ROMMATH_PATH_01);
+					break;
 
-                #pragma endregion
-
-                // The Final Assault - Infiltrate the Sunreaver Resistance
-                #pragma region INFILTRATE_SUNREAVER_RESISTANCE
-
-                case 22:
-                    Talk(GetRommath(), SAY_INFILTRATE_ROMMATH_01);
-                    Next(12s);
-                    break;
-                case 23:
-                    Talk(GetRommath(), SAY_INFILTRATE_ROMMATH_02);
-                    Next(5s);
-                    break;
-                case 24:
-                    DoCastSpellOnPlayers(SPELL_FADING_TO_BLACK);
-                    Next(2s);
-                    break;
-                case 25:
-                    if (Creature* rommath = GetRommath())
-                    {
-                        if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
-                        {
-                            surdiel->NearTeleportTo(SurdielPos01);
-                            surdiel->SetHomePosition(SurdielPos01);
-                        }
-                        if (Creature* hathorel = GetCreature(DATA_MAGISTER_HATHOREL))
-                        if (Creature* aethas = GetAethas())
-                        {
-                            aethas->SetFaction(FACTION_FRIENDLY);
-                            aethas->SetImmuneToAll(false);
-                            aethas->SetVisible(true);
-                            aethas->RemoveAllAuras();
-                            aethas->NearTeleportTo(AethasPos01);
-                            aethas->SetHomePosition(AethasPos01);
-                            if (Creature* rathaella = GetRathaella())
-                            {
-                                rathaella->SetFaction(FACTION_FRIENDLY);
-                                rathaella->SetImmuneToAll(false);
-                                rathaella->RemoveAllAuras();
-                                rathaella->SetStandState(UNIT_STAND_STATE_STAND);
-                                rathaella->NearTeleportTo(RathaellaPos01);
-                                rathaella->SetHomePosition(RathaellaPos01);
-                            }
-                        }
-
-                        instance->DoOnPlayers([this](Player* player)
-                        {
-                            const Position dest = GetRandomPosition(SewersPos01, 5.0f);
-                            player->NearTeleportTo(dest);
-                        });
-
-                        rommath->NearTeleportTo(RommathPos01);
-                        rommath->SetHomePosition(RommathPos01);
-                    }
-                    Next(2s);
-                    break;
-                case 26:
-                    if (Creature* aethas = GetAethas())
-                    {
-                        if (Creature* rathaella = GetRathaella())
-                            rathaella->CastSpell(aethas, SPELL_ARCANE_IMPRISONMENT);
-                    }
-                    Talk(GetRommath(), SAY_INFILTRATE_ROMMATH_03);
-                    Next(2s);
-                    break;
-                case 27:
-                    GetRommath()->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, RommathPos02, true, RommathPos02.GetOrientation());
-                    break;
-
-                // After Rommath smooth path ended
-                case 28:
-                    Talk(GetRommath(), SAY_INFILTRATE_ROMMATH_04);
-                    Next(4s);
-                    break;
-                case 29:
-                    if (Creature* rathaella = GetRathaella())
-                        rathaella->RemoveAllAuras();
-                    if (Creature* aethas = GetAethas())
-                        aethas->RemoveAllAuras();
-                    Talk(GetRommath(), SAY_INFILTRATE_ROMMATH_05);
-                    Next(4s);
-                    break;
-                case 30:
-                    if (GameObject* portal = GetRommath()->SummonGameObject(GOB_PORTAL_TO_SILVERMOON, GetRandomPosition(GetRommath(), 8.0f), QuaternionData::QuaternionData(), 0s))
-                    {
-                        portalGUID = portal->GetGUID();
-                        portal->SetFlag(GO_FLAG_NOT_SELECTABLE);
-                        if (Creature* aethas = GetAethas())
-                        {
-                            aethas->SetWalk(false);
-                            aethas->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, portal->GetPosition());
-                        }
-                    }
-                    break;
-
-                // After Aethas escaped
-                case 31:
-                {
-                    if (index >= jailers.size())
-                    {
-                        if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
-                        {
-                            if (GameObject* portal = instance->GetGameObject(portalGUID))
-                                ClosePortal(portal);
-
-                            narasi->SetWalk(true);
-                            narasi->SetVisible(true);
-                            narasi->CastSpell(narasi, SPELL_TELEPORT_TARGET);
-                            narasi->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, NarasiPos01, true, NarasiPos01.GetOrientation());
-                        }
-                        Next(4s);
-                        break;
-                    }
-
-                    if (Creature* jailer = jailers[index])
-                    {
-                        jailer->SetVisible(true);
-                        jailer->CastSpell(jailer, SPELL_TELEPORT_TARGET);
-                    }
-
-                    index++;
-                    events.RescheduleEvent(31, 50ms, 80ms);
-
-                    break;
-                }
-                case 32:
-                    if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
-                    {
-                        if (Player* player = GetNearestPlayer(narasi))
-                            narasi->AI()->Talk(SAY_INFILTRATE_NARASI_06, player);
-
-                        if (Creature* rathaella = GetRathaella())
-                        {
-                            rathaella->PlayOneShotAnimKitId(18583);    // Cast Arcane Fields
-                            rathaella->PlayDirectSound(129674);        // Sound for Arcane Fields
-                        }
-                    }
-                    Next(1s);
-                    break;
-                case 33:
-                    for (GameObject* field : fields)
-                    {
-                        field->SetLootState(GO_READY);
-                        field->UseDoorOrButton();
-                    }
-                    Next(2s);
-                    break;
-                case 34:
-                    if (Creature* rommath = GetRommath())
-                    {
-                        Talk(rommath, SAY_INFILTRATE_ROMMATH_07);
-                        rommath->SetEmoteState(EMOTE_STATE_READY2HL_ALLOW_MOVEMENT);
-                    }
-                    break;
-
-                #pragma endregion
+				#pragma endregion
 
 				default:
 					break;
@@ -656,15 +625,15 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 		EventMap events;
 		uint32 eventId;
-        uint8 index;
+		uint8 index;
 		DLPPhases phase;
-        ObjectGuid portalGUID;
-		std::vector<Creature*> highmages;
-		std::vector<Creature*> patrol;
-		std::vector<Creature*> citizens;
-		std::vector<Creature*> jailers;
-		std::vector<GameObject*> fields;
-		std::vector<ObjectGuid> mages;
+
+		std::vector<ObjectGuid> highmages;
+		std::vector<ObjectGuid> patrol;
+		std::vector<ObjectGuid> citizens;
+		std::vector<ObjectGuid> sunreavers;
+		std::vector<ObjectGuid> extraction;
+		std::vector<ObjectGuid> barriers;
 
 		// Accesseurs
 		#pragma region ACCESSORS
@@ -692,13 +661,34 @@ class scenario_dalaran_purge : public InstanceMapScript
 			events.ScheduleEvent(eventId, time);
 		}
 
-        Player* GetNearestPlayer(Creature* creature)
-        {
-            Player* player = instance->GetPlayers().begin()->GetSource();
-            if (player && player->IsWithinDist(creature, 5.f, false))
-                return player;
-            return nullptr;
-        }
+		Player* GetNearestPlayer(Creature* creature)
+		{
+			Player* player = instance->GetPlayers().begin()->GetSource();
+			if (player && player->IsWithinDist(creature, 5.f, false))
+				return player;
+			return nullptr;
+		}
+
+		void FeingDeath(Creature* creature)
+		{
+			creature->RemoveAllAuras();
+			creature->SetRegenerateHealth(false);
+			creature->SetHealth(0U);
+			creature->SetStandState(UNIT_STAND_STATE_DEAD);
+			creature->SetUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
+			creature->SetUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
+			creature->SetImmuneToAll(true);
+		}
+
+		template <typename T>
+		void DoOnCreatures(std::vector<ObjectGuid> guids, T&& fn)
+		{
+			for (ObjectGuid guid : guids)
+			{
+				if (Creature* creature = instance->GetCreature(guid))
+					fn(creature);
+			}
+		}
 
 		#pragma endregion
 	};

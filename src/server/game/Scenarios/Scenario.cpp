@@ -56,6 +56,10 @@ void Scenario::Reset()
 
 void Scenario::CompleteStep(ScenarioStepEntry const* step)
 {
+    CriteriaTree const* tree = sCriteriaMgr->GetCriteriaTree(step->Criteriatreeid);
+    if (tree)
+        OnCompletedCriteriaTree(tree);
+
     if (Quest const* quest = sObjectMgr->GetQuestTemplate(step->RewardQuestID))
         for (ObjectGuid guid : _players)
             if (Player* player = ObjectAccessor::FindPlayer(guid))
@@ -196,10 +200,11 @@ bool Scenario::CanCompleteCriteriaTree(CriteriaTree const* tree)
 void Scenario::CompletedCriteriaTree(CriteriaTree const* tree, Player* /*referencePlayer*/)
 {
     ScenarioStepEntry const* step = ASSERT_NOTNULL(tree->ScenarioStep);
-    if (!IsCompletedStep(step))
-        return;
 
     OnCompletedCriteriaTree(tree);
+
+    if (!IsCompletedStep(step))
+        return;
 
     SetStepState(step, SCENARIO_STEP_DONE);
     CompleteStep(step);
@@ -211,13 +216,7 @@ bool Scenario::IsCompletedStep(ScenarioStepEntry const* step)
     if (!tree)
         return false;
 
-    if (IsCompletedCriteriaTree(tree))
-    {
-        OnCompletedCriteriaTree(tree);
-        return true;
-    }
-
-    return false;
+    return IsCompletedCriteriaTree(tree);
 }
 
 void Scenario::OnCompletedCriteriaTree(CriteriaTree const* tree)
