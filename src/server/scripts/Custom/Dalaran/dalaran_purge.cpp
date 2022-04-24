@@ -119,10 +119,44 @@ struct npc_aethas_sunreaver_purge : public CustomAI
 	{
 		switch (id)
 		{
+            case MOVEMENT_INFO_POINT_03:
+                DoCast(SPELL_TELEPORT_VISUAL_ONLY);
+                me->SetVisible(false);
+                break;
 			default:
 				break;
 		}
 	}
+
+    void MoveInLineOfSight(Unit* who) override
+    {
+        ScriptedAI::MoveInLineOfSight(who);
+
+        if (me->IsEngaged())
+            return;
+
+        if (who->GetTypeId() != TYPEID_PLAYER)
+            return;
+
+        if (Player* player = who->ToPlayer())
+        {
+            if (player->IsGameMaster())
+                return;
+
+            if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 5.f))
+            {
+                DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
+                switch (phase)
+                {
+                    case DLPPhases::TheEscape_Escort:
+                        instance->SetData(EVENT_FREE_AETHAS_SUNREAVER, 0U);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
 
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* spellInfo) override
 	{
@@ -144,10 +178,28 @@ struct npc_aethas_sunreaver_purge : public CustomAI
 
 struct npc_magister_rommath_purge : public CustomAI
 {
-	npc_magister_rommath_purge(Creature* creature) : CustomAI(creature)
+	npc_magister_rommath_purge(Creature* creature) : CustomAI(creature), evocating(false)
 	{
 		Initialize();
 	}
+
+    enum Groups
+    {
+        GROUP_COMBAT                = 1,
+    };
+
+	enum Spells
+	{
+		SPELL_FIREBALL              = 79854,
+		SPELL_COMBUSTION            = 190319,
+        SPELL_EVOCATION             = 211765,
+		SPELL_PHOENIX_FLAMES        = 257541,
+		SPELL_METEOR                = 153561,
+		SPELL_DRAGON_BREATH         = 255890,
+		SPELL_BLAZING_BARRIER       = 295238,
+        SPELL_EMBER_BLAST           = 325877,
+        SPELL_BLAZING_SURGE         = 329509,
+	};
 
 	void Initialize()
 	{
@@ -155,21 +207,51 @@ struct npc_magister_rommath_purge : public CustomAI
 	}
 
 	InstanceScript* instance;
+    bool evocating;
+
+    void Reset() override
+    {
+        me->SetFullHealth();
+        me->SetFullPower(me->GetPowerType());
+
+        scheduler.CancelGroup(GROUP_COMBAT);
+
+        Initialize();
+    }
 
 	void MovementInform(uint32 /*type*/, uint32 id) override
 	{
 		switch (id)
 		{
 			case MOVEMENT_INFO_POINT_01:
-				me->AI()->Talk(SAY_INFILTRATE_ROMMATH_03);
-				scheduler.Schedule(5s, [this](TaskContext /*context*/)
-				{
-					me->AI()->Talk(SAY_INFILTRATE_ROMMATH_04);
-					if (GameObject* passage = instance->GetGameObject(DATA_SECRET_PASSAGE))
-						passage->UseDoorOrButton(5000);
-				});
+				me->AI()->Talk(SAY_INFILTRATE_ROMMATH_04);
+				if (GameObject* passage = instance->GetGameObject(DATA_SECRET_PASSAGE))
+					passage->UseDoorOrButton(5000);
+                for (uint8 i = 0; i < TRACKING_PATH_01; i++)
+                {
+                    if (Creature* tracking = DoSummon(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
+                        tracking->AddAura(SPELL_ARCANIC_TRACKING, tracking);
+                }
+                if (Player* player = me->GetMap()->GetPlayers().begin()->GetSource())
+                {
+                    me->SetOwnerGUID(player->GetGUID());
+                    me->SetImmuneToAll(false);
+                    me->GetMotionMaster()->Clear();
+                    me->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, me->GetFollowAngle());
+                }
 				break;
-			default:
+            case MOVEMENT_INFO_POINT_02:
+                me->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
+                break;
+            case MOVEMENT_INFO_POINT_03:
+                DoCast(SPELL_TELEPORT_VISUAL_ONLY);
+                me->SetVisible(false);
+                scheduler.Schedule(5s, [this](TaskContext /*context*/)
+                {
+                    instance->DoSendScenarioEvent(EVENT_FREE_AETHAS_SUNREAVER);
+                });
+                break;
+            default:
 				break;
 		}
 	}
@@ -204,6 +286,111 @@ struct npc_magister_rommath_purge : public CustomAI
 			}
 		}
 	}
+
+    void OnChannelFinished(SpellInfo const* spell) override
+    {
+        if (spell->Id == SPELL_EVOCATION)
+            evocating = false;
+    }
+
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+	{
+        if (me->HealthBelowPctDamaged(10, damage))
+        {
+            // On supprime les dégâts actuels
+            damage = 0;
+
+            if (evocating)
+                return;
+
+            evocating = true;
+
+            // On interrompt tous les sorts
+            CastStop();
+
+            scheduler.DelayGroup(GROUP_COMBAT, 10s);
+
+            // On lance Evocation
+            DoCast(me, SPELL_EVOCATION,
+                   CastSpellExtraArgs(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD)
+                   .AddSpellBP0(30)
+                   .AddSpellMod(SPELLVALUE_BASE_POINT1, 30));
+        }
+	}
+
+	void JustEngagedWith(Unit* /*who*/) override
+	{
+		DoCast(SPELL_BLAZING_BARRIER);
+		DoCast(SPELL_COMBUSTION);
+
+		scheduler
+            .Schedule(1s, GROUP_COMBAT, [this](TaskContext fireball)
+			{
+				DoCastVictim(SPELL_FIREBALL);
+				fireball.Repeat(1800ms);
+			})
+			.Schedule(30s, GROUP_COMBAT, [this](TaskContext combustion)
+			{
+				DoCastVictim(SPELL_COMBUSTION);
+                combustion.Repeat(30s, 45s);
+			})
+			.Schedule(8s, 12s, GROUP_COMBAT, [this](TaskContext dragon_breath)
+			{
+				if (EnemiesInFront(6.f) >= 2)
+				{
+					CastStop();
+					DoCast(SPELL_DRAGON_BREATH);
+					dragon_breath.Repeat(32s);
+				}
+				else
+					dragon_breath.Repeat();
+			})
+            .Schedule(20s, GROUP_COMBAT, [this](TaskContext blazing_surge)
+			{
+				if (EnemiesInFront(15.f) >= 2)
+				{
+                    CastStop(SPELL_EMBER_BLAST);
+					DoCast(SPELL_BLAZING_SURGE);
+                    blazing_surge.Repeat(1min);
+				}
+				else
+                    blazing_surge.Repeat();
+			})
+            .Schedule(8s, GROUP_COMBAT, [this](TaskContext ember_blast)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
+                {
+                    CastStop(SPELL_BLAZING_SURGE);
+                    DoCast(target, SPELL_EMBER_BLAST);
+                }
+                ember_blast.Repeat(15s, 40s);
+            })
+			.Schedule(3s, GROUP_COMBAT, [this](TaskContext phoenix_flames)
+			{
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+				{
+                    CastStop({ SPELL_BLAZING_SURGE, SPELL_EMBER_BLAST });
+					DoCast(target, SPELL_PHOENIX_FLAMES);
+				}
+				phoenix_flames.Repeat(3s, 8s);
+			})
+			.Schedule(15s, 25s, GROUP_COMBAT, [this](TaskContext meteor)
+			{
+				if (Unit* target = SelectTarget(SelectTargetMethod::MinThreat, 0))
+				{
+					CastStop();
+					DoCast(target, SPELL_METEOR);
+					meteor.Repeat(15s, 18s);
+				}
+				else
+					meteor.Repeat(15s);
+			});
+};
+
+    bool CanAIAttack(Unit const* who) const override
+    {
+        return who->IsAlive() && me->IsValidAttackTarget(who) && ScriptedAI::CanAIAttack(who) && who->GetEntry() != NPC_NARASI_SNOWDAWN;
+    }
 };
 
 void AddSC_dalaran_purge()

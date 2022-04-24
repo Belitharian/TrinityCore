@@ -10,7 +10,8 @@
 
 #define RATHAELLA_PATH_01               25
 #define RATHAELLA_PATH_02               16
-#define ROMMATH_PATH_01                 28
+#define ROMMATH_PATH_01                 41
+#define TRACKING_PATH_01                9
 
 #define CUSTOM_DEBUG
 
@@ -65,6 +66,7 @@ enum DLPData
 	DATA_GRAND_MAGISTER_ROMMATH,
 	DATA_MAGISTER_BRASAEL,
 	DATA_SECRET_PASSAGE,
+    DATA_PORTAL_TO_PRISON,
 	DATA_SCENARIO_PHASE
 };
 
@@ -103,6 +105,15 @@ enum DLPTalks
 	SAY_INFILTRATE_ROMMATH_05           = 4,
 	SAY_INFILTRATE_ROMMATH_06           = 5,
 	SAY_INFILTRATE_ROMMATH_07           = 6,
+	SAY_INFILTRATE_ROMMATH_08           = 7,
+
+    // Narasi & Surdiel
+    SAY_INFILTRATE_NARASI_01            = 0,
+    SAY_INFILTRATE_SURDIEL_02           = 2,
+    SAY_INFILTRATE_SURDIEL_03           = 3,
+    SAY_INFILTRATE_SURDIEL_04           = 4,
+    SAY_INFILTRATE_NARASI_05            = 1,
+    SAY_INFILTRATE_HATHOREL_06          = 0,
 };
 
 enum DLPSpells
@@ -120,6 +131,7 @@ enum DLPSpells
 	SPELL_TELEPORT_CASTER               = 238689,
 	SPELL_WAND_OF_DISPELLING            = 243043,
 	SPELL_FACTION_OVERRIDE              = 195838,
+    SPELL_ARCANIC_TRACKING              = 210126,
 	SPELL_CASTER_READY_01               = 245843,
 	SPELL_CASTER_READY_02               = 245848,
 	SPELL_CASTER_READY_03               = 245849,
@@ -130,11 +142,13 @@ enum DLPSpells
 	SPELL_ATTACHED                      = 262121,
 	SPELL_ARCANE_BARRIER                = 264849,
 	SPELL_TELEPORT_TARGET               = 268294,
+    SPELL_FLASHBACK_EFFECT              = 279486,
 	SPELL_PORTAL_CHANNELING_01          = 286636,
 	SPELL_PORTAL_CHANNELING_02          = 287432,
 	SPELL_PORTAL_CHANNELING_03          = 288451,
 	SPELL_HOLD_BAG                      = 288787,
 	SPELL_FADING_TO_BLACK               = 296001,
+    SPELL_RAINY_WEATHER                 = 296026,
 	SPELL_WATER_CHANNELING              = 305033,
 	SPELL_CHILLING_BLAST                = 337053,
 	SPELL_ICY_GLARE                     = 338517,
@@ -152,6 +166,9 @@ enum DLPMisc
 	EVENT_SPEAK_TO_JAINA                = 65820,
 	EVENT_FIND_ROMMATH_01               = 65821,
 	EVENT_FREE_AETHAS_SUNREAVER         = 65822,
+
+    // Creature Groups
+    CREATURE_GROUP_PRISON               = 0,
 
 	// Factions
 	FACTION_DALARAN_PATROL              = 2618,
@@ -173,8 +190,9 @@ enum DLPMisc
 	GOB_SECRET_PASSAGE                  = 251033,
 	GOB_PORTAL_TO_SILVERMOON            = 323854,
 	GOB_MYSTIC_BARRIER_01               = 323860,
+	GOB_PORTAL_TO_STORMWIND             = 353823,
 	GOB_ICE_WALL_COLLISION              = 368620,
-	GOB_ARCANE_FIELD                    = 550001,
+	GOB_PORTAL_TO_PRISON                = 550001,
 
 	// Criteria Trees
 	CRITERIA_TREE_DALARAN               = 1000047,  // Purple Citadel
@@ -187,8 +205,11 @@ enum DLPMisc
 	CRITERIA_TREE_REMAINING_SUNREAVERS  = 1000064,
 	CRITERIA_TREE_THE_ESCAPE            = 1000066,  // The Escape - Parent
 	CRITERIA_TREE_SPEAK_TO_JAINA        = 1000067,  // The Escape - Criteria Tree 1
-	CRITERIA_TREE_FIND_ROMMATH          = 1000068,  // The Escape - Criteria Tree 2
-	CRITERIA_TREE_HANDS_OF_THE_CHEF     = 1000070,
+	CRITERIA_TREE_WHAT_HAPPENED         = 1000068,  // What happened?
+	CRITERIA_TREE_FIND_ROMMATH          = 1000069,  // What happened? - Criteria Tree 1
+	CRITERIA_TREE_FOLLOW_TRACKS         = 1000070,  // What happened? - Criteria Tree 2
+	CRITERIA_TREE_FREE_AETHAS           = 1000071,  // What happened? - Criteria Tree 3
+	CRITERIA_TREE_HANDS_OF_THE_CHEF     = 1000072,
 
 	// Point Id
 	MOVEMENT_INFO_POINT_NONE            = 0,
@@ -210,6 +231,7 @@ enum class DLPPhases : uint32
 	TheEscape,
 	TheEscape_Events,
 	TheEscape_Escort,
+	TheEscape_End,
 	InTheHandsOfTheChief,
 };
 
@@ -314,12 +336,20 @@ const Position LandalockPos01   = { -794.86f, 4425.29f, 738.44f, 5.56f };
 const Position JainaPos01       = { -855.42f, 4560.77f, 727.64f, 4.59f };
 const Position JainaPos02       = { -882.10f, 4495.23f, 580.31f, 5.75f };
 const Position AethasPos01      = { -850.01f, 4639.85f, 749.53f, 4.60f };
-const Position AethasPos02      = { };
+const Position AethasPos02      = { -882.42f, 4498.13f, 580.31f, 5.59f };
 const Position BrasaelPos01     = { -682.22f, 4441.74f, 738.12f, 2.80f };
 const Position SurdielPos01     = { -933.42f, 4577.60f, 704.96f, 5.92f };
 const Position SurdielPos02     = { -900.41f, 4549.03f, 706.03f, 5.60f };
+const Position SurdielPos03     = { -843.55f, 4473.24f, 588.84f, 4.50f };
 const Position ZurosPos01       = { -843.55f, 4473.24f, 588.84f, 4.50f };
 const Position SewersPos01      = { -898.88f, 4593.17f, 707.75f, 5.48f };
+const Position GuardianPos01    = { -779.74f, 4415.03f, 602.62f, 2.44f };
+const Position RommathPos01     = { -679.22f, 4444.06f, 694.24f, 5.62f };
+const Position RommathPos02     = { -854.29f, 4475.16f, 588.85f, 5.60f };
+const Position RommathPos03     = { -875.18f, 4492.31f, 580.07f, 2.47f };
+const Position HathorelPos01    = { -805.92f, 4430.16f, 598.65f, 1.76f };
+const Position HathorelPos02    = { -876.22f, 4489.65f, 580.05f, 2.37f };
+const Position EndPortalPos01   = { -893.05f, 4506.48f, 580.45f, 5.59f };
 
 const Position RathaellaPath01[RATHAELLA_PATH_01] =
 {
@@ -372,34 +402,60 @@ const Position RathaellaPath02[RATHAELLA_PATH_02] =
 
 const Position RommathPath01[ROMMATH_PATH_01] =
 {
-	{ -896.17f, 4546.52f, 706.06f, 5.62f },
-	{ -888.21f, 4540.05f, 706.08f, 5.62f },
-	{ -885.38f, 4538.51f, 706.13f, 5.87f },
-	{ -877.71f, 4534.02f, 706.27f, 5.60f },
-	{ -872.05f, 4528.93f, 706.38f, 5.45f },
-	{ -866.47f, 4521.56f, 706.60f, 5.10f },
-	{ -866.02f, 4517.12f, 706.10f, 4.48f },
-	{ -869.97f, 4510.04f, 706.10f, 4.02f },
-	{ -877.49f, 4501.05f, 706.10f, 3.95f },
-	{ -884.30f, 4495.50f, 706.10f, 3.70f },
-	{ -890.75f, 4491.21f, 706.10f, 3.80f },
-	{ -897.09f, 4485.56f, 706.10f, 3.95f },
-	{ -903.26f, 4477.23f, 706.10f, 4.18f },
-	{ -907.68f, 4468.69f, 706.10f, 4.27f },
-	{ -909.67f, 4463.83f, 706.10f, 4.39f },
-	{ -914.35f, 4454.64f, 706.10f, 4.19f },
-	{ -919.73f, 4446.00f, 706.10f, 4.06f },
-	{ -924.83f, 4439.67f, 706.10f, 3.97f },
-	{ -929.49f, 4435.10f, 706.10f, 3.89f },
-	{ -938.46f, 4425.56f, 706.36f, 3.99f },
-	{ -945.78f, 4417.59f, 706.36f, 3.90f },
-	{ -952.05f, 4411.70f, 706.23f, 3.82f },
-	{ -972.35f, 4397.75f, 721.23f, 3.74f },
-	{ -974.38f, 4396.35f, 721.23f, 3.74f },
-	{ -981.23f, 4406.92f, 721.23f, 2.15f },
-	{ -982.65f, 4410.74f, 721.23f, 1.41f },
-	{ -961.94f, 4424.14f, 735.73f, 0.62f },
-	{ -964.51f, 4428.35f, 735.73f, 2.11f }
+    { -898.20f, 4545.18f, 706.06f, 0.21f },
+    { -896.17f, 4545.25f, 706.06f, 0.00f },
+    { -892.74f, 4544.54f, 706.04f, 5.83f },
+    { -889.83f, 4542.13f, 706.05f, 5.43f },
+    { -884.65f, 4537.16f, 706.17f, 5.77f },
+    { -876.83f, 4532.60f, 706.37f, 5.67f },
+    { -869.97f, 4526.40f, 706.72f, 5.43f },
+    { -866.96f, 4522.56f, 706.60f, 5.22f },
+    { -866.00f, 4520.08f, 706.10f, 4.91f },
+    { -866.02f, 4517.44f, 706.10f, 4.51f },
+    { -868.07f, 4513.34f, 706.10f, 4.08f },
+    { -875.40f, 4503.94f, 706.10f, 4.08f },
+    { -877.07f, 4501.67f, 706.10f, 4.00f },
+    { -883.66f, 4496.70f, 706.10f, 3.70f },
+    { -889.56f, 4492.92f, 706.10f, 3.75f },
+    { -892.55f, 4490.53f, 706.10f, 3.85f },
+    { -897.72f, 4485.26f, 706.10f, 4.02f },
+    { -903.38f, 4477.20f, 706.10f, 4.18f },
+    { -907.52f, 4469.28f, 706.10f, 4.32f },
+    { -908.61f, 4466.26f, 706.10f, 4.40f },
+    { -910.42f, 4461.33f, 706.10f, 4.22f },
+    { -912.43f, 4458.21f, 706.10f, 4.08f },
+    { -918.77f, 4450.02f, 706.10f, 4.02f },
+    { -948.20f, 4415.15f, 706.35f, 3.96f },
+    { -950.47f, 4412.93f, 706.32f, 3.82f },
+    { -958.44f, 4407.01f, 709.62f, 3.76f },
+    { -970.07f, 4399.00f, 720.27f, 3.69f },
+    { -971.62f, 4398.08f, 721.23f, 3.61f },
+    { -973.34f, 4397.72f, 721.23f, 3.02f },
+    { -975.66f, 4398.88f, 721.23f, 2.37f },
+    { -979.81f, 4406.33f, 721.23f, 2.17f },
+    { -981.82f, 4409.07f, 721.23f, 1.99f },
+    { -982.15f, 4410.79f, 721.23f, 1.50f },
+    { -981.56f, 4412.44f, 721.23f, 1.00f },
+    { -977.49f, 4415.15f, 724.24f, 0.47f },
+    { -967.15f, 4420.29f, 733.22f, 0.46f },
+    { -963.78f, 4422.03f, 735.73f, 0.61f },
+    { -962.84f, 4423.48f, 735.73f, 1.34f },
+    { -962.74f, 4425.25f, 735.73f, 1.73f },
+    { -963.61f, 4427.41f, 735.73f, 2.03f },
+    { -965.41f, 4431.36f, 735.73f, 1.85f }
+};
+
+const Position TrackingPath01[TRACKING_PATH_01] =
+{
+    { -944.98f, 4454.64f, 733.80f, 0.06f },
+    { -926.47f, 4459.54f, 734.04f, 0.79f },
+    { -920.02f, 4478.08f, 734.02f, 0.90f },
+    { -902.34f, 4492.18f, 731.47f, 0.58f },
+    { -891.04f, 4516.35f, 729.98f, 1.02f },
+    { -874.79f, 4529.80f, 729.22f, 2.41f },
+    { -901.65f, 4553.94f, 729.21f, 2.45f },
+    { -925.28f, 4467.79f, 733.91f, 0.88f },
+    { -925.28f, 4467.79f, 733.91f, 0.88f }
 };
 
 template <class AI>

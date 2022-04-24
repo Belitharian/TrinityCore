@@ -207,6 +207,7 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 		if (!me->HasAura(SPELL_FROST_BARRIER)
 			&& me->HealthBelowPctDamaged(15, damage))
 		{
+            CastStop();
 			DoCast(SPELL_FROST_BARRIER);
 		}
 	}
@@ -494,6 +495,48 @@ struct npc_mage_commander_zuros : public CustomAI
 				time_stop.Repeat(45s, 1min);
 			});
 	}
+};
+
+struct npc_narasi_snowdawn : public CustomAI
+{
+    npc_narasi_snowdawn(Creature* creature) : CustomAI(creature, AI_Type::Melee)
+	{
+		Initialize();
+
+        me->SetImmuneToPC(true);
+    }
+
+	enum Spells
+	{
+		SPELL_ACCELERATING_BLAST    = 203176,
+		SPELL_NETHER_WOUND          = 211000,
+		SPELL_TIME_STOP             = 279062
+	};
+
+	void JustEngagedWith(Unit* /*who*/) override
+	{
+		scheduler
+			.Schedule(2s, [this](TaskContext nether_wound)
+			{
+				DoCastVictim(SPELL_NETHER_WOUND);
+				nether_wound.Repeat(8s, 15s);
+			})
+			.Schedule(8s, [this](TaskContext accelerating_blast)
+			{
+				DoCastVictim(SPELL_ACCELERATING_BLAST);
+				accelerating_blast.Repeat(24s, 30s);
+			})
+			.Schedule(12s, [this](TaskContext time_stop)
+			{
+				DoCastVictim(SPELL_TIME_STOP);
+				time_stop.Repeat(45s, 1min);
+			});
+	}
+
+    bool CanAIAttack(Unit const* who) const override
+    {
+        return who->IsAlive() && me->IsValidAttackTarget(who) && ScriptedAI::CanAIAttack(who) && who->GetEntry() != NPC_GRAND_MAGISTER_ROMMATH;
+    }
 };
 
 struct npc_archmage_landalock : public NullCreatureAI
@@ -892,7 +935,6 @@ struct npc_sorin_magehand : public NullCreatureAI
 	};
 
 	InstanceScript* instance;
-	const Position dest = { -779.74f, 4415.03f, 602.62f, 2.44f };
 
 	bool OnGossipHello(Player* player) override
 	{
@@ -912,7 +954,7 @@ struct npc_sorin_magehand : public NullCreatureAI
 		switch (gossipListId)
 		{
 			case 1:
-				player->CastSpell(dest, SPELL_TELEPORT);
+				player->CastSpell(GuardianPos01, SPELL_TELEPORT);
 				break;
 		}
 
@@ -1691,7 +1733,6 @@ struct npc_magister_surdiel : public CustomAI
 	bool combatFinal;
 
 	const Position surdielPoint01   = { -1008.24f, 4515.30f, 739.49f, 5.85f };
-	const Position surdielPoint02   = { -843.55f, 4473.24f, 588.84f, 4.50f };
 	const Position portalPoint01    = { -1011.90f, 4530.87f, 739.49f, 4.92f };
 	const Position rommathPoint01   = { -1013.63f, 4526.73f, 739.49f, 5.16f };
 
@@ -1813,7 +1854,7 @@ struct npc_magister_surdiel : public CustomAI
 						sunreaver->KillSelf();
 						sunreaver->SetCorpseDelay(7200);
 					}
-					context.Repeat(2s);
+					context.Repeat(5s);
 					break;
 				case 5:
 					me->SetEmoteState(EMOTE_STATE_NONE);
@@ -1857,8 +1898,8 @@ struct npc_magister_surdiel : public CustomAI
 
 						me->CombatStop();
 						me->SetImmuneToAll(true);
-						me->NearTeleportTo(surdielPoint02);
-						me->SetHomePosition(surdielPoint02);
+						me->NearTeleportTo(SurdielPos03);
+						me->SetHomePosition(SurdielPos03);
 						me->SetRegenerateHealth(true);
 						me->SetFullHealth();
 					});
@@ -1892,7 +1933,7 @@ struct npc_magister_surdiel : public CustomAI
 					me->RemoveAllDynObjects();
 					me->RemoveAllAreaTriggers();
 					me->SetReactState(REACT_PASSIVE);
-					me->SetSpeedRate(MOVE_RUN, 0.6f);
+					me->SetSpeedRate(MOVE_RUN, 0.8f);
 
 					scheduler.Schedule(1s, [this](TaskContext context)
 					{
@@ -1947,29 +1988,34 @@ struct npc_magister_surdiel : public CustomAI
 			})
 			.Schedule(2s, [this](TaskContext pyroblast)
 			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-					DoCast(target, SPELL_PYROBLAST);
-				pyroblast.Repeat(15s, 28s);
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                {
+                    CastStop({ SPELL_MASS_POLYMORPH, SPELL_PYROBLAST, SPELL_FIRE_BOMB });
+                    DoCast(target, SPELL_PYROBLAST);
+                }
+				pyroblast.Repeat(8s, 15s);
 			})
 			.Schedule(5s, [this](TaskContext rain_of_fire)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-					CastStop();
+					CastStop(SPELL_MASS_POLYMORPH);
 
 					Position dest = target->GetPosition();
 					me->CastSpell(dest, SPELL_RAIN_OF_FIRE);
 				}
-				rain_of_fire.Repeat(5min);
+				rain_of_fire.Repeat(8min);
 			})
 			.Schedule(8s, [this](TaskContext fire_bomb)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
+                    CastStop({ SPELL_MASS_POLYMORPH, SPELL_PYROBLAST });
+
 					const Position pos = GetRandomPosition(target, 10.f, false);
 					me->CastSpell(pos, SPELL_FIRE_BOMB);
 				}
-				fire_bomb.Repeat(45s, 1min);
+				fire_bomb.Repeat(30s, 45s);
 			});
 	}
 };
@@ -2499,6 +2545,24 @@ struct npc_high_arcanist_savor : public CustomAI
 	#pragma endregion
 };
 
+struct npc_magister_hathorel : public CustomAI
+{
+    npc_magister_hathorel(Creature* creature) : CustomAI(creature)
+	{
+	}
+
+    void MovementInform(uint32 /*type*/, uint32 id) override
+    {
+        switch (id)
+        {
+            case MOVEMENT_INFO_POINT_03:
+                DoCast(SPELL_TELEPORT_VISUAL_ONLY);
+                me->SetVisible(false);
+                break;
+        }
+    }
+};
+
 ///
 ///     SPECIAL NPC
 ///
@@ -2526,6 +2590,12 @@ struct npc_arcane_barrier : public NullCreatureAI
 	InstanceScript* instance;
 	ObjectGuid mageGUID;
 	ObjectGuid colliderGUID;
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        if (GameObject* collider = ObjectAccessor::GetGameObject(*me, colliderGUID))
+            collider->Delete();
+    }
 
 	void JustAppeared() override
 	{
@@ -3161,6 +3231,7 @@ void AddSC_npcs_dalaran_purge()
 	RegisterDalaranAI(npc_stormwind_cleric);
 	RegisterDalaranAI(npc_archmage_landalock);
 	RegisterDalaranAI(npc_mage_commander_zuros);
+	RegisterDalaranAI(npc_narasi_snowdawn);
 	RegisterDalaranAI(npc_arcanist_rathaella);
 	RegisterDalaranAI(npc_sorin_magehand);
 
@@ -3173,6 +3244,7 @@ void AddSC_npcs_dalaran_purge()
 	RegisterDalaranAI(npc_magister_brasael);
 	RegisterDalaranAI(npc_magister_surdiel);
 	RegisterDalaranAI(npc_high_arcanist_savor);
+	RegisterDalaranAI(npc_magister_hathorel);
 
 	// Special
 	RegisterCreatureAI(npc_arcane_barrier);

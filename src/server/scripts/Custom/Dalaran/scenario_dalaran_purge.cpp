@@ -40,6 +40,7 @@ const ObjectData creatureData[] =
 const ObjectData gameobjectData[] =
 {
 	{ GOB_SECRET_PASSAGE,               DATA_SECRET_PASSAGE             },
+	{ GOB_PORTAL_TO_PRISON,             DATA_PORTAL_TO_PRISON           },
 	{ 0,                                0                               }   // END
 };
 
@@ -59,20 +60,31 @@ class scenario_dalaran_purge : public InstanceMapScript
 			LoadObjectData(creatureData, gameobjectData);
 		}
 
-		enum Spells
-		{
-			SPELL_RAINY_WEATHER         = 296026,
-			SPELL_FLASHBACK_EFFECT      = 279486,
-		};
-
 		void OnPlayerEnter(Player* player) override
 		{
 			player->CastSpell(player, SPELL_RAINY_WEATHER, true);
+
+			DLPPhases phase = (DLPPhases)GetData(DATA_SCENARIO_PHASE);
+			if (phase >= DLPPhases::FreeCitizens && phase < DLPPhases::RemainingSunreavers)
+			{
+				player->RemoveAurasDueToSpell(SPELL_WAND_OF_DISPELLING);
+				player->CastSpell(player, SPELL_WAND_OF_DISPELLING, true);
+			}
+			else if (phase >= DLPPhases::TheEscape && phase < DLPPhases::InTheHandsOfTheChief)
+			{
+				player->CastSpell(player, SPELL_HORDE_ILLUSION, true);
+				player->CastSpell(player, SPELL_FACTION_OVERRIDE, true);
+				player->CastSpell(player, SPELL_FLASHBACK_EFFECT, true);
+			}
 		}
 
 		void OnPlayerLeave(Player* player) override
 		{
 			player->RemoveAurasDueToSpell(SPELL_RAINY_WEATHER);
+			player->RemoveAurasDueToSpell(SPELL_WAND_OF_DISPELLING);
+			player->RemoveAurasDueToSpell(SPELL_HORDE_ILLUSION);
+			player->RemoveAurasDueToSpell(SPELL_FACTION_OVERRIDE);
+			player->RemoveAurasDueToSpell(SPELL_FLASHBACK_EFFECT);
 		}
 
 		uint32 GetData(uint32 dataId) const override
@@ -95,6 +107,10 @@ class scenario_dalaran_purge : public InstanceMapScript
 					#endif
 					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FreeTheArcanist);
 					events.ScheduleEvent(15, 2s);
+					break;
+				case EVENT_FREE_AETHAS_SUNREAVER:
+					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape_End);
+					events.ScheduleEvent(37, 2s);
 					break;
 				default:
 					break;
@@ -249,7 +265,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape);
 					break;
 				}
-				// The Final Assault - Speak to Jaina Proudmoore
+				// What happened! - Speak to Jaina Proudmoore
 				case CRITERIA_TREE_SPEAK_TO_JAINA:
 				{
 					if (Creature* jaina = GetJaina())
@@ -281,6 +297,10 @@ class scenario_dalaran_purge : public InstanceMapScript
 						creature->SetFaction(FACTION_FRIENDLY);
 						creature->setActive(false);
 						creature->SetVisible(false);
+					});
+					DoOnCreatures(barriers, [this](Creature* creature)
+					{
+						creature->KillSelf();
 					});
 
 					if (Creature* zuros = GetCreature(DATA_MAGE_COMMANDER_ZUROS))
@@ -329,10 +349,71 @@ class scenario_dalaran_purge : public InstanceMapScript
 					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape_Events);
 					break;
 				}
-				// The Final Assault - Find the Grand Magister Rommath
+				// What happened!
+				case CRITERIA_TREE_WHAT_HAPPENED:
+				{
+					if (GameObject* portal = instance->GetGameObject(endPortal))
+						ClosePortal(portal);
+
+					if (Creature* jaina = GetJaina())
+					{
+						jaina->SetVisible(true);
+						jaina->SummonGameObject(GOB_PORTAL_TO_STORMWIND, EndPortalPos01,
+												QuaternionData::fromEulerAnglesZYX(EndPortalPos01.GetOrientation(), 0.0f, 0.0f), 0s);
+
+						Trinity::RespawnDo doRespawn;
+						Trinity::WorldObjectWorker<Trinity::RespawnDo> worker(jaina, doRespawn);
+						Cell::VisitGridObjects(jaina, worker, INFINITY);
+
+						std::vector<RespawnInfo const*> data;
+						instance->GetRespawnInfo(data, SPAWN_TYPEMASK_ALL);
+
+						if (!data.empty())
+						{
+							for (RespawnInfo const* info : data)
+								instance->Respawn(info->type, info->spawnId);
+						}
+
+						if (Player* player = GetNearestPlayer(jaina))
+							jaina->SetFacingToObject(player);
+					}
+
+					DoOnCreatures(patrol, [this](Creature* creature)
+					{
+						creature->SetFaction(FACTION_FRIENDLY);
+						creature->setActive(false);
+						creature->SetVisible(false);
+					});
+
+					DoOnCreatures(extraction, [this](Creature* creature)
+					{
+						creature->SetVisible(true);
+					});
+
+					instance->DoOnPlayers([this](Player* player)
+					{
+						player->CastSpell(player, SPELL_FADING_TO_BLACK, true);
+						player->RemoveAurasDueToSpell(SPELL_HORDE_ILLUSION);
+						player->RemoveAurasDueToSpell(SPELL_FACTION_OVERRIDE);
+						player->RemoveAurasDueToSpell(SPELL_FLASHBACK_EFFECT);
+					});
+
+					break;
+				}
+                // What happened! - Find the Grand Magister Rommath
 				case CRITERIA_TREE_FIND_ROMMATH:
 					events.ScheduleEvent(23, 2s);
 					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape_Escort);
+					break;
+				// What happened! - Find the Grand Magister Rommath
+				case CRITERIA_TREE_FOLLOW_TRACKS:
+					instance->SummonCreatureGroup(CREATURE_GROUP_PRISON, &prison);
+					if (Creature* rommath = GetRommath())
+					{
+						rommath->NearTeleportTo(RommathPos01);
+						rommath->SetHomePosition(RommathPos01);
+					}
+					events.ScheduleEvent(28, 2s);
 					break;
 				default:
 					break;
@@ -363,10 +444,13 @@ class scenario_dalaran_purge : public InstanceMapScript
 						creature->SetEmoteState(EMOTE_STATE_COWER);
 					citizens.push_back(creature->GetGUID());
 					break;
-				case NPC_MAGE_COMMANDER_ZUROS:
+                case NPC_NARASI_SNOWDAWN:
+                    creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP | UNIT_NPC_FLAG_QUESTGIVER);
+                    break;
+                case NPC_MAGE_COMMANDER_ZUROS:
 				case NPC_MAGISTER_SURDIEL:
 					creature->SetImmuneToPC(true);
-					break;
+                    break;
 				case NPC_WANTON_HOST:
 				case NPC_WANTON_HOSTESS:
 					creature->SetImmuneToAll(true);
@@ -383,7 +467,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 				case NPC_MAGISTER_HATHOREL:
 				case NPC_HIGH_ARCANIST_SAVOR:
 				case NPC_GRAND_MAGISTER_ROMMATH:
-				case NPC_NARASI_SNOWDAWN:
 					creature->RemoveNpcFlag(UNIT_NPC_FLAG_QUESTGIVER);
 					creature->SetImmuneToAll(true);
 					break;
@@ -437,6 +520,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 			switch (go->GetEntry())
 			{
 				case GOB_SECRET_PASSAGE:
+				case GOB_PORTAL_TO_PRISON:
 					go->SetFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
 					break;
 				case GOB_LAMP_POST:
@@ -573,8 +657,8 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 				#pragma endregion
 
-				// The Escape - Events
-				#pragma region THE_ESCAPE_EVENTS
+				// What happened! - Events
+				#pragma region WHAT_HAPPENED_EVENTS
 
 				case 21:
 					instance->DoOnPlayers([this](Player* player)
@@ -601,8 +685,8 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 				#pragma endregion
 
-				// The Escape - Escort
-				#pragma region THE_ESCAPE_ESCORT
+				// What happened! - Escort
+				#pragma region WHAT_HAPPENED_ESCORT
 
 				case 23:
 					Talk(GetRommath(), SAY_INFILTRATE_ROMMATH_01);
@@ -614,6 +698,242 @@ class scenario_dalaran_purge : public InstanceMapScript
 					break;
 				case 25:
 					GetRommath()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, RommathPath01, ROMMATH_PATH_01);
+					Next(15s);
+					break;
+				case 26:
+					Talk(GetRommath(), SAY_INFILTRATE_ROMMATH_03);
+					Next(15s);
+					break;
+				case 27:
+					if (Creature* rommath = GetRommath())
+					{
+						if (GameObject* portal = GetGameObject(DATA_PORTAL_TO_PRISON))
+						{
+							if (rommath->IsWithinDist(portal, 35.0f))
+							{
+								events.CancelEvent(27);
+
+								float distance = 5.0f;
+								float distanceToTravel = rommath->GetExactDist2d(portal) - distance;
+								float angle = rommath->GetAbsoluteAngle(portal);
+								float destx = rommath->GetPositionX() + distanceToTravel * std::cos(angle);
+								float desty = rommath->GetPositionY() + distanceToTravel * std::sin(angle);
+
+								portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
+
+								rommath->SetOwnerGUID(ObjectGuid::Empty);
+								rommath->GetMotionMaster()->Clear();
+								rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_02, destx, desty, portal->GetPositionZ(), true, angle);
+							}
+							else
+							{
+								events.RescheduleEvent(27, 2s);
+							}
+						}
+					}
+					break;
+
+				#pragma endregion
+
+				// What happened! - Prison
+				#pragma region WHAT_HAPPENED_PRISON
+
+				case 28:
+				{
+					uint8 counter = 0;
+					for (TempSummon* summon : prison)
+					{
+						if (!summon || summon->isDead())
+							counter++;
+					}
+					if (counter >= prison.size())
+					{
+						events.CancelEvent(28);
+						Next(2s);
+					}
+					else
+						events.RescheduleEvent(28, 2s);
+					break;
+				}
+				case 29:
+					if (Creature* aethas = GetAethas())
+					{
+                        aethas->SetImmuneToAll(true);
+						aethas->SetVisible(true);
+						aethas->NearTeleportTo(AethasPos02);
+						aethas->SetHomePosition(AethasPos02);
+						aethas->AddAura(SPELL_ICY_GLARE, aethas);
+						aethas->AddAura(SPELL_CHILLING_BLAST, aethas);
+					}
+					Talk(GetRommath(), SAY_INFILTRATE_ROMMATH_05);
+					Next(8s);
+					break;
+				case 30:
+					if (Creature* rommath = GetRommath())
+					{
+						Talk(rommath, SAY_INFILTRATE_ROMMATH_08);
+						rommath->CastSpell(rommath, SPELL_TELEPORT_CASTER);
+					}
+					Next(5s);
+					break;
+				case 31:
+					if (Creature* rommath = GetRommath())
+					{
+						rommath->NearTeleportTo(GuardianPos01);
+						rommath->SetHomePosition(GuardianPos01);
+						instance->DoOnPlayers([this](Player* player)
+						{
+                            const Position dest = GetRandomPosition(GuardianPos01, 4.5f);
+                            player->CastSpell(dest, SPELL_TELEPORT);
+						});
+					}
+					if (Creature* hathorel = GetCreature(DATA_MAGISTER_HATHOREL))
+						hathorel->NearTeleportTo(HathorelPos01);
+					Next(2s);
+					break;
+				case 32:
+					if (Creature* rommath = GetRommath())
+					{
+						if (Player* player = GetNearestPlayer(rommath))
+						{
+							rommath->SetOwnerGUID(player->GetGUID());
+							rommath->SetImmuneToAll(false);
+							rommath->GetMotionMaster()->Clear();
+							rommath->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, rommath->GetFollowAngle());
+						}
+					}
+					if (Creature* hathorel = GetCreature(DATA_MAGISTER_HATHOREL))
+					{
+						hathorel->SetHomePosition(HathorelPos02);
+						hathorel->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HathorelPos02);
+					}
+					Next(2s);
+					break;
+				case 33:
+					if (Creature* rommath = GetRommath())
+					{
+						if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
+						{
+							if (rommath->IsWithinDist(narasi, 45.0f))
+							{
+								events.CancelEvent(33);
+
+								Talk(rommath, SAY_INFILTRATE_ROMMATH_06);
+
+                                rommath->SetImmuneToAll(true);
+                                rommath->SetOwnerGUID(ObjectGuid::Empty);
+								rommath->SetHomePosition(RommathPos02);
+								rommath->GetMotionMaster()->Clear();
+								rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos02, true, RommathPos02.GetOrientation());
+
+								Next(3s);
+							}
+							else
+							{
+								events.RescheduleEvent(33, 2s);
+							}
+						}
+					}
+					break;
+				case 34:
+					if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
+						Talk(narasi, SAY_INFILTRATE_NARASI_01);
+                    if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
+                    {
+                        surdiel->SetHomePosition(SurdielPos03);
+                        surdiel->CastSpell(SurdielPos03, SPELL_TELEPORT);
+                    }
+					Next(1s);
+					break;
+				case 35:
+					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
+					{
+						Talk(surdiel, SAY_INFILTRATE_SURDIEL_02);
+
+						if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
+						{
+							surdiel->AI()->AttackStart(narasi);
+                            narasi->AI()->AttackStart(surdiel);
+						}
+					}
+                    Next(5s);
+                    break;
+                case 36:
+                    if (Creature* rommath = GetRommath())
+                    {
+                        Talk(rommath, SAY_INFILTRATE_ROMMATH_08);
+                        rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos03);
+                    }
+                    break;
+
+				#pragma endregion
+
+				// What happened! - Escape
+				#pragma region WHAT_HAPPENED_PRISON
+
+				case 37:
+					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
+						Talk(surdiel, SAY_INFILTRATE_SURDIEL_03);
+                    Next(5s);
+                    break;
+				case 38:
+					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
+						Talk(surdiel, SAY_INFILTRATE_SURDIEL_04);
+					Next(5s);
+					break;
+				case 39:
+					if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
+					{
+						Talk(narasi, SAY_INFILTRATE_NARASI_05);
+
+						if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
+						{
+							narasi->CombatStop();
+							narasi->SetImmuneToAll(true);
+
+							surdiel->CombatStop();
+                            surdiel->SetImmuneToAll(true);
+
+							narasi->CastSpell(surdiel, SPELL_ARCANE_IMPRISONMENT);
+						}
+					}
+					Next(2s);
+					break;
+				case 40:
+					if (Creature* hathorel = GetCreature(DATA_MAGISTER_HATHOREL))
+						Talk(hathorel, SAY_INFILTRATE_HATHOREL_06);
+                    if (Creature* jaina = instance->SummonCreature(NPC_JAINA_PROUDMOORE, RommathPos02))
+                    {
+                        jaina->SetImmuneToAll(true);
+                        jaina->SetWalk(true);
+                        jaina->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos03);
+                        jaina->DespawnOrUnsummon(15s);
+                    }
+                    Next(2s);
+					break;
+				case 41:
+					if (Creature* rommath = GetRommath())
+					{
+						Talk(rommath, SAY_INFILTRATE_ROMMATH_07);
+
+						if (GameObject* portal = rommath->SummonGameObject(GOB_PORTAL_TO_SILVERMOON, EndPortalPos01,
+							QuaternionData::fromEulerAnglesZYX(EndPortalPos01.GetOrientation(), 0.0f, 0.0f), 0s))
+						{
+							endPortal = portal->GetGUID();
+
+							rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_03, portal->GetPosition());
+
+							if (Creature* hathorel = GetCreature(DATA_MAGISTER_HATHOREL))
+								hathorel->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_03, portal->GetPosition());
+
+                            if (Creature* aethas = GetAethas())
+                            {
+                                aethas->SetWalk(false);
+                                aethas->RemoveAllAuras();
+                                aethas->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_03, portal->GetPosition());
+                            }
+						}
+					}
 					break;
 
 				#pragma endregion
@@ -635,6 +955,10 @@ class scenario_dalaran_purge : public InstanceMapScript
 		std::vector<ObjectGuid> extraction;
 		std::vector<ObjectGuid> barriers;
 
+		std::list<TempSummon*> prison;
+
+		ObjectGuid endPortal;
+
 		// Accesseurs
 		#pragma region ACCESSORS
 		
@@ -643,7 +967,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 		Creature* GetAethas() { return GetCreature(DATA_AETHAS_SUNREAVER); }
 		Creature* GetElemental() { return GetCreature(DATA_SUMMONED_WATER_ELEMENTAL); }
 		Creature* GetRommath() { return GetCreature(DATA_GRAND_MAGISTER_ROMMATH); }
-		Creature* GetRathaella() { return GetCreature(DATA_ARCANIST_RATHAELLA); }
 
 		#pragma endregion
 
