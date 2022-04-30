@@ -313,7 +313,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case 18:
 					DoTeleportPlayers(instance->GetPlayers(), PlayerPoint01, 12.f);
 					DoCastSpellOnPlayers(SPELL_SCREEN_FX);
-					DoSendScenarioEvent(EVENT_HELP_KALECGOS);
+					TriggerGameEvent(EVENT_HELP_KALECGOS);
 					break;
 
 					#pragma endregion
@@ -356,7 +356,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(6s);
 					break;
 				case 24:
-					DoSendScenarioEvent(EVENT_FIND_JAINA_02);
+					TriggerGameEvent(EVENT_FIND_JAINA_02);
 					if (Creature* dummy = instance->SummonCreature(WORLD_TRIGGER, DummyPoint01))
 					{
 						dummy->SetObjectScale(0.6f);
@@ -397,7 +397,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					break;
 				case 27:
 					GetJaina()->CastSpell(GetJaina(), SPELL_SUMMON_WATER_ELEMENTALS);
-					DoSendScenarioEvent(EVENT_BACK_TO_SENDER);
+					TriggerGameEvent(EVENT_BACK_TO_SENDER);
 					Next(2s);
 					break;
 				case 28:
@@ -498,7 +498,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 					if (membersCounter <= deadCounter)
 					{
-						DoSendScenarioEvent(EVENT_JAINA_PROTECTED);
+						TriggerGameEvent(EVENT_JAINA_PROTECTED);
 						events.CancelEvent(38);
 					}
 					else

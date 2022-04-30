@@ -762,10 +762,11 @@ void CriteriaHandler::UpdateCriteria(CriteriaType type, uint64 miscValue1 /*= 0*
             case CriteriaType::GuildAttainedLevel:
                 SetCriteriaProgress(criteria, miscValue1, referencePlayer);
                 break;
-            case CriteriaType::PlayerTriggerGameEvent:
-            case CriteriaType::AnyoneTriggerGameEventScenario:
-                SetCriteriaProgress(criteria, 1, referencePlayer);
-                break;
+            // @I did that
+            //case CriteriaType::PlayerTriggerGameEvent:
+            //case CriteriaType::AnyoneTriggerGameEventScenario:
+            //    SetCriteriaProgress(criteria, 1, referencePlayer);
+            //    break;
             // FIXME: not triggered in code as result, need to implement
             case CriteriaType::RunInstance:
             case CriteriaType::ParticipateInArena:

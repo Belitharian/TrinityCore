@@ -224,9 +224,6 @@ class TC_GAME_API InstanceScript : public ZoneScript
         // Send Notify to all players in instance
         void DoSendNotifyToInstance(char const* format, ...);
 
-        // Send scenario event
-        void DoSendScenarioEvent(uint32 eventId);
-
         // Update Achievement Criteria for all players in instance
         void DoUpdateCriteria(CriteriaType type, uint32 miscValue1 = 0, uint32 miscValue2 = 0, Unit* unit = nullptr);
 

@@ -123,7 +123,7 @@ class npc_jaina_theramore : public CreatureScript
 				switch (id)
 				{
 					case MOVEMENT_INFO_POINT_01:
-						instance->DoSendScenarioEvent(EVENT_THE_COUNCIL);
+						instance->TriggerGameEvent(EVENT_THE_COUNCIL);
 						break;
 					case MOVEMENT_INFO_POINT_02:
 						me->StopMoving();
@@ -139,7 +139,7 @@ class npc_jaina_theramore : public CreatureScript
 							hedric->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HedricPoint03, true, HedricPoint03.GetOrientation());
 							hedric->SetFacingTo(4.99f);
 						}
-						instance->DoSendScenarioEvent(EVENT_FIND_JAINA_04);
+						instance->TriggerGameEvent(EVENT_FIND_JAINA_04);
 						break;
 					case MOVEMENT_INFO_POINT_03:
 						me->SetVisible(false);
@@ -197,19 +197,19 @@ class npc_jaina_theramore : public CreatureScript
 					switch (phase)
 					{
 						case BFTPhases::FindJaina:
-							instance->DoSendScenarioEvent(EVENT_FIND_JAINA_01);
+							instance->TriggerGameEvent(EVENT_FIND_JAINA_01);
 							break;
 						case BFTPhases::ALittleHelp:
-							instance->DoSendScenarioEvent(EVENT_FIND_JAINA_02);
+							instance->TriggerGameEvent(EVENT_FIND_JAINA_02);
 							break;
 						case BFTPhases::TheBattle:
-							instance->DoSendScenarioEvent(EVENT_FIND_JAINA_03);
+							instance->TriggerGameEvent(EVENT_FIND_JAINA_03);
 							break;
 						case BFTPhases::WaitForAmara:
-							instance->DoSendScenarioEvent(EVENT_FIND_JAINA_05);
+							instance->TriggerGameEvent(EVENT_FIND_JAINA_05);
 							break;
 						case BFTPhases::RetrieveRhonin:
-							instance->DoSendScenarioEvent(EVENT_RETRIEVE_RHONIN);
+							instance->TriggerGameEvent(EVENT_RETRIEVE_RHONIN);
 							break;
 						default:
 							break;
@@ -399,7 +399,7 @@ class npc_amara_leeson : public CreatureScript
 						me->SetVisible(false);
 						break;
 					case MOVEMENT_INFO_POINT_02:
-						instance->DoSendScenarioEvent(EVENT_WAIT_ARCHMAGE_LESSON);
+						instance->TriggerGameEvent(EVENT_WAIT_ARCHMAGE_LESSON);
 						break;
 					default:
 						break;
@@ -658,7 +658,7 @@ class npc_pained : public CreatureScript
 				{
 					case MOVEMENT_INFO_POINT_02:
 						me->SetVisible(false);
-						instance->DoSendScenarioEvent(EVENT_THE_UNKNOWN_TAUREN);
+						instance->TriggerGameEvent(EVENT_THE_UNKNOWN_TAUREN);
 						break;
 					default:
 						break;

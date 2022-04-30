@@ -107,7 +107,7 @@ class npc_roknah_warlord : public CreatureScript
 		{
 			CustomAI::JustDied(killer);
 
-			instance->DoSendScenarioEvent(EVENT_WARLORD_ROKNAH_SLAIN);
+			instance->TriggerGameEvent(EVENT_WARLORD_ROKNAH_SLAIN);
 		}
 
         void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override

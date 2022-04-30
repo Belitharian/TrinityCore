@@ -205,7 +205,7 @@ class npc_jaina_ruins : public CreatureScript
 							warlord->SetRespawnDelay(5 * MINUTE * IN_MILLISECONDS);
 							warlord->KillSelf();
 
-							instance->DoSendScenarioEvent(EVENT_WARLORD_ROKNAH_SLAIN);
+							instance->TriggerGameEvent(EVENT_WARLORD_ROKNAH_SLAIN);
 						}
 					});
 					break;
@@ -233,7 +233,7 @@ class npc_jaina_ruins : public CreatureScript
 					switch (phase)
 					{
 						case RFTPhases::FindJaina_Isle:
-							instance->DoSendScenarioEvent(EVENT_FIND_JAINA_01);
+							instance->TriggerGameEvent(EVENT_FIND_JAINA_01);
 							break;
 						case RFTPhases::FindJaina_Crater:
 							instance->SetData(EVENT_FIND_JAINA_02, 0U);

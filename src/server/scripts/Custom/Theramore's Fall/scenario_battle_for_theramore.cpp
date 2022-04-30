@@ -786,7 +786,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				#pragma region WAITING
 
 				case 24:
-					DoSendScenarioEvent(EVENT_WAITING);
+					TriggerGameEvent(EVENT_WAITING);
 					break;
 
 				#pragma endregion
@@ -1696,7 +1696,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					Next(5s);
 					break;
 				case 172:
-					DoSendScenarioEvent(EVENT_REDUCE_IMPACT);
+					TriggerGameEvent(EVENT_REDUCE_IMPACT);
 					break;
 
 				#pragma endregion

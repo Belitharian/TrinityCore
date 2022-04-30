@@ -45,7 +45,7 @@ struct npc_jaina_dalaran_purge : public CustomAI
 			case 0:
 				me->RemoveAurasDueToSpell(SPELL_CHAT_BUBBLE);
 				me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-				instance->DoSendScenarioEvent(EVENT_SPEAK_TO_JAINA);
+				instance->TriggerGameEvent(EVENT_SPEAK_TO_JAINA);
 				break;
 		}
 
@@ -74,7 +74,7 @@ struct npc_jaina_dalaran_purge : public CustomAI
 				switch (phase)
 				{
 					case DLPPhases::FindJaina01:
-						instance->DoSendScenarioEvent(EVENT_FIND_JAINA_01);
+						instance->TriggerGameEvent(EVENT_FIND_JAINA_01);
 						break;
 					case DLPPhases::FindJaina02:
 						instance->SetData(EVENT_FIND_JAINA_02, 1U);
@@ -248,7 +248,7 @@ struct npc_magister_rommath_purge : public CustomAI
                 me->SetVisible(false);
                 scheduler.Schedule(5s, [this](TaskContext /*context*/)
                 {
-                    instance->DoSendScenarioEvent(EVENT_FREE_AETHAS_SUNREAVER);
+                    instance->TriggerGameEvent(EVENT_FREE_AETHAS_SUNREAVER);
                 });
                 break;
             default:
@@ -278,7 +278,7 @@ struct npc_magister_rommath_purge : public CustomAI
 				{
 					case DLPPhases::TheEscape_Events:
 						me->RemoveAurasDueToSpell(SPELL_COSMETIC_YELLOW_ARROW);
-						instance->DoSendScenarioEvent(EVENT_FIND_ROMMATH_01);
+						instance->TriggerGameEvent(EVENT_FIND_ROMMATH_01);
 						break;
 					default:
 						break;

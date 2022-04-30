@@ -103,7 +103,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					break;
 				case EVENT_FIND_JAINA_02:
 					#ifdef CUSTOM_DEBUG
-						DoSendScenarioEvent(EVENT_FIND_JAINA_02);
+						TriggerGameEvent(EVENT_FIND_JAINA_02);
 					#endif
 					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::FreeTheArcanist);
 					events.ScheduleEvent(15, 2s);
@@ -609,7 +609,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					{
 						creature->SetVisible(false);
 					});
-					DoSendScenarioEvent(EVENT_ASSIST_JAINA);
+					TriggerGameEvent(EVENT_ASSIST_JAINA);
 					break;
 				// DELETED
 				case 14:
@@ -652,7 +652,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					Next(2s);
 					break;
 				case 20:
-					DoSendScenarioEvent(EVENT_FIND_JAINA_02);
+					TriggerGameEvent(EVENT_FIND_JAINA_02);
 					break;
 
 				#pragma endregion
