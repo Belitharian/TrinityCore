@@ -34,7 +34,6 @@ struct npc_guardian_mage_dalaran : public CustomAI
 		SPELL_FROST_NOVA            = 284879,
 		SPELL_BLINK                 = 284877,
 		SPELL_BLIZZARD              = 284968,
-		SPELL_GREATER_PYROBLAST     = 295231
 	};
 
 	uint8 index;
@@ -44,9 +43,9 @@ struct npc_guardian_mage_dalaran : public CustomAI
 		return 10.f;
 	}
 
-	void OnSpellCast(SpellInfo const* spell) override
+	void OnSpellCast(SpellInfo const* spellInfo) override
 	{
-		if (spell->Id == SPELL_FROST_NOVA)
+		if (spellInfo->Id == SPELL_FROST_NOVA)
 		{
 			scheduler.Schedule(1s, [this](TaskContext blink)
 			{
@@ -58,10 +57,19 @@ struct npc_guardian_mage_dalaran : public CustomAI
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
-		DoCastSelf(SPELL_ICE_BARRIER, true);
-
 		scheduler
-			.Schedule(1ms, [this](TaskContext fireball)
+            .Schedule(1ms, [this](TaskContext ice_barrier)
+            {
+                if (!me->HasAura(SPELL_ICE_BARRIER))
+                {
+                    CastStop();
+                    DoCastSelf(SPELL_ICE_BARRIER, true);
+                    ice_barrier.Repeat(1min);
+                }
+                else
+                    ice_barrier.Repeat(5s);
+            })
+			.Schedule(5ms, [this](TaskContext fireball)
 			{
 				DoCastVictim(SPELL_FROSTBOLT);
 				fireball.Repeat(2s);
@@ -79,7 +87,7 @@ struct npc_guardian_mage_dalaran : public CustomAI
 			})
 			.Schedule(5s, [this](TaskContext frost_nova)
 			{
-				if (EnemiesInRange(12.0f) >= 3)
+				if (EnemiesInRange(12.0f) >= 2)
 				{
 					CastStop();
 					DoCast(SPELL_FROST_NOVA);
@@ -87,15 +95,6 @@ struct npc_guardian_mage_dalaran : public CustomAI
 				}
 				else
 					frost_nova.Repeat(1s);
-			})
-			.Schedule(8s, [this](TaskContext greater_pyroblast)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-				{
-					CastStop(SPELL_GREATER_PYROBLAST);
-					DoCast(target, SPELL_GREATER_PYROBLAST);
-				}
-				greater_pyroblast.Repeat(20s, 32s);
 			})
 			.Schedule(4s, [this](TaskContext blizzard)
 			{
@@ -307,6 +306,13 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 			}
 		}
 	}
+
+    bool CanAIAttack(Unit const* who) const override
+    {
+        return who->IsAlive() && me->IsValidAttackTarget(who)
+            && ScriptedAI::CanAIAttack(who)
+            && who->GetEntry() != NPC_GRAND_MAGISTER_ROMMATH;
+    }
 };
 
 struct npc_stormwind_cleric : public CustomAI
@@ -499,43 +505,37 @@ struct npc_mage_commander_zuros : public CustomAI
 
 struct npc_narasi_snowdawn : public CustomAI
 {
-    npc_narasi_snowdawn(Creature* creature) : CustomAI(creature, AI_Type::Melee)
+    npc_narasi_snowdawn(Creature* creature) : CustomAI(creature, AI_Type::NoMovement)
 	{
 		Initialize();
-
-        me->SetImmuneToPC(true);
     }
 
 	enum Spells
 	{
 		SPELL_ACCELERATING_BLAST    = 203176,
-		SPELL_NETHER_WOUND          = 211000,
-		SPELL_TIME_STOP             = 279062
+		SPELL_TIME_STOP             = 215005
 	};
 
-	void JustEngagedWith(Unit* /*who*/) override
+	void JustEngagedWith(Unit* who) override
 	{
+        DoCast(who, SPELL_ACCELERATING_BLAST);
+
 		scheduler
-			.Schedule(2s, [this](TaskContext nether_wound)
-			{
-				DoCastVictim(SPELL_NETHER_WOUND);
-				nether_wound.Repeat(8s, 15s);
-			})
 			.Schedule(8s, [this](TaskContext accelerating_blast)
 			{
 				DoCastVictim(SPELL_ACCELERATING_BLAST);
-				accelerating_blast.Repeat(24s, 30s);
+				accelerating_blast.Repeat(3s);
 			})
 			.Schedule(12s, [this](TaskContext time_stop)
 			{
 				DoCastVictim(SPELL_TIME_STOP);
-				time_stop.Repeat(45s, 1min);
+				time_stop.Repeat(45s, 50s);
 			});
 	}
 
     bool CanAIAttack(Unit const* who) const override
     {
-        return who->IsAlive() && me->IsValidAttackTarget(who) && ScriptedAI::CanAIAttack(who) && who->GetEntry() != NPC_GRAND_MAGISTER_ROMMATH;
+        return who->IsAlive() && who->GetEntry() != NPC_GRAND_MAGISTER_ROMMATH;
     }
 };
 
@@ -916,6 +916,7 @@ struct npc_arcanist_rathaella : public CustomAI
 					break;
 				case 3:
 					me->AI()->Talk(SAY_ARCANIST_RATHAELLA_02);
+                    me->SetWalk(false);
 					break;
 			}
 		});
@@ -1304,7 +1305,8 @@ struct npc_sunreaver_captain : public CustomAI
 {
 	const Position center = { -743.33f, 4289.46f, 729.07f, 2.29f };
 
-	npc_sunreaver_captain(Creature* creature) : CustomAI(creature, AI_Type::Melee)
+    npc_sunreaver_captain(Creature* creature) : CustomAI(creature, AI_Type::Melee),
+        hostsEvent(false)
 	{
 	}
 
@@ -1327,6 +1329,7 @@ struct npc_sunreaver_captain : public CustomAI
 	};
 
 	std::vector<Creature*> hosts;
+    bool hostsEvent;
 
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
@@ -1378,6 +1381,13 @@ struct npc_sunreaver_captain : public CustomAI
 
 	void DoFleeWantonHosts()
 	{
+        if (hostsEvent)
+            return;
+
+        hostsEvent = true;
+
+        hosts.clear();
+
 		GetCreatureListWithEntryInGrid(hosts, me, NPC_WANTON_HOST, 8.f);
 		GetCreatureListWithEntryInGrid(hosts, me, NPC_WANTON_HOSTESS, 8.f);
 
@@ -2730,10 +2740,10 @@ struct npc_book_of_arcane_monstrosities : public CustomAI
 			});
 	}
 
-	void OnSpellCast(SpellInfo const* spell) override
+	void OnSpellCast(SpellInfo const* spellInfo) override
 	{
-		if (spell->Id == SPELL_CLEANSING_FORCE)
-			me->DespawnOrUnsummon(Milliseconds(spell->GetDuration()));
+		if (spellInfo->Id == SPELL_CLEANSING_FORCE)
+			me->DespawnOrUnsummon(Milliseconds(spellInfo->GetDuration()));
 	}
 
 	void LeavingWorld() override

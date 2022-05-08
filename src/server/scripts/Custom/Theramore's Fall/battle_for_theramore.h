@@ -679,10 +679,19 @@ class FriendlyMissingBuff
     uint32 i_spell;
 };
 
-template <class AI, class T>
-inline AI* GetBattleForTheramoreAI(T* obj)
+template <class AI>
+class TheramoreCreatureScript : public CreatureScript
 {
-	return GetInstanceAI<AI>(obj, BFTScriptName);
-}
+    public:
+    TheramoreCreatureScript(char const* name) : CreatureScript(name)
+    {
+    }
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return GetInstanceAI<AI>(creature, BFTScriptName);
+    }
+};
+
+#define RegisterTheramoreAI(ai_name) new TheramoreCreatureScript<ai_name>(#ai_name);
 
 #endif // BATTLE_FOR_THERAMORE_H_

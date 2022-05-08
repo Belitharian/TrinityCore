@@ -233,10 +233,19 @@ inline void DoTeleportPlayers(Map::PlayerList const& players, const Position cen
 	}
 }
 
-template <class AI, class T>
-inline AI* GetRuinsOfTheramoreAI(T* obj)
+template <class AI>
+class RuinsCreatureScript : public CreatureScript
 {
-	return GetInstanceAI<AI>(obj, RFTScriptName);
-}
+    public:
+    RuinsCreatureScript(char const* name) : CreatureScript(name)
+    {
+    }
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return GetInstanceAI<AI>(creature, RFTScriptName);
+    }
+};
+
+#define RegisterRuinsAI(ai_name) new RuinsCreatureScript<ai_name>(#ai_name);
 
 #endif // RUINS_OF_THERAMORE_H_

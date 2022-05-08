@@ -12,216 +12,177 @@
 #include "Custom/AI/CustomAI.h"
 #include "ruins_of_theramore.h"
 
-class npc_water_elementals_theramore : public CreatureScript
+struct npc_water_elementals_theramore : public CustomAI
 {
-	public:
-	npc_water_elementals_theramore() : CreatureScript("npc_water_elementals_theramore")
+	npc_water_elementals_theramore(Creature* creature) : CustomAI(creature)
 	{
 	}
 
-	struct npc_water_elementals_theramoreAI : public CustomAI
+	enum Spells
 	{
-		npc_water_elementals_theramoreAI(Creature* creature) : CustomAI(creature)
-		{
-		}
-
-		enum Spells
-		{
-			SPELL_FROST_BARRIER         = 69787,
-            SPELL_WATER_SPOUT           = 271287,
-            SPELL_WATERY_DOME           = 258153,
-			SPELL_WATER_BOLT_VOLLEY     = 290084,
-			SPELL_WATER_BOLT            = 355225,
-		};
-
-		float GetDistance() override
-		{
-			return 5.f;
-		}
-
-		void JustEngagedWith(Unit* /*who*/) override
-		{
-            if (!me->HasAura(SPELL_FROST_BARRIER) && me->GetMap()->GetId() != 5002)
-                DoCast(SPELL_FROST_BARRIER);
-
-			scheduler
-				.Schedule(5ms, [this](TaskContext water_bolt)
-				{
-					DoCastVictim(SPELL_WATER_BOLT);
-					water_bolt.Repeat(3s);
-				})
-                .Schedule(1min, [this](TaskContext watery_dome)
-                {
-                    DoCastSelf(SPELL_WATERY_DOME);
-                    watery_dome.Repeat(30s, 45s);
-                })
-                .Schedule(8s, 10s, [this](TaskContext water_spout)
-                {
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                        DoCast(target, SPELL_WATER_SPOUT);
-                    water_spout.Repeat(24s, 32s);
-                })
-				.Schedule(12s, 22s, [this](TaskContext water_bolt_volley)
-				{
-                    CastStop(SPELL_WATER_BOLT_VOLLEY);
-                    DoCast(SPELL_WATER_BOLT_VOLLEY);
-                    water_bolt_volley.Repeat(18s, 20s);
-				});
-		}
+		SPELL_FROST_BARRIER         = 69787,
+        SPELL_WATER_SPOUT           = 271287,
+        SPELL_WATERY_DOME           = 258153,
+		SPELL_WATER_BOLT_VOLLEY     = 290084,
+		SPELL_WATER_BOLT            = 355225,
 	};
 
-	CreatureAI* GetAI(Creature* creature) const override
+	float GetDistance() override
 	{
-		return new npc_water_elementals_theramoreAI(creature);
-	}
-};
-
-class npc_roknah_warlord : public CreatureScript
-{
-	public:
-	npc_roknah_warlord() : CreatureScript("npc_roknah_warlord")
-	{
+		return 5.f;
 	}
 
-	struct npc_roknah_warlordAI : public CustomAI
+	void JustEngagedWith(Unit* /*who*/) override
 	{
-		npc_roknah_warlordAI(Creature* creature) : CustomAI(creature, AI_Type::Melee),
-			sendEvent(false)
-		{
-			instance = creature->GetInstanceScript();
-		}
+        if (!me->HasAura(SPELL_FROST_BARRIER) && me->GetMap()->GetId() != 5002)
+            DoCast(SPELL_FROST_BARRIER);
 
-		enum Spells
-		{
-			SPELL_EXECUTE               = 283424,
-			SPELL_MORTAL_STRIKE         = 283410,
-			SPELL_OVERPOWER             = 283426,
-			SPELL_REND                  = 283419,
-			SPELL_SLAM                  = 299995
-		};
-
-		InstanceScript* instance;
-		bool sendEvent;
-
-		void JustDied(Unit* killer) override
-		{
-			CustomAI::JustDied(killer);
-
-			instance->TriggerGameEvent(EVENT_WARLORD_ROKNAH_SLAIN);
-		}
-
-        void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
-		{
-			if (!me->HealthBelowPctDamaged(25, damage))
-				return;
-
-			if (!sendEvent)
+		scheduler
+			.Schedule(5ms, [this](TaskContext water_bolt)
 			{
-				sendEvent = true;
-
-				me->SetHomePosition(me->GetPosition());
-				me->SetRegenerateHealth(false);
-				me->AI()->EnterEvadeMode();
-				me->SetImmuneToAll(true);
-
-				scheduler.Schedule(2s, [this](TaskContext /*context*/)
-				{
-					me->SetStandState(UNIT_STAND_STATE_KNEEL);
-				});
-
-				if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
-				{
-					jaina->RemoveAllAuras();
-					jaina->SetReactState(REACT_PASSIVE);
-					jaina->SetImmuneToAll(false);
-
-					instance->SetData(EVENT_WARLORD_ROKNAH_SLAIN, 0U);
-				}
-			}
-
-			damage = 0;
-		}
-
-		void JustEngagedWith(Unit* /*who*/) override
-		{
-			scheduler
-				.Schedule(5s, 8s, [this](TaskContext execute)
-				{
-					DoCastVictim(SPELL_EXECUTE);
-					execute.Repeat(15s, 28s);
-				})
-				.Schedule(2s, 5s, [this](TaskContext mortal_strike)
-				{
-					switch (mortal_strike.GetRepeatCounter())
-					{
-						case 0:
-							if (!me->HasAura(SPELL_OVERPOWER) && roll_chance_i(60))
-								DoCastSelf(SPELL_OVERPOWER);
-							mortal_strike.Repeat(1s);
-							break;
-						case 1:
-							me->CastStop();
-							DoCastVictim(SPELL_MORTAL_STRIKE);
-							mortal_strike.Repeat(8s, 10s);
-							break;
-					}
-				})
-				.Schedule(14s, 22s, [this](TaskContext overpower)
-				{
-					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-						DoCast(target, SPELL_REND);
-					overpower.Repeat(8s, 10s);
-				})
-				.Schedule(25s, 32s, [this](TaskContext rend_slam)
-				{
-					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-						DoCast(target, RAND(SPELL_REND, SPELL_SLAM));
-					rend_slam.Repeat(2s, 8s);
-				});
-		}
-	};
-
-	CreatureAI* GetAI(Creature* creature) const override
-	{
-		return GetRuinsOfTheramoreAI<npc_roknah_warlordAI>(creature);
+				DoCastVictim(SPELL_WATER_BOLT);
+				water_bolt.Repeat(3s);
+			})
+            .Schedule(1min, [this](TaskContext watery_dome)
+            {
+                DoCastSelf(SPELL_WATERY_DOME);
+                watery_dome.Repeat(30s, 45s);
+            })
+            .Schedule(8s, 10s, [this](TaskContext water_spout)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    DoCast(target, SPELL_WATER_SPOUT);
+                water_spout.Repeat(24s, 32s);
+            })
+			.Schedule(12s, 22s, [this](TaskContext water_bolt_volley)
+			{
+                CastStop(SPELL_WATER_BOLT_VOLLEY);
+                DoCast(SPELL_WATER_BOLT_VOLLEY);
+                water_bolt_volley.Repeat(18s, 20s);
+			});
 	}
 };
 
-class go_theramore_banner : public GameObjectScript
+struct npc_roknah_warlord : public CustomAI
 {
-	public:
-	go_theramore_banner() : GameObjectScript("go_theramore_banner")
+	npc_roknah_warlord(Creature* creature) : CustomAI(creature, AI_Type::Melee),
+		sendEvent(false)
 	{
+		instance = creature->GetInstanceScript();
 	}
 
-	struct go_theramore_bannerAI : public GameObjectAI
+	enum Spells
 	{
-		go_theramore_bannerAI(GameObject* go) : GameObjectAI(go)
-		{
-			instance = go->GetInstanceScript();
-		}
-
-		enum Spells
-		{
-			SPELL_STANDARD_OF_THERAMORE = 105690
-		};
-
-		InstanceScript* instance;
-
-		bool OnGossipHello(Player* player) override
-		{
-			RFTPhases phase = (RFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-			if (phase != RFTPhases::Standards)
-				return false;
-			player->CastSpell(player, SPELL_STANDARD_OF_THERAMORE, true);
-			me->DespawnOrUnsummon();
-			return true;
-		}
+		SPELL_EXECUTE               = 283424,
+		SPELL_MORTAL_STRIKE         = 283410,
+		SPELL_OVERPOWER             = 283426,
+		SPELL_REND                  = 283419,
+		SPELL_SLAM                  = 299995
 	};
 
-	GameObjectAI* GetAI(GameObject* go) const override
+	InstanceScript* instance;
+	bool sendEvent;
+
+	void JustDied(Unit* killer) override
 	{
-		return GetRuinsOfTheramoreAI<go_theramore_bannerAI>(go);
+		CustomAI::JustDied(killer);
+
+		instance->TriggerGameEvent(EVENT_WARLORD_ROKNAH_SLAIN);
+	}
+
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+	{
+		if (!me->HealthBelowPctDamaged(25, damage))
+			return;
+
+		if (!sendEvent)
+		{
+			sendEvent = true;
+
+			me->SetHomePosition(me->GetPosition());
+			me->SetRegenerateHealth(false);
+			me->AI()->EnterEvadeMode();
+			me->SetImmuneToAll(true);
+
+			scheduler.Schedule(2s, [this](TaskContext /*context*/)
+			{
+				me->SetStandState(UNIT_STAND_STATE_KNEEL);
+			});
+
+			if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
+			{
+				jaina->RemoveAllAuras();
+				jaina->SetReactState(REACT_PASSIVE);
+				jaina->SetImmuneToAll(false);
+
+				instance->SetData(EVENT_WARLORD_ROKNAH_SLAIN, 0U);
+			}
+		}
+
+		damage = 0;
+	}
+
+	void JustEngagedWith(Unit* /*who*/) override
+	{
+		scheduler
+			.Schedule(5s, 8s, [this](TaskContext execute)
+			{
+				DoCastVictim(SPELL_EXECUTE);
+				execute.Repeat(15s, 28s);
+			})
+			.Schedule(2s, 5s, [this](TaskContext mortal_strike)
+			{
+				switch (mortal_strike.GetRepeatCounter())
+				{
+					case 0:
+						if (!me->HasAura(SPELL_OVERPOWER) && roll_chance_i(60))
+							DoCastSelf(SPELL_OVERPOWER);
+						mortal_strike.Repeat(1s);
+						break;
+					case 1:
+						me->CastStop();
+						DoCastVictim(SPELL_MORTAL_STRIKE);
+						mortal_strike.Repeat(8s, 10s);
+						break;
+				}
+			})
+			.Schedule(14s, 22s, [this](TaskContext overpower)
+			{
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+					DoCast(target, SPELL_REND);
+				overpower.Repeat(8s, 10s);
+			})
+			.Schedule(25s, 32s, [this](TaskContext rend_slam)
+			{
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+					DoCast(target, RAND(SPELL_REND, SPELL_SLAM));
+				rend_slam.Repeat(2s, 8s);
+			});
+	}
+};
+
+struct go_theramore_banner : public GameObjectAI
+{
+	go_theramore_banner(GameObject* go) : GameObjectAI(go)
+	{
+		instance = go->GetInstanceScript();
+	}
+
+	enum Spells
+	{
+		SPELL_STANDARD_OF_THERAMORE = 105690
+	};
+
+	InstanceScript* instance;
+
+	bool OnGossipHello(Player* player) override
+	{
+		RFTPhases phase = (RFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+		if (phase != RFTPhases::Standards)
+			return false;
+		player->CastSpell(player, SPELL_STANDARD_OF_THERAMORE, true);
+		me->DespawnOrUnsummon();
+		return true;
 	}
 };
 
@@ -271,10 +232,12 @@ class spell_ruins_comet_barrage : public SpellScript
 
 void AddSC_npcs_ruins_of_theramore()
 {
-	new npc_water_elementals_theramore();
-	new npc_roknah_warlord();
+    // Utilisable en dehors de l'instance
+    RegisterCreatureAI(npc_water_elementals_theramore);
 
-	new go_theramore_banner();
+    RegisterRuinsAI(npc_roknah_warlord);
+
+    RegisterGameObjectAI(go_theramore_banner);
 
 	RegisterSpellScript(spell_ruins_comet_barrage);
     RegisterSpellScript(spell_ruins_frigid_shards);

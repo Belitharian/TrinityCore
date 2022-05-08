@@ -1,6 +1,7 @@
 #include "Custom/AI/CustomAI.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
+#include "TemporarySummon.h"
 #include "ScriptMgr.h"
 #include "dalaran_purge.h"
 
@@ -143,7 +144,7 @@ struct npc_aethas_sunreaver_purge : public CustomAI
             if (player->IsGameMaster())
                 return;
 
-            if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 5.f))
+            if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 15.f))
             {
                 DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
                 switch (phase)
@@ -211,9 +212,6 @@ struct npc_magister_rommath_purge : public CustomAI
 
     void Reset() override
     {
-        me->SetFullHealth();
-        me->SetFullPower(me->GetPowerType());
-
         scheduler.CancelGroup(GROUP_COMBAT);
 
         Initialize();
@@ -226,10 +224,10 @@ struct npc_magister_rommath_purge : public CustomAI
 			case MOVEMENT_INFO_POINT_01:
 				me->AI()->Talk(SAY_INFILTRATE_ROMMATH_04);
 				if (GameObject* passage = instance->GetGameObject(DATA_SECRET_PASSAGE))
-					passage->UseDoorOrButton(5000);
+					passage->UseDoorOrButton();
                 for (uint8 i = 0; i < TRACKING_PATH_01; i++)
                 {
-                    if (Creature* tracking = DoSummon(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
+                    if (TempSummon* tracking = me->GetMap()->SummonCreature(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
                         tracking->AddAura(SPELL_ARCANIC_TRACKING, tracking);
                 }
                 if (Player* player = me->GetMap()->GetPlayers().begin()->GetSource())
@@ -241,6 +239,8 @@ struct npc_magister_rommath_purge : public CustomAI
                 }
 				break;
             case MOVEMENT_INFO_POINT_02:
+                if (GameObject* portal = instance->GetGameObject(DATA_PORTAL_TO_PRISON))
+                    portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
                 me->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
                 break;
             case MOVEMENT_INFO_POINT_03:
@@ -389,7 +389,11 @@ struct npc_magister_rommath_purge : public CustomAI
 
     bool CanAIAttack(Unit const* who) const override
     {
-        return who->IsAlive() && me->IsValidAttackTarget(who) && ScriptedAI::CanAIAttack(who) && who->GetEntry() != NPC_NARASI_SNOWDAWN;
+        return who->IsAlive() && me->IsValidAttackTarget(who)
+            && ScriptedAI::CanAIAttack(who)
+            && who->GetEntry() != NPC_NARASI_SNOWDAWN
+            && who->GetEntry() != NPC_JAINA_PROUDMOORE_PATROL
+            && who->GetEntry() != NPC_VEREESA_WINDRUNNER;
     }
 };
 

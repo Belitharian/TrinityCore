@@ -384,7 +384,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 						creature->setActive(false);
 						creature->SetVisible(false);
 					});
-
 					DoOnCreatures(extraction, [this](Creature* creature)
 					{
 						creature->SetVisible(true);
@@ -402,19 +401,23 @@ class scenario_dalaran_purge : public InstanceMapScript
 				}
                 // What happened! - Find the Grand Magister Rommath
 				case CRITERIA_TREE_FIND_ROMMATH:
-					events.ScheduleEvent(23, 2s);
-					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape_Escort);
-					break;
-				// What happened! - Find the Grand Magister Rommath
+                {
+                    events.ScheduleEvent(23, 2s);
+                    SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape_Escort);
+                    break;
+                }
+				// What happened! - Follow the tracks
 				case CRITERIA_TREE_FOLLOW_TRACKS:
-					instance->SummonCreatureGroup(CREATURE_GROUP_PRISON, &prison);
-					if (Creature* rommath = GetRommath())
-					{
-						rommath->NearTeleportTo(RommathPos01);
-						rommath->SetHomePosition(RommathPos01);
-					}
-					events.ScheduleEvent(28, 2s);
-					break;
+                {
+                    instance->SummonCreatureGroup(CREATURE_GROUP_PRISON, &prison);
+                    if (Creature* rommath = GetRommath())
+                    {
+                        rommath->NearTeleportTo(RommathPos01);
+                        rommath->SetHomePosition(RommathPos01);
+                    }
+                    events.ScheduleEvent(28, 2s);
+                    break;
+                }
 				default:
 					break;
 			}
@@ -445,6 +448,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					citizens.push_back(creature->GetGUID());
 					break;
                 case NPC_NARASI_SNOWDAWN:
+                    creature->SetImmuneToPC(true);
                     creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP | UNIT_NPC_FLAG_QUESTGIVER);
                     break;
                 case NPC_MAGE_COMMANDER_ZUROS:
@@ -711,19 +715,14 @@ class scenario_dalaran_purge : public InstanceMapScript
 						{
 							if (rommath->IsWithinDist(portal, 35.0f))
 							{
-								events.CancelEvent(27);
+                                events.CancelEvent(27);
 
-								float distance = 5.0f;
-								float distanceToTravel = rommath->GetExactDist2d(portal) - distance;
-								float angle = rommath->GetAbsoluteAngle(portal);
-								float destx = rommath->GetPositionX() + distanceToTravel * std::cos(angle);
-								float desty = rommath->GetPositionY() + distanceToTravel * std::sin(angle);
-
-								portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
-
-								rommath->SetOwnerGUID(ObjectGuid::Empty);
-								rommath->GetMotionMaster()->Clear();
-								rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_02, destx, desty, portal->GetPositionZ(), true, angle);
+                                if (TempSummon* dummy = portal->SummonCreature(WORLD_TRIGGER, portal->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 10s))
+                                {
+                                    rommath->SetOwnerGUID(ObjectGuid::Empty);
+                                    rommath->GetMotionMaster()->Clear();
+                                    rommath->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_02, dummy, 5.0f);
+                                }
 							}
 							else
 							{
@@ -739,29 +738,23 @@ class scenario_dalaran_purge : public InstanceMapScript
 				#pragma region WHAT_HAPPENED_PRISON
 
 				case 28:
-				{
-					uint8 counter = 0;
-					for (TempSummon* summon : prison)
-					{
-						if (!summon || summon->isDead())
-							counter++;
-					}
-					if (counter >= prison.size())
-					{
-						events.CancelEvent(28);
-						Next(2s);
-					}
-					else
-						events.RescheduleEvent(28, 2s);
+                    if (CheckWipe())
+                    {
+                        if (Creature* aethas = GetAethas())
+                        {
+                            aethas->RemoveAllAuras();
+                            aethas->SetImmuneToAll(true);
+                            aethas->SetVisible(true);
+                            aethas->NearTeleportTo(AethasPos02);
+                            aethas->SetHomePosition(AethasPos02);
+                        }
+
+                        Next(2s);
+                    }
 					break;
-				}
 				case 29:
 					if (Creature* aethas = GetAethas())
 					{
-                        aethas->SetImmuneToAll(true);
-						aethas->SetVisible(true);
-						aethas->NearTeleportTo(AethasPos02);
-						aethas->SetHomePosition(AethasPos02);
 						aethas->AddAura(SPELL_ICY_GLARE, aethas);
 						aethas->AddAura(SPELL_CHILLING_BLAST, aethas);
 					}
@@ -907,7 +900,7 @@ class scenario_dalaran_purge : public InstanceMapScript
                         jaina->SetImmuneToAll(true);
                         jaina->SetWalk(true);
                         jaina->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos03);
-                        jaina->DespawnOrUnsummon(15s);
+                        jaina->DespawnOrUnsummon(13s);
                     }
                     Next(2s);
 					break;
@@ -920,6 +913,8 @@ class scenario_dalaran_purge : public InstanceMapScript
 							QuaternionData::fromEulerAnglesZYX(EndPortalPos01.GetOrientation(), 0.0f, 0.0f), 0s))
 						{
 							endPortal = portal->GetGUID();
+
+                            portal->SetFlag(GO_FLAG_NOT_SELECTABLE | GO_FLAG_IN_USE);
 
 							rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_03, portal->GetPosition());
 
@@ -942,6 +937,25 @@ class scenario_dalaran_purge : public InstanceMapScript
 					break;
 			}
 		}
+
+        bool CheckWipe()
+        {
+            uint8 counter = 0;
+            for (TempSummon* summon : prison)
+            {
+                if (!summon || summon->isDead())
+                    counter++;
+            }
+
+            if (counter >= prison.size())
+            {
+                events.CancelEvent(28);
+                return true;
+            }
+
+            events.RescheduleEvent(28, 500ms);
+            return false;
+        }
 
 		EventMap events;
 		uint32 eventId;
