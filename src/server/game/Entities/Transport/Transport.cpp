@@ -34,8 +34,63 @@
 #include <G3D/Vector3.h>
 #include <sstream>
 
+void TransportBase::UpdatePassengerPosition(Map* map, WorldObject* passenger, float x, float y, float z, float o, bool setHomePosition)
+{
+    // transport teleported but passenger not yet (can happen for players)
+    if (passenger->GetMap() != map)
+        return;
+
+    // if passenger is on vehicle we have to assume the vehicle is also on transport
+    // and its the vehicle that will be updating its passengers
+    if (Unit* unit = passenger->ToUnit())
+        if (unit->GetVehicle())
+            return;
+
+    // Do not use Unit::UpdatePosition here, we don't want to remove auras
+    // as if regular movement occurred
+    switch (passenger->GetTypeId())
+    {
+        case TYPEID_UNIT:
+        {
+            Creature* creature = passenger->ToCreature();
+            map->CreatureRelocation(creature, x, y, z, o, false);
+            if (setHomePosition)
+            {
+                creature->GetTransportHomePosition(x, y, z, o);
+                CalculatePassengerPosition(x, y, z, &o);
+                creature->SetHomePosition(x, y, z, o);
+            }
+            break;
+        }
+        case TYPEID_PLAYER:
+            //relocate only passengers in world and skip any player that might be still logging in/teleporting
+            if (passenger->IsInWorld() && !passenger->ToPlayer()->IsBeingTeleported())
+            {
+                map->PlayerRelocation(passenger->ToPlayer(), x, y, z, o);
+                passenger->ToPlayer()->SetFallInformation(0, passenger->GetPositionZ());
+            }
+            break;
+        case TYPEID_GAMEOBJECT:
+            map->GameObjectRelocation(passenger->ToGameObject(), x, y, z, o, false);
+            passenger->ToGameObject()->RelocateStationaryPosition(x, y, z, o);
+            break;
+        case TYPEID_DYNAMICOBJECT:
+            map->DynamicObjectRelocation(passenger->ToDynObject(), x, y, z, o);
+            break;
+        case TYPEID_AREATRIGGER:
+            map->AreaTriggerRelocation(passenger->ToAreaTrigger(), x, y, z, o);
+            break;
+        default:
+            break;
+    }
+
+    if (Unit* unit = passenger->ToUnit())
+        if (Vehicle* vehicle = unit->GetVehicleKit())
+            vehicle->RelocatePassengers();
+}
+
 Transport::Transport() : GameObject(),
-    _transportInfo(nullptr), _isMoving(true), _pendingStop(false),
+    _transportInfo(nullptr), _pathProgress(0), _isMoving(true), _pendingStop(false),
     _triggeredArrivalEvent(false), _triggeredDepartureEvent(false),
     _passengerTeleportItr(_passengers.begin()), _delayedAddModel(false), _delayedTeleport(false)
 {
@@ -94,7 +149,7 @@ bool Transport::Create(ObjectGuid::LowType guidlow, uint32 entry, uint32 mapid, 
         ReplaceAllFlags(GameObjectFlags(goOverride->Flags));
     }
 
-    m_goValue.Transport.PathProgress = 0;
+    _pathProgress = 0;
     SetObjectScale(goinfo->size);
     SetPeriod(tInfo->pathTime);
     SetEntry(goinfo->entry);
@@ -135,9 +190,9 @@ void Transport::Update(uint32 diff)
         return;
 
     if (IsMoving() || !_pendingStop)
-        m_goValue.Transport.PathProgress += diff;
+        _pathProgress += diff;
 
-    uint32 timer = m_goValue.Transport.PathProgress % GetTransportPeriod();
+    uint32 timer = _pathProgress % GetTransportPeriod();
     bool justStopped = false;
 
     // Set current waypoint
@@ -161,9 +216,9 @@ void Transport::Update(uint32 diff)
                 if (_pendingStop && GetGoState() != GO_STATE_READY)
                 {
                     SetGoState(GO_STATE_READY);
-                    m_goValue.Transport.PathProgress = (m_goValue.Transport.PathProgress / GetTransportPeriod());
-                    m_goValue.Transport.PathProgress *= GetTransportPeriod();
-                    m_goValue.Transport.PathProgress += _currentFrame->ArriveTime;
+                    _pathProgress = (_pathProgress / GetTransportPeriod());
+                    _pathProgress *= GetTransportPeriod();
+                    _pathProgress += _currentFrame->ArriveTime;
                 }
                 break;  // its a stop frame and we are waiting
             }
@@ -266,7 +321,7 @@ void Transport::AddPassenger(WorldObject* passenger)
     }
 }
 
-void Transport::RemovePassenger(WorldObject* passenger)
+Transport* Transport::RemovePassenger(WorldObject* passenger)
 {
     bool erased = false;
     if (_passengerTeleportItr != _passengers.end())
@@ -296,6 +351,8 @@ void Transport::RemovePassenger(WorldObject* passenger)
             plr->SetFallInformation(0, plr->GetPositionZ());
         }
     }
+
+    return this;
 }
 
 Creature* Transport::CreateNPCPassenger(ObjectGuid::LowType guid, CreatureData const* data)
@@ -510,6 +567,11 @@ TempSummon* Transport::SummonPassenger(uint32 entry, Position const& pos, TempSu
     return summon;
 }
 
+int32 Transport::GetMapIdForSpawning() const
+{
+    return GetGOInfo()->moTransport.SpawnMap;
+}
+
 void Transport::UpdatePosition(float x, float y, float z, float o)
 {
     bool newActive = GetMap()->IsGridLoaded(x, y);
@@ -696,62 +758,14 @@ void Transport::DelayedTeleportTransport()
     GetMap()->AddToMap<Transport>(this);
 }
 
-void Transport::UpdatePassengerPositions(PassengerSet& passengers)
+void Transport::UpdatePassengerPositions(PassengerSet const& passengers)
 {
-    for (PassengerSet::iterator itr = passengers.begin(); itr != passengers.end(); ++itr)
+    for (WorldObject* passenger : passengers)
     {
-        WorldObject* passenger = *itr;
-        // transport teleported but passenger not yet (can happen for players)
-        if (passenger->GetMap() != GetMap())
-            continue;
-
-        // if passenger is on vehicle we have to assume the vehicle is also on transport
-        // and its the vehicle that will be updating its passengers
-        if (Unit* unit = passenger->ToUnit())
-            if (unit->GetVehicle())
-                continue;
-
-        // Do not use Unit::UpdatePosition here, we don't want to remove auras
-        // as if regular movement occurred
         float x, y, z, o;
         passenger->m_movementInfo.transport.pos.GetPosition(x, y, z, o);
         CalculatePassengerPosition(x, y, z, &o);
-        switch (passenger->GetTypeId())
-        {
-            case TYPEID_UNIT:
-            {
-                Creature* creature = passenger->ToCreature();
-                GetMap()->CreatureRelocation(creature, x, y, z, o, false);
-                creature->GetTransportHomePosition(x, y, z, o);
-                CalculatePassengerPosition(x, y, z, &o);
-                creature->SetHomePosition(x, y, z, o);
-                break;
-            }
-            case TYPEID_PLAYER:
-                //relocate only passengers in world and skip any player that might be still logging in/teleporting
-                if (passenger->IsInWorld() && !passenger->ToPlayer()->IsBeingTeleported())
-                {
-                    GetMap()->PlayerRelocation(passenger->ToPlayer(), x, y, z, o);
-                    passenger->ToPlayer()->SetFallInformation(0, passenger->GetPositionZ());
-                }
-                break;
-            case TYPEID_GAMEOBJECT:
-                GetMap()->GameObjectRelocation(passenger->ToGameObject(), x, y, z, o, false);
-                passenger->ToGameObject()->RelocateStationaryPosition(x, y, z, o);
-                break;
-            case TYPEID_DYNAMICOBJECT:
-                GetMap()->DynamicObjectRelocation(passenger->ToDynObject(), x, y, z, o);
-                break;
-            case TYPEID_AREATRIGGER:
-                GetMap()->AreaTriggerRelocation(passenger->ToAreaTrigger(), x, y, z, o);
-                break;
-            default:
-                break;
-        }
-
-        if (Unit* unit = passenger->ToUnit())
-            if (Vehicle* vehicle = unit->GetVehicleKit())
-                vehicle->RelocatePassengers();
+        UpdatePassengerPosition(GetMap(), passenger, x, y, z, o, true);
     }
 }
 

@@ -1148,8 +1148,8 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
 
         void SetObjectScale(float scale) override;
 
-        bool TeleportTo(uint32 mapid, float x, float y, float z, float orientation, uint32 options = 0);
-        bool TeleportTo(WorldLocation const& loc, uint32 options = 0);
+        bool TeleportTo(uint32 mapid, float x, float y, float z, float orientation, uint32 options = 0, Optional<uint32> instanceId = {});
+        bool TeleportTo(WorldLocation const& loc, uint32 options = 0, Optional<uint32> instanceId = {});
         bool TeleportToBGEntryPoint();
 
         bool HasSummonPending() const;
@@ -2194,6 +2194,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void SetSkillPermBonus(uint32 pos, uint16 bonus) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Skill).ModifyValue(&UF::SkillInfo::SkillPermBonus, pos), bonus); }
 
         WorldLocation& GetTeleportDest() { return m_teleport_dest; }
+        Optional<uint32> GetTeleportDestInstanceId() const { return m_teleport_instanceId; }
         uint32 GetTeleportOptions() const { return m_teleport_options; }
         bool IsBeingTeleported() const { return IsBeingTeleportedNear() || IsBeingTeleportedFar(); }
         bool IsBeingTeleportedNear() const { return mSemaphoreTeleport_Near; }
@@ -2454,8 +2455,12 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         uint32 GetSaveTimer() const { return m_nextSave; }
         void SetSaveTimer(uint32 timer) { m_nextSave = timer; }
 
-        void SaveRecallPosition() { m_recall_location.WorldRelocate(*this); }
-        void Recall() { TeleportTo(m_recall_location); }
+        void SaveRecallPosition()
+        {
+            m_recall_location.WorldRelocate(*this);
+            m_recall_instanceId = GetInstanceId();
+        }
+        void Recall() { TeleportTo(m_recall_location, 0, m_recall_instanceId); }
 
         void SetHomebind(WorldLocation const& loc, uint32 areaId);
         void SendBindPointUpdate() const;
@@ -2790,6 +2795,8 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void AddAuraVision(PlayerFieldByte2Flags flags) { SetUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AuraVision), flags); }
         void RemoveAuraVision(PlayerFieldByte2Flags flags) { RemoveUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AuraVision), flags); }
 
+        void SetTransportServerTime(int32 transportServerTime) { SetUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TransportServerTime), transportServerTime); }
+
         bool IsInFriendlyArea() const;
         bool IsFriendlyArea(AreaTableEntry const* inArea) const;
 
@@ -3070,14 +3077,17 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         // Player summoning
         time_t m_summon_expire;
         WorldLocation m_summon_location;
+        uint32 m_summon_instanceId;
 
         // Recall position
         WorldLocation m_recall_location;
+        uint32 m_recall_instanceId;
 
         DeclinedName *m_declinedname;
         Runes *m_runes;
         EquipmentSetContainer _equipmentSets;
 
+        bool CanNeverSee(WorldObject const* obj) const override;
         bool CanAlwaysSee(WorldObject const* obj) const override;
 
         bool IsAlwaysDetectableFor(WorldObject const* seer) const override;
@@ -3124,6 +3134,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
 
         // Current teleport data
         WorldLocation m_teleport_dest;
+        Optional<uint32> m_teleport_instanceId;
         uint32 m_teleport_options;
         bool mSemaphoreTeleport_Near;
         bool mSemaphoreTeleport_Far;

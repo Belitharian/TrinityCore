@@ -1017,6 +1017,7 @@ struct GameObjectTemplate
             case GAMEOBJECT_TYPE_TRAP:                  return trap.GiganticAOI != 0;
             case GAMEOBJECT_TYPE_SPELL_FOCUS:           return spellFocus.GiganticAOI != 0;
             case GAMEOBJECT_TYPE_GOOBER:                return goober.GiganticAOI != 0;
+            case GAMEOBJECT_TYPE_TRANSPORT:             return true;
             case GAMEOBJECT_TYPE_SPELLCASTER:           return spellCaster.GiganticAOI != 0;
             case GAMEOBJECT_TYPE_FLAGSTAND:             return flagStand.GiganticAOI != 0;
             case GAMEOBJECT_TYPE_FLAGDROP:              return flagDrop.GiganticAOI != 0;
@@ -1115,7 +1116,7 @@ struct GameObjectData : public SpawnData
     QuaternionData rotation;
     uint32 animprogress = 0;
     GOState goState = GO_STATE_ACTIVE;
-    uint8 artKit = 0;
+    uint32 artKit = 0;
 };
 
 enum class GameObjectActions : uint32
