@@ -422,7 +422,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						kalecgos->SetRegenerateHealth(false);
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle_Survive);
-					#ifdef DEBUG
+					#ifdef CUSTOM_DEBUG
 						events.ScheduleEvent(WAVE_01, 3s);
 					#else
 						events.ScheduleEvent(91, 10s);
@@ -671,7 +671,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						kinndy->SetWalk(true);
 						kinndy->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, KinndyPoint01, true, 1.09f);
 					}
-					#ifdef DEBUG
+					#ifdef CUSTOM_DEBUG
 						events.ScheduleEvent(20, 2s);
 					#else
 						Next(6s);
@@ -810,7 +810,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							creature->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, perithLocation[i].destination, false, perithLocation[i].destination.GetOrientation());
 						}
 					}
-					#ifdef DEBUG
+					#ifdef CUSTOM_DEBUG
 						events.ScheduleEvent(70, 2s);
 					#else
 						Next(7s);
@@ -1047,7 +1047,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				#pragma region A_LITTLE_HELP
 
 				case 71:
-					#ifdef DEBUG
+					#ifdef CUSTOM_DEBUG
 						events.ScheduleEvent(77, 1s);
 					#else
 						EnsurePlayerHaveShaker();
@@ -1091,7 +1091,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case 77:
 					if (archmagesIndex >= ARCHMAGES_LOCATION)
 					{
-						#ifdef DEBUG
+						#ifdef CUSTOM_DEBUG
 							events.ScheduleEvent(90, 1s);
 						#else
 							Next(2s);
@@ -1344,7 +1344,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					#ifdef DEBUG
+					#ifdef CUSTOM_DEBUG
 						for (uint8 i = 0; i < 10; i++)
 							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
 					#else
@@ -1434,7 +1434,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				// PART II
 				case 128:
 				{
-					#ifdef DEBUG
+					#ifdef CUSTOM_DEBUG
 						events.ScheduleEvent(141, 2s);
 					#else
 						if (Creature* jaina = GetJaina())

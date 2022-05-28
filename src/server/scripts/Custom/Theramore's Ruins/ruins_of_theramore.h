@@ -7,7 +7,7 @@
 #define RFTScriptName "scenario_ruins_of_theramore"
 #define DataHeader "RFT"
 
-//#define DEBUG
+//#define CUSTOM_DEBUG
 
 #define KALECGOS_PATH_01                5
 #define FELHUNTER_PATH_01               11

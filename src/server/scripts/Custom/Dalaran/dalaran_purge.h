@@ -1,5 +1,5 @@
-#ifndef RUINS_OF_THERAMORE_H_
-#define RUINS_OF_THERAMORE_H_
+#ifndef DALARAN_PURGE_H_
+#define DALARAN_PURGE_H_
 
 #include "CreatureAIImpl.h"
 #include "PhasingHandler.h"
@@ -13,7 +13,7 @@
 #define ROMMATH_PATH_01                 41
 #define TRACKING_PATH_01                9
 
-#define CUSTOM_DEBUG
+//#define CUSTOM_DEBUG
 
 enum DLPCreatures
 {
@@ -468,4 +468,4 @@ class DalaranCreatureScript : public CreatureScript
 
 #define RegisterDalaranAI(ai_name) new DalaranCreatureScript<ai_name>(#ai_name);
 
-#endif // RUINS_OF_THERAMORE_H_
+#endif // DALARAN_PURGE_H_

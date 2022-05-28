@@ -7,7 +7,7 @@
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader "BFT"
 
-//#define DEBUG
+//#define CUSTOM_DEBUG
 
 #define TERVOSH_PATH_01          6
 #define TERVOSH_PATH_02         10

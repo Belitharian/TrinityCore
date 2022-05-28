@@ -48,7 +48,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			LoadObjectData(creatureData, gameobjectData);
 		}
 
-        void OnPlayerEnter(Player* player) override
+        void OnPlayerEnter(Player* /*player*/) override
         {
 
         }
@@ -103,7 +103,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						kalecgos->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, KalecgosPath01, KALECGOS_PATH_01, false, false, KalecgosPath01[KALECGOS_PATH_01 - 1].GetOrientation());
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::FindJaina_Isle_Valided);
-					#ifdef DEBUG
+					#ifdef CUSTOM_DEBUG
 					events.ScheduleEvent(17, 1s);
 					#else
 					events.ScheduleEvent(1, 1s);

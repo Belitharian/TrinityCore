@@ -66,7 +66,7 @@ struct npc_theramore_citizen : public ScriptedAI
 		{
 			case 0:
 			{
-                #ifdef DEBUG
+                #ifdef CUSTOM_DEBUG
                     for (uint8 i = 0; i < NUMBER_OF_CITIZENS; ++i)
                     {
                         KillRewarder(player, me, false).Reward(NPC_THERAMORE_CITIZEN_CREDIT);
@@ -217,7 +217,7 @@ void ReceiveEmote(Player* player, uint32 emoteId) override
 	BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
 	if (phase == BFTPhases::Preparation || phase == BFTPhases::Preparation_Rhonin)
 	{
-		#ifdef DEBUG
+		#ifdef CUSTOM_DEBUG
 			for (uint8 i = 0; i < NUMBER_OF_TROOPS; i++)
 			{
 				KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
@@ -1316,7 +1316,7 @@ class spell_theramore_throw_bucket : public SpellScript
 			float y = destination->GetPositionY();
 			float z = destination->GetPositionZ();
 
-            #ifdef DEBUG
+            #ifdef CUSTOM_DEBUG
                 for (uint8 i = 0; i < NUMBER_OF_FIRES; ++i)
                 {
                     if (Player* player = caster->ToPlayer())
@@ -1379,19 +1379,6 @@ struct at_blizzard_theramore : AreaTriggerAI
                             continue;
 
                         caster->CastSpell(target, SPELL_BLIZZARD_DAMAGE);
-
-                        if (target->GetTypeId() == TYPEID_PLAYER)
-                            continue;
-
-                        if (target->HasUnitState(UNIT_STATE_FLEEING) || target->HasUnitState(UNIT_STATE_FLEEING_MOVE))
-                            continue;
-
-                        if (roll_chance_i(60))
-                        {
-                            target->CastStop();
-                            target->GetMotionMaster()->Clear();
-                            target->GetMotionMaster()->MoveFleeing(caster, 5 * IN_MILLISECONDS);
-                        }
                     }
                 }
             }
