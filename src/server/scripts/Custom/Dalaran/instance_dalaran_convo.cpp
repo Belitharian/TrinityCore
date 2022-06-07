@@ -40,7 +40,7 @@ class instance_dalaran_convo : public InstanceMapScript
 			LoadObjectData(creatureData, gameobjectData);
 		}
 
-        void SetData(uint32 dataId, uint32 value) override
+        void SetData(uint32 /*dataId*/, uint32 /*value*/) override
         {
             events.ScheduleEvent(1, 2s);
         }
