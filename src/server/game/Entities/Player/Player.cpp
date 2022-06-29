@@ -124,6 +124,7 @@
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include "WorldStateMgr.h"
 #include "WorldStatePackets.h"
 #include <G3D/g3dmath.h>
 #include <sstream>
@@ -140,9 +141,6 @@ uint64 const MAX_MONEY_AMOUNT = 99999999999ULL;
 
 Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
 {
-    m_speakTime = 0;
-    m_speakCount = 0;
-
     m_objectType |= TYPEMASK_PLAYER;
     m_objectTypeId = TYPEID_PLAYER;
 
@@ -446,7 +444,7 @@ bool Player::Create(ObjectGuid::LowType guidlow, WorldPackets::Character::Charac
 
     if (position.TransportGuid)
     {
-        if (Transport* transport = HashMapHolder<Transport>::Find(ObjectGuid::Create<HighGuid::Transport>(*position.TransportGuid)))
+        if (Transport* transport = ObjectAccessor::GetTransport(*this, ObjectGuid::Create<HighGuid::Transport>(*position.TransportGuid)))
         {
             transport->AddPassenger(this);
             m_movementInfo.transport.pos.Relocate(position.Loc);
@@ -7340,7 +7338,7 @@ void Player::UpdateHostileAreaState(AreaTableEntry const* area)
     {
         if (area)
         {
-            if (InBattleground() || area->Flags[0] & AREA_FLAG_COMBAT || (area->PvpCombatWorldStateID != -1 && sWorld->getWorldState(area->PvpCombatWorldStateID) != 0))
+            if (InBattleground() || area->Flags[0] & AREA_FLAG_COMBAT || (area->PvpCombatWorldStateID != -1 && sWorldStateMgr->GetValue(area->PvpCombatWorldStateID, GetMap()) != 0))
                 pvpInfo.IsInHostileArea = true;
             else if (IsWarModeLocalActive() || (area->Flags[0] & AREA_FLAG_UNK3))
             {
@@ -9208,7 +9206,6 @@ void Player::SendInitWorldStates(uint32 zoneId, uint32 areaId)
     Battleground* battleground = GetBattleground();
     OutdoorPvP* outdoorPvP = sOutdoorPvPMgr->GetOutdoorPvPToZoneId(zoneId);
     InstanceScript* instance = GetInstanceScript();
-    Battlefield* battlefield = sBattlefieldMgr->GetBattlefieldToZoneId(zoneId);
 
     TC_LOG_DEBUG("network", "Player::SendInitWorldStates: Sending SMSG_INIT_WORLD_STATES for Map: %u, Zone: %u", mapId, zoneId);
 
@@ -9216,6 +9213,8 @@ void Player::SendInitWorldStates(uint32 zoneId, uint32 areaId)
     packet.MapID = mapId;
     packet.AreaID = zoneId;
     packet.SubareaID = areaId;
+
+    sWorldStateMgr->FillInitialWorldStates(packet, GetMap(), areaId);
 
     packet.Worldstates.emplace_back(2264, 0); // SCOURGE_EVENT_WORLDSTATE_EASTERN_PLAGUELANDS
     packet.Worldstates.emplace_back(2263, 0); // SCOURGE_EVENT_WORLDSTATE_TANARIS
@@ -9759,10 +9758,6 @@ void Player::SendInitWorldStates(uint32 zoneId, uint32 areaId)
                 packet.Worldstates.emplace_back(4882, 0); // WORLD_STATE_HOR_WAVE_COUNT
             }
             break;
-        case AREA_WINTERGRASP: // Wintergrasp
-            if (battlefield && battlefield->GetTypeId() == BATTLEFIELD_WG)
-                battlefield->FillInitialWorldStates(packet);
-            break;
         case 3805: // Zul Aman
             if (instance)
                 instance->FillInitialWorldStates(packet);
@@ -9791,27 +9786,12 @@ void Player::SendInitWorldStates(uint32 zoneId, uint32 areaId)
             if (battleground && battleground->GetTypeID(true) == BATTLEGROUND_BFG)
                 battleground->FillInitialWorldStates(packet);
             break;
-        case 5389: // Tol Barad Peninsula
-            if (sWorld->getBoolConfig(CONFIG_TOLBARAD_ENABLE))
-            {
-                packet.Worldstates.emplace_back(WS_BATTLEFIELD_TB_ALLIANCE_CONTROLS_SHOW, sWorld->getWorldState(WS_BATTLEFIELD_TB_ALLIANCE_CONTROLS_SHOW));
-                packet.Worldstates.emplace_back(WS_BATTLEFIELD_TB_HORDE_CONTROLS_SHOW, sWorld->getWorldState(WS_BATTLEFIELD_TB_HORDE_CONTROLS_SHOW));
-                packet.Worldstates.emplace_back(WS_BATTLEFIELD_TB_TIME_NEXT_BATTLE_SHOW, sWorld->getWorldState(WS_BATTLEFIELD_TB_TIME_NEXT_BATTLE_SHOW));
-                packet.Worldstates.emplace_back(WS_BATTLEFIELD_TB_ALLIANCE_ATTACKING_SHOW, sWorld->getWorldState(WS_BATTLEFIELD_TB_ALLIANCE_ATTACKING_SHOW));
-                packet.Worldstates.emplace_back(WS_BATTLEFIELD_TB_HORDE_ATTACKING_SHOW, sWorld->getWorldState(WS_BATTLEFIELD_TB_HORDE_ATTACKING_SHOW));
-            }
-            break;
-        case 5095: // Tol Barad
-            if (battlefield && battlefield->GetTypeId() == BATTLEFIELD_TB)
-                battlefield->FillInitialWorldStates(packet);
-            break;
         default:
             break;
     }
 
     SendDirectMessage(packet.Write());
     SendBGWeekendWorldStates();
-    SendBattlefieldWorldStates();
 }
 
 void Player::SendBGWeekendWorldStates() const
@@ -9825,31 +9805,6 @@ void Player::SendBGWeekendWorldStates() const
                 SendUpdateWorldState(bl->HolidayWorldState, 1);
             else
                 SendUpdateWorldState(bl->HolidayWorldState, 0);
-        }
-    }
-}
-
-void Player::SendBattlefieldWorldStates() const
-{
-    /// Send misc stuff that needs to be sent on every login, like the battle timers.
-    if (sWorld->getBoolConfig(CONFIG_WINTERGRASP_ENABLE))
-    {
-        if (Battlefield* wg = sBattlefieldMgr->GetBattlefieldByBattleId(BATTLEFIELD_BATTLEID_WG))
-        {
-            SendUpdateWorldState(WS_BATTLEFIELD_WG_ACTIVE, wg->IsWarTime() ? 0 : 1);
-            uint32 timer = wg->IsWarTime() ? 0 : (wg->GetTimer() / 1000); // 0 - Time to next battle
-            SendUpdateWorldState(WS_BATTLEFIELD_WG_TIME_NEXT_BATTLE, uint32(GameTime::GetGameTime() + timer));
-        }
-    }
-
-    if (sWorld->getBoolConfig(CONFIG_TOLBARAD_ENABLE))
-    {
-        if (Battlefield* tb = sBattlefieldMgr->GetBattlefieldByBattleId(BATTLEFIELD_BATTLEID_TB))
-        {
-            SendUpdateWorldState(WS_BATTLEFIELD_TB_FACTION_CONTROLLING, uint32(tb->GetDefenderTeam() + 1));
-            uint32 timer = tb->GetTimer() / 1000;
-            SendUpdateWorldState(WS_BATTLEFIELD_TB_TIME_BATTLE_END, uint32(tb->IsWarTime() ? uint32(GameTime::GetGameTime() + timer) : 0));
-            SendUpdateWorldState(WS_BATTLEFIELD_TB_TIME_NEXT_BATTLE, uint32(!tb->IsWarTime() ? uint32(GameTime::GetGameTime() + timer) : 0));
         }
     }
 }
@@ -10235,7 +10190,11 @@ Item* Player::GetWeaponForAttack(WeaponAttackType attackType, bool useable /*= f
         item = GetUseableItemByPos(INVENTORY_SLOT_BAG_0, slot);
     else
         item = GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+
     if (!item || item->GetTemplate()->GetClass() != ITEM_CLASS_WEAPON)
+        return nullptr;
+
+    if ((attackType == RANGED_ATTACK) != item->GetTemplate()->IsRangedWeapon())
         return nullptr;
 
     if (!useable)
@@ -18227,8 +18186,22 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         ObjectGuid transGUID = ObjectGuid::Create<HighGuid::Transport>(fields.transguid);
 
         Transport* transport = nullptr;
-        if (Transport* go = HashMapHolder<Transport>::Find(transGUID))
-            transport = go;
+        if (Map* transportMap = sMapMgr->CreateMap(mapId, this, instanceId))
+        {
+            if (Transport* transportOnMap = transportMap->GetTransport(transGUID))
+            {
+                if (transportOnMap->GetExpectedMapId() != mapId)
+                {
+                    mapId = transportOnMap->GetExpectedMapId();
+                    instanceId = 0;
+                    transportMap = sMapMgr->CreateMap(mapId, this, instanceId);
+                    if (transportMap)
+                        transport = transportMap->GetTransport(transGUID);
+                }
+                else
+                    transport = transportOnMap;
+            }
+        }
 
         if (transport)
         {
@@ -18500,6 +18473,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     GetSession()->GetCollectionMgr()->LoadHeirlooms();
     GetSession()->GetCollectionMgr()->LoadMounts();
     GetSession()->GetCollectionMgr()->LoadItemAppearances();
+    GetSession()->GetCollectionMgr()->LoadTransmogIllusions();
 
     LearnSpecializationSpells();
 
@@ -18714,6 +18688,22 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     m_questObjectiveCriteriaMgr->CheckAllQuestObjectiveCriteria(this);
 
     PushQuests();
+
+    for (TransmogIllusionEntry const* transmogIllusion : sTransmogIllusionStore)
+    {
+        if (!transmogIllusion->GetFlags().HasFlag(TransmogIllusionFlags::PlayerConditionGrantsOnLogin))
+            continue;
+
+        if (GetSession()->GetCollectionMgr()->HasTransmogIllusion(transmogIllusion->ID))
+            continue;
+
+        if (PlayerConditionEntry const* playerCondition = sPlayerConditionStore.LookupEntry(transmogIllusion->UnlockConditionID))
+            if (!ConditionMgr::IsPlayerMeetingCondition(this, playerCondition))
+                continue;
+
+        GetSession()->GetCollectionMgr()->AddTransmogIllusion(transmogIllusion->ID);
+    }
+
     return true;
 }
 
@@ -20359,22 +20349,14 @@ bool Player::_LoadHomeBind(PreparedQueryResult result)
     if (!ok && HasAtLoginFlag(AT_LOGIN_FIRST))
     {
         PlayerInfo::CreatePosition const& createPosition = m_createMode == PlayerCreateMode::NPE && info->createPositionNPE ? *info->createPositionNPE : info->createPosition;
-
-        m_homebind.WorldRelocate(createPosition.Loc);
-        if (createPosition.TransportGuid)
+        if (!createPosition.TransportGuid)
         {
-            if (Transport* transport = HashMapHolder<Transport>::Find(ObjectGuid::Create<HighGuid::Transport>(*createPosition.TransportGuid)))
-            {
-                float orientation = m_homebind.GetOrientation();
-                transport->CalculatePassengerPosition(m_homebind.m_positionX, m_homebind.m_positionY, m_homebind.m_positionZ, &orientation);
-                m_homebind.SetOrientation(orientation);
-            }
+            m_homebind.WorldRelocate(createPosition.Loc);
+            m_homebindAreaId = sMapMgr->GetAreaId(PhasingHandler::GetEmptyPhaseShift(), m_homebind);
+
+            saveHomebindToDb();
+            ok = true;
         }
-
-        m_homebindAreaId = sMapMgr->GetAreaId(PhasingHandler::GetEmptyPhaseShift(), m_homebind);
-
-        saveHomebindToDb();
-        ok = true;
     }
 
     if (!ok)
@@ -20784,6 +20766,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     GetSession()->GetCollectionMgr()->SaveAccountHeirlooms(loginTransaction);
     GetSession()->GetCollectionMgr()->SaveAccountMounts(loginTransaction);
     GetSession()->GetCollectionMgr()->SaveAccountItemAppearances(loginTransaction);
+    GetSession()->GetCollectionMgr()->SaveAccountTransmogIllusions(loginTransaction);
 
     LoginDatabasePreparedStatement* loginStmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BNET_LAST_PLAYER_CHARACTERS);
     loginStmt->setUInt32(0, GetSession()->GetAccountId());
@@ -21631,34 +21614,49 @@ void Player::outDebugValues() const
 /***               FLOOD FILTER SYSTEM                 ***/
 /*********************************************************/
 
-void Player::UpdateSpeakTime()
+void Player::UpdateSpeakTime(ChatFloodThrottle::Index index)
 {
     // ignore chat spam protection for GMs in any mode
     if (GetSession()->HasPermission(rbac::RBAC_PERM_SKIP_CHECK_CHAT_SPAM))
         return;
 
-    time_t current = GameTime::GetGameTime();
-    if (m_speakTime > current)
+    uint32 limit;
+    uint32 delay;
+    switch (index)
     {
-        uint32 max_count = sWorld->getIntConfig(CONFIG_CHATFLOOD_MESSAGE_COUNT);
-        if (!max_count)
+        case ChatFloodThrottle::REGULAR:
+            limit = sWorld->getIntConfig(CONFIG_CHATFLOOD_MESSAGE_COUNT);
+            delay = sWorld->getIntConfig(CONFIG_CHATFLOOD_MESSAGE_DELAY);
+            break;
+        case ChatFloodThrottle::ADDON:
+            limit = sWorld->getIntConfig(CONFIG_CHATFLOOD_ADDON_MESSAGE_COUNT);
+            delay = sWorld->getIntConfig(CONFIG_CHATFLOOD_ADDON_MESSAGE_DELAY);
+            break;
+        default:
+            return;
+    }
+
+    time_t current = GameTime::GetGameTime();
+    if (m_chatFloodData[index].Time > current)
+    {
+        if (!limit)
             return;
 
-        ++m_speakCount;
-        if (m_speakCount >= max_count)
+        ++m_chatFloodData[index].Count;
+        if (m_chatFloodData[index].Count >= limit)
         {
             // prevent overwrite mute time, if message send just before mutes set, for example.
             time_t new_mute = current + sWorld->getIntConfig(CONFIG_CHATFLOOD_MUTE_TIME);
             if (GetSession()->m_muteTime < new_mute)
                 GetSession()->m_muteTime = new_mute;
 
-            m_speakCount = 0;
+            m_chatFloodData[index].Count = 0;
         }
     }
     else
-        m_speakCount = 1;
+        m_chatFloodData[index].Count = 1;
 
-    m_speakTime = current + sWorld->getIntConfig(CONFIG_CHATFLOOD_MESSAGE_DELAY);
+    m_chatFloodData[index].Time = current + delay;
 }
 
 /*********************************************************/
@@ -24437,9 +24435,15 @@ bool Player::ModifyMoney(int64 amount, bool sendError /*= true*/)
 
 void Player::SetMoney(uint64 value)
 {
-    MoneyChanged(value);
+    bool loading = GetSession()->PlayerLoading();
+
+    if (!loading)
+        MoneyChanged(value);
+
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Coinage), value);
-    UpdateCriteria(CriteriaType::MostMoneyOwned);
+
+    if (!loading)
+        UpdateCriteria(CriteriaType::MostMoneyOwned);
 }
 
 bool Player::IsQuestRewarded(uint32 quest_id) const

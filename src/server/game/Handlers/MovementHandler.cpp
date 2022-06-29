@@ -79,6 +79,10 @@ void WorldSession::HandleMoveWorldportAck()
         sMapMgr->FindMap(loc.GetMapId(), *GetPlayer()->GetTeleportDestInstanceId()) :
         sMapMgr->CreateMap(loc.GetMapId(), GetPlayer());
 
+    MovementInfo::TransportInfo transportInfo = player->m_movementInfo.transport;
+    if (TransportBase* transport = player->GetTransport())
+        transport->RemovePassenger(player);
+
     if (player->IsInWorld())
     {
         TC_LOG_ERROR("network", "%s %s is still in world when teleported from map %s (%u) to new map %s (%u)", player->GetGUID().ToString().c_str(), player->GetName().c_str(), oldMap->GetMapName(), oldMap->GetId(), newMap ? newMap->GetMapName() : "Unknown", loc.GetMapId());
@@ -109,6 +113,13 @@ void WorldSession::HandleMoveWorldportAck()
 
     if (!seamlessTeleport)
         player->SendInitialPacketsBeforeAddToMap();
+
+    // move player between transport copies on each map
+    if (Transport* newTransport = newMap->GetTransport(transportInfo.guid))
+    {
+        player->m_movementInfo.transport = transportInfo;
+        newTransport->AddPassenger(player);
+    }
 
     if (!player->GetMap()->AddPlayerToMap(player, !seamlessTeleport))
     {
@@ -320,10 +331,7 @@ void WorldSession::HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movem
     }
 
     if (!movementInfo.pos.IsPositionValid())
-    {
-        TC_LOG_ERROR("network", "HandleMovementOpcodes: Invalid Position");
         return;
-    }
 
     if (!mover->movespline->Finalized())
         return;
@@ -342,15 +350,11 @@ void WorldSession::HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movem
         // transports size limited
         // (also received at zeppelin leave by some reason with t_* as absolute in continent coordinates, can be safely skipped)
         if (fabs(movementInfo.transport.pos.GetPositionX()) > 75.0f || fabs(movementInfo.transport.pos.GetPositionY()) > 75.0f || fabs(movementInfo.transport.pos.GetPositionZ()) > 75.0f)
-        {
             return;
-        }
 
         if (!Trinity::IsValidMapCoord(movementInfo.pos.GetPositionX() + movementInfo.transport.pos.GetPositionX(), movementInfo.pos.GetPositionY() + movementInfo.transport.pos.GetPositionY(),
             movementInfo.pos.GetPositionZ() + movementInfo.transport.pos.GetPositionZ(), movementInfo.pos.GetOrientation() + movementInfo.transport.pos.GetOrientation()))
-        {
             return;
-        }
 
         // if we boarded a transport, add us to it
         if (plrMover)

@@ -48,6 +48,7 @@
 #include "SpellMgr.h"
 #include "World.h"
 #include "WorldSession.h"
+#include "WorldStateMgr.h"
 
 bool CriteriaData::IsValid(Criteria const* criteria)
 {
@@ -1318,6 +1319,10 @@ bool CriteriaHandler::CanUpdateCriteria(Criteria const* criteria, CriteriaTreeLi
         return false;
     }
 
+    if (criteria->Entry->EligibilityWorldStateID != 0)
+        if (sWorldStateMgr->GetValue(criteria->Entry->EligibilityWorldStateID, referencePlayer->GetMap()) != criteria->Entry->EligibilityWorldStateValue)
+            return false;
+
     return true;
 }
 
@@ -2231,7 +2236,7 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
                 return false;
             break;
         case ModifierTreeType::PlayersRealmWorldState: // 108
-            if (sWorld->getWorldState(reqValue) != secondaryAsset)
+            if (sWorldStateMgr->GetValue(reqValue, referencePlayer->GetMap()) != int32(secondaryAsset))
                 return false;
             break;
         case ModifierTreeType::TimeBetween: // 109
@@ -3772,6 +3777,8 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
     return true;
 }
 
+CriteriaList const CriteriaMgr::EmptyCriteriaList;
+
 char const* CriteriaMgr::GetCriteriaTypeString(uint32 type)
 {
     return GetCriteriaTypeString(CriteriaType(type));
@@ -4300,6 +4307,8 @@ CriteriaList const& CriteriaMgr::GetPlayerCriteriaByType(CriteriaType type, uint
         auto itr = _criteriasByAsset[size_t(type)].find(asset);
         if (itr != _criteriasByAsset[size_t(type)].end())
             return itr->second;
+
+        return EmptyCriteriaList;
     }
 
     return _criteriasByType[size_t(type)];

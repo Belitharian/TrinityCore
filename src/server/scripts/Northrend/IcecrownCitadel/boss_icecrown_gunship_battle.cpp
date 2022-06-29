@@ -474,10 +474,12 @@ public:
         if (!_owner->IsAlive())
             return true;
 
-        Movement::MoveSplineInit init(_owner);
-        init.DisableTransportPathTransformations();
-        init.MoveTo(_dest.GetPositionX(), _dest.GetPositionY(), _dest.GetPositionZ(), false);
-        _owner->GetMotionMaster()->LaunchMoveSpline(std::move(init), EVENT_CHARGE_PREPATH, MOTION_PRIORITY_NORMAL, POINT_MOTION_TYPE);
+        std::function<void(Movement::MoveSplineInit&)> initializer = [dest = _dest](Movement::MoveSplineInit& init)
+        {
+            init.DisableTransportPathTransformations();
+            init.MoveTo(dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), false);
+        };
+        _owner->GetMotionMaster()->LaunchMoveSpline(std::move(initializer), EVENT_CHARGE_PREPATH, MOTION_PRIORITY_NORMAL, POINT_MOTION_TYPE);
 
         return true;
     }
@@ -497,10 +499,10 @@ public:
     {
         _caster->CastSpell(_caster, _spellId, true);
 
-        if (Transport* go = HashMapHolder<Transport>::Find(_transport))
+        if (Transport* go = ObjectAccessor::GetTransport(*_caster, _transport))
             go->AddObjectToRemoveList();
 
-        if (Transport* go = HashMapHolder<Transport>::Find(_otherTransport))
+        if (Transport* go = ObjectAccessor::GetTransport(*_caster, _otherTransport))
             go->AddObjectToRemoveList();
 
         return true;
@@ -572,10 +574,12 @@ struct gunship_npc_AI : public ScriptedAI
             me->GetTransport()->CalculatePassengerPosition(hx, hy, hz, &ho);
             me->SetHomePosition(hx, hy, hz, ho);
 
-            Movement::MoveSplineInit init(me);
-            init.DisableTransportPathTransformations();
-            init.MoveTo(x, y, z, false);
-            me->GetMotionMaster()->LaunchMoveSpline(std::move(init), EVENT_CHARGE_PREPATH, MOTION_PRIORITY_NORMAL, POINT_MOTION_TYPE);
+            std::function<void(Movement::MoveSplineInit&)> initializer = [=](Movement::MoveSplineInit& init)
+            {
+                init.DisableTransportPathTransformations();
+                init.MoveTo(x, y, z, false);
+            };
+            me->GetMotionMaster()->LaunchMoveSpline(std::move(initializer), EVENT_CHARGE_PREPATH, MOTION_PRIORITY_NORMAL, POINT_MOTION_TYPE);
         }
     }
 
@@ -771,7 +775,7 @@ class npc_gunship : public CreatureScript
 
                 if (isVictory)
                 {
-                    if (Transport* otherTransport = HashMapHolder<Transport>::Find(instance->GetGuidData(DATA_ICECROWN_GUNSHIP_BATTLE)))
+                    if (Transport* otherTransport = ObjectAccessor::GetTransport(*me, instance->GetGuidData(DATA_ICECROWN_GUNSHIP_BATTLE)))
                         otherTransport->EnableMovement(true);
 
                     if (Transport* transport = dynamic_cast<Transport*>(me->GetTransport()))
@@ -933,11 +937,13 @@ struct npc_high_overlord_saurfang_igb : public ScriptedAI
         }
         else if (action == ACTION_EXIT_SHIP)
         {
-            Movement::PointsArray path(SaurfangExitPath, SaurfangExitPath + SaurfangExitPathSize);
-            Movement::MoveSplineInit init(me);
-            init.DisableTransportPathTransformations();
-            init.MovebyPath(path, 0);
-            me->GetMotionMaster()->LaunchMoveSpline(std::move(init), 0, MOTION_PRIORITY_NORMAL, POINT_MOTION_TYPE);
+            std::function<void(Movement::MoveSplineInit&)> initializer = [](Movement::MoveSplineInit& init)
+            {
+                Movement::PointsArray path(SaurfangExitPath, SaurfangExitPath + SaurfangExitPathSize);
+                init.DisableTransportPathTransformations();
+                init.MovebyPath(path, 0);
+            };
+            me->GetMotionMaster()->LaunchMoveSpline(std::move(initializer), 0, MOTION_PRIORITY_NORMAL, POINT_MOTION_TYPE);
 
             me->DespawnOrUnsummon(18s);
         }
@@ -994,7 +1000,7 @@ struct npc_high_overlord_saurfang_igb : public ScriptedAI
                     Talk(SAY_SAURFANG_INTRO_2);
                     break;
                 case EVENT_INTRO_SUMMON_SKYBREAKER:
-                    sTransportMgr->CreateTransport(GO_THE_SKYBREAKER_H, UI64LIT(0), me->GetMap());
+                    sTransportMgr->CreateTransport(GO_THE_SKYBREAKER_H, me->GetMap());
                     break;
                 case EVENT_INTRO_H_3:
                     Talk(SAY_SAURFANG_INTRO_3);
@@ -1028,7 +1034,7 @@ struct npc_high_overlord_saurfang_igb : public ScriptedAI
                     if (Transport* orgrimsHammer = dynamic_cast<Transport*>(me->GetTransport()))
                         orgrimsHammer->SummonPassenger(NPC_TELEPORT_PORTAL, OrgrimsHammerTeleportPortal, TEMPSUMMON_TIMED_DESPAWN, nullptr, 21000);
 
-                    if (Transport* skybreaker = HashMapHolder<Transport>::Find(_instance->GetGuidData(DATA_ICECROWN_GUNSHIP_BATTLE)))
+                    if (Transport* skybreaker = ObjectAccessor::GetTransport(*me, _instance->GetGuidData(DATA_ICECROWN_GUNSHIP_BATTLE)))
                         skybreaker->SummonPassenger(NPC_TELEPORT_EXIT, SkybreakerTeleportExit, TEMPSUMMON_TIMED_DESPAWN, nullptr, 23000);
 
                     _events.ScheduleEvent(EVENT_ADDS_BOARD_YELL, 6s);
@@ -1187,11 +1193,13 @@ struct npc_muradin_bronzebeard_igb : public ScriptedAI
         }
         else if (action == ACTION_EXIT_SHIP)
         {
-            Movement::PointsArray path(MuradinExitPath, MuradinExitPath + MuradinExitPathSize);
-            Movement::MoveSplineInit init(me);
-            init.DisableTransportPathTransformations();
-            init.MovebyPath(path, 0);
-            me->GetMotionMaster()->LaunchMoveSpline(std::move(init), 0, MOTION_PRIORITY_NORMAL, POINT_MOTION_TYPE);
+            std::function<void(Movement::MoveSplineInit&)> initializer = [](Movement::MoveSplineInit& init)
+            {
+                Movement::PointsArray path(MuradinExitPath, MuradinExitPath + MuradinExitPathSize);
+                init.DisableTransportPathTransformations();
+                init.MovebyPath(path, 0);
+            };
+            me->GetMotionMaster()->LaunchMoveSpline(std::move(initializer), 0, MOTION_PRIORITY_NORMAL, POINT_MOTION_TYPE);
 
             me->DespawnOrUnsummon(18s);
         }
@@ -1249,7 +1257,7 @@ struct npc_muradin_bronzebeard_igb : public ScriptedAI
                     Talk(SAY_MURADIN_INTRO_2);
                     break;
                 case EVENT_INTRO_SUMMON_ORGRIMS_HAMMER:
-                    sTransportMgr->CreateTransport(GO_ORGRIMS_HAMMER_A, UI64LIT(0), me->GetMap());
+                    sTransportMgr->CreateTransport(GO_ORGRIMS_HAMMER_A, me->GetMap());
                     break;
                 case EVENT_INTRO_A_3:
                     Talk(SAY_MURADIN_INTRO_3);
@@ -1286,7 +1294,7 @@ struct npc_muradin_bronzebeard_igb : public ScriptedAI
                     if (Transport* skybreaker = dynamic_cast<Transport*>(me->GetTransport()))
                         skybreaker->SummonPassenger(NPC_TELEPORT_PORTAL, SkybreakerTeleportPortal, TEMPSUMMON_TIMED_DESPAWN, nullptr, 21000);
 
-                    if (Transport* orgrimsHammer = HashMapHolder<Transport>::Find(_instance->GetGuidData(DATA_ICECROWN_GUNSHIP_BATTLE)))
+                    if (Transport* orgrimsHammer = ObjectAccessor::GetTransport(*me, _instance->GetGuidData(DATA_ICECROWN_GUNSHIP_BATTLE)))
                         orgrimsHammer->SummonPassenger(NPC_TELEPORT_EXIT, OrgrimsHammerTeleportExit, TEMPSUMMON_TIMED_DESPAWN, nullptr, 23000);
 
                     _events.ScheduleEvent(EVENT_ADDS_BOARD_YELL, 6s);
@@ -1413,7 +1421,7 @@ struct npc_gunship_boarding_addAI : public gunship_npc_AI
             if (!myTransport)
                 return;
 
-            if (Transport* destTransport = HashMapHolder<Transport>::Find(Instance->GetGuidData(DATA_ICECROWN_GUNSHIP_BATTLE)))
+            if (Transport* destTransport = ObjectAccessor::GetTransport(*me, Instance->GetGuidData(DATA_ICECROWN_GUNSHIP_BATTLE)))
                 destTransport->CalculatePassengerPosition(x, y, z, &o);
 
             float angle = frand(0, float(M_PI) * 2.0f);
@@ -2125,7 +2133,7 @@ class spell_igb_gunship_fall_teleport : public SpellScript
     void SelectTransport(WorldObject*& target)
     {
         if (InstanceScript* instance = target->GetInstanceScript())
-            target = HashMapHolder<Transport>::Find(instance->GetGuidData(DATA_ICECROWN_GUNSHIP_BATTLE));
+            target = ObjectAccessor::GetTransport(*GetCaster(), instance->GetGuidData(DATA_ICECROWN_GUNSHIP_BATTLE));
     }
 
     void RelocateDest(SpellEffIndex /*effIndex*/)
