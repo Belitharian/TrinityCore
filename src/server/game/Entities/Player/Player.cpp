@@ -9205,7 +9205,6 @@ void Player::SendInitWorldStates(uint32 zoneId, uint32 areaId)
     uint32 mapId = GetMapId();
     Battleground* battleground = GetBattleground();
     OutdoorPvP* outdoorPvP = sOutdoorPvPMgr->GetOutdoorPvPToZoneId(zoneId);
-    InstanceScript* instance = GetInstanceScript();
 
     TC_LOG_DEBUG("network", "Player::SendInitWorldStates: Sending SMSG_INIT_WORLD_STATES for Map: %u, Zone: %u", mapId, zoneId);
 
@@ -9240,12 +9239,6 @@ void Player::SendInitWorldStates(uint32 zoneId, uint32 areaId)
         packet.Worldstates.emplace_back(2493, 15); // NA_UI_GUARDS_MAX
         packet.Worldstates.emplace_back(2491, 15); // NA_UI_GUARDS_LEFT
     }
-
-    // Horde War Mode bonus
-    packet.Worldstates.emplace_back(17042, 10 + (sWorld->GetWarModeDominantFaction() == TEAM_ALLIANCE ? sWorld->GetWarModeOutnumberedFactionReward() : 0));
-
-    // Alliance War Mode bonus
-    packet.Worldstates.emplace_back(17043, 10 + (sWorld->GetWarModeDominantFaction() == TEAM_HORDE ? sWorld->GetWarModeOutnumberedFactionReward() : 0));
 
     switch (zoneId)
     {
@@ -9685,86 +9678,6 @@ void Player::SendInitWorldStates(uint32 zoneId, uint32 areaId)
                 packet.Worldstates.emplace_back(4294, 1);   // BG_IC_WORKSHOP_UNCONTROLLED
                 packet.Worldstates.emplace_back(4243, 1);   // unk
                 packet.Worldstates.emplace_back(4345, 1);   // unk
-            }
-            break;
-        case 4987: // The Ruby Sanctum
-            if (instance)
-                instance->FillInitialWorldStates(packet);
-            else
-            {
-                packet.Worldstates.emplace_back(5049, 50); // WORLDSTATE_CORPOREALITY_MATERIAL
-                packet.Worldstates.emplace_back(5050, 50); // WORLDSTATE_CORPOREALITY_TWILIGHT
-                packet.Worldstates.emplace_back(5051, 0);  // WORLDSTATE_CORPOREALITY_TOGGLE
-            }
-            break;
-        case 4812: // Icecrown Citadel
-            if (instance)
-                instance->FillInitialWorldStates(packet);
-            else
-            {
-                packet.Worldstates.emplace_back(4903, 0);  // WORLDSTATE_SHOW_TIMER (Blood Quickening weekly)
-                packet.Worldstates.emplace_back(4904, 30); // WORLDSTATE_EXECUTION_TIME
-                packet.Worldstates.emplace_back(4940, 0);  // WORLDSTATE_SHOW_ATTEMPTS
-                packet.Worldstates.emplace_back(4941, 50); // WORLDSTATE_ATTEMPTS_REMAINING
-                packet.Worldstates.emplace_back(4942, 50); // WORLDSTATE_ATTEMPTS_MAX
-            }
-            break;
-        case 4100: // The Culling of Stratholme
-            if (instance)
-                instance->FillInitialWorldStates(packet);
-            else
-            {
-                packet.Worldstates.emplace_back(3479, 0);  // WORLDSTATE_SHOW_CRATES
-                packet.Worldstates.emplace_back(3480, 0);  // WORLDSTATE_CRATES_REVEALED
-                packet.Worldstates.emplace_back(3504, 0);  // WORLDSTATE_WAVE_COUNT
-                packet.Worldstates.emplace_back(3931, 25); // WORLDSTATE_TIME_GUARDIAN
-                packet.Worldstates.emplace_back(3932, 0);  // WORLDSTATE_TIME_GUARDIAN_SHOW
-            }
-            break;
-        case 4228: // The Oculus
-            if (instance)
-                instance->FillInitialWorldStates(packet);
-            else
-            {
-                packet.Worldstates.emplace_back(3524, 0); // WORLD_STATE_CENTRIFUGE_CONSTRUCT_SHOW
-                packet.Worldstates.emplace_back(3486, 0); // WORLD_STATE_CENTRIFUGE_CONSTRUCT_AMOUNT
-            }
-            break;
-        case 4273: // Ulduar
-            if (instance)
-                instance->FillInitialWorldStates(packet);
-            else
-            {
-                packet.Worldstates.emplace_back(4132, 0); // WORLDSTATE_ALGALON_TIMER_ENABLED
-                packet.Worldstates.emplace_back(4131, 0); // WORLDSTATE_ALGALON_DESPAWN_TIMER
-            }
-            break;
-        case 4415: // Violet Hold
-            if (instance)
-                instance->FillInitialWorldStates(packet);
-            else
-            {
-               packet.Worldstates.emplace_back(3816, 0);   // WORLD_STATE_VH_SHOW
-               packet.Worldstates.emplace_back(3815, 100); // WORLD_STATE_VH_PRISON_STATE
-               packet.Worldstates.emplace_back(3810, 0);   // WORLD_STATE_VH_WAVE_COUNT
-            }
-            break;
-        case 4820: // Halls of Refection
-            if (instance)
-                instance->FillInitialWorldStates(packet);
-            else
-            {
-                packet.Worldstates.emplace_back(4884, 0); // WORLD_STATE_HOR_WAVES_ENABLED
-                packet.Worldstates.emplace_back(4882, 0); // WORLD_STATE_HOR_WAVE_COUNT
-            }
-            break;
-        case 3805: // Zul Aman
-            if (instance)
-                instance->FillInitialWorldStates(packet);
-            else
-            {
-                packet.Worldstates.emplace_back(3104, 0); // WORLD_STATE_ZULAMAN_TIMER_ENABLED
-                packet.Worldstates.emplace_back(3106, 0); // WORLD_STATE_ZULAMAN_TIMER
             }
             break;
         case 5031: // Twin Peaks
@@ -19722,11 +19635,12 @@ void Player::_LoadSeasonalQuestStatus(PreparedQueryResult result)
             Field* fields = result->Fetch();
             uint32 quest_id = fields[0].GetUInt32();
             uint32 event_id = fields[1].GetUInt32();
+            uint32 completedTime = fields[2].GetInt64();
             Quest const* quest = sObjectMgr->GetQuestTemplate(quest_id);
             if (!quest)
                 continue;
 
-            m_seasonalquests[event_id].insert(quest_id);
+            m_seasonalquests[event_id][quest_id] = completedTime;
             if (uint32 questBit = sDB2Manager.GetQuestUniqueBitFlag(quest_id))
                 SetQuestCompletedBit(questBit, true);
 
@@ -21387,18 +21301,20 @@ void Player::_SaveSeasonalQuestStatus(CharacterDatabaseTransaction trans)
     if (m_seasonalquests.empty())
         return;
 
-    for (SeasonalEventQuestMap::const_iterator iter = m_seasonalquests.begin(); iter != m_seasonalquests.end(); ++iter)
+    for (SeasonalQuestMapByEvent::const_iterator iter = m_seasonalquests.begin(); iter != m_seasonalquests.end(); ++iter)
     {
         uint16 eventId = iter->first;
 
-        for (SeasonalQuestSet::const_iterator itr = iter->second.begin(); itr != iter->second.end(); ++itr)
+        for (SeasonalQuestMapByQuest::const_iterator itr = iter->second.begin(); itr != iter->second.end(); ++itr)
         {
-            uint32 questId = *itr;
+            uint32 questId = itr->first;
+            time_t completedTime = itr->second;
 
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_QUESTSTATUS_SEASONAL);
             stmt->setUInt64(0, GetGUID().GetCounter());
             stmt->setUInt32(1, questId);
             stmt->setUInt32(2, eventId);
+            stmt->setInt64(3, completedTime);
             trans->Append(stmt);
         }
     }
@@ -25130,7 +25046,7 @@ void Player::SetSeasonalQuestStatus(uint32 quest_id)
     if (!quest)
         return;
 
-    m_seasonalquests[quest->GetEventIdForQuest()].insert(quest_id);
+    m_seasonalquests[quest->GetEventIdForQuest()][quest_id] = GameTime::GetGameTime();
     m_SeasonalQuestChanged = true;
 }
 
@@ -25176,8 +25092,11 @@ void Player::ResetWeeklyQuestStatus()
     m_WeeklyQuestChanged = false;
 }
 
-void Player::ResetSeasonalQuestStatus(uint16 event_id)
+void Player::ResetSeasonalQuestStatus(uint16 event_id, time_t eventStartTime)
 {
+    // DB data deleted in caller
+    m_SeasonalQuestChanged = false;
+
     auto eventItr = m_seasonalquests.find(event_id);
     if (eventItr == m_seasonalquests.end())
         return;
@@ -25185,13 +25104,22 @@ void Player::ResetSeasonalQuestStatus(uint16 event_id)
     if (eventItr->second.empty())
         return;
 
-    for (uint32 questId : eventItr->second)
-        if (uint32 questBit = sDB2Manager.GetQuestUniqueBitFlag(questId))
-            SetQuestCompletedBit(questBit, false);
+    for (auto questItr = eventItr->second.begin(); questItr != eventItr->second.end(); )
+    {
+        if (questItr->second < eventStartTime)
+        {
+            if (uint32 questBit = sDB2Manager.GetQuestUniqueBitFlag(questItr->first))
+                SetQuestCompletedBit(questBit, false);
 
-    m_seasonalquests.erase(eventItr);
-    // DB data deleted in caller
-    m_SeasonalQuestChanged = false;
+            questItr = eventItr->second.erase(questItr);
+        }
+        else
+            ++questItr;
+    }
+
+    if (eventItr->second.empty())
+        m_seasonalquests.erase(eventItr);
+
 }
 
 void Player::ResetMonthlyQuestStatus()

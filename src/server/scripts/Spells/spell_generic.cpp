@@ -45,7 +45,7 @@
 #include "SpellPackets.h"
 #include "SpellScript.h"
 #include "Vehicle.h"
-#include "World.h"
+#include "WorldStateMgr.h"
 
 class spell_gen_absorb0_hitlimit1 : public AuraScript
 {
@@ -4821,10 +4821,17 @@ class spell_gen_war_mode_enlisted : public AuraScript
         if (!target)
             return;
 
-        if (target->GetTeamId() == sWorld->GetWarModeDominantFaction())
-            return;
-
-        amount += sWorld->GetWarModeOutnumberedFactionReward();
+        switch (target->GetTeamId())
+        {
+            case TEAM_ALLIANCE:
+                amount = sWorldStateMgr->GetValue(WS_WAR_MODE_ALLIANCE_BUFF_VALUE, target->GetMap());
+                break;
+            case TEAM_HORDE:
+                amount = sWorldStateMgr->GetValue(WS_WAR_MODE_HORDE_BUFF_VALUE, target->GetMap());
+                break;
+            default:
+                break;
+        }
     }
 
     void Register() override

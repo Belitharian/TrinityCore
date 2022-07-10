@@ -794,7 +794,7 @@ class TC_GAME_API World
 
         uint32 GetCleaningFlags() const { return m_CleaningFlags; }
         void SetCleaningFlags(uint32 flags) { m_CleaningFlags = flags; }
-        void ResetEventSeasonalQuests(uint16 event_id);
+        void ResetEventSeasonalQuests(uint16 event_id, time_t eventStartTime);
 
         void ReloadRBAC();
 
@@ -805,8 +805,6 @@ class TC_GAME_API World
         bool IsGuidAlert() { return _guidAlert; }
 
         // War mode balancing
-        TeamId GetWarModeDominantFaction() const { return _warModeDominantFaction; }
-        int32 GetWarModeOutnumberedFactionReward() const { return _warModeOutnumberedFactionReward; }
         void SetForcedWarModeFactionBalanceState(TeamId team, int32 reward = 0);
         void DisableForcedWarModeFactionBalanceState();
 
@@ -937,9 +935,6 @@ class TC_GAME_API World
 
         // War mode balancing
         void UpdateWarModeRewardValues();
-
-        TeamId _warModeDominantFaction; // the team that has higher percentage
-        int32 _warModeOutnumberedFactionReward;
 
     friend class debug_commandscript;
 };
