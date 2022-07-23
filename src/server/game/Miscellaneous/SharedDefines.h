@@ -5664,7 +5664,7 @@ enum UnitDynFlags
     UNIT_DYNFLAG_TRACK_UNIT                 = 0x0008,
     UNIT_DYNFLAG_TAPPED                     = 0x0010, // Lua_UnitIsTapped
     UNIT_DYNFLAG_SPECIALINFO                = 0x0020,
-    UNIT_DYNFLAG_DEAD                       = 0x0040,
+    UNIT_DYNFLAG_UNUSED                     = 0x0040, // previously UNIT_DYNFLAG_DEAD
     UNIT_DYNFLAG_REFER_A_FRIEND             = 0x0080
 };
 
@@ -7747,6 +7747,9 @@ enum AreaId : uint32
 
 enum WorldState : uint32
 {
+    WS_CURRENT_PVP_SEASON_ID                = 3191,
+    WS_PREVIOUS_PVP_SEASON_ID               = 3901,
+
     WS_BATTLEFIELD_WG_VEHICLE_H             = 3490,
     WS_BATTLEFIELD_WG_MAX_VEHICLE_H         = 3491,
     WS_BATTLEFIELD_WG_VEHICLE_A             = 3680,
@@ -7835,16 +7838,6 @@ enum WorldState : uint32
 
     WS_WAR_MODE_HORDE_BUFF_VALUE    = 17042,
     WS_WAR_MODE_ALLIANCE_BUFF_VALUE = 17043,
-
-    WS_CURRENCY_RESET_TIME      = 20001,                     // Next arena distribution time
-    WS_WEEKLY_QUEST_RESET_TIME  = 20002,                     // Next weekly quest reset time
-    WS_BG_DAILY_RESET_TIME      = 20003,                     // Next daily BG reset time
-    WS_CLEANING_FLAGS           = 20004,                     // Cleaning Flags
-    WS_GUILD_DAILY_RESET_TIME   = 20006,                     // Next guild cap reset time
-    WS_MONTHLY_QUEST_RESET_TIME = 20007,                     // Next monthly quest reset time
-    WS_DAILY_QUEST_RESET_TIME   = 20008,                     // Next daily quest reset time
-    WS_DAILY_CALENDAR_DELETION_OLD_EVENTS_TIME = 20009,      // Next daily calendar deletions of old events time
-    WS_GUILD_WEEKLY_RESET_TIME  = 20050,                     // Next guild week reset time
 };
 
 #endif

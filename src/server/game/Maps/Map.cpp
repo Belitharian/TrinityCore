@@ -16,6 +16,7 @@
  */
 
 #include "Map.h"
+#include "BattlefieldMgr.h"
 #include "Battleground.h"
 #include "CellImpl.h"
 #include "CharacterPackets.h"
@@ -43,6 +44,7 @@
 #include "ObjectAccessor.h"
 #include "ObjectGridLoader.h"
 #include "ObjectMgr.h"
+#include "OutdoorPvPMgr.h"
 #include "Pet.h"
 #include "PhasingHandler.h"
 #include "PoolMgr.h"
@@ -93,6 +95,9 @@ Map::~Map()
 
     if (!m_scriptSchedule.empty())
         sMapMgr->DecreaseScheduledScriptCount(m_scriptSchedule.size());
+
+    sOutdoorPvPMgr->DestroyOutdoorPvPForMap(this);
+    sBattlefieldMgr->DestroyBattlefieldsForMap(this);
 
     if (m_parentMap == this)
         delete m_childTerrainMaps;
@@ -374,6 +379,9 @@ i_scriptLock(false), _respawnCheckTimer(0)
     MMAP::MMapFactory::createOrGetMMapManager()->loadMapInstance(sWorld->GetDataPath(), GetId(), i_InstanceId);
 
     _worldStateValues = sWorldStateMgr->GetInitialWorldStatesForMap(this);
+
+    sOutdoorPvPMgr->CreateOutdoorPvPForMap(this);
+    sBattlefieldMgr->CreateBattlefieldsForMap(this);
 
     sScriptMgr->OnCreateMap(this);
 }
@@ -3703,7 +3711,7 @@ void Map::UpdateSpawnGroupConditions()
         if (shouldBeActive)
             SpawnGroupSpawn(spawnGroupId);
         else if (ASSERT_NOTNULL(GetSpawnGroupData(spawnGroupId))->flags & SPAWNGROUP_FLAG_DESPAWN_ON_CONDITION_FAILURE)
-            SpawnGroupDespawn(spawnGroupId);
+            SpawnGroupDespawn(spawnGroupId, true);
         else
             SetSpawnGroupInactive(spawnGroupId);
     }

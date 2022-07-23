@@ -24,7 +24,6 @@
 #include "Log.h"
 #include "MapManager.h"
 #include "MMapFactory.h"
-#include "ObjectMgr.h"
 #include "Player.h"
 #include "ScenarioMgr.h"
 #include "VMapFactory.h"
@@ -142,7 +141,7 @@ Map* MapInstanced::CreateInstanceForPlayer(uint32 mapId, Player* player, uint32 
             }
         }
     }
-    else if (!IsGarrison())
+    else if (IsDungeon())
     {
         InstancePlayerBind* pBind = player->GetBoundInstance(GetId(), player->GetDifficultyID(GetEntry()));
         InstanceSave* pSave = pBind ? pBind->save : nullptr;
@@ -199,7 +198,7 @@ Map* MapInstanced::CreateInstanceForPlayer(uint32 mapId, Player* player, uint32 
                 map = CreateInstance(newInstanceId, nullptr, diff, player->GetTeamId());
         }
     }
-    else
+    else if (IsGarrison())
     {
         newInstanceId = player->GetGUID().GetCounter();
         map = FindInstanceMap(newInstanceId);
@@ -220,12 +219,6 @@ InstanceMap* MapInstanced::CreateInstance(uint32 InstanceId, InstanceSave* save,
     if (!entry)
     {
         TC_LOG_ERROR("maps", "CreateInstance: no entry for map %d", GetId());
-        ABORT();
-    }
-    InstanceTemplate const* iTemplate = sObjectMgr->GetInstanceTemplate(GetId());
-    if (!iTemplate)
-    {
-        TC_LOG_ERROR("maps", "CreateInstance: no instance template for map %d", GetId());
         ABORT();
     }
 

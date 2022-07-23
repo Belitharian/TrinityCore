@@ -1737,10 +1737,10 @@ bool ScriptMgr::OnAreaTrigger(Player* player, AreaTriggerEntry const* trigger, b
     return entered ? tmpscript->OnTrigger(player, trigger) : tmpscript->OnExit(player, trigger);
 }
 
-Battlefield* ScriptMgr::CreateBattlefield(uint32 scriptId)
+Battlefield* ScriptMgr::CreateBattlefield(uint32 scriptId, Map* map)
 {
     GET_SCRIPT_RET(BattlefieldScript, scriptId, tmpscript, nullptr);
-    return tmpscript->GetBattlefield();
+    return tmpscript->GetBattlefield(map);
 }
 
 Battleground* ScriptMgr::CreateBattleground(BattlegroundTypeId /*typeId*/)
@@ -1750,10 +1750,10 @@ Battleground* ScriptMgr::CreateBattleground(BattlegroundTypeId /*typeId*/)
     return nullptr;
 }
 
-OutdoorPvP* ScriptMgr::CreateOutdoorPvP(uint32 scriptId)
+OutdoorPvP* ScriptMgr::CreateOutdoorPvP(uint32 scriptId, Map* map)
 {
     GET_SCRIPT_RET(OutdoorPvPScript, scriptId, tmpscript, nullptr);
-    return tmpscript->GetOutdoorPvP();
+    return tmpscript->GetOutdoorPvP(map);
 }
 
 Trinity::ChatCommands::ChatCommandTable ScriptMgr::GetChatCommands()

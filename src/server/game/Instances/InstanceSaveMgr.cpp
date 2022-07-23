@@ -241,12 +241,6 @@ time_t InstanceSave::GetResetTimeForDB()
         return GetResetTime();
 }
 
-// to cache or not to cache, that is the question
-InstanceTemplate const* InstanceSave::GetTemplate()
-{
-    return sObjectMgr->GetInstanceTemplate(m_mapid);
-}
-
 MapEntry const* InstanceSave::GetMapEntry()
 {
     return sMapStore.LookupEntry(m_mapid);
@@ -614,7 +608,7 @@ void InstanceSaveManager::_ResetInstance(uint32 mapid, uint32 instanceId)
 {
     TC_LOG_DEBUG("maps", "InstanceSaveMgr::_ResetInstance %u, %u", mapid, instanceId);
     Map const* map = sMapMgr->CreateBaseMap(mapid);
-    if (!map->Instanceable())
+    if (!map->IsDungeon())
         return;
 
     InstanceSaveHashMap::iterator itr = m_instanceSaveById.find(instanceId);
@@ -624,12 +618,9 @@ void InstanceSaveManager::_ResetInstance(uint32 mapid, uint32 instanceId)
     DeleteInstanceFromDB(instanceId);                       // even if save not loaded
 
     Map* iMap = ((MapInstanced*)map)->FindInstanceMap(instanceId);
-
-    if (iMap && iMap->IsDungeon())
-        ((InstanceMap*)iMap)->Reset(INSTANCE_RESET_RESPAWN_DELAY);
-
     if (iMap)
     {
+        ((InstanceMap*)iMap)->Reset(INSTANCE_RESET_RESPAWN_DELAY);
         iMap->DeleteRespawnTimes();
         iMap->DeleteCorpseData();
     }

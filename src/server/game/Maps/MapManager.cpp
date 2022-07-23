@@ -156,10 +156,6 @@ Map::EnterState MapManager::PlayerCannotEnter(uint32 mapid, Player* player, bool
     if (!entry->IsDungeon())
         return Map::CAN_ENTER;
 
-    InstanceTemplate const* instance = sObjectMgr->GetInstanceTemplate(mapid);
-    if (!instance)
-        return Map::CANNOT_ENTER_UNINSTANCED_DUNGEON;
-
     Difficulty targetDifficulty, requestedDifficulty;
     targetDifficulty = requestedDifficulty = player->GetDifficultyID(entry);
     // Get the highest available difficulty if current setting is higher than the instance allows
@@ -266,16 +262,9 @@ bool MapManager::ExistMapAndVMap(uint32 mapid, float x, float y)
     return Map::ExistMap(mapid, gx, gy) && Map::ExistVMap(mapid, gx, gy);
 }
 
-bool MapManager::IsValidMAP(uint32 mapid, bool startUp)
+bool MapManager::IsValidMAP(uint32 mapId)
 {
-    MapEntry const* mEntry = sMapStore.LookupEntry(mapid);
-
-    if (startUp)
-        return mEntry ? true : false;
-    else
-        return mEntry && (!mEntry->IsDungeon() || sObjectMgr->GetInstanceTemplate(mapid));
-
-    /// @todo add check for battleground template
+    return sMapStore.LookupEntry(mapId) != nullptr;
 }
 
 void MapManager::UnloadAll()
@@ -304,11 +293,10 @@ uint32 MapManager::GetNumInstances()
     for (MapMapType::iterator itr = i_maps.begin(); itr != i_maps.end(); ++itr)
     {
         Map* map = itr->second;
-        if (!map->Instanceable())
+        if (!map->IsDungeon())
             continue;
         MapInstanced::InstancedMaps &maps = ((MapInstanced*)map)->GetInstancedMaps();
-        for (MapInstanced::InstancedMaps::iterator mitr = maps.begin(); mitr != maps.end(); ++mitr)
-            if (mitr->second->IsDungeon()) ret++;
+        ret += maps.size();
     }
     return ret;
 }
@@ -321,12 +309,11 @@ uint32 MapManager::GetNumPlayersInInstances()
     for (MapMapType::iterator itr = i_maps.begin(); itr != i_maps.end(); ++itr)
     {
         Map* map = itr->second;
-        if (!map->Instanceable())
+        if (!map->IsDungeon())
             continue;
         MapInstanced::InstancedMaps &maps = ((MapInstanced*)map)->GetInstancedMaps();
         for (MapInstanced::InstancedMaps::iterator mitr = maps.begin(); mitr != maps.end(); ++mitr)
-            if (mitr->second->IsDungeon())
-                ret += ((InstanceMap*)mitr->second)->GetPlayers().getSize();
+            ret += mitr->second->GetPlayers().getSize();
     }
     return ret;
 }

@@ -549,6 +549,7 @@ class TolBaradCapturePoint : public BfCapturePoint
 class BattlefieldTB : public Battlefield
 {
     public:
+        using Battlefield::Battlefield;
         ~BattlefieldTB();
 
         void OnStartGrouping() override;
@@ -575,8 +576,6 @@ class BattlefieldTB : public Battlefield
 
         bool SetupBattlefield() override;
 
-        void SaveWorldStateValues();
-
         void HandleKill(Player* killer, Unit* victim) override;
         //void OnUnitDeath(Unit* unit) override;
         void PromotePlayer(Player* killer);
@@ -598,8 +597,6 @@ class BattlefieldTB : public Battlefield
         bool warnedFiveMinutes;
         bool warnedTwoMinutes;
         bool warnedOneMinute;
-
-        uint32 m_saveTimer;
 
         bool updatedNPCAndObjects;
         uint32 m_updateObjectsTimer;

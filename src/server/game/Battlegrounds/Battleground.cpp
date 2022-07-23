@@ -43,7 +43,7 @@
 #include "TemporarySummon.h"
 #include "Transport.h"
 #include "Util.h"
-#include "WorldStatePackets.h"
+#include "WorldStateMgr.h"
 #include <cstdarg>
 
 template<class Do>
@@ -417,7 +417,7 @@ inline void Battleground::_ProcessJoin(uint32 diff)
         Seconds countdownMaxForBGType = Seconds(isArena() ? ARENA_COUNTDOWN_MAX : BATTLEGROUND_COUNTDOWN_MAX);
 
         WorldPackets::Misc::StartTimer startTimer;
-        startTimer.Type         = 0;
+        startTimer.Type         = WorldPackets::Misc::StartTimer::Pvp;
         startTimer.TimeLeft     = std::chrono::duration_cast<Seconds>(countdownMaxForBGType - Milliseconds(GetElapsedTime()));
         startTimer.TotalTime    = countdownMaxForBGType;
 
@@ -686,13 +686,9 @@ void Battleground::RewardReputationToTeam(uint32 faction_id, uint32 Reputation, 
     }
 }
 
-void Battleground::UpdateWorldState(uint32 variable, uint32 value, bool hidden /*= false*/)
+void Battleground::UpdateWorldState(int32 worldStateId, int32 value, bool hidden /*= false*/)
 {
-    WorldPackets::WorldState::UpdateWorldState worldstate;
-    worldstate.VariableID = variable;
-    worldstate.Value = value;
-    worldstate.Hidden = hidden;
-    SendPacketToAll(worldstate.Write());
+    sWorldStateMgr->SetValue(worldStateId, value, hidden, GetBgMap());
 }
 
 void Battleground::EndBattleground(uint32 winner)
@@ -1014,8 +1010,6 @@ void Battleground::Reset()
         delete itr->second;
     PlayerScores.clear();
 
-    ResetBGSubclass();
-
     _playerPositions.clear();
 }
 
@@ -1124,7 +1118,7 @@ void Battleground::AddPlayer(Player* player)
             Seconds countdownMaxForBGType = Seconds(isArena() ? ARENA_COUNTDOWN_MAX : BATTLEGROUND_COUNTDOWN_MAX);
 
             WorldPackets::Misc::StartTimer startTimer;
-            startTimer.Type         = 0;
+            startTimer.Type         = WorldPackets::Misc::StartTimer::Pvp;
             startTimer.TimeLeft     = std::chrono::duration_cast<Seconds>(countdownMaxForBGType - Milliseconds(GetElapsedTime()));
             startTimer.TotalTime    = countdownMaxForBGType;
             player->SendDirectMessage(startTimer.Write());
@@ -1966,12 +1960,6 @@ void Battleground::HandleAreaTrigger(Player* player, uint32 trigger, bool /*ente
 {
     TC_LOG_DEBUG("bg.battleground", "Unhandled AreaTrigger %u in Battleground %u. Player coords (x: %f, y: %f, z: %f)",
                    trigger, player->GetMapId(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ());
-}
-
-bool Battleground::CheckAchievementCriteriaMeet(uint32 criteriaId, Player const* /*source*/, Unit const* /*target*/, uint32 /*miscvalue1*/)
-{
-    TC_LOG_ERROR("bg.battleground", "Battleground::CheckAchievementCriteriaMeet: No implementation for criteria %u", criteriaId);
-    return false;
 }
 
 char const* Battleground::GetName() const

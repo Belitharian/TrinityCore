@@ -200,6 +200,7 @@ class WintergraspCapturePoint : public BfCapturePoint
 class BattlefieldWG : public Battlefield
 {
     public:
+        using Battlefield::Battlefield;
         ~BattlefieldWG();
         /**
          * \brief Called when the battle start
@@ -256,14 +257,6 @@ class BattlefieldWG : public Battlefield
          * \param player : Player who enters the zone
          */
         void OnPlayerEnterZone(Player* player) override;
-
-        /**
-         * \brief Called for update battlefield data
-         * - Save battle timer in database every minutes
-         * - Update imunity aura from graveyard
-         * \param diff : time elapsed since the last call (in ms)
-         */
-        bool Update(uint32 diff) override;
 
         /**
          * \brief Called when a creature is created
@@ -353,7 +346,6 @@ class BattlefieldWG : public Battlefield
 
         TeamId m_tenacityTeam;
         uint32 m_tenacityStack;
-        uint32 m_saveTimer;
 
         ObjectGuid m_titansRelicGUID;
 };
@@ -531,8 +523,6 @@ public:
     void UpdateCreatureAndGo();
 
     void UpdateTurretAttack(bool disable);
-
-    void Save();
 };
 
 // Structure for the 6 workshop
@@ -556,8 +546,6 @@ public:
     void GiveControlTo(TeamId teamId, bool init = false);
 
     void UpdateGraveyardAndWorkshop();
-
-    void Save();
 };
 
 #endif
