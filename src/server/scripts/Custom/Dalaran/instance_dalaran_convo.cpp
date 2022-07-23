@@ -16,7 +16,6 @@ const ObjectData creatureData[] =
 	{ NPC_KAELTHAS,                     DATA_KAELTHAS                   },
 	{ NPC_KELTHUZAD,                    DATA_KELTHUZAD                  },
 	{ NPC_KALECGOS,                     DATA_KALECGOS                   },
-	{ NPC_INVISIBLE_STALKER,            DATA_CAMERA                     },
 	{ 0,                                0                               }   // END
 };
 
@@ -34,15 +33,32 @@ class instance_dalaran_convo : public InstanceMapScript
 
 	struct instance_dalaran_convo_InstanceScript : public InstanceScript
 	{
-		instance_dalaran_convo_InstanceScript(InstanceMap* map) : InstanceScript(map), eventId(1)
+		instance_dalaran_convo_InstanceScript(InstanceMap* map) : InstanceScript(map), eventId(1), phase(Phases::None)
 		{
 			SetHeaders(DataHeader);
 			LoadObjectData(creatureData, gameobjectData);
 		}
 
-        void SetData(uint32 /*dataId*/, uint32 /*value*/) override
+        enum Misc
         {
-            events.ScheduleEvent(1, 2s);
+            // NPCs
+            NPC_GHOUL                   = 146835,
+
+            // Spells
+            SPELL_VOID_DISSOLVE_OUT     = 277050,
+        };
+
+        void SetData(uint32 dataId, uint32 /*value*/) override
+        {
+            switch ((Phases)dataId)
+            {
+                case Phases::Introduction:
+                    events.ScheduleEvent(1, 2s);
+                    break;
+                case Phases::Conversation:
+                    events.ScheduleEvent(100, 2s);
+                    break;
+            }
         }
 
 		void OnCreatureCreate(Creature* creature) override
@@ -52,27 +68,41 @@ class instance_dalaran_convo : public InstanceMapScript
 
 			InstanceScript::OnCreatureCreate(creature);
 
-			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
-			
 			switch (creature->GetEntry())
 			{
-                case NPC_CAPTURED_CIVILIAN:
+                case NPC_SHANNON_NOEL:
+                    creature->AIM_Destroy();
+                    creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
                     creature->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-                    creature->SetAIAnimKitId(ANIMKIT_BEGGING);
+                    creature->CastSpell(creature, SPELL_READING_BOOK_SITTING);
+                    creature->CastSpell(creature, SPELL_DISSOLVE, true);
                     break;
                 case NPC_KELTHUZAD:
                     creature->AIM_Destroy();
+                    creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
                     creature->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-                    break;
-                case NPC_INVISIBLE_STALKER:
-                    creature->SetSpeedRate(MOVE_RUN, 0.7f);
-                    creature->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-                    creature->NearTeleportTo(CamPath01[0].GetPosition());
+                    creature->CastSpell(creature, SPELL_DISSOLVE, true);
                     break;
 				default:
 					break;
 			}
 		}
+
+        void OnGameObjectCreate(GameObject* go) override
+        {
+            InstanceScript::OnGameObjectCreate(go);
+
+            switch (go->GetEntry())
+            {
+                case GOB_PORTAL_TO_DALARAN:
+                    go->SetLootState(GO_READY);
+                    go->UseDoorOrButton();
+                    go->SetFlag(GO_FLAG_NOT_SELECTABLE);
+                    break;
+                default:
+                    break;
+            }
+        }
 
 		void Update(uint32 diff) override
 		{
@@ -80,27 +110,55 @@ class instance_dalaran_convo : public InstanceMapScript
 			switch (eventId = events.ExecuteEvent())
 			{
                 case 1:
-                    GetPlayer()->CastSpell(GetCamera(), SPELL_FIRST_PERSON_CAMERA);
+                    GetAnduin()->SetFacingToObject(GetJaina());
+                    GetJaina()->SetFacingToObject(GetAnduin());
                     Next(2s);
                     break;
                 case 2:
-                    GetCamera()->CastSpell(GetCreature(DATA_KELTHUZAD), 275736);
-                    GetCamera()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, CamPath01, CAM_PATH_1);
+                    GetAnduin()->AI()->Talk(SAY_ANDUIN_INTRO_01);
+                    Next(6s);
                     break;
-				default:
+                case 3:
+                    GetJaina()->AI()->Talk(SAY_JAINA_INTRO_02);
+                    Next(4s);
+                    break;
+                case 4:
+                    GetAnduin()->SetFacingToObject(GetPlayer());
+                    GetJaina()->SetFacingToObject(GetPlayer());
+                    Next(1s);
+                    break;
+                case 5:
+                    GetJaina()->AI()->SetData(PHASE_TYPE, (uint32)Phases::Introduction);
+                    break;
+
+                /** TEST **/
+
+                case 100:
+                    if (Creature* jaina = GetJaina())
+                    {
+                        jaina->NearTeleportTo(JainaPos01);
+                        jaina->AddAura(SPELL_SIT_CHAIR_MED, jaina);
+                    }
+                    GetAnduin()->NearTeleportTo(AnduinPos01);
+                    GetPlayer()->NearTeleportTo(PlayerPos01);
+                    Next(1s);
+                    break;
+                case 101:
+                    break;
+                default:
 					break;
 			}
 		}
 
 		EventMap events;
 		uint32 eventId;
+        Phases phase;
 
 		// Accesseurs
 		#pragma region ACCESSORS
 		
 		Creature* GetJaina() { return GetCreature(DATA_JAINA_PROUDMOORE); }
 		Creature* GetAnduin() { return GetCreature(DATA_ANDUIN); }
-		Creature* GetCamera() { return GetCreature(DATA_CAMERA); }
 
 		#pragma endregion
 

@@ -953,10 +953,9 @@ void MotionMaster::MoveSmoothPath(uint32 pointId, Position const* pathPoints, si
             init.SetUncompressed();
             init.SetSmooth();
         }
+        if (finalOrient)
+            init.SetFacing(*finalOrient);
     };
-
-    if (finalOrient)
-        init.SetFacing(*finalOrient);
 
     // This code is not correct
     // GenericMovementGenerator does not affect UNIT_STATE_ROAMING_MOVE

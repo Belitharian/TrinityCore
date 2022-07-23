@@ -18,19 +18,32 @@
 struct npc_jaina_ruins : public CustomAI
 {
 	npc_jaina_ruins(Creature* creature) : CustomAI(creature),
-		hasBlinked(false), distance(10.f)
+		hasBlinked(false), hasEscaped(false), distance(10.f)
 	{
 		Initialize();
 	}
 
+    enum NPCs
+    {
+        NPC_MIRROR_IMAGE = 500020
+    };
+
 	enum Spells
 	{
+        SPELL_ARCANE_DISSOLVE   = 254799,
 		SPELL_FROSTBOLT         = 284703,
 		SPELL_RING_OF_ICE       = 285459,
+        SPELL_ICEBOUND_ESCAPE   = 290878,
 		SPELL_COMET_BARRAGE     = 354938,
 		SPELL_FRIGID_SHARD      = 354933,
-		SPELL_BLINK             = 357601
+		SPELL_BLINK             = 357601,
 	};
+
+    enum Groups
+    {
+        GROUP_COMBAT,
+        GROUP_ESCAPE,
+    };
 
 	void Initialize()
 	{
@@ -39,6 +52,7 @@ struct npc_jaina_ruins : public CustomAI
 
 	InstanceScript* instance;
 	bool hasBlinked;
+	bool hasEscaped;
 	float distance;
 	Position beforeBlink;
 
@@ -99,39 +113,83 @@ struct npc_jaina_ruins : public CustomAI
 					hasBlinked = false;
 				});
 				break;
+            case SPELL_ICEBOUND_ESCAPE:
+                DoCastSelf(SPELL_ARCANE_DISSOLVE, true);
+                me->AttackStop();
+                me->SetReactState(REACT_PASSIVE);
+                scheduler.Schedule(5s, [this](TaskContext /*escape*/)
+                {
+                    me->SetReactState(REACT_AGGRESSIVE);
+                    me->RemoveAurasDueToSpell(SPELL_ARCANE_DISSOLVE);
+                });
+                break;
 		}
 	}
 
     void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-		if (me->HealthBelowPctDamaged(10, damage))
-			damage = 0;
+        if (me->HealthBelowPctDamaged(10, damage))
+        {
+            damage = 0;
+
+            if (hasEscaped)
+                return;
+
+            for (uint8 i = 0; i < 3; i++)
+            {
+                const Position pos = GetRandomPosition(me->GetPosition(), 6.f);
+                if (Creature* image = me->GetMap()->SummonCreature(NPC_MIRROR_IMAGE, pos))
+                {
+                    image->SetFaction(me->GetFaction());
+
+                    if (me->IsEngaged())
+                    {
+                        for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
+                        {
+                            if (Unit* victim = ref->GetVictim())
+                            {
+                                image->GetThreatManager().AddThreat(victim, 100000.0f);
+                                victim->GetThreatManager().AddThreat(image, 100000.0f);
+                            }
+                        }
+                    }
+                }
+            }
+
+            scheduler.CancelGroup(GROUP_COMBAT);
+
+            CastStop();
+
+            DoCast(SPELL_ICEBOUND_ESCAPE);
+
+            hasEscaped = true;
+        }
 	}
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		scheduler
-			.Schedule(5ms, [this](TaskContext frostbolt)
+			.Schedule(5ms, GROUP_COMBAT, [this](TaskContext frostbolt)
 			{
 				DoCastVictim(SPELL_FROSTBOLT);
 				frostbolt.Repeat(3s);
 			})
-			.Schedule(2s, [this](TaskContext frigid_shard)
+			.Schedule(2s, GROUP_COMBAT, [this](TaskContext frigid_shard)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 					DoCast(target, SPELL_FRIGID_SHARD);
 				frigid_shard.Repeat(5s, 8s);
 			})
-			.Schedule(8s, [this](TaskContext comet_barrage)
+			.Schedule(8s, GROUP_COMBAT, [this](TaskContext comet_barrage)
 			{
 				DoCast(SPELL_COMET_BARRAGE);
 				comet_barrage.Repeat(12s, 14s);
 			})
-			.Schedule(14s, [this](TaskContext blink)
+			.Schedule(14s, GROUP_COMBAT, [this](TaskContext blink)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 				{
-					if (me->IsWithinDist(target, 15.f))
+					if (me->IsWithinDist(target, 10.f))
 					{
 						me->CastStop();
 						DoCast(SPELL_RING_OF_ICE);

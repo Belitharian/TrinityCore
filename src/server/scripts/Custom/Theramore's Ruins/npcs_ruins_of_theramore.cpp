@@ -6,9 +6,11 @@
 #include "Player.h"
 #include "ScriptMgr.h"
 #include "SpellAuraEffects.h"
+#include "SpellHistory.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "SpellScript.h"
+#include "TemporarySummon.h"
 #include "Custom/AI/CustomAI.h"
 #include "ruins_of_theramore.h"
 
@@ -60,6 +62,77 @@ struct npc_water_elementals_theramore : public CustomAI
                 DoCast(SPELL_WATER_BOLT_VOLLEY);
                 water_bolt_volley.Repeat(18s, 20s);
 			});
+	}
+};
+
+struct npc_jaina_image : public CustomAI
+{
+    npc_jaina_image(Creature* creature) : CustomAI(creature)
+    {
+    }
+
+	enum Spells
+	{
+        SPELL_ARCANE_PROJECTILES    = 5143,
+		SPELL_EVOCATION             = 243070,
+		SPELL_SUPERNOVA             = 157980,
+		SPELL_ARCANE_BLAST          = 291316,
+		SPELL_ARCANE_BARRAGE        = 291318,
+        SPELL_COSMETIC_PURPLE_STATE = 299145,
+	};
+
+    void Reset()
+    {
+        me->AddAura(SPELL_COSMETIC_PURPLE_STATE, me);
+    }
+
+	void JustEngagedWith(Unit* who) override
+	{
+        DoCast(who, SPELL_ARCANE_BLAST);
+
+        scheduler
+            .Schedule(5ms, [this](TaskContext context)
+            {
+                if (me->GetPowerPct(POWER_MANA) <= 20)
+			    {
+				    const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
+
+                    me->CastSpell(me, SPELL_EVOCATION);
+                    me->GetSpellHistory()->ResetCooldown(info->Id, true);
+                    me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
+
+				    context.Repeat(7s);
+			    }
+			    else
+			    {
+				    uint32 spellId = SPELL_ARCANE_BLAST;
+				    if (roll_chance_i(30))
+				    {
+					    spellId = SPELL_ARCANE_PROJECTILES;
+				    }
+				    else if (roll_chance_i(40))
+				    {
+					    spellId = SPELL_ARCANE_BARRAGE;
+				    }
+				    else if (roll_chance_i(20))
+				    {
+					    spellId = SPELL_SUPERNOVA;
+				    }
+
+				    const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
+				    Milliseconds ms = Milliseconds(info->CalcCastTime());
+
+                    DoCastVictim(info->Id);
+
+                    me->GetSpellHistory()->ResetCooldown(info->Id, true);
+                    me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
+
+				    if (info->IsChanneled())
+					    ms = Milliseconds(info->CalcDuration(me));
+
+				    context.Repeat(ms + 500ms);
+			    }
+            });
 	}
 };
 
@@ -234,6 +307,7 @@ void AddSC_npcs_ruins_of_theramore()
 {
     // Utilisable en dehors de l'instance
     RegisterCreatureAI(npc_water_elementals_theramore);
+    RegisterCreatureAI(npc_jaina_image);
 
     RegisterRuinsAI(npc_roknah_warlord);
 
