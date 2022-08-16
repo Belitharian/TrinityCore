@@ -9,19 +9,22 @@
 
 #define PHASE_TYPE          255
 
+#define ACTORS_PATH_01      3
+#define ACTORS_PATH_02      9
+
 enum class Phases
 {
     None,
     Introduction,
     Teleportation,
     Conversation,
+    Event,
     Progress
 };
 
 enum NPCs
 {
     NPC_UNDEAD 				        = 3,
-    NPC_KAELTHAS 			        = 19622,
     NPC_KELTHUZAD			        = 20350,
     NPC_INVISIBLE_STALKER           = 32780,
     NPC_KALECGOS 			        = 35867,
@@ -31,6 +34,8 @@ enum NPCs
     NPC_JAINA_PROUDMOORE	        = 68108,
     NPC_KAELTHAS_ASSISTANT 	        = 68482,
     NPC_SHANNON_NOEL                = 99350,
+    NPC_GHOUL                       = 146835,
+    NPC_KAELTHAS                    = 177103,
 };
 
 enum Datas
@@ -40,13 +45,40 @@ enum Datas
     DATA_KAELTHAS,
     DATA_KALECGOS,
     DATA_KELTHUZAD,
+    DATA_SHANNON_NOEL,
 };
 
 enum Spells
 {
+    SPELL_FIRESTRIKE                   = 2120,
+    SPELL_TELEPORT_DUMMY               = 51347,
     SPELL_SIT_CHAIR_MED                = 123161,
     SPELL_READING_BOOK_SITTING         = 223977,
+    SPELL_READING_BOOK_STANDING        = 258793,
     SPELL_DISSOLVE                     = 237075,
+    SPELL_VOID_CHANNELING              = 286909,
+    SPELL_TAKING_NOTES                 = 164999,
+    SPELL_FEIGN_DEATH                  = 265448,
+};
+
+enum Events
+{
+    EVENT_NONE                          = 500,
+
+    // Events
+    EVENT_VISION_01,
+    EVENT_VISION_02,
+    EVENT_VISION_03,
+    EVENT_VISION_04,
+    EVENT_VISION_05,
+    EVENT_VISION_06,
+    EVENT_VISION_07,
+    EVENT_VISION_08,
+    EVENT_VISION_09,
+    EVENT_VISION_10,
+    EVENT_VISION_11,
+    EVENT_VISION_12,
+    EVENT_VISION_13,
 };
 
 enum DLPMisc
@@ -66,11 +98,54 @@ enum DLPMisc
     // Talks
     SAY_ANDUIN_INTRO_01                 = 0,
     SAY_JAINA_INTRO_02                  = 0,
+
+    SAY_JAINA_CONVO_01                  = 1,
+    SAY_JAINA_CONVO_02                  = 2,
+    SAY_JAINA_CONVO_03                  = 3,
+    SAY_JAINA_CONVO_04                  = 4,
+    SAY_JAINA_CONVO_05                  = 5,
+    SAY_JAINA_CONVO_06                  = 6,
 };
 
 const Position PlayerPos01              = { -804.16f, 4453.89f, 598.49f, 3.25f };
 const Position JainaPos01               = { -821.50f, 4463.16f, 598.72f, 0.60f };
+const Position JainaPos02               = { -816.71f, 4501.78f, 601.50f, 5.79f };
 const Position AnduinPos01              = { -817.56f, 4460.48f, 598.72f, 1.15f };
+const Position GhoulPos01               = { -830.17f, 4485.71f, 598.85f, 0.87f };
+const Position FirestrikePos01          = { -808.46f, 4500.06f, 601.61f, 2.40f };
+
+const Position ActorsPath01[ACTORS_PATH_01] =
+{
+    { -799.17f, 4659.60f, 933.83f, 1.67f },
+    { -799.68f, 4664.68f, 933.84f, 1.63f },
+    { -801.00f, 4681.05f, 930.71f, 1.67f },
+};
+
+const Position JainaPath02[ACTORS_PATH_02] =
+{
+    { -820.82f, 4468.03f, 598.71f, 1.66f },
+    { -821.27f, 4471.12f, 598.71f, 1.95f },
+    { -824.68f, 4476.82f, 598.71f, 2.49f },
+    { -828.17f, 4480.55f, 598.85f, 2.14f },
+    { -829.79f, 4485.44f, 598.85f, 1.49f },
+    { -827.32f, 4489.62f, 599.08f, 0.73f },
+    { -824.20f, 4492.97f, 599.30f, 0.89f },
+    { -820.60f, 4497.52f, 601.50f, 0.90f },
+    { -819.51f, 4502.30f, 601.50f, 2.02f },
+};
+
+const Position AnduinPath02[ACTORS_PATH_02] =
+{
+    { -820.82f, 4468.03f, 598.71f, 1.66f },
+    { -821.27f, 4471.12f, 598.71f, 1.95f },
+    { -824.68f, 4476.82f, 598.71f, 2.49f },
+    { -828.17f, 4480.55f, 598.85f, 2.14f },
+    { -829.79f, 4485.44f, 598.85f, 1.49f },
+    { -827.32f, 4489.62f, 599.08f, 0.73f },
+    { -824.20f, 4492.97f, 599.30f, 0.89f },
+    { -820.60f, 4497.52f, 601.50f, 0.90f },
+    { -816.97f, 4498.86f, 601.50f, 0.98f },
+};
 
 inline Position const GetRandomPosition(Position center, float dist)
 {
