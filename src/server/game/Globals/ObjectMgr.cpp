@@ -60,6 +60,7 @@
 #include "SpellScript.h"
 #include "StringConvert.h"
 #include "TemporarySummon.h"
+#include "TerrainMgr.h"
 #include "Timer.h"
 #include "TransportMgr.h"
 #include "Vehicle.h"
@@ -2430,7 +2431,7 @@ void ObjectMgr::LoadCreatures()
             uint32 zoneId = 0;
             uint32 areaId = 0;
             PhasingHandler::InitDbVisibleMapId(phaseShift, data.terrainSwapMap);
-            sMapMgr->GetZoneAndAreaId(phaseShift, zoneId, areaId, data.mapId, data.spawnPoint);
+            sTerrainMgr.GetZoneAndAreaId(phaseShift, zoneId, areaId, data.mapId, data.spawnPoint);
 
             WorldDatabasePreparedStatement* stmt = WorldDatabase.GetPreparedStatement(WORLD_UPD_CREATURE_ZONE_AREA_DATA);
 
@@ -2735,7 +2736,7 @@ void ObjectMgr::LoadGameObjects()
             uint32 zoneId = 0;
             uint32 areaId = 0;
             PhasingHandler::InitDbVisibleMapId(phaseShift, data.terrainSwapMap);
-            sMapMgr->GetZoneAndAreaId(phaseShift, zoneId, areaId, data.mapId, data.spawnPoint);
+            sTerrainMgr.GetZoneAndAreaId(phaseShift, zoneId, areaId, data.mapId, data.spawnPoint);
 
             WorldDatabasePreparedStatement* stmt = WorldDatabase.GetPreparedStatement(WORLD_UPD_GAMEOBJECT_ZONE_AREA_DATA);
 
@@ -6949,7 +6950,7 @@ WorldSafeLocsEntry const* ObjectMgr::GetClosestGraveyard(WorldLocation const& lo
     uint32 MapId = location.GetMapId();
 
     // search for zone associated closest graveyard
-    uint32 zoneId = sMapMgr->GetZoneId(conditionObject ? conditionObject->GetPhaseShift() : PhasingHandler::GetEmptyPhaseShift(), MapId, x, y, z);
+    uint32 zoneId = sTerrainMgr.GetZoneId(conditionObject ? conditionObject->GetPhaseShift() : PhasingHandler::GetEmptyPhaseShift(), MapId, x, y, z);
 
     if (!zoneId)
     {
@@ -9684,6 +9685,49 @@ void ObjectMgr::LoadGossipMenuItems()
     } while (result->NextRow());
 
     TC_LOG_INFO("server.loading", ">> Loaded " SZFMTD " gossip_menu_option entries in %u ms", _gossipMenuItemsStore.size(), GetMSTimeDiffToNow(oldMSTime));
+}
+
+void ObjectMgr::LoadGossipMenuFriendshipFactions()
+{
+    uint32 oldMSTime = getMSTime();
+
+    _gossipMenuAddonStore.clear();
+
+    //                                               0       1
+    QueryResult result = WorldDatabase.Query("SELECT MenuID, FriendshipFactionID FROM gossip_menu_addon");
+
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 gossip_menu_addon IDs. DB table `gossip_menu_addon` is empty!");
+        return;
+    }
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        uint32 menuID = fields[0].GetUInt32();
+        GossipMenuAddon& addon = _gossipMenuAddonStore[menuID];
+        addon.FriendshipFactionID = fields[1].GetInt32();
+
+        if (FactionEntry const* faction = sFactionStore.LookupEntry(addon.FriendshipFactionID))
+        {
+            if (!sFriendshipReputationStore.LookupEntry(faction->FriendshipRepID))
+            {
+                TC_LOG_ERROR("sql.sql", "Table gossip_menu_addon: ID %u is using FriendshipFactionID %u referencing non-existing FriendshipRepID %u",
+                    menuID, addon.FriendshipFactionID, faction->FriendshipRepID);
+                addon.FriendshipFactionID = 0;
+            }
+        }
+        else
+        {
+            TC_LOG_ERROR("sql.sql", "Table gossip_menu_addon: ID %u is using non-existing FriendshipFactionID %u", menuID, addon.FriendshipFactionID);
+            addon.FriendshipFactionID = 0;
+        }
+
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded %u gossip_menu_addon IDs in %u ms", uint32(_gossipMenuAddonStore.size()), GetMSTimeDiffToNow(oldMSTime));
 }
 
 Trainer::Trainer const* ObjectMgr::GetTrainer(uint32 trainerId) const

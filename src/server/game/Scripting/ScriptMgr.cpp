@@ -1229,6 +1229,9 @@ void ScriptMgr::Initialize()
     // LFGScripts
     lfg::AddSC_LFGScripts();
 
+    // MapScripts
+    sMapMgr->AddSC_BuiltInScripts();
+
     // Load all static linked scripts through the script loader function.
     ASSERT(_script_loader_callback,
            "Script loader callback wasn't registered!");
@@ -1535,42 +1538,6 @@ void ScriptMgr::OnDestroyMap(Map* map)
 
     SCR_MAP_BGN(BattlegroundMapScript, map, itr, end, entry, IsBattleground);
         itr->second->OnDestroy((BattlegroundMap*)map);
-    SCR_MAP_END;
-}
-
-void ScriptMgr::OnLoadGridMap(Map* map, GridMap* gmap, uint32 gx, uint32 gy)
-{
-    ASSERT(map);
-    ASSERT(gmap);
-
-    SCR_MAP_BGN(WorldMapScript, map, itr, end, entry, IsWorldMap);
-        itr->second->OnLoadGridMap(map, gmap, gx, gy);
-    SCR_MAP_END;
-
-    SCR_MAP_BGN(InstanceMapScript, map, itr, end, entry, IsDungeon);
-        itr->second->OnLoadGridMap((InstanceMap*)map, gmap, gx, gy);
-    SCR_MAP_END;
-
-    SCR_MAP_BGN(BattlegroundMapScript, map, itr, end, entry, IsBattleground);
-        itr->second->OnLoadGridMap((BattlegroundMap*)map, gmap, gx, gy);
-    SCR_MAP_END;
-}
-
-void ScriptMgr::OnUnloadGridMap(Map* map, GridMap* gmap, uint32 gx, uint32 gy)
-{
-    ASSERT(map);
-    ASSERT(gmap);
-
-    SCR_MAP_BGN(WorldMapScript, map, itr, end, entry, IsWorldMap);
-        itr->second->OnUnloadGridMap(map, gmap, gx, gy);
-    SCR_MAP_END;
-
-    SCR_MAP_BGN(InstanceMapScript, map, itr, end, entry, IsDungeon);
-        itr->second->OnUnloadGridMap((InstanceMap*)map, gmap, gx, gy);
-    SCR_MAP_END;
-
-    SCR_MAP_BGN(BattlegroundMapScript, map, itr, end, entry, IsBattleground);
-        itr->second->OnUnloadGridMap((BattlegroundMap*)map, gmap, gx, gy);
     SCR_MAP_END;
 }
 

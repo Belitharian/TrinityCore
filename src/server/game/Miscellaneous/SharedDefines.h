@@ -6629,8 +6629,8 @@ enum RaidGroupReason
 enum ResetFailedReason : uint8
 {
     INSTANCE_RESET_FAILED           = 0, // "Cannot reset %s.  There are players still inside the instance."
-    INSTANCE_RESET_FAILED_ZONING    = 1, // "Cannot reset %s.  There are players in your party attempting to zone into an instance."
-    INSTANCE_RESET_FAILED_OFFLINE   = 2  // "Cannot reset %s.  There are players offline in your party."
+    INSTANCE_RESET_FAILED_OFFLINE   = 1, // "Cannot reset %s.  There are players offline in your party."
+    INSTANCE_RESET_FAILED_ZONING    = 2  // "Cannot reset %s.  There are players in your party attempting to zone into an instance."
 };
 
 enum class GameError : uint32
@@ -7749,6 +7749,9 @@ enum WorldState : uint32
 {
     WS_CURRENT_PVP_SEASON_ID                = 3191,
     WS_PREVIOUS_PVP_SEASON_ID               = 3901,
+
+    WS_TEAM_IN_INSTANCE_ALLIANCE            = 4485,
+    WS_TEAM_IN_INSTANCE_HORDE               = 4486,
 
     WS_BATTLEFIELD_WG_VEHICLE_H             = 3490,
     WS_BATTLEFIELD_WG_MAX_VEHICLE_H         = 3491,
