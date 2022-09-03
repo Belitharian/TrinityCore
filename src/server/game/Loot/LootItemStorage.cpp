@@ -19,6 +19,7 @@
 #include "Item.h"
 #include "ItemTemplate.h"
 #include "Log.h"
+#include "Loot.h"
 #include "LootItemStorage.h"
 #include "LootMgr.h"
 #include "ObjectMgr.h"
@@ -136,14 +137,14 @@ void LootItemStorage::LoadStorageFromDB()
 
 bool LootItemStorage::LoadStoredLoot(Item* item, Player* player)
 {
-    Loot* loot = &item->loot;
+    Loot* loot = item->GetLootForPlayer(player);
     StoredLootContainer const* container = nullptr;
 
     // read
     {
         std::shared_lock<std::shared_mutex> lock(*GetLock());
 
-        auto itr = _lootItemStore.find(loot->containerID.GetCounter());
+        auto itr = _lootItemStore.find(item->GetGUID().GetCounter());
         if (itr == _lootItemStore.end())
             return false;
 
@@ -235,7 +236,7 @@ void LootItemStorage::RemoveStoredLootItemForContainer(uint64 containerId, uint3
     itr->second.RemoveItem(itemId, count, itemIndex);
 }
 
-void LootItemStorage::AddNewStoredLoot(Loot* loot, Player* player)
+void LootItemStorage::AddNewStoredLoot(uint64 containerId, Loot* loot, Player* player)
 {
     // Saves the money and item loot associated with an openable item to the DB
     if (loot->isLooted()) // no money and no loot
@@ -245,22 +246,22 @@ void LootItemStorage::AddNewStoredLoot(Loot* loot, Player* player)
     {
         std::shared_lock<std::shared_mutex> lock(*GetLock());
 
-        auto itr = _lootItemStore.find(loot->containerID.GetCounter());
+        auto itr = _lootItemStore.find(containerId);
         if (itr != _lootItemStore.end())
         {
-            TC_LOG_ERROR("misc", "Trying to store item loot by player: %s for container id: %s that is already in storage!", player->GetGUID().ToString().c_str(), loot->containerID.ToString().c_str());
+            TC_LOG_ERROR("misc", "Trying to store item loot by player: %s for container id: " UI64FMTD " that is already in storage!", player->GetGUID().ToString().c_str(), containerId);
             return;
         }
     }
 
-    StoredLootContainer container(loot->containerID.GetCounter());
+    StoredLootContainer container(containerId);
 
     CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
     if (loot->gold)
         container.AddMoney(loot->gold, trans);
 
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_ITEMCONTAINER_ITEMS);
-    stmt->setUInt64(0, loot->containerID.GetCounter());
+    stmt->setUInt64(0, containerId);
     trans->Append(stmt);
 
     for (LootItem const& li : loot->items)
@@ -286,7 +287,7 @@ void LootItemStorage::AddNewStoredLoot(Loot* loot, Player* player)
     // write
     {
         std::unique_lock<std::shared_mutex> lock(*GetLock());
-        _lootItemStore.emplace(loot->containerID.GetCounter(), std::move(container));
+        _lootItemStore.emplace(containerId, std::move(container));
     }
 }
 
