@@ -587,7 +587,7 @@ void LootTemplate::Process(Loot& loot, bool rate, uint16 lootMode, uint8 groupId
         if (!item->Roll(rate))
             continue;                                           // Bad luck for the entry
 
-        if (item->reference > 0)                            // References processing
+        if (item->reference > 0)                                // References processing
         {
             LootTemplate const* Referenced = LootTemplates_Reference.GetLootFor(item->reference);
             if (!Referenced)
