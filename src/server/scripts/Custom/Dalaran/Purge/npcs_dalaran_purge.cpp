@@ -2746,8 +2746,8 @@ struct npc_book_of_arcane_monstrosities : public CustomAI
 			me->DespawnOrUnsummon(Milliseconds(spellInfo->GetDuration()));
 	}
 
-	void LeavingWorld() override
-	{
+    void OnDespawn() override
+    {
 		if (GameObject* book = ObjectAccessor::GetGameObject(*me, bookGUID))
 			book->Delete();
 	}

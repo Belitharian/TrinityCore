@@ -67,13 +67,14 @@ struct npc_water_elementals_theramore : public CustomAI
 
 struct npc_jaina_image : public CustomAI
 {
-    npc_jaina_image(Creature* creature) : CustomAI(creature)
+    npc_jaina_image(Creature* creature) : CustomAI(creature, AI_Type::NoMovement)
     {
     }
 
 	enum Spells
 	{
         SPELL_ARCANE_PROJECTILES    = 5143,
+        SPELL_ALPHA_50              = 44816,
 		SPELL_EVOCATION             = 243070,
 		SPELL_SUPERNOVA             = 157980,
 		SPELL_ARCANE_BLAST          = 291316,
@@ -84,6 +85,7 @@ struct npc_jaina_image : public CustomAI
     void Reset()
     {
         me->AddAura(SPELL_COSMETIC_PURPLE_STATE, me);
+        me->AddAura(SPELL_ALPHA_50, me);
     }
 
 	void JustEngagedWith(Unit* who) override
@@ -96,12 +98,13 @@ struct npc_jaina_image : public CustomAI
                 if (me->GetPowerPct(POWER_MANA) <= 20)
 			    {
 				    const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
+                    Milliseconds ms = Milliseconds(info->CalcDuration(me));
 
                     me->CastSpell(me, SPELL_EVOCATION);
                     me->GetSpellHistory()->ResetCooldown(info->Id, true);
                     me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
 
-				    context.Repeat(7s);
+				    context.Repeat(ms + 500ms);
 			    }
 			    else
 			    {

@@ -263,6 +263,9 @@ inline Position const GetRandomPosition(Unit* target, float dist, bool fill = tr
 
 	// Get height map Z position
 	float z = center.GetPositionZ();
+
+    Trinity::NormalizeMapCoord(x);
+    Trinity::NormalizeMapCoord(y);
 	target->UpdateGroundPositionZ(x, y, z);
 
 	// Get orientation angle
@@ -279,11 +282,14 @@ inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, f
 	const Position center = target->GetPosition();
 
 	// Get X and Y position around the center with radius
-	float x = radius * cosf(angle) + center. GetPositionX();
+	float x = radius * cosf(angle) + center.GetPositionX();
 	float y = radius * sinf(angle) + center.GetPositionY();
 
 	// Get height map Z position
 	float z = center.GetPositionZ();
+
+    Trinity::NormalizeMapCoord(x);
+    Trinity::NormalizeMapCoord(y);
 	target->UpdateGroundPositionZ(x, y, z);
 
 	// Get orientation angle

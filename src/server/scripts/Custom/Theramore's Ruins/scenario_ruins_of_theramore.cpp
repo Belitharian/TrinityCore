@@ -75,7 +75,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					break;
 				case EVENT_BACK_TO_SENDER:
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::BackToSender);
-					events.ScheduleEvent(25, 500ms);
+					events.ScheduleEvent(25, 3s);
 					break;
 				case EVENT_WARLORD_ROKNAH_SLAIN:
 					GetJaina()->CastSpell(GetJaina(), SPELL_ALUNETH_FREED_EXPLOSION);
@@ -488,7 +488,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 					for (Creature* horde : hordes)
 					{
-						if (horde->GetEntry() != NPC_ROKNAH_WARLORD)
+						if (horde && horde->GetEntry() != NPC_ROKNAH_WARLORD)
 						{
 							++membersCounter;
 							if (horde->isDead())

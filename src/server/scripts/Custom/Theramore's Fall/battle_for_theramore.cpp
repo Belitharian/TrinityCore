@@ -439,7 +439,7 @@ struct npc_rhonin : public CustomAI
 		{
 			case SPELL_ARCANE_BLAST:
 				arcaneCharges++;
-				if (roll_chance_i(20))
+				if (roll_chance_i(40))
 				{
 					me->CastStop();
 					me->AddAura(SPELL_TIME_WARP, me);
@@ -812,10 +812,10 @@ struct event_theramore_training : public NullCreatureAI
 					.Schedule(1s, [footmen](TaskContext context)
 					{
 						if (!footmen[0]->HasAura(SPELL_POWER_WORD_SHIELD))
-							footmen[0]->DealDamage(footmen[1], footmen[0], urand(150, 200));
+							footmen[0]->DealDamage(footmen[1], footmen[0], urand(1500, 2000));
 
 						if (!footmen[1]->HasAura(SPELL_POWER_WORD_SHIELD))
-							footmen[1]->DealDamage(footmen[0], footmen[1], urand(150, 200));
+							footmen[1]->DealDamage(footmen[0], footmen[1], urand(1500, 2000));
 
 						context.Repeat(8s);
 					})
@@ -824,12 +824,13 @@ struct event_theramore_training : public NullCreatureAI
 						if (arcanist->GetPowerPct(POWER_MANA) <= 20)
 						{
 							const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
+                            Milliseconds ms = Milliseconds(info->CalcDuration());
 
 							arcanist->CastSpell(arcanist, SPELL_EVOCATION);
 							arcanist->GetSpellHistory()->ResetCooldown(info->Id, true);
 							arcanist->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
 
-							context.Repeat(7s);
+							context.Repeat(ms + 500ms);
 						}
 						else
 						{

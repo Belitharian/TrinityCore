@@ -1344,7 +1344,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					#ifdef CUSTOM_DEBUG
+					#ifndef CUSTOM_DEBUG
 						for (uint8 i = 0; i < 10; i++)
 							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
 					#else
@@ -1803,27 +1803,22 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 		void TeleportPlayers(Creature* caster, const Position center, float minDist)
 		{
-            Position pos = GetRandomPosition(center, 8.f);
+            Position pos = caster->GetRandomPoint(center, 8.f);
             instance->DoOnPlayers([caster, center, minDist, pos](Player* player)
             {
                 if (player->IsWithinDist(caster, minDist))
                 {
-                    float x = pos.GetPositionX();
-                    float y = pos.GetPositionY();
-
-                    float z = pos.GetPositionZ();
-                    player->UpdateGroundPositionZ(x, y, z);
-
-                    const Position position = { x, y, z };
-                    float o = position.GetAbsoluteAngle(center);
-
-                    player->NearTeleportTo(x, y, z, o);
+                    player->NearTeleportTo(pos);
                 }
             });
 		}
 
 		void HordeMembersInvoker(uint32 waveId, ObjectGuid* hordes)
 		{
+            Creature* jaina = GetJaina();
+            if (!jaina)
+                return;
+
 			uint8 healers = 0, dps = 0;
 			for (uint32 i = 0; i < NUMBER_OF_MEMBERS; ++i)
 			{
@@ -1845,27 +1840,20 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				switch (waveId)
 				{
 					case WAVE_DOORS:
-						pos = GetRandomPosition(JainaPoint03, 13.f);
+						pos = jaina->GetRandomPoint(JainaPoint03, 13.f);
 						break;
 					case WAVE_CITADEL:
-						pos = GetRandomPosition(CitadelPoint01, 20.f);
+						pos = jaina->GetRandomPoint(CitadelPoint01, 20.f);
 						break;
 					case WAVE_DOCKS:
-						pos = GetRandomPosition(DocksPoint01, 25.f);
+						pos = jaina->GetRandomPoint(DocksPoint01, 25.f);
 						break;
 				}
 
 				if (Creature* temp = instance->SummonCreature(entry, pos))
 				{
-					float x = pos.GetPositionX();
-					float y = pos.GetPositionY();
-					float z = pos.GetPositionZ();
-                    float o = pos.GetOrientation();
-
-					temp->SetBoundingRadius(20.f);
-					temp->UpdateGroundPositionZ(x, y, z);
-					temp->NearTeleportTo(x, y, z, o);
-					temp->SetHomePosition(x, y, z, o);
+					temp->SetBoundingRadius(30.f);
+					temp->SetHomePosition(pos);
 					temp->CastSpell(temp, SPELL_THALYSSRA_SPAWNS, true);
 
 					if (Unit * target = temp->SelectNearestHostileUnitInAggroRange())
@@ -1912,20 +1900,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 {
                     if (player->IsWithinDist(jaina, 25.f))
                     {
-                        Position playerPos = GetRandomPosition(position, 3.f);
+                        Position playerPos = jaina->GetRandomPoint(position, 3.f);
 
                         // Si le joueur est à plus de 25 mètre de la destination d'attaque
                         float distance = playerPos.GetExactDist2d(player->GetPosition());
                         if (distance > 25.0f)
                         {
-                            float x = playerPos.GetPositionX();
-                            float y = playerPos.GetPositionY();
-                            float z = playerPos.GetPositionZ();
-                            float o = playerPos.GetOrientation();
-
-                            player->UpdateGroundPositionZ(x, y, z);
-                            player->NearTeleportTo(x, y, z, o);
                             player->CastSpell(player, SPELL_TELEPORT_DUMMY);
+                            player->NearTeleportTo(playerPos);
                         }
                     }
                 });
@@ -2062,20 +2044,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					explosion.Repeat(2s, 5s);
 				}
 			});
-		}
-
-		Position GetRandomPosition(Position center, float dist)
-		{
-			float alpha = 2 * float(M_PI) * float(rand_norm());
-			float r = dist * sqrtf(float(rand_norm()));
-			float x = r * cosf(alpha) + center.GetPositionX();
-			float y = r * sinf(alpha) + center.GetPositionY();
-            float z = center.GetPositionZ();
-
-            const Position position = { x, y, z };
-            float o = position.GetAbsoluteAngle(center);
-
-            return { x, y, z, o };
 		}
 
         #pragma endregion

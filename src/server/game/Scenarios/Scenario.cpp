@@ -18,7 +18,6 @@
 #include "Scenario.h"
 #include "InstanceScenario.h"
 #include "InstanceScript.h"
-#include "InstanceSaveMgr.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
@@ -223,7 +222,7 @@ void Scenario::OnCompletedCriteriaTree(CriteriaTree const* tree)
 {
     if (InstanceScenario* instanceScenario = reinterpret_cast<InstanceScenario*>(this))
     {
-        if (InstanceMap* instanceMap = instanceScenario->GetMap()->ToInstanceMap())
+        if (InstanceMap* instanceMap = instanceScenario->GetInstance())
         {
             if (InstanceScript* instanceScript = instanceMap->GetInstanceScript())
                 instanceScript->OnCompletedCriteriaTree(tree);
