@@ -20,15 +20,14 @@
 
 #include "Scenario.h"
 
-class Map;
+class InstanceMap;
 
 class TC_GAME_API InstanceScenario : public Scenario
 {
     public:
-        InstanceScenario(Map const* map, ScenarioData const* scenarioData);
+        InstanceScenario(InstanceMap const* map, ScenarioData const* scenarioData);
 
-        void SaveToDB();
-        void LoadInstanceData(uint32 instanceId);
+        void LoadInstanceData();
 
         Map* GetMap() const { return const_cast<Map*>(_map); }
 
@@ -36,7 +35,7 @@ class TC_GAME_API InstanceScenario : public Scenario
         std::string GetOwnerInfo() const override;
         void SendPacket(WorldPacket const* data) const override;
 
-        Map const* _map;
+        InstanceMap const* _map;
 };
 
 #endif // InstanceScenario_h__

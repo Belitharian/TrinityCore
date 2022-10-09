@@ -128,7 +128,7 @@ void WorldSession::HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& p
     {
         for (AELootResult::ResultValue const& resultValue : aeResult)
         {
-            player->SendNewItem(resultValue.item, resultValue.count, false, false, true);
+            player->SendNewItem(resultValue.item, resultValue.count, false, false, true, resultValue.dungeonEncounterId);
             player->UpdateCriteria(CriteriaType::LootItem, resultValue.item->GetEntry(), resultValue.count);
             player->UpdateCriteria(CriteriaType::GetLootByType, resultValue.item->GetEntry(), resultValue.count, resultValue.lootType);
             player->UpdateCriteria(CriteriaType::LootAnyItem, resultValue.item->GetEntry(), resultValue.count);
@@ -157,6 +157,9 @@ void WorldSession::HandleLootMoneyOpcode(WorldPackets::Loot::LootMoney& /*packet
             {
                 Player* member = itr->GetSource();
                 if (!member)
+                    continue;
+
+                if (!loot->HasAllowedLooter(member->GetGUID()))
                     continue;
 
                 if (player->IsAtGroupRewardDistance(member))
@@ -404,15 +407,21 @@ void WorldSession::HandleLootMasterGiveOpcode(WorldPackets::Loot::MasterLootItem
     {
         Loot* loot = Trinity::Containers::MapGetValuePtr(_player->GetAELootView(), req.Object);
 
+        if (!loot || loot->GetLootMethod() != MASTER_LOOT)
+            return;
+
         if (!_player->IsInRaidWith(target) || !_player->IsInMap(target))
         {
-            _player->SendLootError(req.Object, ObjectGuid::Empty, LOOT_ERROR_MASTER_OTHER);
+            _player->SendLootError(req.Object, loot->GetOwnerGUID(), LOOT_ERROR_MASTER_OTHER);
             TC_LOG_INFO("entities.player.cheat", "MasterLootItem: Player %s tried to give an item to ineligible player %s !", GetPlayer()->GetName().c_str(), target->GetName().c_str());
             return;
         }
 
-        if (!loot || loot->GetLootMethod() != MASTER_LOOT)
+        if (!loot->HasAllowedLooter(masterLootItem.Target))
+        {
+            _player->SendLootError(req.Object, loot->GetOwnerGUID(), LOOT_ERROR_MASTER_OTHER);
             return;
+        }
 
         if (req.LootListID >= loot->items.size())
         {
@@ -425,22 +434,22 @@ void WorldSession::HandleLootMasterGiveOpcode(WorldPackets::Loot::MasterLootItem
 
         ItemPosCountVec dest;
         InventoryResult msg = target->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, item.itemid, item.count);
-        if (!item.AllowedForPlayer(target, true))
+        if (!item.HasAllowedLooter(target->GetGUID()))
             msg = EQUIP_ERR_CANT_EQUIP_EVER;
         if (msg != EQUIP_ERR_OK)
         {
             if (msg == EQUIP_ERR_ITEM_MAX_COUNT)
-                _player->SendLootError(req.Object, ObjectGuid::Empty, LOOT_ERROR_MASTER_UNIQUE_ITEM);
+                _player->SendLootError(req.Object, loot->GetOwnerGUID(), LOOT_ERROR_MASTER_UNIQUE_ITEM);
             else if (msg == EQUIP_ERR_INV_FULL)
-                _player->SendLootError(req.Object, ObjectGuid::Empty, LOOT_ERROR_MASTER_INV_FULL);
+                _player->SendLootError(req.Object, loot->GetOwnerGUID(), LOOT_ERROR_MASTER_INV_FULL);
             else
-                _player->SendLootError(req.Object, ObjectGuid::Empty, LOOT_ERROR_MASTER_OTHER);
+                _player->SendLootError(req.Object, loot->GetOwnerGUID(), LOOT_ERROR_MASTER_OTHER);
             return;
         }
 
         // now move item from loot to target inventory
         Item* newitem = target->StoreNewItem(dest, item.itemid, true, item.randomBonusListId, item.GetAllowedLooters(), item.context, item.BonusListIDs);
-        aeResult.Add(newitem, item.count, loot->loot_type);
+        aeResult.Add(newitem, item.count, loot->loot_type, loot->GetDungeonEncounterId());
 
         // mark as looted
         item.count = 0;

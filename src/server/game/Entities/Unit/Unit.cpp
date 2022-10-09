@@ -42,7 +42,6 @@
 #include "GameTime.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
-#include "InstanceSaveMgr.h"
 #include "InstanceScript.h"
 #include "Item.h"
 #include "Log.h"
@@ -1081,7 +1080,7 @@ void Unit::CastStop(uint32 except_spellid)
             InterruptSpell(CurrentSpellTypes(i), false);
 }
 
-void Unit::CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 damage, SpellInfo const* spellInfo, WeaponAttackType attackType, bool crit, Spell* spell /*= nullptr*/)
+void Unit::CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 damage, SpellInfo const* spellInfo, WeaponAttackType attackType, bool crit /*= false*/, bool blocked /*= false*/, Spell* spell /*= nullptr*/)
 {
     if (damage < 0)
         return;
@@ -1098,7 +1097,6 @@ void Unit::CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 dama
         if (Unit::IsDamageReducedByArmor(damageSchoolMask, spellInfo))
             damage = Unit::CalcArmorReducedDamage(damageInfo->attacker, victim, damage, spellInfo, attackType);
 
-        bool blocked = false;
         // Per-school calc
         switch (spellInfo->DmgClass)
         {
@@ -1106,17 +1104,6 @@ void Unit::CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 dama
             case SPELL_DAMAGE_CLASS_RANGED:
             case SPELL_DAMAGE_CLASS_MELEE:
             {
-                // Physical Damage
-                if (damageSchoolMask & SPELL_SCHOOL_MASK_NORMAL)
-                {
-                    // Spells with this attribute were already calculated in MeleeSpellHitResult
-                    if (!spellInfo->HasAttribute(SPELL_ATTR3_COMPLETELY_BLOCKED))
-                    {
-                        // Get blocked status
-                        blocked = isSpellBlocked(victim, spellInfo, attackType);
-                    }
-                }
-
                 if (crit)
                 {
                     damageInfo->HitInfo |= SPELL_HIT_TYPE_CRIT;
@@ -1140,7 +1127,7 @@ void Unit::CalculateSpellDamageTaken(SpellNonMeleeDamage* damageInfo, int32 dama
                 {
                     // double blocked amount if block is critical
                     uint32 value = victim->GetBlockPercent(GetLevel());
-                    if (victim->isBlockCritical())
+                    if (victim->IsBlockCritical())
                         value *= 2; // double blocked percent
                     damageInfo->blocked = CalculatePct(damage, value);
                     if (damage <= int32(damageInfo->blocked))
@@ -1355,7 +1342,7 @@ void Unit::CalculateMeleeDamage(Unit* victim, CalcDamageInfo* damageInfo, Weapon
             damageInfo->HitInfo    |= HITINFO_BLOCK;
             // 30% damage blocked, double blocked amount if block is critical
             damageInfo->Blocked = CalculatePct(damageInfo->Damage, damageInfo->Target->GetBlockPercent(GetLevel()));
-            if (damageInfo->Target->isBlockCritical())
+            if (damageInfo->Target->IsBlockCritical())
                 damageInfo->Blocked *= 2;
 
             damageInfo->OriginalDamage = damageInfo->Damage;
@@ -2353,27 +2340,7 @@ void Unit::SendMeleeAttackStop(Unit* victim)
         TC_LOG_DEBUG("entities.unit", "%s stopped attacking", GetGUID().ToString().c_str());
 }
 
-bool Unit::isSpellBlocked(Unit* victim, SpellInfo const* spellProto, WeaponAttackType attackType)
-{
-    // These spells can't be blocked
-    if (spellProto && (spellProto->HasAttribute(SPELL_ATTR0_NO_ACTIVE_DEFENSE) || spellProto->HasAttribute(SPELL_ATTR3_ALWAYS_HIT)))
-        return false;
-
-    // Can't block when casting/controlled
-    if (victim->IsNonMeleeSpellCast(false) || victim->HasUnitState(UNIT_STATE_CONTROLLED))
-        return false;
-
-    if (victim->HasAuraType(SPELL_AURA_IGNORE_HIT_DIRECTION) || victim->HasInArc(float(M_PI), this))
-    {
-        float blockChance = GetUnitBlockChance(attackType, victim);
-        if (blockChance && roll_chance_f(blockChance))
-            return true;
-    }
-
-    return false;
-}
-
-bool Unit::isBlockCritical()
+bool Unit::IsBlockCritical()
 {
     if (roll_chance_i(GetTotalAuraModifier(SPELL_AURA_MOD_BLOCK_CRIT_CHANCE)))
         return true;
@@ -2452,7 +2419,7 @@ SpellMissInfo Unit::MeleeSpellHitResult(Unit* victim, SpellInfo const* spellInfo
 
     bool canDodge = !spellInfo->HasAttribute(SPELL_ATTR7_NO_ATTACK_DODGE);
     bool canParry = !spellInfo->HasAttribute(SPELL_ATTR7_NO_ATTACK_PARRY);
-    bool canBlock = spellInfo->HasAttribute(SPELL_ATTR3_COMPLETELY_BLOCKED);
+    bool canBlock = true; // all melee and ranged attacks can be blocked
 
     // if victim is casting or cc'd it can't avoid attacks
     if (victim->IsNonMeleeSpellCast(false, false, true) || victim->HasUnitState(UNIT_STATE_CONTROLLED))
@@ -2462,7 +2429,7 @@ SpellMissInfo Unit::MeleeSpellHitResult(Unit* victim, SpellInfo const* spellInfo
         canBlock = false;
     }
 
-    // Ranged attacks can only miss, resist and deflect
+    // Ranged attacks can only miss, resist and deflect and get blocked
     if (attType == RANGED_ATTACK)
     {
         canParry = false;
@@ -2476,7 +2443,6 @@ SpellMissInfo Unit::MeleeSpellHitResult(Unit* victim, SpellInfo const* spellInfo
             if (roll < tmp)
                 return SPELL_MISS_DEFLECT;
         }
-        return SPELL_MISS_NONE;
     }
 
     // Check for attack from behind
@@ -7342,10 +7308,13 @@ bool Unit::IsImmunedToSpell(SpellInfo const* spellInfo, WorldObject const* caste
                 continue;
 
             SpellInfo const* immuneSpellInfo = sSpellMgr->GetSpellInfo(itr->second, GetMap()->GetDifficultyID());
+            if (requireImmunityPurgesEffectAttribute)
+                if (!immuneSpellInfo || !immuneSpellInfo->HasAttribute(SPELL_ATTR1_IMMUNITY_PURGES_EFFECT))
+                    continue;
+
             // Consider the school immune if any of these conditions are not satisfied.
             // In case of no immuneSpellInfo, ignore that condition and check only the other conditions
-            if ((immuneSpellInfo && !immuneSpellInfo->IsPositive() && (!requireImmunityPurgesEffectAttribute || immuneSpellInfo->HasAttribute(SPELL_ATTR1_IMMUNITY_PURGES_EFFECT)))
-                || !spellInfo->IsPositive() || !caster || !IsFriendlyTo(caster))
+            if ((immuneSpellInfo && !immuneSpellInfo->IsPositive()) || !spellInfo->IsPositive() || !caster || !IsFriendlyTo(caster))
                 if (!spellInfo->CanPierceImmuneAura(immuneSpellInfo))
                     schoolImmunityMask |= itr->first;
         }
@@ -10723,6 +10692,10 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
             if (creature->GetMap()->Is25ManRaid())
                 loot->maxDuplicates = 3;
 
+            if (InstanceScript const* instance = creature->GetInstanceScript())
+                if (DungeonEncounterEntry const* dungeonEncounter = instance->GetBossDungeonEncounter(creature))
+                    loot->SetDungeonEncounterId(dungeonEncounter->ID);
+
             if (uint32 lootid = creature->GetCreatureTemplate()->lootid)
                 loot->FillLoot(lootid, LootTemplates_Creature, looter, false, false, creature->GetLootMode(), creature->GetMap()->GetDifficultyLootItemContext());
 
@@ -10848,31 +10821,6 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
                     summoner->ToCreature()->AI()->SummonedCreatureDies(creature, attacker);
                 else if (summoner->ToGameObject() && summoner->ToGameObject()->AI())
                     summoner->ToGameObject()->AI()->SummonedCreatureDies(creature, attacker);
-            }
-        }
-
-        // Dungeon specific stuff, only applies to players killing creatures
-        if (creature->GetInstanceId())
-        {
-            Map* instanceMap = creature->GetMap();
-
-            /// @todo do instance binding anyway if the charmer/owner is offline
-            if (instanceMap->IsDungeon() && ((attacker && attacker->GetCharmerOrOwnerPlayerOrPlayerItself()) || attacker == victim))
-            {
-                if (instanceMap->IsRaidOrHeroicDungeon())
-                {
-                    if (creature->GetCreatureTemplate()->flags_extra & CREATURE_FLAG_EXTRA_INSTANCE_BIND)
-                        instanceMap->ToInstanceMap()->PermBindAllPlayers();
-                }
-                else
-                {
-                    // the reset time is set but not added to the scheduler
-                    // until the players leave the instance
-                    time_t resettime = GameTime::GetGameTime() + 2 * HOUR;
-                    if (InstanceSave* save = sInstanceSaveMgr->GetInstanceSave(creature->GetInstanceId()))
-                        if (save->GetResetTime() < resettime)
-                            save->SetResetTime(resettime);
-                }
             }
         }
     }
