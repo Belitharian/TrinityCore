@@ -183,7 +183,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			SPELL_ARCANE_CANALISATION   = 288451,
 			SPELL_VANISH                = 342048,
 			SPELL_MASS_TELEPORT         = 60516,
-			SPELL_FIRE_CHANNELING       = 329612,
 			SPELL_METEOR                = 276973,
 			SPELL_BIG_EXPLOSION         = 348750,
 			SPELL_BLAZING_BARRIER       = 295238,
@@ -1344,7 +1343,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					#ifndef CUSTOM_DEBUG
+					#ifdef CUSTOM_DEBUG
 						for (uint8 i = 0; i < 10; i++)
 							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
 					#else

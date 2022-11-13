@@ -30,7 +30,8 @@ struct npc_jaina_ruins : public CustomAI
 
 	enum Spells
 	{
-        SPELL_ARCANE_DISSOLVE   = 254799,
+        SPELL_ETERNAL_SILENCE   = 42201,
+        SPELL_DISSOLVE          = 237075,
 		SPELL_FROSTBOLT         = 284703,
 		SPELL_RING_OF_ICE       = 285459,
         SPELL_ICEBOUND_ESCAPE   = 290878,
@@ -51,10 +52,11 @@ struct npc_jaina_ruins : public CustomAI
 	}
 
 	InstanceScript* instance;
+	Position beforeBlink;
+    std::list<ObjectGuid> images;
 	bool hasBlinked;
 	bool hasEscaped;
 	float distance;
-	Position beforeBlink;
 
 	void SetData(uint32 /*id*/, uint32 value) override
 	{
@@ -81,12 +83,24 @@ struct npc_jaina_ruins : public CustomAI
 	{
 		CustomAI::EnterEvadeMode(why);
 
+        for (ObjectGuid guid : images)
+        {
+            if (Creature* image = ObjectAccessor::GetCreature(*me, guid))
+                image->DespawnOrUnsummon();
+        }
+
+        me->RemoveAurasDueToSpell(SPELL_DISSOLVE);
+
 		RFTPhases phase = (RFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
 		switch (phase)
 		{
 			case RFTPhases::Standards_Valided:
-				instance->SetData(EVENT_BACK_TO_SENDER, 0U);
-				break;
+            {
+                me->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+                me->SetReactState(REACT_PASSIVE);
+                instance->SetData(EVENT_BACK_TO_SENDER, 0U);
+                break;
+            }
 			default:
 				break;
 		}
@@ -97,69 +111,70 @@ struct npc_jaina_ruins : public CustomAI
 		switch (spell->Id)
 		{
 			case SPELL_SUMMON_WATER_ELEMENTALS:
-				for (uint8 i = 0; i < ELEMENTALS_SIZE; ++i)
-				{
-					if (Creature* elemental = me->GetMap()->SummonCreature(NPC_WATER_ELEMENTAL, ElementalsPoint[i].spawn))
-						elemental->CastSpell(elemental, SPELL_WATER_BOSS_ENTRANCE);
-				}
-				break;
-			case SPELL_RING_OF_ICE:
-				if (!hasBlinked)
-					break;
-				scheduler.Schedule(1s, [this](TaskContext /*blink*/)
-				{
-					me->CastStop();
-					me->CastSpell(beforeBlink, SPELL_BLINK, true);
-					hasBlinked = false;
-				});
-				break;
-            case SPELL_ICEBOUND_ESCAPE:
-                DoCastSelf(SPELL_ARCANE_DISSOLVE, true);
-                me->AttackStop();
-                me->SetReactState(REACT_PASSIVE);
-                scheduler.Schedule(5s, [this](TaskContext /*escape*/)
+            {
+                for (uint8 i = 0; i < ELEMENTALS_SIZE; ++i)
                 {
-                    me->SetReactState(REACT_AGGRESSIVE);
-                    me->RemoveAurasDueToSpell(SPELL_ARCANE_DISSOLVE);
+                    if (Creature* elemental = me->GetMap()->SummonCreature(NPC_WATER_ELEMENTAL, ElementalsPoint[i].spawn))
+                        elemental->CastSpell(elemental, SPELL_WATER_BOSS_ENTRANCE);
+                }
+                break;
+            }
+			case SPELL_RING_OF_ICE:
+            {
+                if (!hasBlinked)
+                    break;
+                scheduler.Schedule(1s, [this](TaskContext /*blink*/)
+                {
+                    me->CastStop();
+                    me->CastSpell(beforeBlink, SPELL_BLINK, true);
+                    hasBlinked = false;
                 });
                 break;
+            }
+            case SPELL_ICEBOUND_ESCAPE:
+            {
+                me->AddAura(SPELL_DISSOLVE, me);
+                me->AddAura(SPELL_ETERNAL_SILENCE, me);
+                break;
+            }
 		}
 	}
 
     void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-        if (me->HealthBelowPctDamaged(10, damage))
+        if (me->HealthBelowPctDamaged(50, damage))
         {
             damage = 0;
 
             if (hasEscaped)
                 return;
 
+            float angle = 0.0f;
             for (uint8 i = 0; i < 3; i++)
             {
-                const Position pos = GetRandomPosition(me->GetPosition(), 6.f);
+                const Position pos = GetRandomPositionAroundCircle(me, angle, 6.f);
                 if (Creature* image = me->GetMap()->SummonCreature(NPC_MIRROR_IMAGE, pos))
                 {
-                    image->SetFaction(me->GetFaction());
+                    images.push_back(image->GetGUID());
 
-                    if (me->IsEngaged())
+                    image->SetFaction(me->GetFaction());
+                    for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
                     {
-                        for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
+                        if (Unit* victim = ref->GetVictim())
                         {
-                            if (Unit* victim = ref->GetVictim())
-                            {
-                                image->GetThreatManager().AddThreat(victim, 100000.0f);
-                                victim->GetThreatManager().AddThreat(image, 100000.0f);
-                            }
+                            image->AI()->AttackStart(victim);
+                            victim->GetThreatManager().AddThreat(image, INFINITY);
+                            image->GetThreatManager().AddThreat(victim, INFINITY);
                         }
                     }
                 }
+
+                angle += 120.0f;
             }
 
             scheduler.CancelGroup(GROUP_COMBAT);
 
             CastStop();
-
             DoCast(SPELL_ICEBOUND_ESCAPE);
 
             hasEscaped = true;
@@ -199,8 +214,15 @@ struct npc_jaina_ruins : public CustomAI
 						beforeBlink = me->GetPosition();
 
 						Position dest = GetRandomPosition(target->GetPosition(), 8.f);
-						me->UpdateGroundPositionZ(dest.GetPositionX(), dest.GetPositionY(), dest.m_positionZ);
-						me->CastStop();
+
+                        float x = dest.GetPositionX();
+                        float y = dest.GetPositionY();
+
+                        Trinity::NormalizeMapCoord(x);
+                        Trinity::NormalizeMapCoord(y);
+                        me->UpdateGroundPositionZ(x, y, dest.m_positionZ);
+
+                        me->CastStop();
 						me->CastSpell(dest, SPELL_BLINK, true);
 
 						scheduler.Schedule(1s, [this](TaskContext /*ring_of_ice*/)

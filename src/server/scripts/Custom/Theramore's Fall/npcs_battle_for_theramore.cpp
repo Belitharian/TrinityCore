@@ -212,7 +212,7 @@ Unit* SelectRandomMissingBuff(uint32 spell)
     return Trinity::Containers::SelectRandomContainerElement(list);
 }
 
-void ReceiveEmote(Player* player, uint32 /*emoteId*/) override
+void ReceiveEmote(Player* player, uint32 emoteId) override
 {
 	BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
 	if (phase == BFTPhases::Preparation || phase == BFTPhases::Preparation_Rhonin)

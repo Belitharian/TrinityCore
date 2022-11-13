@@ -50,7 +50,6 @@ enum Datas
 
 enum Spells
 {
-    SPELL_FIRESTRIKE                   = 2120,
     SPELL_TELEPORT_DUMMY               = 51347,
     SPELL_SIT_CHAIR_MED                = 123161,
     SPELL_READING_BOOK_SITTING         = 223977,
@@ -59,6 +58,7 @@ enum Spells
     SPELL_VOID_CHANNELING              = 286909,
     SPELL_TAKING_NOTES                 = 164999,
     SPELL_FEIGN_DEATH                  = 265448,
+    SPELL_FIRESTRIKE                   = 330347,
 };
 
 enum Events

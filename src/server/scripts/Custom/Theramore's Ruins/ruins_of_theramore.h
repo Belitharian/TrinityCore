@@ -216,6 +216,30 @@ inline Position GetRandomPosition(Position center, float dist)
 	return { x, y, center.GetPositionZ(), 0.f };
 }
 
+inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
+{
+    // Get center position
+    const Position center = target->GetPosition();
+
+    // Get X and Y position around the center with radius
+    float x = radius * cosf(angle) + center.GetPositionX();
+    float y = radius * sinf(angle) + center.GetPositionY();
+
+    // Get height map Z position
+    float z = center.GetPositionZ();
+
+    Trinity::NormalizeMapCoord(x);
+    Trinity::NormalizeMapCoord(y);
+    target->UpdateGroundPositionZ(x, y, z);
+
+    // Get orientation angle
+    const Position position = { x, y, z };
+    float o = position.GetAbsoluteAngle(center);
+
+    // Set final position
+    return { x, y, z, o };
+}
+
 inline void DoTeleportPlayers(Map::PlayerList const& players, const Position center, float dist = 8.0f)
 {
 	if (players.isEmpty())
@@ -227,8 +251,15 @@ inline void DoTeleportPlayers(Map::PlayerList const& players, const Position cen
 		if (Player* player = i->GetSource())
 		{
 			player->CastSpell(player, SPELL_TELEPORT_VISUAL_ONLY, true);
-			player->UpdateGroundPositionZ(pos.GetPositionX(), pos.GetPositionY(), pos.m_positionZ);
-			player->NearTeleportTo(pos);
+
+            float x = pos.GetPositionX();
+            float y = pos.GetPositionY();
+
+            Trinity::NormalizeMapCoord(x);
+            Trinity::NormalizeMapCoord(y);
+			player->UpdateGroundPositionZ(x, y, pos.m_positionZ);
+
+            player->NearTeleportTo(pos);
 		}
 	}
 }

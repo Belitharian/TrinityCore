@@ -248,22 +248,19 @@ class instance_dalaran_convo : public InstanceMapScript
                     if (Creature* jaina = GetJaina())
                     {
                         Talk(jaina, SAY_JAINA_CONVO_06);
+                        jaina->SetWalk(true);
                         jaina->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, JainaPos02, true, JainaPos02.GetOrientation());
                     }
                     Next(2s);
                     break;
                 case EVENT_VISION_11:
                     if (Creature* kael = GetKaelThas())
-                    {
                         kael->RemoveAurasDueToSpell(SPELL_DISSOLVE);
-                        kael->CastSpell(kael, SPELL_READING_BOOK_STANDING);
-                    }
                     Next(5s);
                     break;
                 case EVENT_VISION_12:
                     if (Creature* kael = GetKaelThas())
                     {
-                        kael->RemoveAurasDueToSpell(SPELL_READING_BOOK_STANDING);
                         kael->SetFacingTo(2.52f);
                         kael->CastSpell(FirestrikePos01, SPELL_FIRESTRIKE, true);
                     }
