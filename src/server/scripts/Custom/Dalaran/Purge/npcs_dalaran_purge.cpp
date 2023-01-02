@@ -262,12 +262,10 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 		{
 			if (Map* map = me->GetMap())
 			{
-				Map::PlayerList const& players = map->GetPlayers();
-				if (players.getSize() > 0)
-				{
-					if (Player* player = players.begin()->GetSource())
-						KillRewarder(player, victim, false).Reward(victim->GetEntry());
-				}
+                if (Player* player = map->GetPlayers().getFirst()->GetSource())
+                {
+                    KillRewarder::Reward(player, victim);
+                }
 			}
 		}
 	}
@@ -664,7 +662,7 @@ struct npc_archmage_landalock : public NullCreatureAI
 			#else
 				for (Creature* citizen : citizens)
 				{
-					KillRewarder(player, citizen, false).Reward(citizen->GetEntry());
+					KillRewarder::Reward(player, citizen);
 
 					citizen->CastSpell(citizen, SPELL_TELEPORT_TARGET);
 					citizen->DisappearAndDie();
@@ -716,7 +714,7 @@ struct npc_archmage_landalock : public NullCreatureAI
 					if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
 					{
 						me->SetFacingToObject(player);
-						KillRewarder(player, me, false).Reward(me->GetEntry());
+						KillRewarder::Reward(player, me);
 					}
 					Next(3s);
 					break;
@@ -876,7 +874,7 @@ struct npc_arcanist_rathaella : public CustomAI
 				{
 					me->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, RathaellaPath02, RATHAELLA_PATH_02);
 					if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
-						KillRewarder(player, me, false).Reward(me->GetEntry());
+						KillRewarder::Reward(player, me);
 				});
 
 				break;
@@ -1900,7 +1898,7 @@ struct npc_magister_surdiel : public CustomAI
 						if (map && map->GetPlayers().getSize() > 0)
 						{
 							if (Player* player = map->GetPlayers().begin()->GetSource())
-								KillRewarder(player, me, false).Reward(me->GetEntry());
+								KillRewarder::Reward(player, me);
 						}
 
 						rommath->CastSpell(rommath, SPELL_TELEPORT_VISUAL_ONLY);

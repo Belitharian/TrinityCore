@@ -425,7 +425,7 @@ struct npc_rhonin : public CustomAI
 				me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 				instance->DoCastSpellOnPlayers(SPELL_RUNIC_SHIELD);
 				DoCast(SPELL_ARCANE_CAST_INSTANT);
-				KillRewarder(player, me, false).Reward(me->GetEntry());
+				KillRewarder::Reward(player, me);
 				break;
 		}
 

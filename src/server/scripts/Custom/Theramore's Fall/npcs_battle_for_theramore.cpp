@@ -72,7 +72,7 @@ struct npc_theramore_citizen : public ScriptedAI
                         KillRewarder(player, me, false).Reward(NPC_THERAMORE_CITIZEN_CREDIT);
                     }
                 #else
-                    KillRewarder(player, me, false).Reward(NPC_THERAMORE_CITIZEN_CREDIT);
+                    KillRewarder::Reward(player, me, NPC_THERAMORE_CITIZEN_CREDIT);
                 #endif
 
 				me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
@@ -160,7 +160,7 @@ struct npc_wounded_theramore_troop : public ScriptedAI
 
 		if (Player* player = caster->ToPlayer())
 		{
-			KillRewarder(player, me, false).Reward(NPC_THERAMORE_WOUNDED_TROOP);
+			KillRewarder::Reward(player, me, NPC_THERAMORE_WOUNDED_TROOP);
 		}
 
         me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
@@ -228,7 +228,7 @@ void ReceiveEmote(Player* player, uint32 emoteId) override
 				if (player->IsWithinDist(me, 5.f))
 				{
 					me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
-					KillRewarder(player, me, false).Reward(NPC_THERAMORE_TROOPS_CREDIT);
+					KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
 					emoteReceived = true;
 				}
 			}
@@ -267,7 +267,7 @@ struct npc_thader_windermere : public CustomAI
 			case 0:
                 me->RemoveAurasDueToSpell(SPELL_CHAT_BUBBLE);
                 me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-				KillRewarder(player, me, false).Reward(me->GetEntry());
+				KillRewarder::Reward(player, me);
 				scheduler.Schedule(2s, [this](TaskContext context)
 				{
 					switch (context.GetRepeatCounter())
@@ -706,7 +706,7 @@ struct npc_theramore_horde : public CustomAI
 
         uint32 killCredit = me->GetCreatureTemplate()->KillCredit[0];
         if (Player* player = killer->ToPlayer())
-            KillRewarder(player, me, false).Reward(killCredit);
+            KillRewarder::Reward(player, me, killCredit);
     }
 };
 
@@ -1332,7 +1332,7 @@ class spell_theramore_throw_bucket : public SpellScript
                     {
                         if (Player* player = caster->ToPlayer())
                         {
-                            KillRewarder(player, fire, false).Reward(NPC_THERAMORE_FIRE_CREDIT);
+                            KillRewarder::Reward(player, caster, NPC_THERAMORE_FIRE_CREDIT);
                         }
 
                         fire->DespawnOrUnsummon();

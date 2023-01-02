@@ -305,14 +305,20 @@ void KillRewarder::Reward()
     }
 }
 
-void KillRewarder::Reward(uint32 entry)
+void KillRewarder::_Reward(uint32 entry)
 {
-    // 5. Credit instance encounter.
-    if (Scenario* scenario = _killer->GetScenario())
+    boost::container::flat_set<Group const*, std::less<>, boost::container::small_vector<Group const*, 3>> processedGroups;
+    for (Player* killer : _killers)
     {
-        if (Creature* victim = _victim->ToCreature())
-            scenario->UpdateCriteria(CriteriaType::KillCreature, entry, 1, 0, victim, _killer);
-        else
-            scenario->UpdateCriteria(CriteriaType::KillCreature, entry, 1, 0, nullptr, _killer);
+        _InitGroupData(killer);
+
+        // 5. Credit instance encounter.
+        if (Scenario* scenario = killer->GetScenario())
+        {
+            if (Creature* victim = _victim->ToCreature())
+                scenario->UpdateCriteria(CriteriaType::KillCreature, entry, 1, 0, victim, killer);
+            else
+                scenario->UpdateCriteria(CriteriaType::KillCreature, entry, 1, 0, nullptr, killer);
+        }
     }
 }

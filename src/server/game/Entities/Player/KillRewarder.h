@@ -31,7 +31,13 @@ public:
     KillRewarder(Trinity::IteratorPair<Player**> killers, Unit* victim, bool isBattleGround);
 
     void Reward();
-    void Reward(uint32 entry);
+
+    static void Reward(Player* player, Unit* victim, uint32 credit = 0U)
+    {
+        Player* players[] = { player };
+        uint32 entry = credit ? credit : victim->GetEntry();
+        KillRewarder(Trinity::IteratorPair(std::begin(players), std::end(players)), victim, false)._Reward(entry);
+    }
 
 private:
     void _InitXP(Player* player, Player const* killer);
@@ -43,6 +49,8 @@ private:
     void _RewardKillCredit(Player* player);
     void _RewardPlayer(Player* player, bool isDungeon);
     void _RewardGroup(Group const* group, Player const* killer);
+
+    void _Reward(uint32 entry);
 
     Trinity::IteratorPair<Player**> _killers;
     Unit* _victim;
