@@ -373,6 +373,7 @@ class TC_GAME_API Spell
         void EffectRemoveTalent();
         void EffectDestroyItem();
         void EffectLearnGarrisonBuilding();
+        void EffectRemoveAuraBySpellLabel();
         void EffectCreateGarrison();
         void EffectCreateConversation();
         void EffectCancelConversation();
@@ -452,7 +453,7 @@ class TC_GAME_API Spell
         void cancel();
         void update(uint32 difftime);
         void cast(bool skipCheck = false);
-        void finish(bool ok = true);
+        void finish(SpellCastResult result = SPELL_CAST_OK);
         void TakePower();
 
         void TakeRunePower(bool didHit);
