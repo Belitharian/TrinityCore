@@ -310,7 +310,6 @@ void KillRewarder::Reward()
 
 void KillRewarder::_Reward(uint32 entry)
 {
-    boost::container::flat_set<Group const*, std::less<>, boost::container::small_vector<Group const*, 3>> processedGroups;
     for (Player* killer : _killers)
     {
         _InitGroupData(killer);

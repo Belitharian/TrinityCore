@@ -7,7 +7,7 @@
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader "BFT"
 
-//#define CUSTOM_DEBUG
+#define CUSTOM_DEBUG
 
 #define TERVOSH_PATH_01          6
 #define TERVOSH_PATH_02         10
@@ -36,8 +36,6 @@
 #define NUMBER_OF_CITIZENS      8
 #define NUMBER_OF_TROOPS        5
 #define NUMBER_OF_FIRES         8
-
-#define KALECGOS_CIRCLE_RADIUS  95.f
 
 enum class BFTPhases
 {
@@ -147,6 +145,7 @@ enum BFTMisc
 	SPELL_RUNIC_SHIELD                  = 346057,
 	SPELL_FROST_BREATH                  = 300548,
 	SPELL_THERAMORE_EXPLOSION_SCENE     = 128446,
+	SPELL_TELEPORT_TARGET               = 268294,
     SPELL_THALYSSRA_SPAWNS              = 302492,
 	SPELL_CHAT_BUBBLE                   = 140812,
 
@@ -656,7 +655,7 @@ Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };
 Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f };
 Position const CitadelPoint01   = { -3668.74f, -4511.64f, 10.09f, 1.54f };
 Position const DocksPoint01     = { -3826.84f, -4539.05f,  9.21f, 5.96f };
-Position const TheramorePoint01 = { -3753.48f, -4444.54f, 55.23f, 0.00f };
+Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f };
 
 class FriendlyMissingBuff
 {
@@ -678,6 +677,31 @@ class FriendlyMissingBuff
     Unit const* i_obj;
     uint32 i_spell;
 };
+
+inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
+{
+    // Get center position
+    const Position center = target->GetPosition();
+
+    // Get X and Y position around the center with radius
+    float x = radius * cosf(angle) + center.GetPositionX();
+    float y = radius * sinf(angle) + center.GetPositionY();
+
+    // Get height map Z position
+    float z = center.GetPositionZ();
+
+    Trinity::NormalizeMapCoord(x);
+    Trinity::NormalizeMapCoord(y);
+    target->UpdateGroundPositionZ(x, y, z);
+
+    // Get orientation angle
+    const Position position = { x, y, z };
+    float o = position.GetAbsoluteAngle(center);
+
+    // Set final position
+    return { x, y, z, o };
+}
+
 
 template <class AI>
 class TheramoreCreatureScript : public CreatureScript

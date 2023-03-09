@@ -64,7 +64,10 @@ void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
                 DoStartMovement(unit);
                 scheduler.Schedule(Seconds(duration), [unit, this](TaskContext /*context*/)
                 {
-                    DoStartMovement(unit, GetDistance());
+                    if (unit && unit->IsAlive())
+                    {
+                        DoStartMovement(unit, GetDistance());
+                    }
                 });
             }
         }
@@ -207,6 +210,11 @@ uint32 CustomAI::EnemiesInFront(float distance)
         if (me->isInFrontInMap(ref->GetVictim(), distance))
             ++count;
     return count;
+}
+
+bool CustomAI::HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic)
+{
+    return spellInfo->GetAllEffectsMechanicMask() & (UI64LIT(1) << mechanic);
 }
 
 std::list<Unit*> CustomAI::DoFindMissingBuff(uint32 spellId)

@@ -31,7 +31,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         void SpellHit(WorldObject* /*caster*/, SpellInfo const* /*spellInfo*/) override;
 
-        void EnterEvadeMode(EvadeReason why = EVADE_REASON_OTHER) override;
+        void EnterEvadeMode(EvadeReason why = EvadeReason::Other) override;
 
         void Reset() override;
         void AttackStart(Unit* /*who*/) override;
@@ -52,6 +52,8 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         uint32 EnemiesInRange(float distance);
         uint32 EnemiesInFront(float distance);
+
+        bool HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic);
 };
 
 #endif // CUSTOM_CUSTOMAI_H

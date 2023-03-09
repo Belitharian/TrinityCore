@@ -1,4 +1,5 @@
 #include "GameObject.h"
+#include "Containers.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
 #include "MotionMaster.h"
@@ -22,15 +23,20 @@ struct npc_jaina_theramore : public CustomAI
 		Initialize();
 	}
 
+    enum NPCs
+    {
+        NPC_ARCANE_RIFT_TRIGGER     = 196664
+    };
+
 	enum Spells
 	{
 		SPELL_BLIZZARD              = 284968,
-		SPELL_WONDROUS_RADIANCE     = 227410,
 		SPELL_FIREBALL              = 20678,
 		SPELL_FIREBLAST             = 20679,
 		SPELL_FROST_BARRIER         = 69787,
 		SPELL_FROSTBOLT_COSMETIC    = 237649,
-		SPELL_LIGHTNING_FX          = 278455
+		SPELL_LIGHTNING_FX          = 278455,
+        SPELL_ARCANE_RIFT           = 388902,
 	};
 
 	void Initialize()
@@ -45,6 +51,15 @@ struct npc_jaina_theramore : public CustomAI
 		Initialize();
 	}
 
+    void SummonedCreatureDespawn(Creature* summon) override
+    {
+        if (summon->GetEntry() == NPC_ARCANE_RIFT_TRIGGER)
+        {
+            summon->RemoveAllAuras();
+            summon->RemoveAllAreaTriggers();
+        }
+    }
+
     void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
 		if (me->HealthBelowPctDamaged(10, damage)
@@ -54,6 +69,14 @@ struct npc_jaina_theramore : public CustomAI
 			DoCast(SPELL_FROST_BARRIER);
 		}
 	}
+
+    void EnterEvadeMode(EvadeReason why)
+    {
+        CustomAI::EnterEvadeMode(why);
+
+        me->RemoveAllAreaTriggers();
+        me->UnsummonAllTotems();
+    }
 
     void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{
@@ -74,7 +97,7 @@ struct npc_jaina_theramore : public CustomAI
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		scheduler
-			.Schedule(5ms, [this](TaskContext fireball)
+			.Schedule(1s, [this](TaskContext fireball)
 			{
 				if (roll_chance_i(20))
 					Talk(SAY_JAINA_SPELL_01);
@@ -95,17 +118,19 @@ struct npc_jaina_theramore : public CustomAI
 					DoCast(target, SPELL_BLIZZARD);
 				blizzard.Repeat(14s, 22s);
 			})
-			.Schedule(10s, [this](TaskContext wondrous_radiance)
+			.Schedule(10s, [this](TaskContext arcane_rift)
 			{
-				CastSpellExtraArgs args(true);
-				args.AddSpellBP0(1E8);
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                {
+                    if (Creature* summon = me->SummonCreature(NPC_ARCANE_RIFT_TRIGGER, target->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 5s))
+                    {
+                        summon->SetFaction(me->GetFaction());
+                        summon->SetOwnerGUID(me->GetGUID());
+                        summon->CastSpell(summon, SPELL_ARCANE_RIFT);
+                    }
+                }
 
-				me->CastStop();
-
-				for (auto threat : me->GetThreatManager().GetUnsortedThreatList())
-					DoCast(threat->GetVictim(), SPELL_WONDROUS_RADIANCE, args);
-
-				wondrous_radiance.Repeat(25s, 32s);
+                arcane_rift.Repeat(25s, 32s);
 			});
 	}
 
@@ -523,15 +548,17 @@ struct npc_rhonin : public CustomAI
 
 struct npc_kinndy_sparkshine : public CustomAI
 {
-	npc_kinndy_sparkshine(Creature* creature) : CustomAI(creature), evocating(false)
+	npc_kinndy_sparkshine(Creature* creature) : CustomAI(creature, AI_Type::NoMovement), evocating(false)
 	{
 	}
 
 	enum Spells
 	{
-		SPELL_ARCANE_BOLT           = 154235,
+		SPELL_ARCANE_BOLT           = 371306,
 		SPELL_SUPERNOVA             = 157980,
         SPELL_EVOCATION             = 211765,
+        SPELL_UNCONTROLLED_ENERGY   = 388951,
+        SPELL_RUNE_OF_ALACRITY      = 388335
 	};
 
     bool evocating;
@@ -554,6 +581,13 @@ struct npc_kinndy_sparkshine : public CustomAI
 			}
 		}
 	}
+
+    void EnterEvadeMode(EvadeReason why)
+    {
+        CustomAI::EnterEvadeMode(why);
+
+        me->RemoveAllAreaTriggers();
+    }
 
     void OnChannelFinished(SpellInfo const* spell) override
     {
@@ -586,7 +620,14 @@ struct npc_kinndy_sparkshine : public CustomAI
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
+        DoCast(SPELL_RUNE_OF_ALACRITY);
+
 		scheduler
+            .Schedule(45s, [this](TaskContext rune_of_alacrity)
+            {
+                DoCast(SPELL_RUNE_OF_ALACRITY);
+                rune_of_alacrity.Repeat(45s, 1min);
+            })
 			.Schedule(8s, 10s, [this](TaskContext supernova)
 			{
                 if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
@@ -595,7 +636,22 @@ struct npc_kinndy_sparkshine : public CustomAI
                     DoCast(target, SPELL_SUPERNOVA);
                 }
 				supernova.Repeat(10s, 15s);
-			})
+            })
+            .Schedule(5s, 15s, [this](TaskContext uncontrolled_energy)
+            {
+                float slice = 2 * float(M_PI) / 8;
+
+                uint8 index = 0;
+                for (uint8 i = 0; i < 8; ++i)
+				{
+					float angle = slice * index;
+					const Position dest = GetRandomPositionAroundCircle(me, angle, 15.0f);
+                    me->CastSpell(dest, SPELL_UNCONTROLLED_ENERGY);
+					index++;
+				}
+
+                uncontrolled_energy.Repeat(1min);
+            })
 			.Schedule(3s, [this](TaskContext arcane_bolt)
 			{
 				DoCastVictim(SPELL_ARCANE_BOLT);
@@ -641,7 +697,7 @@ struct npc_kalecgos_theramore : public CustomAI
 	{
 		SPELL_COMET_STORM           = 153595,
 		SPELL_DISSOLVE              = 255295,
-		SPELL_TELEPORT              = 357601,
+		SPELL_TELEPORT              = 400542,
 		SPELL_CHILLED               = 333602,
 		SPELL_FLURRY                = 320008,
 		SPELL_ICE_NOVA              = 157997
@@ -656,12 +712,20 @@ struct npc_kalecgos_theramore : public CustomAI
 			switch (id)
 			{
 				case MOVEMENT_INFO_POINT_01:
-					me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-					me->SetImmuneToAll(true);
-					scheduler.Schedule(2s, [this](TaskContext /*context*/)
+					scheduler.Schedule(1s, [this](TaskContext context)
 					{
-						DoCastSelf(SPELL_DISSOLVE);
-						DoCastSelf(SPELL_TELEPORT, true);
+                        switch (context.GetRepeatCounter())
+                        {
+                            case 0:
+                                me->CastSpell(me, SPELL_TELEPORT);
+                                context.Repeat(4800ms);
+                                break;
+                            case 1:
+                                DoCastSelf(SPELL_DISSOLVE, true);
+                                me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+                                me->SetImmuneToAll(true);
+                                break;
+                        }
 					});
 					break;
 				case MOVEMENT_INFO_POINT_02:
@@ -679,14 +743,20 @@ struct npc_kalecgos_theramore : public CustomAI
 			.Schedule(8s, 10s, [this](TaskContext chilled)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-					DoCast(target, SPELL_CHILLED);
+                {
+                    me->CastStop();
+                    DoCast(target, SPELL_CHILLED);
+                }
 				chilled.Repeat(14s, 22s);
 			})
 			.Schedule(12s, 18s, [this](TaskContext comet_barrage)
 			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
-					DoCast(target, SPELL_COMET_STORM);
-				comet_barrage.Repeat(30s, 35s);
+                if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
+                {
+                    me->CastStop();
+                    DoCast(target, SPELL_COMET_STORM);
+                }
+				comet_barrage.Repeat(18s, 25s);
 			})
 			.Schedule(5ms, [this](TaskContext frostbolt)
 			{
@@ -728,14 +798,15 @@ struct event_theramore_training : public NullCreatureAI
 		NPC_TRAINING_DUMMY              = 87318,
 
 		// Spells
-		SPELL_FLASH_HEAL                = 314655,
-		SPELL_HEAL                      = 332706,
-		SPELL_POWER_WORD_SHIELD         = 318158,
 		SPELL_ARCANE_PROJECTILES        = 5143,
-		SPELL_EVOCATION                 = 243070,
 		SPELL_SUPERNOVA                 = 157980,
+		SPELL_EVOCATION                 = 243070,
+		SPELL_POWER_WORD_BARRIER        = 281780,
 		SPELL_ARCANE_BLAST              = 291316,
 		SPELL_ARCANE_BARRAGE            = 291318,
+		SPELL_POWER_WORD_SHIELD         = 318158,
+		SPELL_FLASH_HEAL                = 314655,
+		SPELL_HEAL                      = 332706,
 	};
 
 	void Initialize(Creature* creature, Emote emote, Creature* target)
@@ -778,6 +849,7 @@ struct event_theramore_training : public NullCreatureAI
 				faithful->SetFacingTo(2.60f);
 				faithful->SetReactState(REACT_AGGRESSIVE);
 				faithful->SetPower(POWER_MANA, faithful->GetMaxPower(POWER_MANA));
+                faithful->CastSpell(faithful, SPELL_POWER_WORD_BARRIER, true);
 
 				arcanist->CastStop();
 				arcanist->CombatStop();
@@ -822,15 +894,26 @@ struct event_theramore_training : public NullCreatureAI
 					.Schedule(1s, [arcanist, training](TaskContext context)
 					{
 						if (arcanist->GetPowerPct(POWER_MANA) <= 20)
-						{
-							const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
-                            Milliseconds ms = Milliseconds(info->CalcDuration());
+                        {
+                            if (Spell* spell = arcanist->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+                            {
+                                if (spell->getState() != SPELL_STATE_FINISHED && spell->IsChannelActive())
+                                {
+                                    context.Repeat(2s);
+                                }
+                            }
+                            else
+                            {
+                                const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
+                                Milliseconds ms = Milliseconds(info->CalcDuration());
+                                CastSpellExtraArgs args(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD);
 
-							arcanist->CastSpell(arcanist, SPELL_EVOCATION);
-							arcanist->GetSpellHistory()->ResetCooldown(info->Id, true);
-							arcanist->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
+                                arcanist->CastSpell(arcanist, SPELL_EVOCATION, args);
+                                arcanist->GetSpellHistory()->ResetCooldown(info->Id, true);
+                                arcanist->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
 
-							context.Repeat(ms + 500ms);
+                                context.Repeat(ms + 800ms);
+                            }
 						}
 						else
 						{

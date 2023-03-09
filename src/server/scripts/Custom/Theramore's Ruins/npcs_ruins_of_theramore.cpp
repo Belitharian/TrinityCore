@@ -23,8 +23,8 @@ struct npc_water_elementals_theramore : public CustomAI
 	enum Spells
 	{
 		SPELL_FROST_BARRIER         = 69787,
-        SPELL_WATER_SPOUT           = 271287,
-        SPELL_WATERY_DOME           = 258153,
+		SPELL_WATER_SPOUT           = 271287,
+		SPELL_WATERY_DOME           = 258153,
 		SPELL_WATER_BOLT_VOLLEY     = 290084,
 		SPELL_WATER_BOLT            = 355225,
 	};
@@ -36,8 +36,8 @@ struct npc_water_elementals_theramore : public CustomAI
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
-        if (!me->HasAura(SPELL_FROST_BARRIER) && me->GetMap()->GetId() != 5002)
-            DoCast(SPELL_FROST_BARRIER);
+		if (!me->HasAura(SPELL_FROST_BARRIER) && me->GetMap()->GetId() != 5002)
+			DoCast(SPELL_FROST_BARRIER);
 
 		scheduler
 			.Schedule(5ms, [this](TaskContext water_bolt)
@@ -45,97 +45,97 @@ struct npc_water_elementals_theramore : public CustomAI
 				DoCastVictim(SPELL_WATER_BOLT);
 				water_bolt.Repeat(3s);
 			})
-            .Schedule(1min, [this](TaskContext watery_dome)
-            {
-                DoCastSelf(SPELL_WATERY_DOME);
-                watery_dome.Repeat(30s, 45s);
-            })
-            .Schedule(8s, 10s, [this](TaskContext water_spout)
-            {
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                    DoCast(target, SPELL_WATER_SPOUT);
-                water_spout.Repeat(24s, 32s);
-            })
+			.Schedule(1min, [this](TaskContext watery_dome)
+			{
+				DoCastSelf(SPELL_WATERY_DOME);
+				watery_dome.Repeat(30s, 45s);
+			})
+			.Schedule(8s, 10s, [this](TaskContext water_spout)
+			{
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+					DoCast(target, SPELL_WATER_SPOUT);
+				water_spout.Repeat(24s, 32s);
+			})
 			.Schedule(12s, 22s, [this](TaskContext water_bolt_volley)
 			{
-                CastStop(SPELL_WATER_BOLT_VOLLEY);
-                DoCast(SPELL_WATER_BOLT_VOLLEY);
-                water_bolt_volley.Repeat(18s, 20s);
+				CastStop(SPELL_WATER_BOLT_VOLLEY);
+				DoCast(SPELL_WATER_BOLT_VOLLEY);
+				water_bolt_volley.Repeat(18s, 20s);
 			});
 	}
 };
 
 struct npc_jaina_image : public CustomAI
 {
-    npc_jaina_image(Creature* creature) : CustomAI(creature, AI_Type::NoMovement)
-    {
-    }
+	npc_jaina_image(Creature* creature) : CustomAI(creature, AI_Type::NoMovement)
+	{
+	}
 
 	enum Spells
 	{
-        SPELL_ARCANE_PROJECTILES    = 5143,
-        SPELL_ALPHA_50              = 44816,
+		SPELL_ARCANE_PROJECTILES    = 5143,
+		SPELL_ALPHA_50              = 44816,
 		SPELL_EVOCATION             = 243070,
 		SPELL_SUPERNOVA             = 157980,
 		SPELL_ARCANE_BLAST          = 291316,
 		SPELL_ARCANE_BARRAGE        = 291318,
-        SPELL_COSMETIC_PURPLE_STATE = 299145,
+		SPELL_COSMETIC_PURPLE_STATE = 299145,
 	};
 
-    void Reset()
-    {
-        me->AddAura(SPELL_COSMETIC_PURPLE_STATE, me);
-        me->AddAura(SPELL_ALPHA_50, me);
-    }
+	void Reset()
+	{
+		me->AddAura(SPELL_COSMETIC_PURPLE_STATE, me);
+		me->AddAura(SPELL_ALPHA_50, me);
+	}
 
 	void JustEngagedWith(Unit* who) override
 	{
-        DoCast(who, SPELL_ARCANE_BLAST);
+		DoCast(who, SPELL_ARCANE_BLAST);
 
-        scheduler
-            .Schedule(5ms, [this](TaskContext context)
-            {
-                if (me->GetPowerPct(POWER_MANA) <= 20)
-			    {
-				    const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
-                    Milliseconds ms = Milliseconds(info->CalcDuration(me));
+		scheduler
+			.Schedule(5ms, [this](TaskContext context)
+			{
+				if (me->GetPowerPct(POWER_MANA) <= 20)
+				{
+					const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
+					Milliseconds ms = Milliseconds(info->CalcDuration(me));
 
-                    me->CastSpell(me, SPELL_EVOCATION);
-                    me->GetSpellHistory()->ResetCooldown(info->Id, true);
-                    me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
+					me->CastSpell(me, SPELL_EVOCATION);
+					me->GetSpellHistory()->ResetCooldown(info->Id, true);
+					me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
 
-				    context.Repeat(ms + 500ms);
-			    }
-			    else
-			    {
-				    uint32 spellId = SPELL_ARCANE_BLAST;
-				    if (roll_chance_i(30))
-				    {
-					    spellId = SPELL_ARCANE_PROJECTILES;
-				    }
-				    else if (roll_chance_i(40))
-				    {
-					    spellId = SPELL_ARCANE_BARRAGE;
-				    }
-				    else if (roll_chance_i(20))
-				    {
-					    spellId = SPELL_SUPERNOVA;
-				    }
+					context.Repeat(ms + 500ms);
+				}
+				else
+				{
+					uint32 spellId = SPELL_ARCANE_BLAST;
+					if (roll_chance_i(30))
+					{
+						spellId = SPELL_ARCANE_PROJECTILES;
+					}
+					else if (roll_chance_i(40))
+					{
+						spellId = SPELL_ARCANE_BARRAGE;
+					}
+					else if (roll_chance_i(20))
+					{
+						spellId = SPELL_SUPERNOVA;
+					}
 
-				    const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
-				    Milliseconds ms = Milliseconds(info->CalcCastTime());
+					const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
+					Milliseconds ms = Milliseconds(info->CalcCastTime());
 
-                    DoCastVictim(info->Id);
+					DoCastVictim(info->Id);
 
-                    me->GetSpellHistory()->ResetCooldown(info->Id, true);
-                    me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
+					me->GetSpellHistory()->ResetCooldown(info->Id, true);
+					me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
 
-				    if (info->IsChanneled())
-					    ms = Milliseconds(info->CalcDuration(me));
+					if (info->IsChanneled())
+						ms = Milliseconds(info->CalcDuration(me));
 
-				    context.Repeat(ms + 500ms);
-			    }
-            });
+					context.Repeat(ms + 500ms);
+				}
+			});
 	}
 };
 
@@ -166,7 +166,7 @@ struct npc_roknah_warlord : public CustomAI
 		instance->TriggerGameEvent(EVENT_WARLORD_ROKNAH_SLAIN);
 	}
 
-    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
 		if (!me->HealthBelowPctDamaged(25, damage))
 			return;
@@ -308,14 +308,14 @@ class spell_ruins_comet_barrage : public SpellScript
 
 void AddSC_npcs_ruins_of_theramore()
 {
-    // Utilisable en dehors de l'instance
-    RegisterCreatureAI(npc_water_elementals_theramore);
-    RegisterCreatureAI(npc_jaina_image);
+	// Utilisable en dehors de l'instance
+	RegisterCreatureAI(npc_water_elementals_theramore);
+	RegisterCreatureAI(npc_jaina_image);
 
-    RegisterRuinsAI(npc_roknah_warlord);
+	RegisterRuinsAI(npc_roknah_warlord);
 
-    RegisterGameObjectAI(go_theramore_banner);
+	RegisterGameObjectAI(go_theramore_banner);
 
 	RegisterSpellScript(spell_ruins_comet_barrage);
-    RegisterSpellScript(spell_ruins_frigid_shards);
+	RegisterSpellScript(spell_ruins_frigid_shards);
 }

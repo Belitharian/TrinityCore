@@ -1,5 +1,6 @@
 #include "CriteriaHandler.h"
 #include "EventMap.h"
+#include "Containers.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
@@ -75,8 +76,8 @@ class HordeDoorsEvent : public BasicEvent
 
 	private:
 	GameObject* owner;
-	const float minPosX = -3792.73f;
-	const float maxPosX = -3772.15f;
+	const float minPosX = -3787.90f;
+	const float maxPosX = -3778.27f;
 };
 
 class KalecgosSpellEvent : public BasicEvent
@@ -111,18 +112,19 @@ class KalecgosLoopEvent : public BasicEvent
 		owner->SetDisableGravity(true);
 		owner->SetSpeed(MOVE_RUN, 25.f);
 
-		float perimeter = 2.f * float(M_PI) * KALECGOS_CIRCLE_RADIUS;
-		m_loopTime = (perimeter / owner->GetSpeed(MOVE_RUN)) * IN_MILLISECONDS;
+		float perimeter = 2.f * float(M_PI) * m_circleRadius;
+		m_loopTime = (perimeter / owner->GetSpeed(MOVE_RUN)) * 1000.f;
 	}
 
 	bool Execute(uint64 timer, uint32 /*updateTime*/) override
 	{
-		owner->GetMotionMaster()->MoveCirclePath(TheramorePoint01.GetPositionX(), TheramorePoint01.GetPositionY(), TheramorePoint01.GetPositionZ(), KALECGOS_CIRCLE_RADIUS, true, 16);
+		owner->GetMotionMaster()->MoveCirclePath(TheramorePoint01.GetPositionX(), TheramorePoint01.GetPositionY(), TheramorePoint01.GetPositionZ(), m_circleRadius, true, 16);
         owner->m_Events.AddEvent(this, Milliseconds(timer + m_loopTime));
         return false;
 	}
 
 	private:
+    const float m_circleRadius = 95.0f;
 	Creature* owner;
     uint64 m_loopTime;
 };
@@ -193,6 +195,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			SPELL_CHILLING_BLAST        = 337053,
 			SPELL_TIED_UP               = 167469,
 			SPELL_FROST_BREATH          = 300548,
+            SPELL_SCORCHED_EARTH        = 373139,
 			SPELL_WATER_BUCKET          = 42336
 		};
 
@@ -508,12 +511,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				}
 				// Step 10 : Help the wounded - Parent
 				case CRITERIA_TREE_HELP_THE_WOUNDED:
-					for (uint8 i = 128; i < 141; i++)
-						events.CancelEvent(i);
-					DoRemoveAurasDueToSpellOnPlayers(SPELL_RUNIC_SHIELD);
-					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::WaitForAmara);
-					events.ScheduleEvent(141, 5ms);
-					break;
+                {
+                    for (uint8 i = 128; i < 141; i++)
+                        events.CancelEvent(i);
+                    DoRemoveAurasDueToSpellOnPlayers(SPELL_RUNIC_SHIELD);
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::WaitForAmara);
+                    events.ScheduleEvent(141, 5ms);
+                    break;
+                }
 				// Step 10 : Help the wounded - Rejoin Lady Jaina Proudmoore after the attack
 				case CRITERIA_TREE_FOLLOW_JAINA:
 					events.ScheduleEvent(128, 3s);
@@ -1261,8 +1266,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
                         scheduler.CancelGroup((uint32)BFTPhases::TheBattle);
                         barrier->ResetDoorOrButton();
-						if (Creature* trigger = barrier->SummonCreature(WORLD_TRIGGER, ExplodingPoint01, TEMPSUMMON_TIMED_DESPAWN, 2s))
-							trigger->CastSpell(trigger, SPELL_BIG_EXPLOSION);
+                        if (Creature* trigger = barrier->SummonCreature(WORLD_TRIGGER, ExplodingPoint01, TEMPSUMMON_TIMED_DESPAWN, 5s))
+                        {
+                            trigger->SetFaction(FACTION_MONSTER);
+                            trigger->CastSpell(trigger, SPELL_BIG_EXPLOSION);
+                            trigger->CastSpell(trigger, SPELL_SCORCHED_EARTH, true);
+                        }
 					}
 					Next(1s);
 					break;
@@ -1343,14 +1352,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					#ifdef CUSTOM_DEBUG
-						for (uint8 i = 0; i < 10; i++)
-							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
-					#else
+					//#ifdef CUSTOM_DEBUG
+						//for (uint8 i = 0; i < 10; i++)
+							//DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
+					//#else
 						HordeMembersInvoker(Waves[waves], hordeMembers);
 						waves++;
 						events.ScheduleEvent(++wavesInvoker, 1s);
-					#endif
+					//#endif
 					break;
 
 				case WAVE_01_CHECK:
@@ -1803,6 +1812,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		void TeleportPlayers(Creature* caster, const Position center, float minDist)
 		{
             Position pos = caster->GetRandomPoint(center, 8.f);
+            pos.m_positionZ += 3.0f;
+
             instance->DoOnPlayers([caster, center, minDist, pos](Player* player)
             {
                 if (player->IsWithinDist(caster, minDist))
@@ -1835,7 +1846,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					healers++;
 				}
 
-				Position pos = {};
+				Position pos;
 				switch (waveId)
 				{
 					case WAVE_DOORS:
@@ -1849,13 +1860,16 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						break;
 				}
 
-				if (Creature* temp = instance->SummonCreature(entry, pos))
-				{
-					temp->SetBoundingRadius(30.f);
-					temp->SetHomePosition(pos);
-					temp->CastSpell(temp, SPELL_THALYSSRA_SPAWNS, true);
+                pos.m_positionZ += 3.0f;
 
-					if (Unit * target = temp->SelectNearestHostileUnitInAggroRange())
+                SummonPropertiesEntry const* properties = sSummonPropertiesStore.LookupEntry(64);
+				if (Creature* temp = instance->SummonCreature(entry, pos, properties))
+				{
+					temp->SetHomePosition(pos);
+                    temp->SetCorpseDelay(120 * IN_MILLISECONDS, true);
+					temp->CastSpell(temp, SPELL_TELEPORT_TARGET, true);
+
+					if (Unit * target = SelectNearestHostileInRange(temp))
 						temp->AI()->AttackStart(target);
 
 					hordes[i] = temp->GetGUID();
@@ -1900,6 +1914,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     if (player->IsWithinDist(jaina, 25.f))
                     {
                         Position playerPos = jaina->GetRandomPoint(position, 3.f);
+                        playerPos.m_positionZ += 3.0f;
 
                         // Si le joueur est à plus de 25 mètre de la destination d'attaque
                         float distance = playerPos.GetExactDist2d(player->GetPosition());
@@ -2045,6 +2060,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			});
 		}
 
+        Unit* SelectNearestHostileInRange(Creature* creature) const
+        {
+            Unit* target = nullptr;
+            Trinity::NearestHostileUnitInAggroRangeCheck check(creature);
+            Trinity::UnitSearcher<Trinity::NearestHostileUnitInAggroRangeCheck> searcher(creature, target, check);
+            Cell::VisitGridObjects(creature, searcher, MAX_VISIBILITY_DISTANCE);
+            return target;
+        }
+
         #pragma endregion
 	};
 
@@ -2097,6 +2121,33 @@ class scene_theramore_explosion : public SceneScript
 		float y = r * sinf(alpha) + Center.GetPositionY();
 		return { MAP_THERAMORE_RUINS, { x, y, Center.GetPositionZ(), Center.GetOrientation() }};
 	}
+};
+
+class NearestHostileUnitInRange
+{
+    public:
+        explicit NearestHostileUnitInRange(Creature const* creature) : me(creature) { }
+
+        bool operator()(Unit* u) const
+        {
+            if (!u->IsHostileTo(me))
+                return false;
+
+            if (!u->IsWithinDist(me, MAX_VISIBILITY_DISTANCE))
+                return false;
+
+            if (!me->IsValidAttackTarget(u))
+                return false;
+
+            if (!u->IsWithinLOSInMap(me))
+                return false;
+
+            return true;
+        }
+
+    private:
+        Creature const* me;
+        NearestHostileUnitInRange(NearestHostileUnitInRange const&) = delete;
 };
 
 void AddSC_scenario_battle_for_theramore()

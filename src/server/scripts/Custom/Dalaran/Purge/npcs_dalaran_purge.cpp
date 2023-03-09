@@ -1,6 +1,7 @@
 #include "Custom/AI/CustomAI.h"
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
+#include "Containers.h"
 #include "SpellAuraEffects.h"
 #include "DB2Stores.h"
 #include "InstanceScript.h"
@@ -58,17 +59,17 @@ struct npc_guardian_mage_dalaran : public CustomAI
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		scheduler
-            .Schedule(1ms, [this](TaskContext ice_barrier)
-            {
-                if (!me->HasAura(SPELL_ICE_BARRIER))
-                {
-                    CastStop();
-                    DoCastSelf(SPELL_ICE_BARRIER, true);
-                    ice_barrier.Repeat(1min);
-                }
-                else
-                    ice_barrier.Repeat(5s);
-            })
+			.Schedule(1ms, [this](TaskContext ice_barrier)
+			{
+				if (!me->HasAura(SPELL_ICE_BARRIER))
+				{
+					CastStop();
+					DoCastSelf(SPELL_ICE_BARRIER, true);
+					ice_barrier.Repeat(1min);
+				}
+				else
+					ice_barrier.Repeat(5s);
+			})
 			.Schedule(5ms, [this](TaskContext fireball)
 			{
 				DoCastVictim(SPELL_FROSTBOLT);
@@ -206,7 +207,7 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 		if (!me->HasAura(SPELL_FROST_BARRIER)
 			&& me->HealthBelowPctDamaged(15, damage))
 		{
-            CastStop();
+			CastStop();
 			DoCast(SPELL_FROST_BARRIER);
 		}
 	}
@@ -262,10 +263,10 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 		{
 			if (Map* map = me->GetMap())
 			{
-                if (Player* player = map->GetPlayers().getFirst()->GetSource())
-                {
-                    KillRewarder::Reward(player, victim);
-                }
+				if (Player* player = map->GetPlayers().getFirst()->GetSource())
+				{
+					KillRewarder::Reward(player, victim);
+				}
 			}
 		}
 	}
@@ -305,12 +306,12 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 		}
 	}
 
-    bool CanAIAttack(Unit const* who) const override
-    {
-        return who->IsAlive() && me->IsValidAttackTarget(who)
-            && ScriptedAI::CanAIAttack(who)
-            && who->GetEntry() != NPC_GRAND_MAGISTER_ROMMATH;
-    }
+	bool CanAIAttack(Unit const* who) const override
+	{
+		return who->IsAlive() && me->IsValidAttackTarget(who)
+			&& ScriptedAI::CanAIAttack(who)
+			&& who->GetEntry() != NPC_GRAND_MAGISTER_ROMMATH;
+	}
 };
 
 struct npc_stormwind_cleric : public CustomAI
@@ -503,10 +504,10 @@ struct npc_mage_commander_zuros : public CustomAI
 
 struct npc_narasi_snowdawn : public CustomAI
 {
-    npc_narasi_snowdawn(Creature* creature) : CustomAI(creature, AI_Type::NoMovement)
+	npc_narasi_snowdawn(Creature* creature) : CustomAI(creature, AI_Type::NoMovement)
 	{
 		Initialize();
-    }
+	}
 
 	enum Spells
 	{
@@ -516,7 +517,7 @@ struct npc_narasi_snowdawn : public CustomAI
 
 	void JustEngagedWith(Unit* who) override
 	{
-        DoCast(who, SPELL_ACCELERATING_BLAST);
+		DoCast(who, SPELL_ACCELERATING_BLAST);
 
 		scheduler
 			.Schedule(8s, [this](TaskContext accelerating_blast)
@@ -531,10 +532,10 @@ struct npc_narasi_snowdawn : public CustomAI
 			});
 	}
 
-    bool CanAIAttack(Unit const* who) const override
-    {
-        return who->IsAlive() && who->GetEntry() != NPC_GRAND_MAGISTER_ROMMATH;
-    }
+	bool CanAIAttack(Unit const* who) const override
+	{
+		return who->IsAlive() && who->GetEntry() != NPC_GRAND_MAGISTER_ROMMATH;
+	}
 };
 
 struct npc_archmage_landalock : public NullCreatureAI
@@ -772,7 +773,6 @@ struct npc_archmage_landalock : public NullCreatureAI
 				case 11:
 				{
 					uint8 index = 0;
-					const Position center = me->GetPosition();
 					float slice = 2 * (float)M_PI / (float)citizens.size();
 					for (Creature* citizen : citizens)
 					{
@@ -914,7 +914,7 @@ struct npc_arcanist_rathaella : public CustomAI
 					break;
 				case 3:
 					me->AI()->Talk(SAY_ARCANIST_RATHAELLA_02);
-                    me->SetWalk(false);
+					me->SetWalk(false);
 					break;
 			}
 		});
@@ -996,7 +996,7 @@ struct npc_sunreaver_citizen : public CustomAI
 	enum Spells
 	{
 		SPELL_SCORCH                = 17195,
-		SPELL_FIREBALL              = 358226,
+		SPELL_CINDER_BOLT           = 384194,
 	};
 
 	InstanceScript* instance;
@@ -1051,13 +1051,13 @@ struct npc_sunreaver_citizen : public CustomAI
 
 	void JustEngagedWith(Unit* who) override
 	{
-		DoCast(who, SPELL_FIREBALL);
+		DoCast(who, SPELL_CINDER_BOLT);
 
 		scheduler
-			.Schedule(2s, [this](TaskContext fireball)
+			.Schedule(2s, [this](TaskContext cinder_bolt)
 			{
-				DoCastVictim(SPELL_FIREBALL);
-				fireball.Repeat(2s);
+				DoCastVictim(SPELL_CINDER_BOLT);
+                cinder_bolt.Repeat(2800ms);
 			})
 			.Schedule(3s, 5s, [this](TaskContext scorch)
 			{
@@ -1303,8 +1303,8 @@ struct npc_sunreaver_captain : public CustomAI
 {
 	const Position center = { -743.33f, 4289.46f, 729.07f, 2.29f };
 
-    npc_sunreaver_captain(Creature* creature) : CustomAI(creature, AI_Type::Melee),
-        hostsEvent(false)
+	npc_sunreaver_captain(Creature* creature) : CustomAI(creature, AI_Type::Melee),
+		hostsEvent(false)
 	{
 	}
 
@@ -1327,7 +1327,7 @@ struct npc_sunreaver_captain : public CustomAI
 	};
 
 	std::vector<Creature*> hosts;
-    bool hostsEvent;
+	bool hostsEvent;
 
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
@@ -1379,12 +1379,12 @@ struct npc_sunreaver_captain : public CustomAI
 
 	void DoFleeWantonHosts()
 	{
-        if (hostsEvent)
-            return;
+		if (hostsEvent)
+			return;
 
-        hostsEvent = true;
+		hostsEvent = true;
 
-        hosts.clear();
+		hosts.clear();
 
 		GetCreatureListWithEntryInGrid(hosts, me, NPC_WANTON_HOST, 8.f);
 		GetCreatureListWithEntryInGrid(hosts, me, NPC_WANTON_HOSTESS, 8.f);
@@ -1996,11 +1996,11 @@ struct npc_magister_surdiel : public CustomAI
 			})
 			.Schedule(2s, [this](TaskContext pyroblast)
 			{
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                {
-                    CastStop({ SPELL_MASS_POLYMORPH, SPELL_PYROBLAST, SPELL_FIRE_BOMB });
-                    DoCast(target, SPELL_PYROBLAST);
-                }
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+				{
+					CastStop({ SPELL_MASS_POLYMORPH, SPELL_PYROBLAST, SPELL_FIRE_BOMB });
+					DoCast(target, SPELL_PYROBLAST);
+				}
 				pyroblast.Repeat(8s, 15s);
 			})
 			.Schedule(5s, [this](TaskContext rain_of_fire)
@@ -2018,7 +2018,7 @@ struct npc_magister_surdiel : public CustomAI
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-                    CastStop({ SPELL_MASS_POLYMORPH, SPELL_PYROBLAST });
+					CastStop({ SPELL_MASS_POLYMORPH, SPELL_PYROBLAST });
 
 					const Position pos = GetRandomPosition(target, 10.f, false);
 					me->CastSpell(pos, SPELL_FIRE_BOMB);
@@ -2555,20 +2555,20 @@ struct npc_high_arcanist_savor : public CustomAI
 
 struct npc_magister_hathorel : public CustomAI
 {
-    npc_magister_hathorel(Creature* creature) : CustomAI(creature)
+	npc_magister_hathorel(Creature* creature) : CustomAI(creature)
 	{
 	}
 
-    void MovementInform(uint32 /*type*/, uint32 id) override
-    {
-        switch (id)
-        {
-            case MOVEMENT_INFO_POINT_03:
-                DoCast(SPELL_TELEPORT_VISUAL_ONLY);
-                me->SetVisible(false);
-                break;
-        }
-    }
+	void MovementInform(uint32 /*type*/, uint32 id) override
+	{
+		switch (id)
+		{
+			case MOVEMENT_INFO_POINT_03:
+				DoCast(SPELL_TELEPORT_VISUAL_ONLY);
+				me->SetVisible(false);
+				break;
+		}
+	}
 };
 
 ///
@@ -2599,11 +2599,11 @@ struct npc_arcane_barrier : public NullCreatureAI
 	ObjectGuid mageGUID;
 	ObjectGuid colliderGUID;
 
-    void JustDied(Unit* /*killer*/) override
-    {
-        if (GameObject* collider = ObjectAccessor::GetGameObject(*me, colliderGUID))
-            collider->Delete();
-    }
+	void JustDied(Unit* /*killer*/) override
+	{
+		if (GameObject* collider = ObjectAccessor::GetGameObject(*me, colliderGUID))
+			collider->Delete();
+	}
 
 	void JustAppeared() override
 	{
@@ -2744,8 +2744,8 @@ struct npc_book_of_arcane_monstrosities : public CustomAI
 			me->DespawnOrUnsummon(Milliseconds(spellInfo->GetDuration()));
 	}
 
-    void OnDespawn() override
-    {
+	void OnDespawn() override
+	{
 		if (GameObject* book = ObjectAccessor::GetGameObject(*me, bookGUID))
 			book->Delete();
 	}
