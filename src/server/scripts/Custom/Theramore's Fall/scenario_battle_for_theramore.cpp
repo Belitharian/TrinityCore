@@ -171,11 +171,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			WAVE_10_CHECK,
 
 			WAVE_BREAKER,
-
-			// Types
-			WAVE_DOORS                  = 1000,
-			WAVE_CITADEL,
-			WAVE_DOCKS
 		};
 
 		enum Spells
@@ -196,21 +191,22 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			SPELL_TIED_UP               = 167469,
 			SPELL_FROST_BREATH          = 300548,
             SPELL_SCORCHED_EARTH        = 373139,
+            SPELL_READING_BOOK_STANDING = 397765,
 			SPELL_WATER_BUCKET          = 42336
 		};
 
-		uint32 Waves[10] =
+		uint32 Waves[NUMBER_OF_MEMBERS] =
 		{
-			WAVE_DOORS,
-			WAVE_CITADEL,
-			WAVE_DOCKS,
-			WAVE_DOCKS,
-			WAVE_CITADEL,
-			WAVE_DOORS,
-			WAVE_DOCKS,
-			WAVE_CITADEL,
-			WAVE_DOCKS,
-			WAVE_DOORS
+			DATA_WAVE_CITADEL,
+			DATA_WAVE_DOCKS,
+			DATA_WAVE_DOORS,
+			DATA_WAVE_DOCKS,
+			DATA_WAVE_CITADEL,
+			DATA_WAVE_DOORS,
+			DATA_WAVE_DOCKS,
+			DATA_WAVE_CITADEL,
+			DATA_WAVE_DOCKS,
+			DATA_WAVE_DOORS
 		};
 
 		uint32 GetData(uint32 dataId) const override
@@ -219,6 +215,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 return (uint32)phase;
             else if (dataId == DATA_WOUNDED_TROOPS)
                 return woundedTroops;
+            else if (dataId == DATA_WAVE_GROUP_ID)
+                return Waves[waves];
 			return 0;
 		}
 
@@ -227,9 +225,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
             if (dataId == DATA_SCENARIO_PHASE)
                 phase = (BFTPhases)value;
             else if (dataId == DATA_WOUNDED_TROOPS)
-            {
                 woundedTroops = value;
-            }
 		}
 
 		void OnCompletedCriteriaTree(CriteriaTree const* tree) override
@@ -342,13 +338,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						const Position pos = FireLocation[i];
 						if (TempSummon* trigger = instance->SummonCreature(NPC_THERAMORE_FIRE_CREDIT, pos))
 							trigger->CastSpell(trigger, SPELL_COSMETIC_LARGE_FIRE);
-					}
-					for (ObjectGuid guid : dummies)
-					{
-						if (Creature* dummy = instance->GetCreature(guid))
-						{
-							dummy->AI()->DoAction(2U);
-						}
 					}
 					for (ObjectGuid guid : tanks)
 					{
@@ -603,10 +592,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case NPC_ARCHMAGE_TERVOSH:
 					creature->SetEmoteState(EMOTE_STATE_READ_BOOK_AND_TALK);
 					break;
-				case NPC_EVENT_THERAMORE_TRAINING:
-				case NPC_EVENT_THERAMORE_FAITHFUL:
-					dummies.push_back(creature->GetGUID());
-					break;
 				case NPC_THERAMORE_CITIZEN_FEMALE:
 				case NPC_THERAMORE_CITIZEN_MALE:
 					citizens.push_back(creature->GetGUID());
@@ -614,6 +599,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						break;
 					creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 					break;
+				case NPC_BISHOP_DELAVEY:
+                    creature->SetImmuneToNPC(true);
+                    creature->CastSpell(creature, SPELL_READING_BOOK_STANDING);
+                    citizens.push_back(creature->GetGUID());
+                    break;
 				case NPC_ALLIANCE_PEASANT:
 					creature->SetImmuneToNPC(true);
 					citizens.push_back(creature->GetGUID());
@@ -1352,14 +1342,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					//#ifdef CUSTOM_DEBUG
-						//for (uint8 i = 0; i < 10; i++)
-							//DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
-					//#else
-						HordeMembersInvoker(Waves[waves], hordeMembers);
+					#ifdef CUSTOM_DEBUG
+						for (uint8 i = 0; i < 10; i++)
+							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
+					#else
+						HordeMembersInvoker(Waves[waves]);
 						waves++;
 						events.ScheduleEvent(++wavesInvoker, 1s);
-					//#endif
+					#endif
 					break;
 
 				case WAVE_01_CHECK:
@@ -1373,18 +1363,20 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_09_CHECK:
 				case WAVE_10_CHECK:
 				{
-					uint32 membersCounter = 0;
 					uint32 deadCounter = 0;
-					for (uint8 i = 0; i < NUMBER_OF_MEMBERS; ++i)
-					{
-						++membersCounter;
-						Creature* temp = ObjectAccessor::GetCreature(*GetJaina(), hordeMembers[i]);
-						if (!temp || temp->isDead())
-							++deadCounter;
-					}
 
-					// Quand le nombre de membres vivants est inférieur ou égal au nom de membres morts
-					if (membersCounter <= deadCounter)
+                    if (Creature* jaina = GetJaina())
+                    {
+                        for (uint8 i = 0; i < NUMBER_OF_MEMBERS; ++i)
+                        {
+                            Creature* temp = ObjectAccessor::GetCreature(*jaina, hordeMembers[i]);
+                            if (!temp || temp->isDead())
+                                ++deadCounter;
+                        }
+                    }
+                        
+					// Quand le nombre de membres vivants est inférieur ou égal au nombre de membres morts
+					if (deadCounter >= NUMBER_OF_MEMBERS)
 					{
 						DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
 						events.ScheduleEvent(++wavesInvoker, 2s);
@@ -1720,11 +1712,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		uint8 archmagesIndex;
 		uint8 waves;
 		GuidVector citizens;
-		GuidVector dummies;
 		GuidVector tanks;
 		GuidVector troops;
-		std::list<TempSummon*> hordes;
-		ObjectGuid hordeMembers[NUMBER_OF_MEMBERS];
+        GuidVector hordeMembers;
 
 		// Accesseurs
 		#pragma region ACCESSORS
@@ -1823,109 +1813,29 @@ class scenario_battle_for_theramore : public InstanceMapScript
             });
 		}
 
-		void HordeMembersInvoker(uint32 waveId, ObjectGuid* hordes)
+		void HordeMembersInvoker(uint32 waveId)
 		{
             Creature* jaina = GetJaina();
             if (!jaina)
                 return;
 
-			uint8 healers = 0, dps = 0;
-			for (uint32 i = 0; i < NUMBER_OF_MEMBERS; ++i)
-			{
-				uint32 entry = NPC_ROKNAH_GRUNT;
+            hordeMembers.clear();
 
-				if (dps < 5)
-				{
-					entry = RAND(NPC_ROKNAH_FELCASTER, NPC_ROKNAH_HAG);
-					dps++;
-				}
+            std::list<TempSummon*> members;
+            instance->SummonCreatureGroup(waveId, &members);
 
-				if (healers < 3)
-				{
-					entry = NPC_ROKNAH_LOA_SINGER;
-					healers++;
-				}
+            for (TempSummon* horde : members)
+            {
+                horde->SetTempSummonType(TEMPSUMMON_MANUAL_DESPAWN);
+                horde->SetCorpseDelay(280 * IN_MILLISECONDS, true);
 
-				Position pos;
-				switch (waveId)
-				{
-					case WAVE_DOORS:
-						pos = jaina->GetRandomPoint(JainaPoint03, 13.f);
-						break;
-					case WAVE_CITADEL:
-						pos = jaina->GetRandomPoint(CitadelPoint01, 20.f);
-						break;
-					case WAVE_DOCKS:
-						pos = jaina->GetRandomPoint(DocksPoint01, 25.f);
-						break;
-				}
+                if (Unit* target = SelectNearestHostileInRange(horde))
+                    horde->AI()->AttackStart(target);
 
-                pos.m_positionZ += 3.0f;
+                hordeMembers.push_back(horde->GetGUID());
+            }
 
-                SummonPropertiesEntry const* properties = sSummonPropertiesStore.LookupEntry(64);
-				if (Creature* temp = instance->SummonCreature(entry, pos, properties))
-				{
-					temp->SetHomePosition(pos);
-                    temp->SetCorpseDelay(120 * IN_MILLISECONDS, true);
-					temp->CastSpell(temp, SPELL_TELEPORT_TARGET, true);
-
-					if (Unit * target = SelectNearestHostileInRange(temp))
-						temp->AI()->AttackStart(target);
-
-					hordes[i] = temp->GetGUID();
-				}
-			}
-
-			SendJainaWarning(waveId);
-		}
-
-		void SendJainaWarning(uint32 spawnNumber)
-		{
-			uint8 groupId = 0;
-			Position position;
-			switch (spawnNumber)
-			{
-				// Portes
-				case WAVE_DOORS:
-					position = JainaPoint03;
-					groupId = SAY_BATTLE_GATE;
-					break;
-				// Citadelle
-				case WAVE_CITADEL:
-					position = CitadelPoint01;
-					groupId = SAY_BATTLE_CITADEL;
-					break;
-				// Docks
-				case WAVE_DOCKS:
-					position = DocksPoint01;
-					groupId = SAY_BATTLE_DOCKS;
-					break;
-			}
-
-			if (Creature* jaina = GetJaina())
-			{
-				jaina->NearTeleportTo(position);
-				jaina->SetHomePosition(position);
-				jaina->AI()->Talk(SAY_BATTLE_ALERT);
-				jaina->AI()->Talk(groupId);
-
-                instance->DoOnPlayers([this, jaina, position](Player* player)
-                {
-                    if (player->IsWithinDist(jaina, 25.f))
-                    {
-                        Position playerPos = jaina->GetRandomPoint(position, 3.f);
-                        playerPos.m_positionZ += 3.0f;
-
-                        // Si le joueur est à plus de 25 mètre de la destination d'attaque
-                        float distance = playerPos.GetExactDist2d(player->GetPosition());
-                        if (distance > 25.0f)
-                        {
-                            player->CastSpell(player, SPELL_TELEPORT_DUMMY);
-                            player->NearTeleportTo(playerPos);
-                        }
-                    }
-                });
-			}
+            jaina->AI()->DoAction(SPELL_TELEPORT_CAST_TIME);
 		}
 
 		void MassDespawn(uint32 entry)
@@ -1944,34 +1854,34 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 		void SpawnWoundedTroops()
 		{
-			GuidVector::iterator itr = troops.begin();
-			while (itr != troops.end())
+            Creature* jaina = GetJaina();
+            if (!jaina)
+                return;
+
+            for (ObjectGuid guid : troops)
 			{
-				if (Creature* troop = instance->GetCreature(*itr))
+				if (Creature* troop = ObjectAccessor::GetCreature(*jaina, guid))
 				{
+                    if (!troop || troop->isDead())
+                        continue;
+
 					if (!troop->IsFormationLeader() && roll_chance_i(60))
 					{
 						troop->SetVisible(false);
-						if (Creature* wounded = troop->SummonCreature(NPC_THERAMORE_WOUNDED_TROOP, troop->GetPosition(), TempSummonType::TEMPSUMMON_MANUAL_DESPAWN))
-						{
-							uint32 health = troop->GetMaxHealth();
-							Powers power = troop->GetPowerType();
+                        if (Creature* wounded = troop->SummonCreature(NPC_THERAMORE_WOUNDED_TROOP, troop->GetPosition(), TempSummonType::TEMPSUMMON_MANUAL_DESPAWN))
+                        {
+                            uint32 health = troop->GetMaxHealth();
+                            Powers power = troop->GetPowerType();
 
-							wounded->SetPowerType(power);
-							wounded->SetPower(power, troop->GetPower(power));
-							wounded->SetRegenerateHealth(false);
-							wounded->SetMaxHealth(health);
-							wounded->SetHealth(health * frand(0.15f, 0.20f));
-							wounded->SetStandState(UNIT_STAND_STATE_SLEEP);
-							wounded->SetDisplayId(troop->GetDisplayId());
-							wounded->SetImmuneToNPC(true);
-
-							itr = troops.erase(itr);
-						}
-					}
-					else
-					{
-						itr++;
+                            wounded->SetPowerType(power);
+                            wounded->SetPower(power, troop->GetPower(power));
+                            wounded->SetRegenerateHealth(false);
+                            wounded->SetMaxHealth(health);
+                            wounded->SetHealth(health * frand(0.15f, 0.20f));
+                            wounded->SetStandState(UNIT_STAND_STATE_SLEEP);
+                            wounded->SetDisplayId(troop->GetDisplayId());
+                            wounded->SetImmuneToNPC(true);
+                        }
 					}
 				}
 			}
@@ -1979,35 +1889,21 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 		void EnsurePlayersAreInPhase(uint32 phaseId)
 		{
-			Map::PlayerList const& players = instance->GetPlayers();
-			if (players.isEmpty())
-				return;
-
-			for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
-			{
-				if (Player* player = i->GetSource())
-				{
-					PhasingHandler::AddPhase(player, phaseId, true);
-				}
-			}
+            instance->DoOnPlayers([phaseId](Player* player)
+            {
+                PhasingHandler::AddPhase(player, phaseId, true);
+            });
 		}
 
 		void EnsurePlayersHaveAura(uint32 entry)
 		{
-			Map::PlayerList const& players = instance->GetPlayers();
-			if (players.isEmpty())
-				return;
-
-			for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
-			{
-				if (Player* player = i->GetSource())
-				{
-					if (player->HasAura(entry))
-						continue;
-
-					player->CastSpell(player, entry, true);
-				}
-			}
+            instance->DoOnPlayers([entry](Player* player)
+            {
+                if (!player->HasAura(entry))
+                {
+                    player->CastSpell(player, entry, true);
+                }
+            });
 		}
 
 		void EnsurePlayerHaveShield()

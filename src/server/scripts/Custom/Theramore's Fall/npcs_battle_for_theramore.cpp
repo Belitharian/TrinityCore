@@ -16,6 +16,7 @@
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
 #include "SpellAuraEffects.h"
+#include "SpellHistory.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "SpellScript.h"
@@ -605,9 +606,9 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 
 struct npc_theramore_faithful : public npc_theramore_troop
 {
-	npc_theramore_faithful(Creature* creature) : npc_theramore_troop(creature, AI_Type::Distance), ascension(false)
+	npc_theramore_faithful(Creature* creature) : npc_theramore_troop(creature, AI_Type::Distance),
+        ascension(false)
 	{
-		instance = creature->GetInstanceScript();
 	}
 
 	enum Spells
@@ -624,7 +625,6 @@ struct npc_theramore_faithful : public npc_theramore_troop
 	};
 
 	bool ascension;
-	InstanceScript* instance;
 
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
@@ -666,8 +666,8 @@ struct npc_theramore_faithful : public npc_theramore_troop
 		{
 			BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
 			if (phase < BFTPhases::HelpTheWounded)
-			{
-				CastSpellExtraArgs args(true);
+			{              
+                CastSpellExtraArgs args(true);
 				args.SetTriggerFlags(TRIGGERED_IGNORE_SET_FACING);
 
 				if (Unit* target = SelectRandomMissingBuff(SPELL_POWER_WORD_FORTITUDE))
@@ -843,7 +843,7 @@ struct npc_roknah_hag : public npc_theramore_horde
 	bool iceblock;
 	uint8 index;
 
-	void SpellHitTarget(WorldObject* object, SpellInfo const* spellInfo) override
+	void SpellHitTarget(WorldObject* /*object*/, SpellInfo const* spellInfo) override
 	{
 		switch (spellInfo->Id)
 		{
@@ -1323,6 +1323,196 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 	}
 };
 
+struct npc_faithful_training : public npc_theramore_faithful
+{
+    npc_faithful_training(Creature* creature) : npc_theramore_faithful(creature),
+        soldierA(nullptr), soldierB(nullptr)
+    {
+    }
+
+    enum Misc
+	{
+        // Cosmetic
+        COSMETIC_GROUP,
+
+		// Spells
+		SPELL_POWER_WORD_SHIELD         = 318158,
+		SPELL_FLASH_HEAL                = 314655,
+		SPELL_HEAL                      = 332706,
+	};
+
+    Creature* soldierA;
+    Creature* soldierB;
+
+    void SetState(Creature* creature, Emote emote, Creature* target)
+    {
+        creature->SetEmoteState(emote);
+
+        uint64 health = creature->GetMaxHealth() * 0.3f;
+        creature->SetRegenerateHealth(false);
+        creature->SetHealth(health);
+
+        if (target) creature->SetTarget(target->GetGUID());
+    }
+
+    void Reset() override
+    {
+        printf("npc_faithful_training::Reset()\n");
+
+        npc_theramore_faithful::Reset();
+
+        std::vector<Creature*> soldiers;
+        me->GetCreatureListWithEntryInGrid(soldiers, NPC_THERAMORE_FOOTMAN, 15.0f);
+        if (soldiers.size() <= 0)
+            return;
+
+        soldierA = soldiers[0];
+        soldierB = soldiers[1];
+
+        if (!soldierA && !soldierB)
+            return;
+
+        SetState(soldierA, EMOTE_STATE_ATTACK1H, soldierB);
+        SetState(soldierB, EMOTE_STATE_BLOCK_SHIELD, soldierA);
+
+        soldierA->SetReactState(REACT_PASSIVE);
+        soldierB->SetReactState(REACT_PASSIVE);
+
+        me->SetReactState(REACT_PASSIVE);
+
+        scheduler
+            .Schedule(5s, COSMETIC_GROUP, [this](TaskContext check_phase)
+            {
+                BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+                if (phase > BFTPhases::Preparation)
+                {
+                    scheduler.CancelGroup(COSMETIC_GROUP);
+                }
+
+                check_phase.Repeat(2s);
+            })
+            .Schedule(5s, 8s, COSMETIC_GROUP, [this](TaskContext heal)
+            {
+                if (Creature* victim = RAND(soldierA, soldierB))
+                    me->CastSpell(victim, RAND(SPELL_FLASH_HEAL, SPELL_HEAL, SPELL_POWER_WORD_SHIELD));
+                heal.Repeat(5s, 15s);
+            })
+            .Schedule(5s, 8s, COSMETIC_GROUP,[this](TaskContext soldiers)
+            {
+                if (!soldierA->HasAura(SPELL_POWER_WORD_SHIELD))
+                {
+                    soldierA->DealDamage(soldierA, soldierB, urand(500, 800));
+                }
+
+                if (!soldierB->HasAura(SPELL_POWER_WORD_SHIELD))
+                {
+                    soldierB->DealDamage(soldierB, soldierA, urand(500, 800));
+                }
+
+                soldiers.Repeat(2s);
+            });
+    }
+};
+
+struct npc_arcanist_training : public npc_theramore_arcanist
+{
+    npc_arcanist_training(Creature* creature) : npc_theramore_arcanist(creature)
+	{
+	}
+
+	enum Misc
+	{
+        // Group
+        COSMETIC_GROUP,
+
+		// NPCs
+		NPC_TRAINING_DUMMY              = 87318,
+
+		// Spells
+		SPELL_ARCANE_PROJECTILES        = 5143,
+		SPELL_SUPERNOVA                 = 157980,
+		SPELL_EVOCATION                 = 243070,
+		SPELL_ARCANE_BLAST              = 291316,
+		SPELL_ARCANE_BARRAGE            = 291318,
+	};
+
+	void Reset() override
+	{
+        npc_theramore_arcanist::Reset();
+
+        scheduler
+            .Schedule(5s, COSMETIC_GROUP, [this](TaskContext check_phase)
+            {
+                BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+                if (phase > BFTPhases::Preparation)
+                {
+                    scheduler.CancelGroup(COSMETIC_GROUP);
+                }
+
+                check_phase.Repeat(2s);
+            })
+            .Schedule(5s, 8s, COSMETIC_GROUP, [this](TaskContext context)
+            {
+                Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
+                if (!training)
+                    return;
+
+                if (me->GetPowerPct(POWER_MANA) <= 20)
+                {
+                    if (Spell* spell = me->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+                    {
+                        if (spell->getState() != SPELL_STATE_FINISHED && spell->IsChannelActive())
+                        {
+                            context.Repeat(2s);
+                        }
+                    }
+                    else
+                    {
+                        const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
+                        Milliseconds ms = Milliseconds(info->CalcDuration());
+                        CastSpellExtraArgs args(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD);
+
+                        me->CastSpell(me, SPELL_EVOCATION, args);
+                        me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
+
+                        context.Repeat(ms + 800ms);
+                    }
+                }
+                else
+                {
+                    Milliseconds ms = 50ms;
+                    if (!me->HasUnitState(UNIT_STATE_CASTING))
+                    {
+                        uint32 spellId = SPELL_ARCANE_BLAST;
+                        if (roll_chance_i(30))
+                        {
+                            spellId = SPELL_ARCANE_PROJECTILES;
+                        }
+                        else if (roll_chance_i(20))
+                        {
+                            spellId = SPELL_ARCANE_BARRAGE;
+                        }
+                        else if (roll_chance_i(10))
+                        {
+                            spellId = SPELL_SUPERNOVA;
+                        }
+
+                        const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
+                        ms = Milliseconds(info->CalcCastTime());
+
+                        me->CastSpell(training, spellId);
+                        me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
+
+                        if (info->IsChanneled())
+                            ms = Milliseconds(info->CalcDuration(me));
+                    }
+
+                    context.Repeat(ms + 500ms);
+                }
+            });
+	}
+};
+
 // Healing Tide Totem - 65349
 struct npc_healing_tide_totem : public TotemAI
 {
@@ -1667,6 +1857,9 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterTheramoreAI(npc_theramore_faithful);
 	RegisterTheramoreAI(npc_theramore_arcanist);
 	RegisterTheramoreAI(npc_wounded_theramore_troop);
+
+    RegisterTheramoreAI(npc_faithful_training);
+    RegisterTheramoreAI(npc_arcanist_training);
 
 	// Utilisables dans les Ruines de Theramore
 	RegisterCreatureAI(npc_roknah_hag);

@@ -9,8 +9,6 @@
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
-#include "SpellHistory.h"
-#include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "TemporarySummon.h"
 #include "Custom/AI/CustomAI.h"
@@ -50,6 +48,41 @@ struct npc_jaina_theramore : public CustomAI
 	{
 		Initialize();
 	}
+
+    void DoAction(int32 actionId) override
+    {
+        if (actionId == SPELL_TELEPORT_CAST_TIME)
+        {
+            uint32 waveId = instance->GetData(DATA_WAVE_GROUP_ID);
+
+            Position position;
+            switch (waveId)
+            {
+                // Portes
+                case DATA_WAVE_DOORS:
+                    position = JainaPoint03;
+                    me->AI()->Talk(SAY_BATTLE_GATE);
+                    break;
+                    // Citadelle
+                case DATA_WAVE_CITADEL:
+                    position = CitadelPoint01;
+                    me->AI()->Talk(SAY_BATTLE_CITADEL);
+                    break;
+                    // Docks
+                case DATA_WAVE_DOCKS:
+                    position = DocksPoint01;
+                    me->AI()->Talk(SAY_BATTLE_DOCKS);
+                    break;
+            }
+
+            DoCastSelf(SPELL_TELEPORT_CAST_TIME, true);
+            scheduler.Schedule(3800ms, [this, position](TaskContext /*teleport*/)
+            {
+                me->SetHomePosition(position);
+                me->NearTeleportTo(position);
+            });
+        }
+    }
 
     void SummonedCreatureDespawn(Creature* summon) override
     {
@@ -535,15 +568,6 @@ struct npc_rhonin : public CustomAI
 			}
 		}
 	}
-
-	uint32 EnemiesInRange(float distance)
-	{
-		uint32 count = 0;
-		for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
-			if (me->IsWithinDist(ref->GetVictim(), distance))
-				++count;
-		return count;
-	}
 };
 
 struct npc_kinndy_sparkshine : public CustomAI
@@ -781,263 +805,6 @@ struct npc_kalecgos_theramore : public CustomAI
 	}
 };
 
-struct event_theramore_training : public NullCreatureAI
-{
-	event_theramore_training(Creature* creature) : NullCreatureAI(creature), launched(false)
-	{
-		instance = creature->GetInstanceScript();
-	}
-
-	TaskScheduler scheduler;
-	InstanceScript* instance;
-	bool launched;
-
-	enum Misc
-	{
-		// NPCs
-		NPC_TRAINING_DUMMY              = 87318,
-
-		// Spells
-		SPELL_ARCANE_PROJECTILES        = 5143,
-		SPELL_SUPERNOVA                 = 157980,
-		SPELL_EVOCATION                 = 243070,
-		SPELL_POWER_WORD_BARRIER        = 281780,
-		SPELL_ARCANE_BLAST              = 291316,
-		SPELL_ARCANE_BARRAGE            = 291318,
-		SPELL_POWER_WORD_SHIELD         = 318158,
-		SPELL_FLASH_HEAL                = 314655,
-		SPELL_HEAL                      = 332706,
-	};
-
-	void Initialize(Creature* creature, Emote emote, Creature* target)
-	{
-		uint64 health = creature->GetMaxHealth() * 0.3f;
-		creature->SetEmoteState(emote);
-		creature->SetRegenerateHealth(false);
-		creature->SetHealth(health);
-
-		if (target)
-			creature->SetTarget(target->GetGUID());
-	}
-
-	void DoAction(int32 param) override
-	{
-		std::vector<Creature*> footmen;
-		GetCreatureListWithEntryInGrid(footmen, me, NPC_THERAMORE_FOOTMAN, 15.f);
-		if (footmen.empty())
-			return;
-
-		Creature* faithful = GetClosestCreatureWithEntry(me, NPC_THERAMORE_FAITHFUL, 15.f);
-		Creature* arcanist = GetClosestCreatureWithEntry(me, NPC_THERAMORE_ARCANIST, 15.f);
-		Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
-
-		if (faithful && arcanist && training)
-		{
-			if (param == 2)
-			{
-				for (uint8 i = 0; i < 2; i++)
-				{
-					footmen[i]->SetTarget(ObjectGuid::Empty);
-					footmen[i]->SetEmoteState(EMOTE_STATE_NONE);
-					footmen[i]->SetFacingTo(2.60f);
-					footmen[i]->SetRegenerateHealth(false);
-					footmen[i]->SetHealth(footmen[0]->GetMaxHealth());
-					footmen[i]->SetReactState(REACT_AGGRESSIVE);
-				}
-
-				faithful->SetTarget(ObjectGuid::Empty);
-				faithful->SetFacingTo(2.60f);
-				faithful->SetReactState(REACT_AGGRESSIVE);
-				faithful->SetPower(POWER_MANA, faithful->GetMaxPower(POWER_MANA));
-                faithful->CastSpell(faithful, SPELL_POWER_WORD_BARRIER, true);
-
-				arcanist->CastStop();
-				arcanist->CombatStop();
-				arcanist->SetTarget(ObjectGuid::Empty);
-				arcanist->SetFacingTo(2.60f);
-				arcanist->SetReactState(REACT_AGGRESSIVE);
-				arcanist->SetPower(POWER_MANA, arcanist->GetMaxPower(POWER_MANA));
-
-				training->SetVisible(false);
-
-				scheduler.CancelAll();
-			}
-			else
-			{
-				Initialize(footmen[0], EMOTE_STATE_ATTACK1H, footmen[1]);
-				Initialize(footmen[1], EMOTE_STATE_BLOCK_SHIELD, footmen[0]);
-
-				footmen[0]->SetReactState(REACT_PASSIVE);
-				footmen[1]->SetReactState(REACT_PASSIVE);
-				faithful->SetReactState(REACT_PASSIVE);
-				arcanist->SetReactState(REACT_PASSIVE);
-
-				training->SetImmuneToPC(true);
-
-				scheduler
-					.Schedule(1s, [faithful, footmen](TaskContext context)
-					{
-						Creature* victim = footmen[urand(0, 1)];
-						faithful->CastSpell(victim, RAND(SPELL_FLASH_HEAL, SPELL_HEAL, SPELL_POWER_WORD_SHIELD));
-						context.Repeat(8s);
-					})
-					.Schedule(1s, [footmen](TaskContext context)
-					{
-						if (!footmen[0]->HasAura(SPELL_POWER_WORD_SHIELD))
-							footmen[0]->DealDamage(footmen[1], footmen[0], urand(1500, 2000));
-
-						if (!footmen[1]->HasAura(SPELL_POWER_WORD_SHIELD))
-							footmen[1]->DealDamage(footmen[0], footmen[1], urand(1500, 2000));
-
-						context.Repeat(8s);
-					})
-					.Schedule(1s, [arcanist, training](TaskContext context)
-					{
-						if (arcanist->GetPowerPct(POWER_MANA) <= 20)
-                        {
-                            if (Spell* spell = arcanist->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
-                            {
-                                if (spell->getState() != SPELL_STATE_FINISHED && spell->IsChannelActive())
-                                {
-                                    context.Repeat(2s);
-                                }
-                            }
-                            else
-                            {
-                                const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
-                                Milliseconds ms = Milliseconds(info->CalcDuration());
-                                CastSpellExtraArgs args(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD);
-
-                                arcanist->CastSpell(arcanist, SPELL_EVOCATION, args);
-                                arcanist->GetSpellHistory()->ResetCooldown(info->Id, true);
-                                arcanist->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
-
-                                context.Repeat(ms + 800ms);
-                            }
-						}
-						else
-						{
-							uint32 spellId = SPELL_ARCANE_BLAST;
-							if (roll_chance_i(30))
-							{
-								spellId = SPELL_ARCANE_PROJECTILES;
-							}
-							else if (roll_chance_i(40))
-							{
-								spellId = SPELL_ARCANE_BARRAGE;
-							}
-							else if (roll_chance_i(20))
-							{
-								spellId = SPELL_SUPERNOVA;
-							}
-
-							const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
-							Milliseconds ms = Milliseconds(info->CalcCastTime());
-
-							arcanist->CastSpell(training, spellId);
-
-							arcanist->GetSpellHistory()->ResetCooldown(info->Id, true);
-							arcanist->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
-
-							if (info->IsChanneled())
-								ms = Milliseconds(info->CalcDuration(arcanist));
-
-							context.Repeat(ms + 500ms);
-						}
-					});
-			}
-		}
-	}
-
-	void Reset() override
-	{
-		scheduler.CancelAll();
-	}
-
-	void UpdateAI(uint32 diff) override
-	{
-		if (!launched)
-		{
-			DoAction(1U);
-			launched = true;
-		}
-
-		scheduler.Update(diff);
-	}
-};
-
-struct event_theramore_faithful : public ScriptedAI
-{
-	event_theramore_faithful(Creature* creature) : ScriptedAI(creature), launched(false)
-	{
-		instance = creature->GetInstanceScript();
-	}
-
-	TaskScheduler scheduler;
-	InstanceScript* instance;
-	bool launched;
-
-	enum Misc
-	{
-		// Spells
-		SPELL_HOLY_CHANNELING           = 235056,
-		SPELL_RENEW                     = 294342,
-	};
-
-	void DoAction(int32 param) override
-	{
-		std::vector<Creature*> citizens;
-		GetCreatureListWithEntryInGrid(citizens, me, NPC_THERAMORE_CITIZEN_MALE, 5.f);
-		GetCreatureListWithEntryInGrid(citizens, me, NPC_THERAMORE_CITIZEN_FEMALE, 5.f);
-		if (citizens.empty())
-			return;
-
-		Creature* faithful = GetClosestCreatureWithEntry(me, NPC_THERAMORE_FAITHFUL, 5.f);
-
-		if (param == 2)
-		{
-			faithful->RemoveAllAuras();
-			faithful->SetFacingTo(0.66f);
-
-			scheduler.CancelAll();
-		}
-		else
-		{
-			if (faithful)
-			{
-				for (Creature* citizen : citizens)
-					citizen->SetFacingToObject(faithful);
-
-				faithful->CastSpell(faithful, SPELL_HOLY_CHANNELING);
-
-				scheduler.Schedule(2s, [citizens](TaskContext context)
-				{
-					uint32 random = urand(0, citizens.size() - 1);
-					citizens[random]->AddAura(SPELL_RENEW, citizens[random]);
-					context.Repeat(5s, 8s);
-				});
-			}
-		}
-
-	}
-
-	void Reset() override
-	{
-		scheduler.CancelAll();
-	}
-
-	void UpdateAI(uint32 diff) override
-	{
-		if (!launched)
-		{
-			DoAction(1U);
-			launched = true;
-		}
-
-		scheduler.Update(diff);
-	}
-};
-
 void AddSC_battle_for_theramore()
 {
     RegisterTheramoreAI(npc_jaina_theramore);
@@ -1047,6 +814,4 @@ void AddSC_battle_for_theramore()
 	RegisterTheramoreAI(npc_kinndy_sparkshine);
 	RegisterTheramoreAI(npc_pained);
 	RegisterTheramoreAI(npc_kalecgos_theramore);
-	RegisterTheramoreAI(event_theramore_training);
-	RegisterTheramoreAI(event_theramore_faithful);
 }

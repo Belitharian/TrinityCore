@@ -7,7 +7,7 @@
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader "BFT"
 
-#define CUSTOM_DEBUG
+//#define CUSTOM_DEBUG
 
 #define TERVOSH_PATH_01          6
 #define TERVOSH_PATH_02         10
@@ -81,7 +81,8 @@ enum BFTData
 	DATA_ROKNAH_HAG,
 
 	DATA_SCENARIO_PHASE,
-    DATA_WOUNDED_TROOPS,
+	DATA_WOUNDED_TROOPS,
+	DATA_WAVE_GROUP_ID,
 
 	// GameObjects
 	DATA_PORTAL_TO_STORMWIND,
@@ -89,6 +90,11 @@ enum BFTData
 	DATA_PORTAL_TO_ORGRIMMAR,
 	DATA_MYSTIC_BARRIER_01,
 	DATA_MYSTIC_BARRIER_02,
+
+	// Invokers
+	DATA_WAVE_DOORS                     = 100,
+	DATA_WAVE_CITADEL,
+	DATA_WAVE_DOCKS
 };
 
 enum BFTCreatures
@@ -107,6 +113,7 @@ enum BFTCreatures
 	NPC_THERAMORE_OFFICER               = 58913,
 	NPC_THERAMORE_CITIZEN_MALE          = 143773,
 	NPC_THERAMORE_CITIZEN_FEMALE        = 143776,
+	NPC_BISHOP_DELAVEY                  = 500022,
 
 	NPC_ROKNAH_GRUNT                    = 64732,
 	NPC_ROKNAH_LOA_SINGER               = 64733,
@@ -124,15 +131,13 @@ enum BFTCreatures
 	NPC_THADER_WINDERMERE               = 500009,
 	NPC_THALEN_SONGWEAVER               = 500010,
 	NPC_THERAMORE_WOUNDED_TROOP         = 500012,
-	NPC_THERAMORE_FIRE_CREDIT           = 500013,
-
-	NPC_EVENT_THERAMORE_TRAINING        = 550000,
-	NPC_EVENT_THERAMORE_FAITHFUL        = 550001,
+	NPC_THERAMORE_FIRE_CREDIT           = 500013
 };
 
 enum BFTMisc
 {
 	// Spells
+	SPELL_TELEPORT_CAST_TIME            = 90058,
 	SPELL_COSMETIC_LARGE_FIRE           = 277763,
 	SPELL_COSMETIC_FIRE_LIGHT           = 320348,
 	SPELL_CAMERA_SHAKE_VOLCANO          = 246439,
@@ -146,7 +151,7 @@ enum BFTMisc
 	SPELL_FROST_BREATH                  = 300548,
 	SPELL_THERAMORE_EXPLOSION_SCENE     = 128446,
 	SPELL_TELEPORT_TARGET               = 268294,
-    SPELL_THALYSSRA_SPAWNS              = 302492,
+	SPELL_THALYSSRA_SPAWNS              = 302492,
 	SPELL_CHAT_BUBBLE                   = 140812,
 
 	// GameObjects
@@ -183,12 +188,12 @@ enum BFTMisc
 	CRITERIA_TREE_RETRIEVE              = 1000029,
 	CRITERIA_TREE_REDUCE_EXPLOSION      = 1000030,
 
-    // Phase
-    PHASE_THERAMORE_SCENE_EXPLOSION     = 1503,
+	// Phase
+	PHASE_THERAMORE_SCENE_EXPLOSION     = 1503,
 
 	// Sounds
 	SOUND_FEARFUL_CROWD                 = 15003,
-    SOUND_COUNTERSPELL                  = 3227,
+	SOUND_COUNTERSPELL                  = 3227,
 
 	// Point Id
 	MOVEMENT_INFO_POINT_NONE            = 0,
@@ -207,7 +212,7 @@ enum BFTMisc
 	EVENT_FIND_JAINA_05                 = 65807,    // Find Jaina - After wounded / fires
 	EVENT_WAIT_ARCHMAGE_LESSON          = 65808,
 	EVENT_RETRIEVE_RHONIN               = 65809,
-    EVENT_REDUCE_IMPACT                 = 65810
+	EVENT_REDUCE_IMPACT                 = 65810
 };
 
 enum BFTTalks
@@ -334,7 +339,7 @@ enum BFTTalks
 	SAY_IRIS_XPLOSION_09  = 60,
 	SAY_IRIS_XPLOSION_10  = 8,
 
-    SAY_WOUNDED_TROOP     = 61,
+	SAY_WOUNDED_TROOP     = 61,
 
 	SAY_JAINA_SPELL_01    = 40,
 	SAY_JAINA_BLIZZARD_01 = 41,
@@ -398,7 +403,7 @@ Position const TervoshPath01[TERVOSH_PATH_01] =
 	{ -3755.68f, -4441.48f, 30.55f, 0.97f },
 	{ -3753.32f, -4440.05f, 30.55f, 0.01f },
 	{ -3751.34f, -4440.64f, 30.55f, 0.46f },
-    { -3749.70f, -4440.37f, 30.54f, 0.46f }
+	{ -3749.70f, -4440.37f, 30.54f, 0.46f }
 };
 
 Position const TervoshPath02[TERVOSH_PATH_02] =
@@ -659,61 +664,61 @@ Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f };
 
 class FriendlyMissingBuff
 {
-    public:
-    FriendlyMissingBuff(Unit const* obj, uint32 spellid) : i_obj(obj), i_spell(spellid)
-    {
-    }
+	public:
+	FriendlyMissingBuff(Unit const* obj, uint32 spellid) : i_obj(obj), i_spell(spellid)
+	{
+	}
 
-    bool operator()(Creature* c) const
-    {
-        if (c->IsTrigger() && !c->IsPvP())
-            return false;
-        if (c->IsAlive() && !i_obj->IsHostileTo(c) && i_obj->IsWithinDistInMap(c, 30.f) && !c->HasAura(i_spell))
-            return true;
-        return false;
-    }
+	bool operator()(Creature* c) const
+	{
+		if (c->IsTrigger() && !c->IsPvP())
+			return false;
+		if (c->IsAlive() && !i_obj->IsHostileTo(c) && i_obj->IsWithinDistInMap(c, 30.f) && !c->HasAura(i_spell))
+			return true;
+		return false;
+	}
 
-    private:
-    Unit const* i_obj;
-    uint32 i_spell;
+	private:
+	Unit const* i_obj;
+	uint32 i_spell;
 };
 
 inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
 {
-    // Get center position
-    const Position center = target->GetPosition();
+	// Get center position
+	const Position center = target->GetPosition();
 
-    // Get X and Y position around the center with radius
-    float x = radius * cosf(angle) + center.GetPositionX();
-    float y = radius * sinf(angle) + center.GetPositionY();
+	// Get X and Y position around the center with radius
+	float x = radius * cosf(angle) + center.GetPositionX();
+	float y = radius * sinf(angle) + center.GetPositionY();
 
-    // Get height map Z position
-    float z = center.GetPositionZ();
+	// Get height map Z position
+	float z = center.GetPositionZ();
 
-    Trinity::NormalizeMapCoord(x);
-    Trinity::NormalizeMapCoord(y);
-    target->UpdateGroundPositionZ(x, y, z);
+	Trinity::NormalizeMapCoord(x);
+	Trinity::NormalizeMapCoord(y);
+	target->UpdateGroundPositionZ(x, y, z);
 
-    // Get orientation angle
-    const Position position = { x, y, z };
-    float o = position.GetAbsoluteAngle(center);
+	// Get orientation angle
+	const Position position = { x, y, z };
+	float o = position.GetAbsoluteAngle(center);
 
-    // Set final position
-    return { x, y, z, o };
+	// Set final position
+	return { x, y, z, o };
 }
 
 
 template <class AI>
 class TheramoreCreatureScript : public CreatureScript
 {
-    public:
-    TheramoreCreatureScript(char const* name) : CreatureScript(name)
-    {
-    }
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetInstanceAI<AI>(creature, BFTScriptName);
-    }
+	public:
+	TheramoreCreatureScript(char const* name) : CreatureScript(name)
+	{
+	}
+	CreatureAI* GetAI(Creature* creature) const override
+	{
+		return GetInstanceAI<AI>(creature, BFTScriptName);
+	}
 };
 
 #define RegisterTheramoreAI(ai_name) new TheramoreCreatureScript<ai_name>(#ai_name);

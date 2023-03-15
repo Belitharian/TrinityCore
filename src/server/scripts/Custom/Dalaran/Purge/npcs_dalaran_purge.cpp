@@ -2481,7 +2481,6 @@ struct npc_high_arcanist_savor : public CustomAI
 			{
 				player->RemoveAurasDueToSpell(SPELL_ETERNAL_SILENCE);
 				player->RemoveUnitFlag(UNIT_FLAG_PACIFIED);
-				player->RemoveUnitFlag(UNIT_FLAG_SILENCED);
 				player->SetClientControl(player, true);
 				player->SetFacingToObject(me);
 				player->CastSpell(player, lastSpeed, true);
@@ -2510,7 +2509,7 @@ struct npc_high_arcanist_savor : public CustomAI
 							player->CastSpell(player, SPELL_SPEED_NORMAL, true);
 							player->CastSpell(player, SPELL_REWIND_TIME, true);
 							player->CastSpell(player, SPELL_ETERNAL_SILENCE, true);
-							player->SetUnitFlag(UnitFlags(UNIT_FLAG_PACIFIED | UNIT_FLAG_SILENCED));
+							player->SetUnitFlag(UNIT_FLAG_PACIFIED);
 							player->SetClientControl(player, false);
 							player->GetMotionMaster()->MoveCharge(clone->GetPositionX(), clone->GetPositionY(), clone->GetPositionZ(), cloneDist / 3.0f);
 							player->ToPlayer()->SetFullHealth();
