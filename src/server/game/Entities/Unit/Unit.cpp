@@ -857,6 +857,10 @@ bool Unit::HasBreakableByDamageCrowdControlAura(Unit* excludeCasterChannel) cons
 
         duel_hasEnded = true;
     }
+    else if (victim->IsCreature() && damageTaken >= health && victim->ToCreature()->HasFlag(CREATURE_STATIC_FLAG_UNKILLABLE))
+    {
+        damageTaken = health - 1;
+    }
     else if (victim->IsVehicle() && damageTaken >= (health-1) && victim->GetCharmer() && victim->GetCharmer()->GetTypeId() == TYPEID_PLAYER)
     {
         Player* victimRider = victim->GetCharmer()->ToPlayer();
@@ -5546,8 +5550,14 @@ bool Unit::Attack(Unit* victim, bool meleeAttack)
 
     Creature* creature = ToCreature();
     // creatures cannot attack while evading
-    if (creature && creature->IsInEvadeMode())
-        return false;
+    if (creature)
+    {
+        if (creature->IsInEvadeMode())
+            return false;
+
+        if (!creature->CanMelee())
+            meleeAttack = false;
+    }
 
     // nobody can attack GM in GM-mode
     if (victim->GetTypeId() == TYPEID_PLAYER)
@@ -10662,9 +10672,14 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
 
     std::vector<Player*> tappers;
     if (isRewardAllowed && creature)
+    {
         for (ObjectGuid tapperGuid : creature->GetTapList())
             if (Player* tapper = ObjectAccessor::GetPlayer(*creature, tapperGuid))
                 tappers.push_back(tapper);
+
+        if (!creature->CanHaveLoot())
+            isRewardAllowed = false;
+    }
 
     // Exploit fix
     if (creature && creature->IsPet() && creature->GetOwnerGUID().IsPlayer())
@@ -10712,7 +10727,7 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
             {
                 if (dungeonEncounter)
                 {
-                    creature->m_personalLoot = GenerateDungeonEncounterPersonalLoot(dungeonEncounter->ID, creature->GetCreatureTemplate()->lootid,
+                    creature->m_personalLoot = GenerateDungeonEncounterPersonalLoot(dungeonEncounter->ID, creature->GetLootId(),
                         LootTemplates_Creature, LOOT_CORPSE, creature, creature->GetCreatureTemplate()->mingold, creature->GetCreatureTemplate()->maxgold,
                         creature->GetLootMode(), creature->GetMap()->GetDifficultyLootItemContext(), tappers);
                 }
@@ -10723,7 +10738,7 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
 
                     Loot* loot = new Loot(creature->GetMap(), creature->GetGUID(), LOOT_CORPSE, dungeonEncounter ? group : nullptr);
 
-                    if (uint32 lootid = creature->GetCreatureTemplate()->lootid)
+                    if (uint32 lootid = creature->GetLootId())
                         loot->FillLoot(lootid, LootTemplates_Creature, looter, dungeonEncounter != nullptr, false, creature->GetLootMode(), creature->GetMap()->GetDifficultyLootItemContext());
 
                     if (creature->GetLootMode() > 0)
@@ -10749,7 +10764,7 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
                     if (dungeonEncounter)
                         loot->SetDungeonEncounterId(dungeonEncounter->ID);
 
-                    if (uint32 lootid = creature->GetCreatureTemplate()->lootid)
+                    if (uint32 lootid = creature->GetLootId())
                         loot->FillLoot(lootid, LootTemplates_Creature, tapper, true, false, creature->GetLootMode(), creature->GetMap()->GetDifficultyLootItemContext());
 
                     if (creature->GetLootMode() > 0)
@@ -10853,7 +10868,7 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
             else
                 creature->AllLootRemovedFromCorpse();
 
-            if (LootTemplates_Skinning.HaveLootFor(creature->GetCreatureTemplate()->SkinLootId))
+            if (creature->CanHaveLoot() && LootTemplates_Skinning.HaveLootFor(creature->GetCreatureTemplate()->SkinLootId))
             {
                 creature->SetDynamicFlag(UNIT_DYNFLAG_CAN_SKIN);
                 creature->SetUnitFlag(UNIT_FLAG_SKINNABLE);
@@ -10988,7 +11003,7 @@ void Unit::SetControlled(bool apply, UnitState state)
                 SetStunned(false);
                 break;
             case UNIT_STATE_ROOT:
-                if (HasAuraType(SPELL_AURA_MOD_ROOT) || HasAuraType(SPELL_AURA_MOD_ROOT_2) || HasAuraType(SPELL_AURA_MOD_ROOT_DISABLE_GRAVITY) || GetVehicle() || (ToCreature() && ToCreature()->GetMovementTemplate().IsRooted()))
+                if (HasAuraType(SPELL_AURA_MOD_ROOT) || HasAuraType(SPELL_AURA_MOD_ROOT_2) || HasAuraType(SPELL_AURA_MOD_ROOT_DISABLE_GRAVITY) || GetVehicle() || (ToCreature() && ToCreature()->IsTemplateRooted()))
                     return;
 
                 ClearUnitState(state);
@@ -11118,7 +11133,7 @@ void Unit::SetFeared(bool apply)
             caster = ObjectAccessor::GetUnit(*this, fearAuras.front()->GetCasterGUID());
         if (!caster)
             caster = getAttackerForHelper();
-        GetMotionMaster()->MoveFleeing(caster, fearAuras.empty() ? sWorld->getIntConfig(CONFIG_CREATURE_FAMILY_FLEE_DELAY) : 0);             // caster == NULL processed in MoveFleeing
+        GetMotionMaster()->MoveFleeing(caster, fearAuras.empty() ? Milliseconds(sWorld->getIntConfig(CONFIG_CREATURE_FAMILY_FLEE_DELAY)) : 0ms);             // caster == NULL processed in MoveFleeing
     }
     else
     {
@@ -12786,7 +12801,7 @@ bool Unit::SetDisableGravity(bool disable, bool updateAnimTier /*= true*/)
         SendMessageToSet(packet.Write(), true);
     }
 
-    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT) && !ToCreature()->GetMovementTemplate().IsRooted())
+    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT) && !ToCreature()->IsTemplateRooted())
     {
         if (IsGravityDisabled())
             SetAnimTier(AnimTier::Fly);
@@ -13002,7 +13017,7 @@ bool Unit::SetHover(bool enable, bool updateAnimTier /*= true*/)
         SendMessageToSet(packet.Write(), true);
     }
 
-    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT) && !ToCreature()->GetMovementTemplate().IsRooted())
+    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT) && !ToCreature()->IsTemplateRooted())
     {
         if (IsGravityDisabled())
             SetAnimTier(AnimTier::Fly);
