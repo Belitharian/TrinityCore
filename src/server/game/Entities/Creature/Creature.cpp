@@ -298,7 +298,7 @@ bool ForcedDespawnDelayEvent::Execute(uint64 /*e_time*/, uint32 /*p_time*/)
     return true;
 }
 
-Creature::Creature(bool isWorldObject) : Unit(isWorldObject), MapObject(), m_PlayerDamageReq(0), _pickpocketLootRestore(0),
+Creature::Creature(bool isWorldObject) : Unit(isWorldObject), MapObject(), m_PlayerDamageReq(0), m_dontClearTapListOnEvade(false), _pickpocketLootRestore(0),
     m_corpseRemoveTime(0), m_respawnTime(0), m_respawnDelay(300), m_corpseDelay(60), m_ignoreCorpseDecayRatio(false), m_wanderDistance(0.0f), m_boundaryCheckTime(2500), m_combatPulseTime(0), m_combatPulseDelay(0), m_reactState(REACT_AGGRESSIVE),
     m_defaultMovementType(IDLE_MOTION_TYPE), m_spawnId(UI64LIT(0)), m_equipmentId(0), m_originalEquipmentId(0), m_AlreadyCallAssistance(false), m_AlreadySearchedAssistance(false), m_cannotReachTarget(false), m_cannotReachTimer(0),
     m_meleeDamageSchoolMask(SPELL_SCHOOL_MASK_NORMAL), m_originalEntry(0), m_homePosition(), m_transportHomePosition(), m_creatureInfo(nullptr), m_creatureData(nullptr), _waypointPathId(0), _currentWaypointNodeInfo(0, 0),
@@ -583,6 +583,8 @@ bool Creature::InitEntry(uint32 entry, CreatureData const* data /*= nullptr*/)
         || IsPet()
         || IsTotem()
         || cinfo->flags_extra & CREATURE_FLAG_EXTRA_NO_XP);
+
+    _staticFlags.ApplyFlag(CREATURE_STATIC_FLAG_4_TREAT_AS_RAID_UNIT_FOR_HELPFUL_SPELLS, (cinfo->type_flags & CREATURE_TYPE_FLAG_TREAT_AS_RAID_UNIT) != 0);
 
     return true;
 }
@@ -1347,6 +1349,13 @@ void Creature::SetTappedBy(Unit const* unit, bool withGroup)
 
     if (m_tapList.size() >= CREATURE_TAPPERS_SOFT_CAP)
         SetDynamicFlag(UNIT_DYNFLAG_TAPPED);
+}
+
+void Creature::SetDontClearTapListOnEvade(bool dontClear)
+{
+    // only temporary summons are allowed to not clear their tap list
+    if (!m_spawnId)
+        m_dontClearTapListOnEvade = dontClear;
 }
 
 // return true if this creature is tapped by the player or by a member of his group.
@@ -3398,21 +3407,10 @@ void Creature::DoNotReacquireSpellFocusTarget()
 
 bool Creature::IsMovementPreventedByCasting() const
 {
-    // first check if currently a movement allowed channel is active and we're not casting
-    if (Spell* spell = m_currentSpells[CURRENT_CHANNELED_SPELL])
-    {
-        if (spell->getState() != SPELL_STATE_FINISHED && spell->IsChannelActive())
-            if (spell->CheckMovement() != SPELL_CAST_OK)
-                return true;
-    }
+    if (!Unit::IsMovementPreventedByCasting() && !HasSpellFocus())
+        return false;
 
-    if (HasSpellFocus())
-        return true;
-
-    if (HasUnitState(UNIT_STATE_CASTING))
-        return true;
-
-    return false;
+    return true;
 }
 
 void Creature::StartPickPocketRefillTimer()
