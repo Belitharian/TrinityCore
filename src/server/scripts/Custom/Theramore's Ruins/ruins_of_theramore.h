@@ -35,7 +35,9 @@ enum RFTCreatures
 	NPC_BOMBARDING_ZEPPELIN             = 136957,
 	NPC_ARCHMAGE_TERVOSH	            = 500000,
 	NPC_KINNDY_SPARKSHINE	            = 500001,
-	NPC_DEAD_ROKNAH_TROOP               = 500015
+	NPC_DEAD_ROKNAH_TROOP               = 500015,
+
+    NPC_INVOKER                         = 550001,
 };
 
 enum RFTData
@@ -82,6 +84,9 @@ enum RFTTalks
 
 enum RFTSpells
 {
+    // OLD
+	//SPELL_SCREEN_FX						= 337213,
+
 	SPELL_FEATHER_FALL                  = 130,
 	SPELL_TELEPORT_VISUAL_ONLY			= 51347,
 	SPELL_COSMETIC_PURPLE_VERTEX_STATE	= 83237,
@@ -93,12 +98,15 @@ enum RFTSpells
 	SPELL_WATER_BOSS_ENTRANCE           = 240261,
 	SPELL_COSMETIC_ARCANE_DISSOLVE		= 254799,
 	SPELL_SHIMMERDUST					= 278917,
+    SPELL_SKYBOX_EFFECT_ENTRANCE        = 279122,
 	SPELL_BURNING                       = 282051,
 	SPELL_ARCANE_CHANNELING             = 294676,
 	SPELL_EMPOWERED_SUMMON              = 303681,
-	SPELL_SCREEN_FX						= 337213,
+    SPELL_SKYBOX_EFFECT_RUINS           = 310302,
 	SPELL_GLACIAL_SPIKE_COSMETIC		= 346559,
-    SPELL_THALYSSRA_SPAWNS              = 302492
+    SPELL_THALYSSRA_SPAWNS              = 302492,
+    SPELL_EXPLOSIVE_BRAND               = 374567,
+    SPELL_EXPLOSIVE_BRAND_DAMAGE        = 374570,
 };
 
 enum RFTMisc
@@ -204,6 +212,7 @@ const Position PlayerPoint01    = { -3878.20f, -4589.90f,   8.67f, 0.78f };
 const Position JainaPoint01     = { -3012.72f, -4340.22f,   6.64f, 1.70f };
 const Position JainaPoint02     = { -3698.21f, -4457.47f, -20.88f, 1.27f };
 const Position JainaPoint03     = { -3711.41f, -4467.89f, -20.54f, 0.02f };
+const Position JainaPoint04     = { -3825.77f, -4537.44f,   9.21f, 0.73f };
 const Position KalecgosPoint01  = { -3013.10f, -4336.91f,   6.77f, 4.82f };
 const Position DummyPoint01     = { -3698.69f, -4467.94f, -20.87f, 3.55f };
 

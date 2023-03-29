@@ -743,6 +743,83 @@ struct npc_theramore_faithful : public npc_theramore_troop
 	}
 };
 
+struct npc_theramore_marksman : public npc_theramore_troop
+{
+    npc_theramore_marksman(Creature* creature) : npc_theramore_troop(creature, AI_Type::Hybrid)
+    {
+        Initialize();
+    }
+
+    enum Spells
+    {
+        SPELL_SHOOT                 = 22907,
+        SPELL_MULTI_SHOOT           = 38310,
+    };
+
+    float GetDistance() override
+    {
+        return 30.0f;
+    }
+
+    void AttackStart(Unit* who) override
+    {
+        if (!who)
+            return;
+
+        if (who && me->Attack(who, true))
+        {
+            me->GetMotionMaster()->Clear(MOTION_PRIORITY_NORMAL);
+            me->PauseMovement();
+            me->SetCanMelee(false);
+            me->SetSheath(SHEATH_STATE_RANGED);
+        }
+    }
+
+    void MoveInLineOfSight(Unit* who) override
+    {
+        CustomAI::MoveInLineOfSight(who);
+
+        if (!me->IsEngaged())
+            return;
+
+        if (me->IsInRange(who, 0.0f, me->GetCombatReach()))
+        {
+            if (me->CanMelee())
+                return;
+
+            me->SetCanMelee(true);
+            me->SetSheath(SHEATH_STATE_MELEE);
+        }
+        else
+        {
+            SetCombatMove(false, GetDistance());
+            me->SetCanMelee(false);
+            me->SetSheath(SHEATH_STATE_RANGED);
+        }
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        SetCombatMove(false, GetDistance());
+        me->SetCanMelee(false);
+        me->SetSheath(SHEATH_STATE_RANGED);
+
+        DoCast(who, SPELL_SHOOT);
+
+        scheduler
+            .Schedule(2s, [this](TaskContext shoot)
+            {
+                DoCastVictim(SPELL_SHOOT);
+                shoot.Repeat(2s);
+            })
+            .Schedule(15s, [this](TaskContext multi_shoot)
+            {
+                DoCastVictim(SPELL_MULTI_SHOOT);
+                multi_shoot.Repeat(14s, 18s);
+            });
+    }
+};
+
 struct npc_theramore_horde : public CustomAI
 {
 	npc_theramore_horde(Creature* creature, AI_Type type) : CustomAI(creature, type)
@@ -827,7 +904,7 @@ struct npc_roknah_hag : public npc_theramore_horde
 
 	enum Spells
 	{
-		SPELL_BLINK         = 264377,
+		SPELL_BLINK         = 295236,
 		SPELL_CONE_OF_COLD  = 292294,
 		SPELL_EBONBOLT      = 284752,
 		SPELL_FLURRY        = 284858,
@@ -1028,6 +1105,9 @@ struct npc_roknah_grunt : public npc_theramore_horde
 	{
 		npc_theramore_horde::JustEngagedWith(who);
 
+        if (!me->HasAura(SPELL_OVERPOWER) && roll_chance_i(60))
+            DoCastSelf(SPELL_OVERPOWER);
+
 		scheduler
 			.Schedule(5ms, [this](TaskContext hammer_stun)
 			{
@@ -1049,25 +1129,15 @@ struct npc_roknah_grunt : public npc_theramore_horde
 			})
 			.Schedule(2s, 5s, [this](TaskContext mortal_strike)
 			{
-				switch (mortal_strike.GetRepeatCounter())
-				{
-					case 0:
-						if (!me->HasAura(SPELL_OVERPOWER) && roll_chance_i(60))
-							DoCastSelf(SPELL_OVERPOWER);
-						mortal_strike.Repeat(1s);
-						break;
-					case 1:
-						me->CastStop();
-						DoCastVictim(SPELL_MORTAL_STRIKE);
-						mortal_strike.Repeat(8s, 10s);
-						break;
-				}
+                me->CastStop();
+				DoCastVictim(SPELL_MORTAL_STRIKE);
+				mortal_strike.Repeat(8s, 10s);
 			})
-			.Schedule(14s, 22s, [this](TaskContext overpower)
+			.Schedule(14s, 22s, [this](TaskContext rend)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 					DoCast(target, SPELL_REND);
-				overpower.Repeat(8s, 10s);
+                rend.Repeat(8s, 10s);
 			})
 			.Schedule(32s, 38s, [this](TaskContext rend_slam)
 			{
@@ -1351,15 +1421,24 @@ struct npc_faithful_training : public npc_theramore_faithful
         uint64 health = creature->GetMaxHealth() * 0.3f;
         creature->SetRegenerateHealth(false);
         creature->SetHealth(health);
+        creature->SetTarget(target ? target->GetGUID() : ObjectGuid::Empty);
+    }
 
-        if (target) creature->SetTarget(target->GetGUID());
+    void ClearState(Creature* creature)
+    {
+        creature->SetEmoteState(EMOTE_STATE_NONE);
+        creature->SetRegenerateHealth(true);
+        creature->SetHealth(creature->GetMaxHealth());
+        creature->SetTarget(ObjectGuid::Empty);
     }
 
     void Reset() override
     {
-        printf("npc_faithful_training::Reset()\n");
-
         npc_theramore_faithful::Reset();
+
+        BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+        if (phase > BFTPhases::Preparation)
+            return;
 
         std::vector<Creature*> soldiers;
         me->GetCreatureListWithEntryInGrid(soldiers, NPC_THERAMORE_FOOTMAN, 15.0f);
@@ -1384,8 +1463,16 @@ struct npc_faithful_training : public npc_theramore_faithful
             .Schedule(5s, COSMETIC_GROUP, [this](TaskContext check_phase)
             {
                 BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-                if (phase > BFTPhases::Preparation)
+                if (phase >= BFTPhases::Preparation)
                 {
+                    ClearState(soldierA);
+                    ClearState(soldierB);
+
+                    soldierA->SetReactState(REACT_AGGRESSIVE);
+                    soldierB->SetReactState(REACT_AGGRESSIVE);
+
+                    me->SetReactState(REACT_AGGRESSIVE);
+
                     scheduler.CancelGroup(COSMETIC_GROUP);
                 }
 
@@ -1440,11 +1527,15 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 	{
         npc_theramore_arcanist::Reset();
 
+        BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+        if (phase > BFTPhases::Preparation)
+            return;
+
         scheduler
             .Schedule(5s, COSMETIC_GROUP, [this](TaskContext check_phase)
             {
                 BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-                if (phase > BFTPhases::Preparation)
+                if (phase >= BFTPhases::Preparation)
                 {
                     scheduler.CancelGroup(COSMETIC_GROUP);
                 }
@@ -1618,9 +1709,6 @@ class spell_theramore_throw_bucket : public SpellScript
 		if (caster && destination)
 		{
 			float radius = GetSpellInfo()->GetEffect(effIndex).CalcRadius();
-			float x = destination->GetPositionX();
-			float y = destination->GetPositionY();
-			float z = destination->GetPositionZ();
 
 			#ifdef CUSTOM_DEBUG
 				for (uint8 i = 0; i < NUMBER_OF_FIRES; ++i)
@@ -1629,7 +1717,7 @@ class spell_theramore_throw_bucket : public SpellScript
 						KillRewarder::Reward(player, caster, NPC_THERAMORE_FIRE_CREDIT);
 				}
 			#else
-				if (Creature* trigger = caster->SummonTrigger(x, y, z, 0.0f, 5s))
+				if (Creature* trigger = caster->SummonCreature(WORLD_TRIGGER, destination->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 5s))
 				{
 					std::list<Creature*> fires;
 					trigger->GetCreatureListWithEntryInGrid(fires, NPC_THERAMORE_FIRE_CREDIT, radius);
@@ -1856,6 +1944,7 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterTheramoreAI(npc_theramore_footman);
 	RegisterTheramoreAI(npc_theramore_faithful);
 	RegisterTheramoreAI(npc_theramore_arcanist);
+	RegisterTheramoreAI(npc_theramore_marksman);
 	RegisterTheramoreAI(npc_wounded_theramore_troop);
 
     RegisterTheramoreAI(npc_faithful_training);

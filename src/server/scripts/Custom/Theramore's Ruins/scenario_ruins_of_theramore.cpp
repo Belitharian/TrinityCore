@@ -14,9 +14,7 @@
 #include "TemporarySummon.h"
 #include "ruins_of_theramore.h"
 
-#define CREATURE_DATA_SIZE 6
-
-const ObjectData creatureData[CREATURE_DATA_SIZE] =
+const ObjectData creatureData[] =
 {
 	{ NPC_JAINA_PROUDMOORE,     DATA_JAINA_PROUDMOORE       },
 	{ NPC_KALECGOS,             DATA_KALECGOS               },
@@ -41,23 +39,33 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 	struct scenario_ruins_of_theramore_InstanceScript : public InstanceScript
 	{
-		scenario_ruins_of_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map),
-			eventId(1), phase(RFTPhases::FindJaina_Isle)
+        scenario_ruins_of_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map),
+            eventId(1), hordeCounter(0), phase(RFTPhases::FindJaina_Isle), irisDummy(ObjectGuid::Empty)
 		{
 			SetHeaders(DataHeader);
 			LoadObjectData(creatureData, gameobjectData);
 		}
-
-        void OnPlayerEnter(Player* /*player*/) override
-        {
-
-        }
 
 		uint32 GetData(uint32 dataId) const override
 		{
 			if (dataId == DATA_SCENARIO_PHASE)
 				return (uint32)phase;
 			return 0U;
+		}
+
+		void OnPlayerEnter(Player* player) override
+		{
+            RFTPhases phase = (RFTPhases)GetData(DATA_SCENARIO_PHASE);
+            if (phase >= RFTPhases::FindJaina_Isle_Valided)
+                player->AddAura(SPELL_SKYBOX_EFFECT_RUINS, player);
+            else
+			    player->AddAura(SPELL_SKYBOX_EFFECT_ENTRANCE, player);
+		}
+
+		void OnPlayerLeave(Player* player) override
+		{
+			player->RemoveAurasDueToSpell(SPELL_SKYBOX_EFFECT_ENTRANCE);
+			player->RemoveAurasDueToSpell(SPELL_SKYBOX_EFFECT_RUINS);
 		}
 
 		void SetData(uint32 dataId, uint32 value) override
@@ -75,16 +83,16 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					break;
 				case EVENT_BACK_TO_SENDER:
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::BackToSender);
-					events.ScheduleEvent(25, 3s);
+					events.ScheduleEvent(25, 1s);
 					break;
 				case EVENT_WARLORD_ROKNAH_SLAIN:
-					GetJaina()->CastSpell(GetJaina(), SPELL_ALUNETH_FREED_EXPLOSION);
+					GetJaina()->CastSpell(GetJaina(), SPELL_EXPLOSIVE_BRAND, true);
 					for (Creature* horde : hordes)
 					{
 						if (horde && horde->IsAlive() && horde->GetEntry() != NPC_ROKNAH_WARLORD)
-							horde->KillSelf();
+							horde->CastSpell(horde, SPELL_EXPLOSIVE_BRAND_DAMAGE);
 					}
-					events.ScheduleEvent(39, 1s);
+					events.ScheduleEvent(39, 800ms);
 					break;
 			}
 		}
@@ -104,9 +112,9 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::FindJaina_Isle_Valided);
 					#ifdef CUSTOM_DEBUG
-					events.ScheduleEvent(17, 1s);
+						events.ScheduleEvent(17, 1s);
 					#else
-					events.ScheduleEvent(1, 1s);
+						events.ScheduleEvent(1, 1s);
 					#endif
 					break;
 				}
@@ -118,7 +126,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						jaina->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 						jaina->SetStandState(UNIT_STAND_STATE_KNEEL);
 						jaina->RemoveAllAuras();
-                        jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+						jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 
 						// Distance minimale pour déclencher l'event
 						jaina->AI()->SetData(0U, 50U);
@@ -131,15 +139,29 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					break;
 				// Cleaning
 				case CRITERIA_TREE_CLEANING:
-					instance->SummonCreatureGroup(0);
-					if (Creature* jaina = GetJaina())
-					{
-						Talk(jaina, SAY_IRIS_PROTECTION_JAINA_03);
-						jaina->RemoveAurasDueToSpell(SPELL_ALUNETH_DRINKS);
-						jaina->AI()->SetData(0U, 15U);
-					}
-					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::Standards_Valided);
-					break;
+                {
+                    std::list<TempSummon*> hordes;
+                    instance->SummonCreatureGroup(0, &hordes);
+                    hordeCounter = (uint32)hordes.size();
+                    for (TempSummon* horde : hordes)
+                    {
+                        horde->SetMaxHealth(horde->GetMaxHealth() * 10.f);
+                        horde->SetFullHealth();
+                        horde->SetTempSummonType(TEMPSUMMON_TIMED_OR_DEAD_DESPAWN);
+
+                        hordeChecker.push_back(horde->GetGUID());
+                    }
+                    if (Creature* jaina = GetJaina())
+                    {
+                        Talk(jaina, SAY_IRIS_PROTECTION_JAINA_03);
+                        jaina->RemoveAurasDueToSpell(SPELL_ALUNETH_DRINKS);
+                        jaina->SetHomePosition(JainaPoint04);
+                        jaina->NearTeleportTo(JainaPoint04);
+                    }
+                    SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::Standards_Valided);
+                    events.ScheduleEvent(44, 2s);
+                    break;
+                }
 				// Back to sender
 				case CRITERIA_TREE_BACK_TO_SENDER:
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::TheFinalAssault);
@@ -158,8 +180,9 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			InstanceScript::OnCreatureCreate(creature);
 
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
-            creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
-            creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
+			creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
+			creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
+            creature->SetBoundingRadius(36.0f);
 
 			switch (creature->GetEntry())
 			{
@@ -305,6 +328,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					{
 						Talk(kalecgos, SAY_AFTER_BATTLE_KALECGOS_13);
 						kalecgos->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+                        if (instance->GetPlayers().isEmpty())
+                            return;
 						if (Player* player = instance->GetPlayers().begin()->GetSource())
 							kalecgos->SetFacingToObject(player);
 					}
@@ -312,7 +337,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					break;
 				case 18:
 					DoTeleportPlayers(instance->GetPlayers(), PlayerPoint01, 12.f);
-					DoCastSpellOnPlayers(SPELL_SCREEN_FX);
+					DoRemoveAurasDueToSpellOnPlayers(SPELL_SKYBOX_EFFECT_ENTRANCE);
+					DoCastSpellOnPlayers(SPELL_SKYBOX_EFFECT_RUINS);
 					TriggerGameEvent(EVENT_HELP_KALECGOS);
 					break;
 
@@ -380,12 +406,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 							dummy->SetObjectScale(5.0f);
 							dummy->AddAura(SPELL_COSMETIC_ARCANE_ENERGY_1, dummy);
 						}
-
-						Talk(jaina, SAY_IRIS_PROTECTION_JAINA_04);
-						if (Player* player = instance->GetPlayers().begin()->GetSource())
-							jaina->SetFacingToObject(player);
 					}
-					Next(4s);
+					Next(2s);
 					break;
 				case 26:
 					if (Creature* jaina = GetJaina())
@@ -414,7 +436,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(5s);
 					break;
 				case 29:
-					if (TempSummon* zeppelin = instance->SummonCreature(NPC_BOMBARDING_ZEPPELIN, ZeppelinPoint.spawn, nullptr, 10 * IN_MILLISECONDS))
+					if (TempSummon* zeppelin = instance->SummonCreature(NPC_BOMBARDING_ZEPPELIN, ZeppelinPoint.spawn, nullptr, 13 * IN_MILLISECONDS))
 					{
 						zeppelin->SetSpeedRate(MOVE_RUN, 5.f);
 						zeppelin->PlayDirectSound(SOUND_ZEPPELIN_FLIGHT);
@@ -423,13 +445,12 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(3s);
 					break;
 				case 30:
+					hordes.clear();
 					instance->SummonCreatureGroup(1, &hordes);
-					for (Creature* horde : hordes)
+					for (TempSummon* horde : hordes)
 					{
-						Position pos = horde->GetPosition();
-						horde->UpdateGroundPositionZ(pos.GetPositionX(), pos.GetPositionY(), pos.m_positionZ);
-						horde->NearTeleportTo(pos);
-						horde->SetImmuneToAll(true);
+                        horde->SetTempSummonType(TEMPSUMMON_TIMED_OR_DEAD_DESPAWN);
+                        horde->SetImmuneToAll(true);
 						horde->CastSpell(horde, SPELL_THALYSSRA_SPAWNS);
 					}
 					Next(4s);
@@ -515,17 +536,23 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case 39:
 					if (Creature* jaina = GetJaina())
 					{
+						for (Creature* horde : hordes)
+						{
+							if (horde && horde->IsAlive() && horde->GetEntry() != NPC_ROKNAH_WARLORD)
+								horde->KillSelf();
+						}
+
 						if (Creature* dummy = instance->GetCreature(irisDummy))
 							dummy->DespawnOrUnsummon();
 
 						jaina->SetImmuneToAll(true);
 						jaina->SetWalk(true);
 
-                        if (GameObject* brokenGlass = GetGameObject(DATA_BROKEN_GLASS))
-                        {
-                            if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, brokenGlass->GetPosition()))
-                                jaina->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_01, trigger, 0.8f);
-                        }
+						if (GameObject* brokenGlass = GetGameObject(DATA_BROKEN_GLASS))
+						{
+							if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, brokenGlass->GetPosition()))
+								jaina->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_01, trigger, 0.8f);
+						}
 					}
 					break;
 				case 40:
@@ -559,7 +586,6 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(1s);
 					break;
 				case 43:
-					DoRemoveAurasDueToSpellOnPlayers(SPELL_SCREEN_FX);
 					if (Creature* jaina = GetJaina())
 					{
 						for (Creature* elemental : elementals)
@@ -572,6 +598,56 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 				#pragma endregion
 
+				// Check dead hordes
+				#pragma region HORDE_CHECKER
+
+				case 44:
+				{
+					uint32 deadCounter = 0;
+
+					if (Creature* jaina = GetJaina())
+					{
+						for (uint8 i = 0; i < hordeCounter; ++i)
+						{
+							Creature* temp = ObjectAccessor::GetCreature(*jaina, hordeChecker[i]);
+							if (temp && temp->IsAlive() && !temp->IsEngaged())
+								temp->AI()->AttackStart(jaina);
+
+							if (!temp || temp->isDead())
+								++deadCounter;
+						}
+
+						// Quand le nombre de membres vivants est inférieur ou égal au nombre de membres morts
+						if (deadCounter >= hordeCounter)
+						{
+							Talk(jaina, SAY_IRIS_PROTECTION_JAINA_04);
+							if (Player* player = instance->GetPlayers().begin()->GetSource())
+								jaina->SetFacingToObject(player);
+
+							jaina->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+							jaina->SetReactState(REACT_PASSIVE);
+
+							events.CancelEvent(44);
+
+							Next(5s);
+						}
+						else
+							events.RescheduleEvent(44, 1s);
+					}
+
+					break;
+				}
+				case 45:
+					if (Creature* jaina = GetJaina())
+					{
+						jaina->SetWalk(false);
+						jaina->SetHomePosition(JainaPoint03);
+						jaina->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_03, JainaPoint03, true, JainaPoint03.GetOrientation());
+					}
+					break;
+
+				#pragma endregion
+
 				default:
 					break;
 			}
@@ -579,8 +655,10 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 		EventMap events;
 		uint32 eventId;
+		uint32 hordeCounter;
 		RFTPhases phase;
 		ObjectGuid irisDummy;
+		GuidVector hordeChecker;
 		std::vector<Creature*> elementals;
 		std::list<TempSummon*> hordes;
 

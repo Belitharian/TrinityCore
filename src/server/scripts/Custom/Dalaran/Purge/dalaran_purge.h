@@ -13,7 +13,7 @@
 #define ROMMATH_PATH_01                 41
 #define TRACKING_PATH_01                9
 
-//#define CUSTOM_DEBUG
+#define CUSTOM_DEBUG
 
 enum DLPCreatures
 {
@@ -193,6 +193,7 @@ enum DLPMisc
 	GOB_PORTAL_TO_STORMWIND             = 353823,
 	GOB_ICE_WALL_COLLISION              = 368620,
 	GOB_PORTAL_TO_PRISON                = 550001,
+	GOB_PORTAL_TO_LIBRARY               = 550002,
 
 	// Criteria Trees
 	CRITERIA_TREE_DALARAN               = 1000047,  // Purple Citadel

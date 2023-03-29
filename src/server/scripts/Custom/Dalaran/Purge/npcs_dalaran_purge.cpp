@@ -8,6 +8,7 @@
 #include "KillRewarder.h"
 #include "MotionMaster.h"
 #include "Object.h"
+#include "GameObjectAI.h"
 #include "PassiveAI.h"
 #include "ScriptMgr.h"
 #include "SpellAuras.h"
@@ -22,7 +23,7 @@
 
 struct npc_guardian_mage_dalaran : public CustomAI
 {
-	npc_guardian_mage_dalaran(Creature* creature) : CustomAI(creature), index(1)
+	npc_guardian_mage_dalaran(Creature* creature) : CustomAI(creature)
 	{
 	}
 
@@ -36,8 +37,6 @@ struct npc_guardian_mage_dalaran : public CustomAI
 		SPELL_BLINK                 = 284877,
 		SPELL_BLIZZARD              = 284968,
 	};
-
-	uint8 index;
 
 	float GetDistance() override
 	{
@@ -139,6 +138,8 @@ struct npc_assassin_dalaran : public CustomAI
 
 	void Reset() override
 	{
+        CustomAI::Reset();
+
 		if (roll_chance_i(20))
 		{
 			scheduler.Schedule(1ms, [this](TaskContext stealth)
@@ -182,13 +183,13 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 
 	enum Spells
 	{
-		SPELL_FROST_BARRIER         = 69787,
 		SPELL_COSMETIC_SNOW         = 83065,
 		SPELL_BLIZZARD              = 284968,
 		SPELL_FROSTBOLT             = 284703,
 		SPELL_FRIGID_SHARD          = 354933,
 		SPELL_TELEPORT              = 135176,
 		SPELL_GLACIAL_SPIKE         = 338488,
+        SPELL_FROZEN_SHIELD         = 396780
 	};
 
 	void Initialize() override
@@ -202,13 +203,32 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 
 	InstanceScript* instance;
 
+    void Reset()
+    {
+        CustomAI::Reset();
+
+        me->ResumeMovement();
+    }
+
+    void AttackStart(Unit* who)
+    {
+        if (!who)
+            return;
+
+        if (who && me->Attack(who, false))
+        {
+            me->PauseMovement();
+            me->SetCanMelee(false);
+        }
+    }
+
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-		if (!me->HasAura(SPELL_FROST_BARRIER)
-			&& me->HealthBelowPctDamaged(15, damage))
+		if (!me->HasAura(SPELL_FROZEN_SHIELD)
+			&& me->HealthBelowPctDamaged(30, damage))
 		{
 			CastStop();
-			DoCast(SPELL_FROST_BARRIER);
+			DoCast(SPELL_FROZEN_SHIELD);
 		}
 	}
 
@@ -314,6 +334,90 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 	}
 };
 
+struct npc_vereesa_windrunner_dalaran : public CustomAI
+{
+    npc_vereesa_windrunner_dalaran(Creature* creature) : CustomAI(creature, AI_Type::Hybrid)
+    {
+        Initialize();
+    }
+
+    enum Spells
+    {
+        SPELL_SHOOT                 = 22907,
+        SPELL_MULTI_SHOOT           = 38310,
+        SPELL_ARCANE_SHOOT          = 255644,
+    };
+
+    float GetDistance() override
+    {
+        return 30.0f;
+    }
+
+    void AttackStart(Unit* who) override
+    {
+        if (!who)
+            return;
+
+        if (who && me->Attack(who, true))
+        {
+            me->GetMotionMaster()->Clear(MOTION_PRIORITY_NORMAL);
+            me->PauseMovement();
+            me->SetCanMelee(false);
+            me->SetSheath(SHEATH_STATE_RANGED);
+        }
+    }
+
+    void MoveInLineOfSight(Unit* who) override
+    {
+        CustomAI::MoveInLineOfSight(who);
+
+        if (!me->IsEngaged())
+            return;
+
+        if (me->IsInRange(who, 0.0f, me->GetCombatReach()))
+        {
+            if (me->CanMelee())
+                return;
+
+            me->SetCanMelee(true);
+            me->SetSheath(SHEATH_STATE_MELEE);
+        }
+        else
+        {
+            SetCombatMove(false, GetDistance());
+            me->SetCanMelee(false);
+            me->SetSheath(SHEATH_STATE_RANGED);
+        }
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        SetCombatMove(false, GetDistance());
+        me->SetCanMelee(false);
+        me->SetSheath(SHEATH_STATE_RANGED);
+
+        DoCast(who, SPELL_SHOOT);
+
+        scheduler
+            .Schedule(2s, [this](TaskContext shoot)
+            {
+                DoCastVictim(SPELL_SHOOT);
+                shoot.Repeat(2s);
+            })
+            .Schedule(8s, [this](TaskContext arcane_shoot)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    DoCast(target, SPELL_ARCANE_SHOOT);
+                arcane_shoot.Repeat(4s, 8s);
+            })
+            .Schedule(15s, [this](TaskContext multi_shoot)
+            {
+                DoCastVictim(SPELL_MULTI_SHOOT);
+                multi_shoot.Repeat(14s, 18s);
+            });
+    }
+};
+
 struct npc_stormwind_cleric : public CustomAI
 {
 	npc_stormwind_cleric(Creature* creature) : CustomAI(creature), ascension(false)
@@ -369,6 +473,8 @@ struct npc_stormwind_cleric : public CustomAI
 
 	void Reset() override
 	{
+        CustomAI::Reset();
+
 		scheduler.Schedule(1s, 5s, [this](TaskContext fortitude)
 		{
 			CastSpellExtraArgs args(true);
@@ -504,7 +610,7 @@ struct npc_mage_commander_zuros : public CustomAI
 
 struct npc_narasi_snowdawn : public CustomAI
 {
-	npc_narasi_snowdawn(Creature* creature) : CustomAI(creature, AI_Type::NoMovement)
+	npc_narasi_snowdawn(Creature* creature) : CustomAI(creature, AI_Type::Distance)
 	{
 		Initialize();
 	}
@@ -659,7 +765,7 @@ struct npc_archmage_landalock : public NullCreatureAI
 			#ifdef CUSTOM_DEBUG
 				Creature* citizen = citizens.front();
 				for (uint8 i = 0; i < 20; i++)
-					KillRewarder(player, citizen, false).Reward(citizen->GetEntry());
+                    KillRewarder::Reward(player, citizen);
 			#else
 				for (Creature* citizen : citizens)
 				{
@@ -845,6 +951,8 @@ struct npc_arcanist_rathaella : public CustomAI
 		CustomAI::Initialize();
 
 		instance = me->GetInstanceScript();
+
+        me->SetWalk(false);
 	}
 
 	void OnSpellClick(Unit* clicker, bool spellClickHandled) override
@@ -859,7 +967,7 @@ struct npc_arcanist_rathaella : public CustomAI
 
 		#ifdef CUSTOM_DEBUG
 			if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
-				KillRewarder(player, me, false).Reward(me->GetEntry());
+                KillRewarder::Reward(player, me);
 		#endif
 	}
 
@@ -891,9 +999,12 @@ struct npc_arcanist_rathaella : public CustomAI
 		if (spellInfo->Id != SPELL_FREE_CAPTIVE)
 			return;
 
-		me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-		me->RemoveAurasDueToSpell(SPELL_ATTACHED);
+        me->RemoveAllAuras();
+        me->GetMotionMaster()->Clear();
+        me->GetMotionMaster()->MoveIdle();
+        me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
 		me->AI()->Talk(SAY_ARCANIST_RATHAELLA_01);
+        me->SetWalk(false);
 
 		scheduler.Schedule(3s, [caster, this](TaskContext context)
 		{
@@ -909,12 +1020,11 @@ struct npc_arcanist_rathaella : public CustomAI
 					context.Repeat(1s);
 					break;
 				case 2:
-					me->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, RathaellaPath01, RATHAELLA_PATH_01, true, false);
+					me->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, RathaellaPath01, RATHAELLA_PATH_01);
 					context.Repeat(2s);
 					break;
 				case 3:
 					me->AI()->Talk(SAY_ARCANIST_RATHAELLA_02);
-					me->SetWalk(false);
 					break;
 			}
 		});
@@ -966,11 +1076,6 @@ struct npc_sorin_magehand : public NullCreatureAI
 		me->SetImmuneToAll(true);
 		me->CastSpell(me, SPELL_ARCANE_BARRIER, true);
 		me->CastSpell(me, SPELL_RUNES_OF_SHIELDING, true);
-	}
-
-	void Reset() override
-	{
-		scheduler.CancelAll();
 	}
 
 	void UpdateAI(uint32 diff) override
@@ -1031,22 +1136,15 @@ struct npc_sunreaver_citizen : public CustomAI
 
 	void AttackStart(Unit* who) override
 	{
-		if (!who)
-			return;
+        if (me->HasUnitState(UNIT_STATE_FLEEING_MOVE))
+        {
+            me->GetMotionMaster()->Clear();
+        }
 
-		if (me->HasUnitState(UNIT_STATE_FLEEING_MOVE))
-			me->GetMotionMaster()->Clear();
+        me->CallAssistance();
+        me->SetEmoteState(EMOTE_STATE_NONE);
 
-		me->SetEmoteState(EMOTE_STATE_NONE);
-
-		if (me->Attack(who, true))
-		{
-			me->CallAssistance();
-
-			DoStartMovement(who, GetDistance());
-
-			SetCombatMovement(true);
-		}
+        CustomAI::AttackStart(who);
 	}
 
 	void JustEngagedWith(Unit* who) override
@@ -1088,7 +1186,7 @@ struct npc_sunreaver_pyromancer : public CustomAI
 
 	void Reset() override
 	{
-		Initialize();
+        CustomAI::Reset();
 
 		scheduler.Schedule(1ms, [this](TaskContext spell_molten_armor)
 		{
@@ -1150,7 +1248,7 @@ struct npc_sunreaver_aegis : public CustomAI
 
 	void Reset() override
 	{
-		Initialize();
+        CustomAI::Reset();
 
 		scheduler.Schedule(1ms, [this](TaskContext buffs)
 		{
@@ -1255,7 +1353,7 @@ struct npc_sunreaver_summoner : public CustomAI
 
 	void Reset() override
 	{
-		Initialize();
+        CustomAI::Reset();
 
 		scheduler.Schedule(1s, [this](TaskContext /*context*/)
 		{
@@ -1423,7 +1521,7 @@ struct npc_magister_brasael : public CustomAI
 	static constexpr uint32 BAGS_COUNT = 50;
 	static constexpr uint32 DAMAGE_LIMITATION = 5000;
 
-	npc_magister_brasael(Creature* creature) : CustomAI(creature, AI_Type::NoMovement),
+	npc_magister_brasael(Creature* creature) : CustomAI(creature, AI_Type::Distance),
 		cauterized(false), damagedBags(0)
 	{
 	}
@@ -1518,9 +1616,7 @@ struct npc_magister_brasael : public CustomAI
 
 	void Reset() override
 	{
-		summons.DespawnAll();
-
-		Initialize();
+        CustomAI::Reset();
 
 		for (uint8 i = 0; i < BAGS_COUNT; i++)
 			me->AddAura(SPELL_SURVIVOR_BAG, me);
@@ -1695,7 +1791,7 @@ struct npc_magister_surdiel : public CustomAI
 {
 	static constexpr float DAMAGE_REDUCTION = 0.01f;
 
-	npc_magister_surdiel(Creature* creature) : CustomAI(creature, AI_Type::NoMovement), combatFinal(false)
+	npc_magister_surdiel(Creature* creature) : CustomAI(creature, AI_Type::Distance), combatFinal(false)
 	{
 		instance = me->GetInstanceScript();
 	}
@@ -1757,9 +1853,7 @@ struct npc_magister_surdiel : public CustomAI
 
 	void Reset() override
 	{
-		summons.DespawnAll();
-
-		Initialize();
+        Initialize();
 
 		combatFinal = false;
 	}
@@ -2033,8 +2127,8 @@ struct npc_high_arcanist_savor : public CustomAI
 	static constexpr uint32 SAVOR_MAX_WAVES = 4;
 	static constexpr float SAVOR_SPAWN_COUNT = 2.0f;
 
-	npc_high_arcanist_savor(Creature* creature) : CustomAI(creature, AI_Type::NoMovement), phase(Phases::None),
-		clones(creature), lastSpeed(0), timeCount(0), sunreaversCount(0), wavesCount(0), portal(nullptr)
+	npc_high_arcanist_savor(Creature* creature) : CustomAI(creature), phase(Phases::None),
+		clones(creature), lastSpeed(SPELL_SPEED_SLOW), timeCount(0), sunreaversCount(0), wavesCount(0), portal(nullptr)
 	{
 		instance = me->GetInstanceScript();
 	}
@@ -2115,17 +2209,28 @@ struct npc_high_arcanist_savor : public CustomAI
 	uint32 sunreaversCount;
 	uint32 wavesCount;
 
-	const Position barrierPoint01   = { -688.29f, 4387.71f, 747.99f, 5.50f };
-	const Position portalPoint01    = { -679.94f, 4355.88f, 748.57f, 1.29f };
+	const Position portalPoint01    = { -819.12f, 4499.20f, 601.50f, 0.88f };
 
 	void Reset() override
 	{
-		summons.DespawnAll();
-
-		Initialize();
+        CustomAI::Reset();
 
 		phase = Phases::None;
 	}
+
+    void AttackStart(Unit* who) override
+    {
+        if (!who)
+            return;
+
+        if (me->Attack(who, false))
+        {
+            me->SetCanMelee(false);
+            me->SetSheath(SHEATH_STATE_UNARMED);
+
+            SetCombatMovement(false);
+        }
+    }
 
 	void EnterEvadeMode(EvadeReason why) override
 	{
@@ -2143,6 +2248,9 @@ struct npc_high_arcanist_savor : public CustomAI
 		CustomAI::JustDied(killer);
 		DoCastOnPlayers(SPELL_SPEED_NORMAL);
 		ClosePortal(portal);
+
+        if (Creature* barrier = me->FindNearestCreature(NPC_ARCANE_BARRIER, 50.f))
+            barrier->DespawnOrUnsummon();
 	}
 
 	void JustSummoned(Creature* summon) override
@@ -2187,12 +2295,17 @@ struct npc_high_arcanist_savor : public CustomAI
 				scheduler.CancelGroup(GROUP_ORB);
 				scheduler.Schedule(2s, GROUP_TIME, [this](TaskContext spell_speed)
 				{
-					if (Player* player = GetFirstPlayer())
-					{
-						lastSpeed = player->HasAura(SPELL_SPEED_SLOW) ? SPELL_SPEED_FAST : SPELL_SPEED_SLOW;
-						DoCastOnPlayers(lastSpeed);
-						spell_speed.Repeat(30s);
-					}
+                    if (lastSpeed == SPELL_SPEED_FAST)
+                    {
+                        DoCastOnPlayers(SPELL_SPEED_SLOW);
+                        lastSpeed = SPELL_SPEED_SLOW;
+                    }
+                    else
+                    {
+                        DoCastOnPlayers(SPELL_SPEED_FAST);
+                        lastSpeed = SPELL_SPEED_FAST;
+                    }
+					spell_speed.Repeat(15s);
 				});
 				break;
 			case ACTION_HORDE_PORTAL_SPAWN:
@@ -2338,19 +2451,9 @@ struct npc_high_arcanist_savor : public CustomAI
 		}
 	}
 
-	void JustEngagedWith(Unit* who) override
+	void JustEngagedWith(Unit* /*who*/) override
 	{
-		if (who->GetTypeId() == TYPEID_PLAYER)
-		{
-			if (Creature* barrier = me->SummonCreature(NPC_ARCANE_BARRIER, barrierPoint01))
-				barrier->SetObjectScale(1.2f);
-
-			TeleportPlayersAround(me);
-		}
-
 		me->AI()->Talk(SAY_SAVOR_AGGRO);
-
-		me->SummonCreature(NPC_ARCANE_BARRIER, barrierPoint01);
 
 		scheduler
 			.Schedule(2s, [this](TaskContext /*summon_time*/)
@@ -2380,7 +2483,6 @@ struct npc_high_arcanist_savor : public CustomAI
 			.Schedule(1s, GROUP_ORB, [this](TaskContext arcanic_orb)
 			{
 				phase = Phases::Orb;
-				DoCastOnPlayers(SPELL_SPEED_FAST);
 				DoCast(SPELL_ARCANE_ORB);
 			});
 	}
@@ -2701,7 +2803,7 @@ struct npc_arcane_barrier : public NullCreatureAI
 
 struct npc_book_of_arcane_monstrosities : public CustomAI
 {
-	npc_book_of_arcane_monstrosities(Creature* creature) : CustomAI(creature, AI_Type::NoMovement)
+	npc_book_of_arcane_monstrosities(Creature* creature) : CustomAI(creature, AI_Type::Distance)
 	{
 		if (GameObject* book = me->SummonGameObject(GOB_OPEN_BOOK_VISUAL, me->GetPosition(), QuaternionData::fromEulerAnglesZYX(me->GetOrientation(), 0.0f, 0.0f), 0s))
 			bookGUID = book->GetGUID();
@@ -2767,7 +2869,7 @@ struct npc_book_of_arcane_monstrosities : public CustomAI
 
 struct npc_arcane_orb : public CustomAI
 {
-	npc_arcane_orb(Creature* creature) : CustomAI(creature, AI_Type::NoMovement)
+	npc_arcane_orb(Creature* creature) : CustomAI(creature, AI_Type::Distance)
 	{
 		instance = creature->GetInstanceScript();
 
@@ -3017,6 +3119,34 @@ struct at_rain_of_fire : AreaTriggerAI
 	}
 };
 
+struct go_portal_savor : public GameObjectAI
+{
+    go_portal_savor(GameObject* gameobject) : GameObjectAI(gameobject)
+    {
+        instance = gameobject->GetInstanceScript();
+    }
+
+    InstanceScript* instance;
+
+    const Position toSavor      = { -819.12f, 4499.20f, 601.50f, 0.88f };
+    const Position fromSavor    = { -673.41f, 4377.76f, 748.58f, 2.65f };
+
+    bool OnReportUse(Player* player) override
+    {
+        DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
+        if (phase == DLPPhases::TheEscape)
+        {
+            player->CastSpell(fromSavor, SPELL_TELEPORT);
+        }
+        else
+        {
+            player->CastSpell(toSavor, SPELL_TELEPORT);
+        }
+
+        return false;
+    }
+};
+
 // Teleport - 135176
 class spell_purge_teleport : public SpellScript
 {
@@ -3234,6 +3364,7 @@ void AddSC_npcs_dalaran_purge()
 	RegisterDalaranAI(npc_guardian_mage_dalaran);
 
 	// Alliance
+	RegisterDalaranAI(npc_vereesa_windrunner_dalaran);
 	RegisterDalaranAI(npc_jaina_dalaran_patrol);
 	RegisterDalaranAI(npc_stormwind_cleric);
 	RegisterDalaranAI(npc_archmage_landalock);
@@ -3272,4 +3403,7 @@ void AddSC_npcs_dalaran_purge()
 	RegisterSpellScript(spell_speed);
 	RegisterSpellScript(spell_arcane_orb);
 	RegisterSpellScript(spell_big_bang);
+
+    // Gameobjects
+    RegisterGameObjectAI(go_portal_savor);
 }

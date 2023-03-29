@@ -7,7 +7,7 @@
 
 struct npc_jaina_dalaran_purge : public CustomAI
 {
-	npc_jaina_dalaran_purge(Creature* creature) : CustomAI(creature)
+	npc_jaina_dalaran_purge(Creature* creature) : CustomAI(creature, AI_Type::None)
 	{
 		Initialize();
 	}
@@ -84,20 +84,6 @@ struct npc_jaina_dalaran_purge : public CustomAI
 						break;
 				}
 			}
-		}
-	}
-
-	void CastHordeIllusionOnPlayers(Player* player)
-	{
-		me->HandleEmoteCommand(EMOTE_ONESHOT_CASTSTRONG, player);
-		if (Map* map = me->GetMap())
-		{
-			map->DoOnPlayers([this](Player* player)
-			{
-				player->CombatStop();
-				player->CastSpell(player, SPELL_FACTION_OVERRIDE);
-				player->CastSpell(player, SPELL_HORDE_ILLUSION);
-			});
 		}
 	}
 };
@@ -179,7 +165,7 @@ struct npc_aethas_sunreaver_purge : public CustomAI
 
 struct npc_magister_rommath_purge : public CustomAI
 {
-	npc_magister_rommath_purge(Creature* creature) : CustomAI(creature), evocating(false)
+	npc_magister_rommath_purge(Creature* creature) : CustomAI(creature), evocating(false), eventId(0)
 	{
 		Initialize();
 	}
@@ -191,6 +177,7 @@ struct npc_magister_rommath_purge : public CustomAI
 
 	enum Spells
 	{
+        SPELL_FIRE_CHANNELING       = 45461,
 		SPELL_FIREBALL              = 79854,
 		SPELL_COMBUSTION            = 190319,
         SPELL_EVOCATION             = 211765,
@@ -200,6 +187,8 @@ struct npc_magister_rommath_purge : public CustomAI
 		SPELL_BLAZING_BARRIER       = 295238,
         SPELL_EMBER_BLAST           = 325877,
         SPELL_BLAZING_SURGE         = 329509,
+        SPELL_PHOENIX_FIRE          = 266964,
+        SPELL_PHOENIX_VISUAL        = 336658
 	};
 
 	void Initialize()
@@ -208,11 +197,20 @@ struct npc_magister_rommath_purge : public CustomAI
 	}
 
 	InstanceScript* instance;
+    EventMap events;
+    uint32 eventId;
     bool evocating;
 
     void Reset() override
     {
         scheduler.CancelGroup(GROUP_COMBAT);
+
+        events.Reset();
+
+        if (Player* player = me->GetCharmerOrOwnerPlayerOrPlayerItself())
+        {
+            events.ScheduleEvent(1, 5s);
+        }
 
         Initialize();
     }
@@ -386,6 +384,50 @@ struct npc_magister_rommath_purge : public CustomAI
 					meteor.Repeat(15s);
 			});
 };
+
+    void UpdateAI(uint32 diff) override
+    {
+        CustomAI::UpdateAI(diff);
+
+        events.Update(diff);
+
+        if (me->IsEngaged())
+            return;
+
+        Player* player = me->GetCharmerOrOwnerPlayerOrPlayerItself();
+        if (!player)
+            return;
+
+        if (!player->isDead())
+            return;
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (eventId = events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                case 1:
+                    CastStop();
+                    DoCastSelf(SPELL_FIRE_CHANNELING);
+                    events.ScheduleEvent(2, 1s);
+                    break;
+                case 2:
+                    player->AddAura(SPELL_PHOENIX_FIRE, player);
+                    events.ScheduleEvent(3, 1s);
+                    break;
+                case 3:
+                    player->CastSpell(player, SPELL_PHOENIX_VISUAL);
+                    player->ResurrectPlayer(100.0f);
+                    player->RemoveAurasDueToSpell(SPELL_PHOENIX_FIRE);
+                    break;
+            }
+
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
+        }
+    }
 
     bool CanAIAttack(Unit const* who) const override
     {

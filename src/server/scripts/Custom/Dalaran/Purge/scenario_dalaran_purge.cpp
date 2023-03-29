@@ -173,6 +173,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 						jaina->RemoveAllAuras();
 						jaina->NearTeleportTo(JainaPos01);
 						jaina->SetHomePosition(JainaPos01);
+                        jaina->AI()->EnterEvadeMode();
 					}
 
 					DoOnCreatures(patrol, [this](Creature* creature)
@@ -235,7 +236,15 @@ class scenario_dalaran_purge : public InstanceMapScript
 				case CRITERIA_TREE_CASHING_OUT:
 				{
 					DoRemoveAurasDueToSpellOnPlayers(SPELL_WAND_OF_DISPELLING);
-					Talk(GetJaina(), SAY_SAVOR_JAINA_01);
+                    if (Creature* jaina = GetJaina())
+                    {
+                        Talk(GetJaina(), SAY_SAVOR_JAINA_01);
+
+                        jaina->AI()->EnterEvadeMode(EvadeReason::Other);
+
+                        if (GameObject* portal = ObjectAccessor::GetGameObject(*jaina, savorPortal))
+                            portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
+                    }
 					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::RemainingSunreavers);
 					break;
 				}
@@ -246,11 +255,14 @@ class scenario_dalaran_purge : public InstanceMapScript
 						Talk(rommath, SAY_INFILTRATE_ROMMATH_07);
 					if (Creature* jaina = GetJaina())
 					{
-						jaina->NearTeleportTo(JainaPos02);
+                        if (GameObject* portal = ObjectAccessor::GetGameObject(*jaina, savorPortal))
+                            ClosePortal(portal);
+
+                        jaina->NearTeleportTo(JainaPos02);
 						jaina->SetHomePosition(JainaPos02);
-						jaina->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                        jaina->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 						jaina->CastSpell(jaina, SPELL_CHAT_BUBBLE);
-					}
+                    }
 					if (Creature* sorin = GetCreature(DATA_SORIN_MAGEHAND))
 					{
 						sorin->RemoveAllAuras();
@@ -329,8 +341,12 @@ class scenario_dalaran_purge : public InstanceMapScript
 						sorin->CastSpell(sorin, SPELL_RUNES_OF_SHIELDING, true);
 					}
 
-					if (Creature* rommath = GetRommath())
-						rommath->CastSpell(rommath, SPELL_COSMETIC_YELLOW_ARROW);
+                    if (Creature* rommath = GetRommath())
+                    {
+                        rommath->CastSpell(rommath, SPELL_COSMETIC_YELLOW_ARROW);
+                        rommath->SetFullHealth();
+                        rommath->SetFullPower(POWER_MANA);
+                    }
 
 					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
 					{
@@ -433,6 +449,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
 			creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
 			creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
+			creature->SetBoundingRadius(80.f);
 
 			switch (creature->GetEntry())
 			{
@@ -531,6 +548,15 @@ class scenario_dalaran_purge : public InstanceMapScript
 					go->SetLootState(GO_READY);
 					go->UseDoorOrButton();
 					break;
+                case GOB_PORTAL_TO_LIBRARY:
+                    if (savorPortal.IsEmpty())
+                    {
+                        go->SetLootState(GO_READY);
+                        go->UseDoorOrButton();
+                        go->SetFlag(GO_FLAG_NOT_SELECTABLE);
+                        savorPortal = go->GetGUID();
+                    }
+                    break;
 			}
 		}
 
@@ -962,16 +988,17 @@ class scenario_dalaran_purge : public InstanceMapScript
 		uint8 index;
 		DLPPhases phase;
 
-		std::vector<ObjectGuid> highmages;
-		std::vector<ObjectGuid> patrol;
-		std::vector<ObjectGuid> citizens;
-		std::vector<ObjectGuid> sunreavers;
-		std::vector<ObjectGuid> extraction;
-		std::vector<ObjectGuid> barriers;
+		GuidVector highmages;
+        GuidVector patrol;
+        GuidVector citizens;
+        GuidVector sunreavers;
+        GuidVector extraction;
+        GuidVector barriers;
 
 		std::list<TempSummon*> prison;
 
 		ObjectGuid endPortal;
+        ObjectGuid savorPortal;
 
 		// Accesseurs
 		#pragma region ACCESSORS

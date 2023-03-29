@@ -16,7 +16,7 @@
 
 struct npc_jaina_theramore : public CustomAI
 {
-	npc_jaina_theramore(Creature* creature) : CustomAI(creature, AI_Type::Melee)
+	npc_jaina_theramore(Creature* creature) : CustomAI(creature, AI_Type::Melee), instance(nullptr)
 	{
 		Initialize();
 	}
@@ -37,8 +37,10 @@ struct npc_jaina_theramore : public CustomAI
         SPELL_ARCANE_RIFT           = 388902,
 	};
 
-	void Initialize()
+	void Initialize() override
 	{
+        CustomAI::Initialize();
+
 		instance = me->GetInstanceScript();
 	}
 
@@ -75,8 +77,8 @@ struct npc_jaina_theramore : public CustomAI
                     break;
             }
 
-            DoCastSelf(SPELL_TELEPORT_CAST_TIME, true);
-            scheduler.Schedule(3800ms, [this, position](TaskContext /*teleport*/)
+            DoCastSelf(SPELL_TELEPORT_CAST_TIME);
+            scheduler.Schedule(1800ms, [this, position](TaskContext /*teleport*/)
             {
                 me->SetHomePosition(position);
                 me->NearTeleportTo(position);
@@ -572,7 +574,7 @@ struct npc_rhonin : public CustomAI
 
 struct npc_kinndy_sparkshine : public CustomAI
 {
-	npc_kinndy_sparkshine(Creature* creature) : CustomAI(creature, AI_Type::NoMovement), evocating(false)
+	npc_kinndy_sparkshine(Creature* creature) : CustomAI(creature, AI_Type::Distance), evocating(false)
 	{
 	}
 

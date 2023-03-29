@@ -22,10 +22,10 @@ struct npc_water_elementals_theramore : public CustomAI
 
 	enum Spells
 	{
-		SPELL_FROST_BARRIER         = 69787,
 		SPELL_WATER_SPOUT           = 271287,
 		SPELL_WATERY_DOME           = 258153,
 		SPELL_WATER_BOLT_VOLLEY     = 290084,
+		SPELL_IMMUNE                = 299144,
 		SPELL_WATER_BOLT            = 355225,
 	};
 
@@ -36,8 +36,7 @@ struct npc_water_elementals_theramore : public CustomAI
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
-		if (!me->HasAura(SPELL_FROST_BARRIER) && me->GetMap()->GetId() != 5002)
-			DoCast(SPELL_FROST_BARRIER);
+		if (me->GetMap()->GetId() != 5002) DoCast(SPELL_IMMUNE);
 
 		scheduler
 			.Schedule(5ms, [this](TaskContext water_bolt)
@@ -67,25 +66,23 @@ struct npc_water_elementals_theramore : public CustomAI
 
 struct npc_jaina_image : public CustomAI
 {
-	npc_jaina_image(Creature* creature) : CustomAI(creature, AI_Type::NoMovement)
+	npc_jaina_image(Creature* creature) : CustomAI(creature, AI_Type::Distance)
 	{
 	}
 
 	enum Spells
 	{
 		SPELL_ARCANE_PROJECTILES    = 5143,
-		SPELL_ALPHA_50              = 44816,
 		SPELL_EVOCATION             = 243070,
 		SPELL_SUPERNOVA             = 157980,
 		SPELL_ARCANE_BLAST          = 291316,
 		SPELL_ARCANE_BARRAGE        = 291318,
-		SPELL_COSMETIC_PURPLE_STATE = 299145,
+        SPELL_MIRROR_IMAGE_FX       = 370617,
 	};
 
 	void Reset()
 	{
-		me->AddAura(SPELL_COSMETIC_PURPLE_STATE, me);
-		me->AddAura(SPELL_ALPHA_50, me);
+		me->AddAura(SPELL_MIRROR_IMAGE_FX, me);
 	}
 
 	void JustEngagedWith(Unit* who) override
@@ -95,46 +92,61 @@ struct npc_jaina_image : public CustomAI
 		scheduler
 			.Schedule(5ms, [this](TaskContext context)
 			{
-				if (me->GetPowerPct(POWER_MANA) <= 20)
-				{
-					const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
-					Milliseconds ms = Milliseconds(info->CalcDuration(me));
+                if (me->GetPowerPct(POWER_MANA) <= 20)
+                {
+                    if (Spell* spell = me->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+                    {
+                        if (spell->getState() != SPELL_STATE_FINISHED && spell->IsChannelActive())
+                        {
+                            context.Repeat(2s);
+                        }
+                    }
+                    else
+                    {
+                        const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
+                        Milliseconds ms = Milliseconds(info->CalcDuration());
+                        CastSpellExtraArgs args(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD);
 
-					me->CastSpell(me, SPELL_EVOCATION);
-					me->GetSpellHistory()->ResetCooldown(info->Id, true);
-					me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
+                        me->CastSpell(me, SPELL_EVOCATION, args);
+                        me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
 
-					context.Repeat(ms + 500ms);
-				}
-				else
-				{
-					uint32 spellId = SPELL_ARCANE_BLAST;
-					if (roll_chance_i(30))
-					{
-						spellId = SPELL_ARCANE_PROJECTILES;
-					}
-					else if (roll_chance_i(40))
-					{
-						spellId = SPELL_ARCANE_BARRAGE;
-					}
-					else if (roll_chance_i(20))
-					{
-						spellId = SPELL_SUPERNOVA;
-					}
+                        context.Repeat(ms + 800ms);
+                    }
+                }
+                else
+                {
+                    Milliseconds ms = 50ms;
+                    if (!me->HasUnitState(UNIT_STATE_CASTING))
+                    {
+                        uint32 spellId = SPELL_ARCANE_BLAST;
+                        if (roll_chance_i(30))
+                        {
+                            spellId = SPELL_ARCANE_PROJECTILES;
+                        }
+                        else if (roll_chance_i(20))
+                        {
+                            spellId = SPELL_ARCANE_BARRAGE;
+                        }
+                        else if (roll_chance_i(10))
+                        {
+                            spellId = SPELL_SUPERNOVA;
+                        }
 
-					const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
-					Milliseconds ms = Milliseconds(info->CalcCastTime());
+                        const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
+                        ms = Milliseconds(info->CalcCastTime());
 
-					DoCastVictim(info->Id);
+                        if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                        {
+                            me->CastSpell(target, spellId);
+                            me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
+                        }
 
-					me->GetSpellHistory()->ResetCooldown(info->Id, true);
-					me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
+                        if (info->IsChanneled())
+                            ms = Milliseconds(info->CalcDuration(me));
+                    }
 
-					if (info->IsChanneled())
-						ms = Milliseconds(info->CalcDuration(me));
-
-					context.Repeat(ms + 500ms);
-				}
+                    context.Repeat(ms + 500ms);
+                }
 			});
 	}
 };

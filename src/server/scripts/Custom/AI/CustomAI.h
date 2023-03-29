@@ -11,8 +11,8 @@ enum class AI_Type
 {
     None,
     Melee,
+    Hybrid,
     Distance,
-    NoMovement
 };
 
 class TC_API_EXPORT CustomAI : public ScriptedAI
@@ -42,6 +42,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void CastStop();
         void CastStop(uint32 exception);
         void CastStop(const std::vector<uint32>& exceptions);
+        void SetCombatMove(bool on, float distance = 0.0f, bool stopMoving = false);
 
         std::list<Unit*> DoFindMissingBuff(uint32 spellId);
 
@@ -49,6 +50,9 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         TaskScheduler scheduler;
         SummonList summons;
         AI_Type type;
+        uint8 interruptCounter;
+        bool canCombatMove;
+        bool wasInterrupted;
 
         uint32 EnemiesInRange(float distance);
         uint32 EnemiesInFront(float distance);

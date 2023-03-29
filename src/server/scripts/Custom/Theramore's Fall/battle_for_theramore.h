@@ -131,13 +131,14 @@ enum BFTCreatures
 	NPC_THADER_WINDERMERE               = 500009,
 	NPC_THALEN_SONGWEAVER               = 500010,
 	NPC_THERAMORE_WOUNDED_TROOP         = 500012,
-	NPC_THERAMORE_FIRE_CREDIT           = 500013
+	NPC_THERAMORE_FIRE_CREDIT           = 500013,
+
+    NPC_INVOKER                         = 550001,
 };
 
 enum BFTMisc
 {
 	// Spells
-	SPELL_TELEPORT_CAST_TIME            = 90058,
 	SPELL_COSMETIC_LARGE_FIRE           = 277763,
 	SPELL_COSMETIC_FIRE_LIGHT           = 320348,
 	SPELL_CAMERA_SHAKE_VOLCANO          = 246439,
@@ -150,9 +151,11 @@ enum BFTMisc
 	SPELL_RUNIC_SHIELD                  = 346057,
 	SPELL_FROST_BREATH                  = 300548,
 	SPELL_THERAMORE_EXPLOSION_SCENE     = 128446,
+    SPELL_SKYBOX_EFFECT                 = 279122,
 	SPELL_TELEPORT_TARGET               = 268294,
 	SPELL_THALYSSRA_SPAWNS              = 302492,
 	SPELL_CHAT_BUBBLE                   = 140812,
+	SPELL_TELEPORT_CAST_TIME            = 373184,
 
 	// GameObjects
 	GOB_MYSTIC_BARRIER_01               = 323860,
