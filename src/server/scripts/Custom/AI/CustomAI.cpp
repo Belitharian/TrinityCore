@@ -1,6 +1,7 @@
 #include "CustomAI.h"
-#include "ScriptMgr.h"
-#include "ScriptedCreature.h"
+#include "CellImpl.h"
+#include "Containers.h"
+#include "GridNotifiers.h"
 
 CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 	type(type), summons(creature), wasInterrupted(false), canCombatMove(true)
@@ -41,14 +42,14 @@ void CustomAI::SummonedCreatureDies(Creature* summon, Unit* killer)
 
 void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
 {
-    if (caster->GetGUID() == me->GetGUID())
-        return;
-
-    if (spellInfo->HasEffect(SPELL_EFFECT_INTERRUPT_CAST) || spellInfo->HasEffect(SPELL_EFFECT_KNOCK_BACK))
+    if (caster->GetGUID() != me->GetGUID()
+        && (spellInfo->HasEffect(SPELL_EFFECT_INTERRUPT_CAST) || spellInfo->HasEffect(SPELL_EFFECT_KNOCK_BACK)))
     {
         wasInterrupted = true;
 
-        SetCombatMove(true);
+        me->SetCanMelee(true);
+
+        SetCombatMove(true, 0.0f, false, true);
 
         interruptCounter++;
         if (interruptCounter >= 3)
@@ -74,6 +75,8 @@ void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
             {
                 wasInterrupted = false;
 
+                me->SetCanMelee(false);
+
                 SetCombatMove(false, GetDistance());
             });
         }
@@ -82,6 +85,11 @@ void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
 
 void CustomAI::EnterEvadeMode(EvadeReason why)
 {
+    if (me->GetWaypointPath() != 0)
+    {
+        me->ResumeMovement();
+    }
+
 	summons.DespawnAll();
 	scheduler.CancelAll();
 
@@ -105,23 +113,31 @@ void CustomAI::AttackStart(Unit* who)
 
     if (who && me->Attack(who, true))
     {
-        me->GetMotionMaster()->Clear(MOTION_PRIORITY_NORMAL);
+        if (me->GetWaypointPath() != 0)
+        {
+            me->GetMotionMaster()->Clear(MOTION_PRIORITY_NORMAL);
+        }
+
         me->PauseMovement();
 
-        if (type == AI_Type::Distance)
+        switch (type)
         {
-            me->SetCanMelee(true);
-            me->SetSheath(SHEATH_STATE_UNARMED);
-        }
-        else if (type == AI_Type::Melee || type == AI_Type::Hybrid)
-        {
-            me->SetCanMelee(true);
-            me->GetMotionMaster()->MoveChase(who);
-        }
-        else
-        {
-            me->SetCanMelee(false);
-            me->SetSheath(SHEATH_STATE_UNARMED);
+            case AI_Type::Distance:
+                me->SetCanMelee(true);
+                me->SetSheath(SHEATH_STATE_UNARMED);
+                break;
+            case AI_Type::Melee:
+                me->SetCanMelee(true);
+                me->GetMotionMaster()->MoveChase(who);
+                break;
+            case AI_Type::Hybrid:
+                me->SetCanMelee(true);
+                me->GetMotionMaster()->MoveChase(who);
+                break;
+            default:
+                me->SetCanMelee(false);
+                me->SetSheath(SHEATH_STATE_UNARMED);
+                break;
         }
     }
 }
@@ -130,6 +146,9 @@ void CustomAI::JustDied(Unit* killer)
 {
 	summons.DespawnAll();
 	scheduler.CancelAll();
+
+    me->RemoveAllDynObjects();
+    me->RemoveAllAreaTriggers();
 
 	ScriptedAI::JustDied(killer);
 }
@@ -211,36 +230,39 @@ void CustomAI::CastStop(uint32 exception)
 	}
 }
 
-void CustomAI::SetCombatMove(bool on, float distance, bool stopMoving)
+void CustomAI::SetCombatMove(bool on, float distance, bool stopMoving, bool force)
 {
-    if (canCombatMove == on)
-        return;
-
-    canCombatMove = on;
-
-    if (distance)
-        distance = me->GetCombatReach();
+    if (distance) distance = me->GetCombatReach();
 
     if (me->IsEngaged())
     {
-        if (on)
+        if (force)
         {
-            if (!me->HasReactState(REACT_PASSIVE) && me->GetVictim() && !me->GetMotionMaster()->HasMovementGenerator([](MovementGenerator const* movement) -> bool
-            {
-                return movement->GetMovementGeneratorType() == CHASE_MOTION_TYPE && movement->Mode == MOTION_MODE_DEFAULT && movement->Priority == MOTION_PRIORITY_NORMAL;
-            }))
+            me->ResumeMovement();
+
+            me->GetMotionMaster()->Clear();
+            me->GetMotionMaster()->Remove(CHASE_MOTION_TYPE);
+            me->GetMotionMaster()->MoveChase(me->GetVictim(), distance);
+        }
+        else
+        {
+            if (canCombatMove == on)
+                return;
+
+            canCombatMove = on;
+
+            me->GetMotionMaster()->Clear();
+            me->GetMotionMaster()->Remove(CHASE_MOTION_TYPE);
+
+            if (on)
             {
                 me->GetMotionMaster()->MoveChase(me->GetVictim(), distance);
             }
-        }
-        else if (MovementGenerator* movement = me->GetMotionMaster()->GetMovementGenerator([](MovementGenerator const* a) -> bool
-        {
-            return a->GetMovementGeneratorType() == CHASE_MOTION_TYPE && a->Mode == MOTION_MODE_DEFAULT && a->Priority == MOTION_PRIORITY_NORMAL;
-        }))
-        {
-            me->GetMotionMaster()->Remove(movement);
-            if (stopMoving)
-                me->StopMoving();
+            else
+            {
+                if (stopMoving)
+                    me->StopMoving();
+            }
         }
     }
 }
@@ -268,11 +290,28 @@ bool CustomAI::HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic)
 	return spellInfo->GetAllEffectsMechanicMask() & (UI64LIT(1) << mechanic);
 }
 
+bool CustomAI::ShouldTakeDamage()
+{
+    return me->GetHealthPct() > me->GetSparringHealthPct();
+}
+
 std::list<Unit*> CustomAI::DoFindMissingBuff(uint32 spellId)
 {
+    const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
+
+    float range = info->GetEffect(EFFECT_0).CalcRadius();
+
 	std::list<Unit*> list;
-	Trinity::FriendlyMissingBuff u_check(me, spellId);
-	Trinity::CreatureListSearcher<Trinity::FriendlyMissingBuff> searcher(me, list, u_check);
-	Cell::VisitAllObjects(me, searcher, SIZE_OF_GRIDS);
+    FriendlyMissingBuff u_check(me, spellId, range);
+	Trinity::UnitListSearcher<FriendlyMissingBuff> searcher(me, list, u_check);
+	Cell::VisitAllObjects(me, searcher, range);
 	return list;
+}
+
+Unit* CustomAI::SelectRandomMissingBuff(uint32 spell)
+{
+    std::list<Unit*> list = DoFindMissingBuff(spell);
+    if (list.empty())
+        return nullptr;
+    return Trinity::Containers::SelectRandomContainerElement(list);
 }

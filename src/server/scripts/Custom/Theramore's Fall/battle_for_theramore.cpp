@@ -31,10 +31,10 @@ struct npc_jaina_theramore : public CustomAI
 		SPELL_BLIZZARD              = 284968,
 		SPELL_FIREBALL              = 20678,
 		SPELL_FIREBLAST             = 20679,
-		SPELL_FROST_BARRIER         = 69787,
 		SPELL_FROSTBOLT_COSMETIC    = 237649,
 		SPELL_LIGHTNING_FX          = 278455,
         SPELL_ARCANE_RIFT           = 388902,
+        SPELL_FROZEN_SHIELD         = 396780
 	};
 
 	void Initialize() override
@@ -97,11 +97,13 @@ struct npc_jaina_theramore : public CustomAI
 
     void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-		if (me->HealthBelowPctDamaged(10, damage)
-			&& !me->HasAura(SPELL_FROST_BARRIER))
+		if (!ShouldTakeDamage() && !me->HasAura(SPELL_FROZEN_SHIELD))
 		{
-			me->CastStop();
-			DoCast(SPELL_FROST_BARRIER);
+            CastSpellExtraArgs args(true);
+            args.AddSpellBP0(500);
+
+			CastStop();
+			DoCastSelf(SPELL_FROZEN_SHIELD, args);
 		}
 	}
 
@@ -408,7 +410,7 @@ struct npc_amara_leeson : public CustomAI
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-					me->CastStop();
+					CastStop();
 					DoCast(target, SPELL_GREATER_PYROBLAST);
 				}
 				greater_pyroblast.Repeat(8s, 10s);
@@ -441,6 +443,12 @@ struct npc_rhonin : public CustomAI
 	{
 		GOSSIP_MENU_DEFAULT         = 65001,
 	};
+
+    enum Groups
+    {
+        GROUP_NORMAL,
+        GROUP_ARCANE_EXPLOSION
+    };
 
 	enum Spells
 	{
@@ -501,7 +509,7 @@ struct npc_rhonin : public CustomAI
 				arcaneCharges++;
 				if (roll_chance_i(40))
 				{
-					me->CastStop();
+					CastStop();
 					me->AddAura(SPELL_TIME_WARP, me);
 					DoCastVictim(SPELL_ARCANE_PROJECTILES);
 				}
@@ -519,7 +527,7 @@ struct npc_rhonin : public CustomAI
 		DoCastSelf(SPELL_PRISMATIC_BARRIER, CastSpellExtraArgs(SPELLVALUE_BASE_POINT0, 256E3));
 
 		scheduler
-			.Schedule(1s, [this](TaskContext arcane_blast)
+			.Schedule(1s, GROUP_NORMAL, [this](TaskContext arcane_blast)
 			{
 				if (arcaneCharges < 4)
 					DoCastVictim(SPELL_ARCANE_BLAST);
@@ -527,7 +535,7 @@ struct npc_rhonin : public CustomAI
 					DoCastVictim(SPELL_ARCANE_BARRAGE);
 				arcane_blast.Repeat(2800ms);
 			})
-			.Schedule(3s, [this](TaskContext evocation)
+			.Schedule(3s, GROUP_NORMAL, [this](TaskContext evocation)
 			{
 				if (me->GetPowerPct(POWER_MANA) < 20)
 				{
@@ -537,16 +545,18 @@ struct npc_rhonin : public CustomAI
 				else
 					evocation.Repeat(3s);
 			})
-			.Schedule(5s, [this](TaskContext arcane_explosion)
+			.Schedule(5s, GROUP_ARCANE_EXPLOSION, [this](TaskContext arcane_explosion)
 			{
 				if (EnemiesInRange(9.f) >= 3)
 				{
-					me->CastStop();
+                    scheduler.DelayGroup(GROUP_NORMAL, 5s);
+
+					CastStop();
 					DoCast(SPELL_ARCANE_EXPLOSION);
-					arcane_explosion.Repeat(14s, 18s);
+					arcane_explosion.Repeat(2s);
 				}
 				else
-					arcane_explosion.Repeat(1s);
+					arcane_explosion.Repeat(5ms);
 			});
 	}
 
@@ -623,11 +633,8 @@ struct npc_kinndy_sparkshine : public CustomAI
 
     void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
-        if (me->HealthBelowPctDamaged(10, damage))
+        if (!ShouldTakeDamage())
         {
-            // On supprime les dégâts actuels
-            damage = 0;
-
             if (evocating)
                 return;
 
@@ -770,7 +777,7 @@ struct npc_kalecgos_theramore : public CustomAI
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                 {
-                    me->CastStop();
+                    CastStop();
                     DoCast(target, SPELL_CHILLED);
                 }
 				chilled.Repeat(14s, 22s);
@@ -779,7 +786,7 @@ struct npc_kalecgos_theramore : public CustomAI
 			{
                 if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
                 {
-                    me->CastStop();
+                    CastStop();
                     DoCast(target, SPELL_COMET_STORM);
                 }
 				comet_barrage.Repeat(18s, 25s);
@@ -796,7 +803,7 @@ struct npc_kalecgos_theramore : public CustomAI
 					Unit* target = ref->GetVictim();
 					if (target && target->isMoving())
 					{
-						me->CastStop();
+						CastStop();
 						DoCast(target, SPELL_ICE_NOVA);
 						ice_nova.Repeat(3s, 5s);
 						return;

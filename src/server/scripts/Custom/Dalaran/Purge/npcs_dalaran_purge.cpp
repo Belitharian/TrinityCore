@@ -1,9 +1,6 @@
-#include "Custom/AI/CustomAI.h"
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
 #include "Containers.h"
-#include "SpellAuraEffects.h"
-#include "DB2Stores.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
 #include "MotionMaster.h"
@@ -11,14 +8,13 @@
 #include "GameObjectAI.h"
 #include "PassiveAI.h"
 #include "ScriptMgr.h"
-#include "SpellAuras.h"
-#include "SpellHistory.h"
-#include "SpellInfo.h"
 #include "TemporarySummon.h"
+#include "SpellAuraEffects.h"
+#include "Custom/AI/CustomAI.h"
 #include "dalaran_purge.h"
 
 ///
-///     NEUTRAL NPC
+///     ALLIANCE NPC
 ///
 
 struct npc_guardian_mage_dalaran : public CustomAI
@@ -169,10 +165,6 @@ struct npc_assassin_dalaran : public CustomAI
 			});
 	}
 };
-
-///
-///     ALLIANCE NPC
-///
 
 struct npc_jaina_dalaran_patrol : public CustomAI
 {
@@ -477,13 +469,13 @@ struct npc_stormwind_cleric : public CustomAI
 
 		scheduler.Schedule(1s, 5s, [this](TaskContext fortitude)
 		{
-			CastSpellExtraArgs args(true);
-			args.SetTriggerFlags(TRIGGERED_IGNORE_SET_FACING);
+            CastSpellExtraArgs args(true);
+            args.SetTriggerFlags(TRIGGERED_IGNORE_SET_FACING);
 
-			if (Unit* target = SelectRandomMissingBuff(SPELL_POWER_WORD_FORTITUDE))
-				DoCast(target, SPELL_POWER_WORD_FORTITUDE, args);
+            if (Unit* target = SelectRandomMissingBuff(SPELL_POWER_WORD_FORTITUDE))
+                DoCast(target, SPELL_POWER_WORD_FORTITUDE, args);
 
-			fortitude.Repeat(5s, 8s);
+            fortitude.Repeat(2s);
 		});
 	}
 
@@ -549,14 +541,6 @@ struct npc_stormwind_cleric : public CustomAI
 					DoCast(target, SPELL_FLASH_HEAL);
 				flash_heal.Repeat(2s);
 			});
-	}
-
-	Unit* SelectRandomMissingBuff(uint32 spell)
-	{
-		std::list<Unit*> list = DoFindMissingBuff(spell);
-		if (list.empty())
-			return nullptr;
-		return Trinity::Containers::SelectRandomContainerElement(list);
 	}
 };
 

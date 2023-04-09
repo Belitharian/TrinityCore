@@ -1,17 +1,6 @@
-#include "GameObject.h"
 #include "InstanceScript.h"
 #include "TemporarySummon.h"
-#include "KillRewarder.h"
 #include "MotionMaster.h"
-#include "ObjectAccessor.h"
-#include "PassiveAI.h"
-#include "Scenario.h"
-#include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "ScriptedGossip.h"
-#include "SpellHistory.h"
-#include "SpellInfo.h"
-#include "SpellMgr.h"
 #include "Custom/AI/CustomAI.h"
 #include "ruins_of_theramore.h"
 
@@ -173,11 +162,11 @@ struct npc_jaina_ruins : public CustomAI
 
     void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-        if ((!me->HasAura(SPELL_IMMUNE) || !me->HasAura(SPELL_FROZEN_SHIELD))
-            && me->HealthBelowPctDamaged(50, damage))
-        {
-            damage = 0;
+        if (ShouldTakeDamage())
+            return;
 
+        if ((!me->HasAura(SPELL_IMMUNE) || !me->HasAura(SPELL_FROZEN_SHIELD)))
+        {
             if (hasEscaped)
                 return;
 

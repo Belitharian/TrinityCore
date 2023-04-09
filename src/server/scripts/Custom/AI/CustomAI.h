@@ -6,6 +6,10 @@
 #include "ScriptedCreature.h"
 #include "DBCEnums.h"
 #include "TaskScheduler.h"
+#include "ScriptMgr.h"
+#include "SpellHistory.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 
 enum class AI_Type
 {
@@ -13,6 +17,34 @@ enum class AI_Type
     Melee,
     Hybrid,
     Distance,
+};
+
+class FriendlyMissingBuff
+{
+    public:
+        FriendlyMissingBuff(Unit const* obj, uint32 spellid, float range) : i_obj(obj), i_spell(spellid), f_range(range) { }
+
+        bool operator()(Unit* u) const
+        {
+            if (Creature* c = u->ToCreature())
+            {
+                if (c->IsTrigger() || c->GetFaction() == FACTION_FRIENDLY
+                    || c->IsCivilian())
+                {
+                    return false;
+                }
+            }
+
+            if (u->IsAlive() && !i_obj->IsHostileTo(u) && i_obj->IsWithinDistInMap(u, f_range, false) && !u->HasAura(i_spell))
+                return true;
+
+            return false;
+        }
+
+    private:
+        Unit const* i_obj;
+        uint32 i_spell;
+        float f_range;
 };
 
 class TC_API_EXPORT CustomAI : public ScriptedAI
@@ -42,9 +74,10 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void CastStop();
         void CastStop(uint32 exception);
         void CastStop(const std::vector<uint32>& exceptions);
-        void SetCombatMove(bool on, float distance = 0.0f, bool stopMoving = false);
+        void SetCombatMove(bool on, float distance = 0.0f, bool stopMoving = false, bool force = false);
 
         std::list<Unit*> DoFindMissingBuff(uint32 spellId);
+        Unit* SelectRandomMissingBuff(uint32 spell);
 
     protected:
         TaskScheduler scheduler;
@@ -58,6 +91,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         uint32 EnemiesInFront(float distance);
 
         bool HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic);
+        bool ShouldTakeDamage();
 };
 
 #endif // CUSTOM_CUSTOMAI_H

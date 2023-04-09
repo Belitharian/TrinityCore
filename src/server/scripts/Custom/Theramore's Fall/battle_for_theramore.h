@@ -3,11 +3,13 @@
 
 #include "CreatureAIImpl.h"
 #include "Position.h"
+#include "Totem.h"
+#include "TotemAI.h"
 
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader "BFT"
 
-//#define CUSTOM_DEBUG
+#define CUSTOM_DEBUG
 
 #define TERVOSH_PATH_01          6
 #define TERVOSH_PATH_02         10
@@ -114,6 +116,7 @@ enum BFTCreatures
 	NPC_THERAMORE_CITIZEN_MALE          = 143773,
 	NPC_THERAMORE_CITIZEN_FEMALE        = 143776,
 	NPC_BISHOP_DELAVEY                  = 500022,
+	NPC_TRAINING_DUMMY                  = 87318,
 
 	NPC_ROKNAH_GRUNT                    = 64732,
 	NPC_ROKNAH_LOA_SINGER               = 64733,
@@ -664,27 +667,6 @@ Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f };
 Position const CitadelPoint01   = { -3668.74f, -4511.64f, 10.09f, 1.54f };
 Position const DocksPoint01     = { -3826.84f, -4539.05f,  9.21f, 5.96f };
 Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f };
-
-class FriendlyMissingBuff
-{
-	public:
-	FriendlyMissingBuff(Unit const* obj, uint32 spellid) : i_obj(obj), i_spell(spellid)
-	{
-	}
-
-	bool operator()(Creature* c) const
-	{
-		if (c->IsTrigger() && !c->IsPvP())
-			return false;
-		if (c->IsAlive() && !i_obj->IsHostileTo(c) && i_obj->IsWithinDistInMap(c, 30.f) && !c->HasAura(i_spell))
-			return true;
-		return false;
-	}
-
-	private:
-	Unit const* i_obj;
-	uint32 i_spell;
-};
 
 inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
 {

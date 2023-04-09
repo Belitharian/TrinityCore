@@ -94,7 +94,6 @@ class KalecgosSpellEvent : public BasicEvent
 			owner->AI()->Talk(SAY_KALECGOS_SPELL_01);
 
 		owner->CastSpell(owner, SPELL_FROST_BREATH);
-		owner->GetThreatManager().RemoveMeFromThreatLists();
 		owner->m_Events.AddEvent(this, Milliseconds(timer) + randtime(8s, 10s));
 		return false;
 	}
@@ -224,6 +223,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		{
 			player->AddAura(SPELL_SKYBOX_EFFECT, player);
 		}
+
+        void OnPlayerLeave(Player* player) override
+        {
+            player->RemoveAurasDueToSpell(SPELL_SKYBOX_EFFECT);
+        }
 
 		void SetData(uint32 dataId, uint32 value) override
 		{
@@ -600,7 +604,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case NPC_THERAMORE_CITIZEN_FEMALE:
 				case NPC_THERAMORE_CITIZEN_MALE:
-					citizens.push_back(creature->GetGUID());
+                case NPC_TRAINING_DUMMY:
+                    creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
+                    creature->RemoveUnitFlag(UNIT_FLAG_PVP_ENABLING);
+                    citizens.push_back(creature->GetGUID());
 					if (phase == BFTPhases::Evacuation)
 						break;
 					creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
@@ -611,6 +618,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					citizens.push_back(creature->GetGUID());
 					break;
 				case NPC_ALLIANCE_PEASANT:
+                    creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
+                    creature->RemoveUnitFlag(UNIT_FLAG_PVP_ENABLING);
 					creature->SetImmuneToNPC(true);
 					citizens.push_back(creature->GetGUID());
 					break;
@@ -1348,7 +1357,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					#ifdef CUSTOM_DEBUG
+					#ifndef CUSTOM_DEBUG
 						for (uint8 i = 0; i < 10; i++)
 							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
 					#else

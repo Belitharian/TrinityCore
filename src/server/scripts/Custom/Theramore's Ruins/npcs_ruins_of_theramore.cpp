@@ -180,7 +180,7 @@ struct npc_roknah_warlord : public CustomAI
 
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-		if (!me->HealthBelowPctDamaged(25, damage))
+		if (ShouldTakeDamage())
 			return;
 
 		if (!sendEvent)
