@@ -58,9 +58,6 @@ enum HunterSpells
 enum MiscSpells
 {
     SPELL_DRAENEI_GIFT_OF_THE_NAARU                 = 59543,
-    SPELL_MAGE_TEMPORAL_DISPLACEMENT                = 80354,
-    SPELL_SHAMAN_EXHAUSTION                         = 57723,
-    SPELL_SHAMAN_SATED                              = 57724
 };
 
 // 131894 - A Murder of Crows
@@ -547,7 +544,7 @@ class spell_hun_tame_beast : public SpellScript
 
         if (Creature* target = GetExplTargetUnit()->ToCreature())
         {
-            if (target->GetLevel() > caster->GetLevel())
+            if (target->GetLevelForTarget(caster) > caster->GetLevel())
                 return SPELL_FAILED_HIGHLEVEL;
 
             // use SMSG_PET_TAME_FAILURE?

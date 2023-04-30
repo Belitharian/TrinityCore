@@ -22,6 +22,7 @@
 #include "DB2Structure.h"
 #include "Optional.h"
 #include "SharedDefines.h"
+#include "advstd.h"
 #include <map>
 #include <set>
 #include <vector>
@@ -59,6 +60,7 @@ TC_GAME_API extern DB2Storage<AzeritePowerEntry>                    sAzeritePowe
 TC_GAME_API extern DB2Storage<BankBagSlotPricesEntry>               sBankBagSlotPricesStore;
 TC_GAME_API extern DB2Storage<BannedAddonsEntry>                    sBannedAddonsStore;
 TC_GAME_API extern DB2Storage<BarberShopStyleEntry>                 sBarberShopStyleStore;
+TC_GAME_API extern DB2Storage<BattlePetAbilityEntry>                sBattlePetAbilityStore;
 TC_GAME_API extern DB2Storage<BattlePetBreedQualityEntry>           sBattlePetBreedQualityStore;
 TC_GAME_API extern DB2Storage<BattlePetBreedStateEntry>             sBattlePetBreedStateStore;
 TC_GAME_API extern DB2Storage<BattlePetSpeciesEntry>                sBattlePetSpeciesStore;
@@ -352,11 +354,11 @@ public:
 
         friend std::strong_ordering operator<=>(HotfixRecord const& left, HotfixRecord const& right)
         {
-            if (auto cmp = left.ID <=> right.ID; std::is_neq(cmp))
+            if (std::strong_ordering cmp = left.ID <=> right.ID; advstd::is_neq(cmp))
                 return cmp;
-            if (auto cmp = left.TableHash <=> right.TableHash; std::is_neq(cmp))
+            if (std::strong_ordering cmp = left.TableHash <=> right.TableHash; advstd::is_neq(cmp))
                 return cmp;
-            if (auto cmp = left.RecordID <=> right.RecordID; std::is_neq(cmp))
+            if (std::strong_ordering cmp = left.RecordID <=> right.RecordID; advstd::is_neq(cmp))
                 return cmp;
             return std::strong_ordering::equal;
         }
