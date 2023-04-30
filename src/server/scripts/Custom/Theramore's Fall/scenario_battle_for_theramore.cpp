@@ -644,6 +644,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 			switch (go->GetEntry())
 			{
+                case GOB_HERO_S_CALL:
+                    go->SetFlag(GO_FLAG_NOT_SELECTABLE);
+                    break;
 				case GOB_PORTAL_TO_DALARAN:
 				case GOB_PORTAL_TO_STORMWIND:
 				case GOB_PORTAL_TO_ORGRIMMAR:
@@ -1357,7 +1360,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					#ifndef CUSTOM_DEBUG
+					#ifdef CUSTOM_DEBUG
 						for (uint8 i = 0; i < 10; i++)
 							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
 					#else

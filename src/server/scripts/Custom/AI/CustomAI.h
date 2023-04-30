@@ -11,6 +11,8 @@
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 
+#define NPC_TRAINING_DUMMY 87318
+
 enum class AI_Type
 {
     None,

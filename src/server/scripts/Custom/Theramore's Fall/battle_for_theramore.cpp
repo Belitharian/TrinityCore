@@ -11,7 +11,6 @@
 #include "ScriptedGossip.h"
 #include "SpellMgr.h"
 #include "TemporarySummon.h"
-#include "Custom/AI/CustomAI.h"
 #include "battle_for_theramore.h"
 
 struct npc_jaina_theramore : public CustomAI
@@ -95,7 +94,7 @@ struct npc_jaina_theramore : public CustomAI
         }
     }
 
-    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
 		if (!ShouldTakeDamage() && !me->HasAura(SPELL_FROZEN_SHIELD))
 		{
@@ -378,7 +377,7 @@ struct npc_amara_leeson : public CustomAI
 		SPELL_BLAZING_BARRIER       = 295238,
 		SPELL_PRISMATIC_BARRIER     = 235450,
 		SPELL_ICE_BARRIER           = 198094,
-		SPELL_GREATER_PYROBLAST     = 295231,
+		SPELL_GREATER_PYROBLAST     = 255998,
 		SPELL_SCORCH                = 301075
 	};
 
@@ -442,6 +441,9 @@ struct npc_rhonin : public CustomAI
 	enum Misc
 	{
 		GOSSIP_MENU_DEFAULT         = 65001,
+
+        NPC_ARCANIC_CRYSTAL         = 86602,
+        SPELL_ARCANE_AFFINITY       = 173213,
 	};
 
     enum Groups
@@ -453,7 +455,7 @@ struct npc_rhonin : public CustomAI
 	enum Spells
 	{
 		SPELL_PRISMATIC_BARRIER     = 235450,
-		SPELL_ARCANE_PROJECTILES    = 166995,
+		SPELL_ARCANE_PROJECTILES    = 5143,
 		SPELL_ARCANE_EXPLOSION      = 210479,
 		SPELL_ARCANE_BLAST          = 291316,
 		SPELL_ARCANE_BARRAGE        = 291318,
@@ -469,11 +471,6 @@ struct npc_rhonin : public CustomAI
 
 	InstanceScript* instance;
 	uint8 arcaneCharges;
-
-	float GetDistance() override
-	{
-		return 15.f;
-	}
 
 	bool OnGossipHello(Player* player) override
 	{
@@ -537,14 +534,26 @@ struct npc_rhonin : public CustomAI
 			})
 			.Schedule(3s, GROUP_NORMAL, [this](TaskContext evocation)
 			{
-				if (me->GetPowerPct(POWER_MANA) < 20)
-				{
+				if (me->GetPowerPct(POWER_MANA) < 10.0f)
 					DoCast(SPELL_EVOCATION);
-					evocation.Repeat(3min);
-				}
-				else
-					evocation.Repeat(3s);
+                evocation.Repeat(3s);
 			})
+            .Schedule(5s, GROUP_NORMAL, [this](TaskContext arcane_cristal)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                {
+                    const Position pos = target->GetRandomNearPosition(4.f);
+                    if (Creature* crystal = me->SummonCreature(NPC_ARCANIC_CRYSTAL, pos, TEMPSUMMON_TIMED_DESPAWN, 31s))
+                    {
+                        crystal->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+                        crystal->SetFaction(me->GetFaction());
+                        crystal->SetCanMelee(false);
+                        crystal->SetControlled(true, UNIT_STATE_ROOT);
+                        crystal->CastSpell(crystal, SPELL_ARCANE_AFFINITY);
+                    }
+                }
+                arcane_cristal.Repeat(1min);
+            })
 			.Schedule(5s, GROUP_ARCANE_EXPLOSION, [this](TaskContext arcane_explosion)
 			{
 				if (EnemiesInRange(9.f) >= 3)
@@ -631,7 +640,7 @@ struct npc_kinndy_sparkshine : public CustomAI
             evocating = false;
     }
 
-    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         if (!ShouldTakeDamage())
         {

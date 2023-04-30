@@ -5,11 +5,12 @@
 #include "Position.h"
 #include "Totem.h"
 #include "TotemAI.h"
+#include "Custom/AI/CustomAI.h"
 
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader "BFT"
 
-#define CUSTOM_DEBUG
+//#define CUSTOM_DEBUG
 
 #define TERVOSH_PATH_01          6
 #define TERVOSH_PATH_02         10
@@ -116,7 +117,6 @@ enum BFTCreatures
 	NPC_THERAMORE_CITIZEN_MALE          = 143773,
 	NPC_THERAMORE_CITIZEN_FEMALE        = 143776,
 	NPC_BISHOP_DELAVEY                  = 500022,
-	NPC_TRAINING_DUMMY                  = 87318,
 
 	NPC_ROKNAH_GRUNT                    = 64732,
 	NPC_ROKNAH_LOA_SINGER               = 64733,
@@ -161,12 +161,13 @@ enum BFTMisc
 	SPELL_TELEPORT_CAST_TIME            = 373184,
 
 	// GameObjects
+    GOB_HERO_S_CALL                     = 206111,
 	GOB_MYSTIC_BARRIER_01               = 323860,
 	GOB_MYSTIC_BARRIER_02               = 323862,
 	GOB_PORTAL_TO_STORMWIND             = 353823,
 	GOB_PORTAL_TO_DALARAN               = 323842,
 	GOB_PORTAL_TO_ORGRIMMAR             = 353822,
-	GOB_REFRESHMENT                     = 186812,
+	GOB_REFRESHMENT                     = 336432,
 
 	// Criteria Trees
 	CRITERIA_TREE_FIND_JAINA            = 1000000,

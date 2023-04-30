@@ -13,8 +13,11 @@
 #include "ScriptedGossip.h"
 #include "SpellAuraEffects.h"
 #include "TemporarySummon.h"
-#include "Custom/AI/CustomAI.h"
 #include "battle_for_theramore.h"
+
+///
+///     ALLIANCE NPC
+///
 
 struct npc_theramore_citizen : public ScriptedAI
 {
@@ -26,11 +29,9 @@ struct npc_theramore_citizen : public ScriptedAI
 
 	npc_theramore_citizen(Creature* creature) : ScriptedAI(creature)
 	{
-		instance = creature->GetInstanceScript();
 	}
 
 	TaskScheduler scheduler;
-	InstanceScript* instance;
 
 	void MovementInform(uint32 type, uint32 id) override
 	{
@@ -306,7 +307,7 @@ struct npc_hedric_evencane : public CustomAI
 			banding = false;
 	}
 
-	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+	void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
         if (ShouldTakeDamage())
             return;
@@ -392,7 +393,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 
     bool healthLow;
 
-	void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
+	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
 	{
         if (!me->GetSpellHistory()->HasCooldown(SPELL_BLESSING_OF_FREEDOM))
         {
@@ -441,7 +442,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			{
 				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 80))
 				{
-                    CastStop({ SPELL_HOLY_LIGHT, SPELL_EXARCH_BLADE });
+                    CastStop({ SPELL_HOLY_LIGHT, SPELL_EXARCH_BLADE, SPELL_HEAL });
 					DoCast(target, SPELL_HOLY_LIGHT);
 				}
 				holy_light.Repeat(8s);
@@ -450,7 +451,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			{
 				if (Unit* target = DoSelectBelowHpPctFriendly(15.0f, 50))
 				{
-					CastStop(SPELL_EXARCH_BLADE);
+                    CastStop({ SPELL_EXARCH_BLADE, SPELL_HEAL });
 					DoCast(target, SPELL_LIGHT_OF_DAWN);
 				}
 				light_of_dawn.Repeat(10s, 15s);
@@ -460,7 +461,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			{
 				if (Unit* target = DoSelectCastingUnit(SPELL_REBUKE, 35.f))
 				{
-                    CastStop({ SPELL_HOLY_LIGHT, SPELL_EXARCH_BLADE });
+                    CastStop({ SPELL_HOLY_LIGHT, SPELL_EXARCH_BLADE, SPELL_HEAL });
 					DoCast(target, SPELL_REBUKE);
 					rebuke.Repeat(25s, 40s);
 				}
@@ -473,7 +474,7 @@ struct npc_theramore_officier : public npc_theramore_troop
             {
                 if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                 {
-                    CastStop(SPELL_EXARCH_BLADE);
+                    CastStop({ SPELL_EXARCH_BLADE, SPELL_HEAL });
                     DoCast(target, SPELL_LIGHT_HAMMER);
                 }
                 light_hammer.Repeat(30s);
@@ -486,7 +487,7 @@ struct npc_theramore_officier : public npc_theramore_troop
                 {
                     if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 90))
                     {
-                        CastStop(SPELL_EXARCH_BLADE);
+                        CastStop({ SPELL_EXARCH_BLADE, SPELL_HEAL });
                         DoCast(target, SPELL_HOLY_SHOCK);
                     }
                 }
@@ -525,7 +526,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			{
                 if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
                 {
-                    CastStop(SPELL_EXARCH_BLADE);
+                    CastStop({ SPELL_EXARCH_BLADE, SPELL_HEAL });
                     DoCast(target, SPELL_JUDGMENT);
                 }
 				judgment.Repeat(12s, 15s);
@@ -651,7 +652,7 @@ struct npc_theramore_faithful : public npc_theramore_troop
 	enum Spells
 	{
 		SPELL_SMITE                 = 332705,
-		SPELL_HEAL                  = 332706,
+		SPELL_HALO                  = 120517,
 		SPELL_FLASH_HEAL            = 314655,
 		SPELL_RENEW                 = 294342,
 		SPELL_PRAYER_OF_HEALING     = 266969,
@@ -735,31 +736,31 @@ struct npc_theramore_faithful : public npc_theramore_troop
 					CastSpellExtraArgs args;
 					args.AddSpellBP0(target->CountPctFromMaxHealth(20));
 
-					CastStop();
+                    CastStop({ SPELL_RENEW, SPELL_FLASH_HEAL });
 					DoCast(target, SPELL_POWER_WORD_SHIELD, args);
 				}
 				power_word_shield.Repeat(8s);
 			})
 			.Schedule(5s, 7s, [this](TaskContext renew)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 50))
+				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
 					DoCast(target, SPELL_RENEW);
 				renew.Repeat(10s, 15s);
 			})
 			.Schedule(12s, 14s, [this](TaskContext prayer_of_healing)
 			{
-				CastStop(SPELL_PRAYER_OF_HEALING);
+				CastStop({ SPELL_RENEW, SPELL_FLASH_HEAL, SPELL_PRAYER_OF_HEALING });
 				DoCastSelf(SPELL_PRAYER_OF_HEALING);
-				prayer_of_healing.Repeat(25s);
+				prayer_of_healing.Repeat(14s);
 			})
-			.Schedule(1s, 3s, [this](TaskContext heal)
+			.Schedule(1s, 3s, [this](TaskContext halo)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
+				if (Unit* target = DoSelectBelowHpPctFriendly(30.f, 60))
 				{
-					CastStop(SPELL_HEAL);
-					DoCast(target, SPELL_HEAL);
+					CastStop(SPELL_HALO);
+					DoCast(target, SPELL_HALO);
 				}
-				heal.Repeat(2s);
+                halo.Repeat(25s);
 			})
 			.Schedule(1s, 3s, [this](TaskContext psychic_scream)
 			{
@@ -773,7 +774,7 @@ struct npc_theramore_faithful : public npc_theramore_troop
 			})
 			.Schedule(1s, 8s, [this](TaskContext flash_heal)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 40))
+				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 50))
 					DoCast(target, SPELL_FLASH_HEAL);
 				flash_heal.Repeat(2s);
 			});
@@ -857,6 +858,10 @@ struct npc_theramore_marksman : public npc_theramore_troop
     }
 };
 
+///
+///     HORDE NPC
+///
+
 struct npc_theramore_horde : public CustomAI
 {
 	npc_theramore_horde(Creature* creature, AI_Type type) : CustomAI(creature, type)
@@ -884,7 +889,7 @@ struct npc_theramore_horde : public CustomAI
 			{
 				case MOVEMENT_INFO_POINT_03:
 					me->CastSpell(me, SPELL_ARCANIC_BARRIER, args);
-					me->DespawnOrUnsummon(2s);
+                    me->KillSelf();
 					break;
 				default:
 					break;
@@ -911,10 +916,7 @@ struct npc_theramore_horde : public CustomAI
         if (who->GetEntry() == NPC_KALECGOS_DRAGON)
             return false;
 
-        return who->IsAlive() && me->IsValidAttackTarget(who)
-            && !who->HasAuraType(SPELL_AURA_MOD_FEAR_2)
-            && !who->HasBreakableByDamageCrowdControlAura(me)
-            && ScriptedAI::CanAIAttack(who);
+        return CustomAI::CanAIAttack(who);
     }
 };
 
@@ -998,7 +1000,7 @@ struct npc_roknah_hag : public npc_theramore_horde
 		}
 	}
 
-    void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
+    void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
     {
         if (!me->GetSpellHistory()->HasCooldown(SPELL_BLINK))
         {
@@ -1236,6 +1238,11 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 		SPELL_HEALING_TIDE      = 127945,
 	};
 
+    enum Misc
+    {
+        NPC_HEALING_TIDE_TOTEM  = 65349,
+    };
+
 	const SpellInfo* flameShock;
 	const SpellInfo* frostShock;
 
@@ -1254,6 +1261,8 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 	void JustEngagedWith(Unit* who) override
 	{
 		npc_theramore_horde::JustEngagedWith(who);
+
+        DoCastVictim(SPELL_LIGHTNING_BOLT);
 
 		scheduler
 			.Schedule(8s, 14s, [this](TaskContext chain_lightning)
@@ -1306,8 +1315,17 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 			{
 				if (Unit* target = DoSelectBelowHpPctFriendly(60.f, 20))
 				{
-					DoCast(SPELL_HEALING_TIDE);
-					healing_tide.Repeat(30s);
+                    Creature* totem = me->FindNearestCreature(NPC_HEALING_TIDE_TOTEM, 60.f);
+                    if (!totem)
+                    {
+                        CastStop();
+                        DoCast(SPELL_HEALING_TIDE);
+                        healing_tide.Repeat(1min);
+                    }
+                    else
+                    {
+                        healing_tide.Repeat(2s);
+                    }
 				}
 				else
 					healing_tide.Repeat(2s);
@@ -1457,6 +1475,10 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 	}
 };
 
+///
+///     COSMETIC
+///
+
 struct npc_faithful_training : public npc_theramore_faithful
 {
     npc_faithful_training(Creature* creature) : npc_theramore_faithful(creature),
@@ -1482,7 +1504,7 @@ struct npc_faithful_training : public npc_theramore_faithful
     {
         creature->SetEmoteState(emote);
 
-        uint64 health = creature->GetMaxHealth() * 0.3f;
+        uint64 health = static_cast<uint64>(creature->GetMaxHealth()) * 0.3f;
         creature->SetRegenerateHealth(false);
         creature->SetHealth(health);
         creature->SetTarget(target ? target->GetGUID() : ObjectGuid::Empty);
@@ -1552,12 +1574,12 @@ struct npc_faithful_training : public npc_theramore_faithful
             {
                 if (!soldierA->HasAura(SPELL_POWER_WORD_SHIELD))
                 {
-                    soldierA->DealDamage(soldierA, soldierB, urand(500, 800));
+                    soldierB->DealDamage(soldierA, soldierB, urand(1000, 1500));
                 }
 
                 if (!soldierB->HasAura(SPELL_POWER_WORD_SHIELD))
                 {
-                    soldierB->DealDamage(soldierB, soldierA, urand(500, 800));
+                    soldierA->DealDamage(soldierB, soldierA, urand(1000, 1500));
                 }
 
                 soldiers.Repeat(2s);
@@ -1575,9 +1597,6 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 	{
         // Group
         COSMETIC_GROUP,
-
-		// NPCs
-		NPC_TRAINING_DUMMY              = 87318,
 
 		// Spells
 		SPELL_ARCANE_PROJECTILES        = 5143,
@@ -1734,29 +1753,6 @@ class spell_theramore_light_of_dawn : public SpellScript
 	void Register() override
 	{
 		OnEffectHitTarget += SpellEffectFn(spell_theramore_light_of_dawn::HandleDummy, EFFECT_1, SPELL_EFFECT_DUMMY);
-	}
-};
-
-// Greater Pyroblast - 295231
-class spell_theramore_greater_pyroblast : public SpellScript
-{
-	PrepareSpellScript(spell_theramore_greater_pyroblast);
-
-	void HandleDamages(SpellEffIndex /*effIndex*/)
-	{
-		Unit* caster = GetCaster();
-		Unit* victim = GetHitUnit();
-		if (caster && victim)
-		{
-			int32 pct = GetSpellInfo()->GetEffect(EFFECT_1).BasePoints;
-			int32 damage = victim->CountPctFromMaxHealth(pct);
-			Unit::DealDamage(caster, victim, damage);
-		}
-	}
-
-	void Register() override
-	{
-		OnEffectHitTarget += SpellEffectFn(spell_theramore_greater_pyroblast::HandleDamages, EFFECT_0, SPELL_EFFECT_DAMAGE_FROM_MAX_HEALTH_PCT);
 	}
 };
 
@@ -2059,7 +2055,6 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterTheramoreAI(npc_theramore_arcanist);
 	RegisterTheramoreAI(npc_theramore_marksman);
 	RegisterTheramoreAI(npc_wounded_theramore_troop);
-
     RegisterTheramoreAI(npc_faithful_training);
     RegisterTheramoreAI(npc_arcanist_training);
 
@@ -2068,11 +2063,9 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterCreatureAI(npc_roknah_grunt);
 	RegisterCreatureAI(npc_roknah_loasinger);
 	RegisterCreatureAI(npc_roknah_felcaster);
-
 	RegisterCreatureAI(npc_healing_tide_totem);
 
 	RegisterSpellScript(spell_theramore_light_of_dawn);
-	RegisterSpellScript(spell_theramore_greater_pyroblast);
 	RegisterSpellScript(spell_theramore_throw_bucket);
 
 	RegisterAreaTriggerAI(at_blizzard_theramore);

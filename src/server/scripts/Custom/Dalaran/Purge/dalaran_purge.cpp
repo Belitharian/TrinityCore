@@ -398,34 +398,38 @@ struct npc_magister_rommath_purge : public CustomAI
         if (!player)
             return;
 
-        if (!player->isDead())
-            return;
-
-        if (me->HasUnitState(UNIT_STATE_CASTING))
-            return;
-
         while (eventId = events.ExecuteEvent())
         {
             switch (eventId)
             {
                 case 1:
+                {
+                    if (player->isDead())
+                    {
+                        events.ScheduleEvent(2, 1s);
+                    }
+                    else
+                    {
+                        events.RescheduleEvent(1, 1s);
+                    }
+                    break;
+                }
+                case 2:
                     CastStop();
                     DoCastSelf(SPELL_FIRE_CHANNELING);
-                    events.ScheduleEvent(2, 1s);
-                    break;
-                case 2:
-                    player->AddAura(SPELL_PHOENIX_FIRE, player);
                     events.ScheduleEvent(3, 1s);
                     break;
                 case 3:
+                    player->AddAura(SPELL_PHOENIX_FIRE, player);
+                    events.ScheduleEvent(4, 1s);
+                    break;
+                case 4:
                     player->CastSpell(player, SPELL_PHOENIX_VISUAL);
                     player->ResurrectPlayer(100.0f);
                     player->RemoveAurasDueToSpell(SPELL_PHOENIX_FIRE);
+                    events.ScheduleEvent(1, 5s);
                     break;
             }
-
-            if (me->HasUnitState(UNIT_STATE_CASTING))
-                return;
         }
     }
 

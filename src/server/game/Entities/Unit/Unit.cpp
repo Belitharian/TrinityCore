@@ -7227,6 +7227,41 @@ int32 Unit::SpellBaseHealingBonusDone(SpellSchoolMask schoolMask) const
         return false;
     });
 
+    if (GetTypeId() == TYPEID_UNIT)
+    {
+        if (Creature const* creature = ToCreature())
+        {
+            float variance = 1.0f;
+            UnitMods unitMod = UNIT_MOD_DAMAGE_MAINHAND;
+            WeaponAttackType attackType = BASE_ATTACK;
+
+            switch (creature->GetCreatureTemplate()->unit_class)
+            {
+                default:
+                    variance = creature->GetCreatureTemplate()->BaseVariance;
+                    attackType = BASE_ATTACK;
+                    unitMod = UNIT_MOD_DAMAGE_MAINHAND;
+                    break;
+                case UNIT_CLASS_MAGE:
+                    variance = creature->GetCreatureTemplate()->RangeVariance;
+                    attackType = RANGED_ATTACK;
+                    unitMod = UNIT_MOD_DAMAGE_RANGED;
+                    break;
+            }
+
+            float weaponMaxDamage = GetWeaponDamageRange(attackType, MAXDAMAGE);
+            float attackPower = GetTotalAttackPowerValue(attackType, false);
+            float attackSpeedMulti = GetAPMultiplier(attackType, false);
+            float baseValue = GetFlatModifierValue(unitMod, BASE_VALUE) + (attackPower / 3.5f) * variance;
+            float basePct = GetPctModifierValue(unitMod, BASE_PCT) * attackSpeedMulti;
+            float totalValue = GetFlatModifierValue(unitMod, TOTAL_VALUE);
+            float totalPct = GetPctModifierValue(unitMod, TOTAL_PCT);
+            float dmgMultiplier = creature->GetCreatureTemplate()->ModDamage;
+
+            advertisedBenefit += ((weaponMaxDamage + baseValue) * dmgMultiplier * basePct + totalValue) * totalPct;
+        }
+    }
+
     // Healing bonus of spirit, intellect and strength
     if (GetTypeId() == TYPEID_PLAYER)
     {

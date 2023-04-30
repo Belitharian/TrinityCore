@@ -168,7 +168,8 @@ struct npc_assassin_dalaran : public CustomAI
 
 struct npc_jaina_dalaran_patrol : public CustomAI
 {
-	npc_jaina_dalaran_patrol(Creature* creature) : CustomAI(creature)
+    npc_jaina_dalaran_patrol(Creature* creature) : CustomAI(creature),
+        playerGUID(ObjectGuid::Empty), originalSpeedRate(creature->GetSpeedRate(MOVE_WALK))
 	{
 		Initialize();
 	}
@@ -181,7 +182,9 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 		SPELL_FRIGID_SHARD          = 354933,
 		SPELL_TELEPORT              = 135176,
 		SPELL_GLACIAL_SPIKE         = 338488,
-        SPELL_FROZEN_SHIELD         = 396780
+        SPELL_FROZEN_SHIELD         = 396780,
+        SPELL_SHATTER               = 263627,
+        SPELL_ICY_GLARE             = 263626
 	};
 
 	void Initialize() override
@@ -194,10 +197,14 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 	}
 
 	InstanceScript* instance;
+    ObjectGuid playerGUID;
+    float originalSpeedRate;
 
     void Reset()
     {
         CustomAI::Reset();
+
+        me->SetSpeedRate(MOVE_WALK, originalSpeedRate);
 
         me->ResumeMovement();
     }
@@ -207,7 +214,11 @@ struct npc_jaina_dalaran_patrol : public CustomAI
         if (!who)
             return;
 
-        if (who && me->Attack(who, false))
+        bool canOneshot = who->GetTypeId() == TYPEID_PLAYER && me->IsWithinDist(who, 35.0f);
+        if (canOneshot)
+            return;
+
+        if (me->Attack(who, false))
         {
             me->PauseMovement();
             me->SetCanMelee(false);
@@ -226,41 +237,73 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 
 	void JustEngagedWith(Unit* who) override
 	{
-		DoCast(who, SPELL_GLACIAL_SPIKE);
+        bool canOneshot = who->GetTypeId() == TYPEID_PLAYER && me->IsWithinDist(who, 35.0f);
+        if (canOneshot)
+        {
+            if (Player* player = who->ToPlayer())
+            {
+                playerGUID = player->GetGUID();
 
-		scheduler
-			.Schedule(2s, [this](TaskContext frostbolt)
-			{
-				DoCastVictim(SPELL_FROSTBOLT);
-				frostbolt.Repeat(2s);
-			})
-			.Schedule(10s, [this](TaskContext glacial_spike)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
-				{
-					CastStop(SPELL_FRIGID_SHARD);
-					DoCast(target, SPELL_GLACIAL_SPIKE);
-				}
-				glacial_spike.Repeat(15s, 32s);
-			})
-			.Schedule(4s, [this](TaskContext blizzard)
-			{
-				if (me->GetThreatManager().GetThreatListSize() >= 2)
-				{
-					CastStop(SPELL_BLIZZARD);
-					DoCastVictim(SPELL_BLIZZARD);
-					blizzard.Repeat(5s, 8s);
-				}
-				else
-					blizzard.Repeat(2s);
-			})
-			.Schedule(8s, [this](TaskContext frigid_shard)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-					DoCast(target, SPELL_FRIGID_SHARD);
-				frigid_shard.Repeat(10s, 12s);
-			});
+                DoCast(player, SPELL_ICY_GLARE, true);
+
+                me->SetWalk(true);
+                me->SetSpeedRate(MOVE_WALK, 1.8f);
+                me->GetMotionMaster()->Remove(CHASE_MOTION_TYPE);
+                me->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_01, player, 5.0f);
+            }
+        }
+        else
+        {
+            DoCast(who, SPELL_GLACIAL_SPIKE);
+
+            scheduler
+                .Schedule(2s, [this](TaskContext frostbolt)
+            {
+                DoCastVictim(SPELL_FROSTBOLT);
+                frostbolt.Repeat(2s);
+            })
+                .Schedule(10s, [this](TaskContext glacial_spike)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
+                {
+                    CastStop(SPELL_FRIGID_SHARD);
+                    DoCast(target, SPELL_GLACIAL_SPIKE);
+                }
+                glacial_spike.Repeat(15s, 32s);
+            })
+                .Schedule(4s, [this](TaskContext blizzard)
+            {
+                if (me->GetThreatManager().GetThreatListSize() >= 2)
+                {
+                    CastStop(SPELL_BLIZZARD);
+                    DoCastVictim(SPELL_BLIZZARD);
+                    blizzard.Repeat(5s, 8s);
+                }
+                else
+                    blizzard.Repeat(2s);
+            })
+                .Schedule(8s, [this](TaskContext frigid_shard)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    DoCast(target, SPELL_FRIGID_SHARD);
+                frigid_shard.Repeat(10s, 12s);
+            });
+        }
 	}
+
+    void MovementInform(uint32 /*type*/, uint32 id) override
+    {
+        switch (id)
+        {
+            case MOVEMENT_INFO_POINT_01:
+                if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
+                {
+                    me->SetFacingToObject(player);
+                    DoCast(player, SPELL_SHATTER);
+                }
+                break;
+        }
+    }
 
 	void KilledUnit(Unit* victim) override
 	{
@@ -866,7 +909,7 @@ struct npc_archmage_landalock : public NullCreatureAI
 					float slice = 2 * (float)M_PI / (float)citizens.size();
 					for (Creature* citizen : citizens)
 					{
-						uint32 delay = std::numeric_limits<uint32>::max();
+						constexpr uint32 delay = std::numeric_limits<uint32>::max();
 						citizen->SetRespawnDelay(delay);
 						citizen->SetRespawnTime(delay);
 

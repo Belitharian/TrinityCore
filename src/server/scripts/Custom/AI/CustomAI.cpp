@@ -192,7 +192,8 @@ bool CustomAI::CanAIAttack(Unit const* who) const
 {
 	return who->IsAlive() && me->IsValidAttackTarget(who)
 		&& !who->HasAuraType(SPELL_AURA_MOD_FEAR_2)
-		&& !who->HasBreakableByDamageCrowdControlAura(me)
+		&& !who->HasBreakableByDamageCrowdControlAura()
+        && who->GetEntry() != NPC_TRAINING_DUMMY
 		&& ScriptedAI::CanAIAttack(who);
 }
 
