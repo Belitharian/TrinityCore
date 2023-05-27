@@ -1121,6 +1121,7 @@ private:
 uint32 constexpr PLAYER_MAX_HONOR_LEVEL = 500;
 uint8 constexpr PLAYER_LEVEL_MIN_HONOR = 10;
 uint32 constexpr SPELL_PVP_RULES_ENABLED = 134735;
+float constexpr MAX_AREA_SPIRIT_HEALER_RANGE = 20.0f;
 
 enum class ZonePVPTypeOverride : uint32
 {
@@ -1746,6 +1747,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void SendRespecWipeConfirm(ObjectGuid const& guid, uint32 cost, SpecResetType respecType) const;
         void RegenerateAll();
         void Regenerate(Powers power);
+        void InterruptPowerRegen(Powers power);
         void RegenerateHealth();
         void setRegenTimerCount(uint32 time) {m_regenTimerCount = time;}
         void setWeaponChangeTimer(uint32 time) {m_weaponChangeTimer = time;}
@@ -2865,10 +2867,16 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         UF::UpdateField<UF::PlayerData, 0, TYPEID_PLAYER> m_playerData;
         UF::UpdateField<UF::ActivePlayerData, 0, TYPEID_ACTIVE_PLAYER> m_activePlayerData;
 
+        void SetAreaSpiritHealer(Creature* creature);
+        ObjectGuid const& GetSpiritHealerGUID() const { return _areaSpiritHealerGUID; }
+        bool CanAcceptAreaSpiritHealFrom(Unit* spiritHealer) const { return spiritHealer->GetGUID() == _areaSpiritHealerGUID; }
+        void SendAreaSpiritHealerTime(Unit* spiritHealer) const;
+        void SendAreaSpiritHealerTime(ObjectGuid const& spiritHealerGUID, int32 timeLeft) const;
+
     protected:
         // Gamemaster whisper whitelist
         GuidList WhisperList;
-        uint32 m_combatExitTime;
+        TimePoint m_regenInterruptTimestamp;
         uint32 m_regenTimerCount;
         uint32 m_foodEmoteTimerCount;
         float m_powerFraction[MAX_POWERS_PER_CLASS];
@@ -3217,6 +3225,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         std::unique_ptr<RestMgr> _restMgr;
 
         bool _usePvpItemLevels;
+        ObjectGuid _areaSpiritHealerGUID;
 };
 
 TC_GAME_API void AddItemsSetItem(Player* player, Item const* item);

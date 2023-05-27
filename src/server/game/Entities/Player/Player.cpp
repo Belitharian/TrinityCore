@@ -167,7 +167,7 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     if (!GetSession()->HasPermission(rbac::RBAC_PERM_CAN_FILTER_WHISPERS))
         SetAcceptWhispers(true);
 
-    m_combatExitTime = 0;
+    m_regenInterruptTimestamp = GameTime::Now();
     m_regenTimer = 0;
     m_regenTimerCount = 0;
     m_foodEmoteTimerCount = 0;
@@ -1780,7 +1780,7 @@ void Player::Regenerate(Powers power)
     float addvalue = 0.0f;
     if (!IsInCombat())
     {
-        if (powerType->RegenInterruptTimeMS && GetMSTimeDiffToNow(m_combatExitTime) < uint32(powerType->RegenInterruptTimeMS))
+        if (powerType->GetFlags().HasFlag(PowerTypeFlags::UseRegenInterrupt) && m_regenInterruptTimestamp + Milliseconds(powerType->RegenInterruptTimeMS) < GameTime::Now())
             return;
 
         addvalue = (powerType->RegenPeace + m_unitData->PowerRegenFlatModifier[powerIndex]) * 0.001f * m_regenTimer;
@@ -1809,6 +1809,13 @@ void Player::Regenerate(Powers power)
         RATE_POWER_ARCANE_CHARGES,
         RATE_POWER_FURY,
         RATE_POWER_PAIN,
+        RATE_POWER_ESSENCE,
+        MAX_RATES, // runes
+        MAX_RATES, // runes
+        MAX_RATES, // runes
+        MAX_RATES, // alternate
+        MAX_RATES, // alternate
+        MAX_RATES, // alternate
     };
 
     if (RatesForPower[power] != MAX_RATES)
@@ -1901,6 +1908,17 @@ void Player::Regenerate(Powers power)
             const_cast<UF::UnitData&>(*m_unitData).ClearChanged(&UF::UnitData::Power, powerIndex);
         });
     }
+}
+
+void Player::InterruptPowerRegen(Powers power)
+{
+    uint32 powerIndex = GetPowerIndex(power);
+    if (powerIndex == MAX_POWERS || powerIndex >= MAX_POWERS_PER_CLASS)
+        return;
+
+    m_regenInterruptTimestamp = GameTime::Now();
+    m_powerFraction[powerIndex] = 0.0f;
+    SendDirectMessage(WorldPackets::Combat::InterruptPowerRegen(power).Write());
 }
 
 void Player::RegenerateHealth()
@@ -2382,7 +2400,9 @@ void Player::GiveLevel(uint8 level)
 
     // Only health and mana are set to maximum.
     SetFullHealth();
-    SetFullPower(POWER_MANA);
+    for (PowerTypeEntry const* powerType : sPowerTypeStore)
+        if (powerType->GetFlags().HasFlag(PowerTypeFlags::SetToMaxOnLevelUp))
+            SetFullPower(Powers(powerType->PowerTypeEnum));
 
     // update level to hunter/summon pet
     if (Pet* pet = GetPet())
@@ -4380,6 +4400,8 @@ void Player::BuildPlayerRepop()
 
 void Player::ResurrectPlayer(float restore_percent, bool applySickness)
 {
+    SetAreaSpiritHealer(nullptr);
+
     WorldPackets::Misc::DeathReleaseLoc packet;
     packet.MapID = -1;
     SendDirectMessage(packet.Write());
@@ -4809,7 +4831,7 @@ void Player::RepopAtGraveyard()
 
     bool shouldResurrect = false;
     // Such zones are considered unreachable as a ghost and the player must be automatically revived
-    if ((!IsAlive() && zone && zone->Flags[0] & AREA_FLAG_NEED_FLY) || GetTransport() || GetPositionZ() < GetMap()->GetMinHeight(GetPhaseShift(), GetPositionX(), GetPositionY()))
+    if ((!IsAlive() && zone && zone->GetFlags().HasFlag(AreaFlags::NoGhostOnRelease)) || GetMap()->IsNonRaidDungeon() || GetMap()->IsRaid() || GetTransport() || GetPositionZ() < GetMap()->GetMinHeight(GetPhaseShift(), GetPositionX(), GetPositionY()))
     {
         shouldResurrect = true;
         SpawnCorpseBones();
@@ -4852,10 +4874,10 @@ void Player::RepopAtGraveyard()
 
 bool Player::CanJoinConstantChannelInZone(ChatChannelsEntry const* channel, AreaTableEntry const* zone) const
 {
-    if (channel->Flags & CHANNEL_DBC_FLAG_ZONE_DEP && zone->Flags[0] & AREA_FLAG_ARENA_INSTANCE)
+    if (channel->Flags & CHANNEL_DBC_FLAG_ZONE_DEP && zone->GetFlags().HasFlag(AreaFlags::NoChatChannels))
         return false;
 
-    if ((channel->Flags & CHANNEL_DBC_FLAG_CITY_ONLY) && (!(zone->Flags[0] & AREA_FLAG_SLAVE_CAPITAL)))
+    if ((channel->Flags & CHANNEL_DBC_FLAG_CITY_ONLY) && (!(zone->GetFlags().HasFlag(AreaFlags::AllowTradeChannel))))
         return false;
 
     if ((channel->Flags & CHANNEL_DBC_FLAG_GUILD_REQ) && GetGuildId())
@@ -7430,7 +7452,7 @@ void Player::UpdateArea(uint32 newArea)
 
     AreaTableEntry const* area = sAreaTableStore.LookupEntry(newArea);
     bool oldFFAPvPArea = pvpInfo.IsInFFAPvPArea;
-    pvpInfo.IsInFFAPvPArea = area && (area->Flags[0] & AREA_FLAG_ARENA);
+    pvpInfo.IsInFFAPvPArea = area && (area->GetFlags().HasFlag(AreaFlags::FreeForAllPvP));
     UpdatePvPState(true);
 
     // check if we were in ffa arena and we left
@@ -7457,8 +7479,8 @@ void Player::UpdateArea(uint32 newArea)
     else
         RemovePvpFlag(UNIT_BYTE2_FLAG_SANCTUARY);
 
-    uint32 const areaRestFlag = (GetTeam() == ALLIANCE) ? AREA_FLAG_REST_ZONE_ALLIANCE : AREA_FLAG_REST_ZONE_HORDE;
-    if (area && area->Flags[0] & areaRestFlag)
+    AreaFlags const areaRestFlag = (GetTeam() == ALLIANCE) ? AreaFlags::AllianceResting : AreaFlags::HordeResting;
+    if (area && area->GetFlags().HasFlag(areaRestFlag))
         _restMgr->SetRestFlag(REST_FLAG_IN_FACTION_AREA);
     else
         _restMgr->RemoveRestFlag(REST_FLAG_IN_FACTION_AREA);
@@ -7512,7 +7534,7 @@ void Player::UpdateZone(uint32 newZone, uint32 newArea)
 
     UpdateHostileAreaState(zone);
 
-    if (zone->Flags[0] & AREA_FLAG_CAPITAL) // Is in a capital city
+    if (zone->GetFlags().HasFlag(AreaFlags::LinkedChat)) // Is in a capital city
     {
         if (!pvpInfo.IsHostile || zone->IsSanctuary())
             _restMgr->SetRestFlag(REST_FLAG_IN_CITY);
@@ -7556,17 +7578,17 @@ void Player::UpdateHostileAreaState(AreaTableEntry const* area)
 
     if (area->IsSanctuary()) // sanctuary and arena cannot be overriden
         pvpInfo.IsInHostileArea = false;
-    else if (area->Flags[0] & AREA_FLAG_ARENA)
+    else if (area->GetFlags().HasFlag(AreaFlags::FreeForAllPvP))
         pvpInfo.IsInHostileArea = true;
     else if (overrideZonePvpType == ZonePVPTypeOverride::None)
     {
         if (area)
         {
-            if (InBattleground() || area->Flags[0] & AREA_FLAG_COMBAT || (area->PvpCombatWorldStateID != -1 && sWorldStateMgr->GetValue(area->PvpCombatWorldStateID, GetMap()) != 0))
+            if (InBattleground() || area->GetFlags().HasFlag(AreaFlags::CombatZone) || (area->PvpCombatWorldStateID != -1 && sWorldStateMgr->GetValue(area->PvpCombatWorldStateID, GetMap()) != 0))
                 pvpInfo.IsInHostileArea = true;
-            else if (IsWarModeLocalActive() || (area->Flags[0] & AREA_FLAG_UNK3))
+            else if (IsWarModeLocalActive() || (area->GetFlags().HasFlag(AreaFlags::EnemiesPvPFlagged)))
             {
-                if (area->Flags[0] & AREA_FLAG_CONTESTED_AREA)
+                if (area->GetFlags().HasFlag(AreaFlags::Contested))
                     pvpInfo.IsInHostileArea = IsWarModeLocalActive();
                 else
                 {
@@ -7744,6 +7766,9 @@ void Player::DuelComplete(DuelCompleteType type)
         else
             ++i;
     }
+
+    RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags2::DuelEnd);
+    opponent->RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags2::DuelEnd);
 
     // cleanup combo points
     ClearComboPoints();
@@ -25518,7 +25543,7 @@ void Player::AtExitCombat()
 {
     Unit::AtExitCombat();
     UpdatePotionCooldown();
-    m_combatExitTime = getMSTime();
+    m_regenInterruptTimestamp = GameTime::Now();
 }
 
 float Player::GetBlockPercent(uint8 attackerLevel) const
@@ -26518,7 +26543,7 @@ bool Player::IsAreaThatActivatesPvpTalents(uint32 areaID) const
             if (area->IsSanctuary())
                 return false;
 
-            if (area->Flags[0] & AREA_FLAG_ARENA)
+            if (area->GetFlags().HasFlag(AreaFlags::FreeForAllPvP))
                 return true;
 
             if (sBattlefieldMgr->IsWorldPvpArea(area->ID))
@@ -29175,7 +29200,7 @@ bool Player::CanEnableWarModeInArea() const
 
     do
     {
-        if (area->Flags[1] & AREA_FLAG_2_CAN_ENABLE_WAR_MODE)
+        if (area->GetFlags2().HasFlag(AreaFlags2::AllowWarModeToggle))
             return true;
 
         area = sAreaTableStore.LookupEntry(area->ParentAreaID);
@@ -29196,6 +29221,7 @@ void Player::UpdateWarModeAuras()
             RemovePlayerFlag(PLAYER_FLAGS_WAR_MODE_ACTIVE);
             CastSpell(this, auraInside, true);
             RemoveAurasDueToSpell(auraOutside);
+            RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags2::WarModeLeave);
         }
         else
         {
@@ -29213,6 +29239,7 @@ void Player::UpdateWarModeAuras()
         RemoveAurasDueToSpell(auraInside);
         RemovePlayerFlag(PLAYER_FLAGS_WAR_MODE_ACTIVE);
         RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
+        RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags2::WarModeLeave);
     }
 }
 
@@ -29228,6 +29255,39 @@ std::string Player::GetDebugInfo() const
     std::stringstream sstr;
     sstr << Unit::GetDebugInfo();
     return sstr.str();
+}
+
+void Player::SetAreaSpiritHealer(Creature* creature)
+{
+    if (!creature)
+    {
+        _areaSpiritHealerGUID = ObjectGuid::Empty;
+        RemoveAurasDueToSpell(SPELL_WAITING_FOR_RESURRECT);
+        return;
+    }
+
+    if (!creature->IsAreaSpiritHealer())
+        return;
+
+    _areaSpiritHealerGUID = creature->GetGUID();
+    CastSpell(nullptr, SPELL_WAITING_FOR_RESURRECT);
+}
+
+void Player::SendAreaSpiritHealerTime(Unit* spiritHealer) const
+{
+    int32 timeLeft = 0;
+    if (Spell* spell = spiritHealer->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+        timeLeft = spell->GetTimer();
+
+    SendAreaSpiritHealerTime(spiritHealer->GetGUID(), timeLeft);
+}
+
+void Player::SendAreaSpiritHealerTime(ObjectGuid const& spiritHealerGUID, int32 timeLeft) const
+{
+    WorldPackets::Battleground::AreaSpiritHealerTime areaSpiritHealerTime;
+    areaSpiritHealerTime.HealerGuid = spiritHealerGUID;
+    areaSpiritHealerTime.TimeLeft = timeLeft;
+    SendDirectMessage(areaSpiritHealerTime.Write());
 }
 
 void Player::SendDisplayToast(uint32 entry, DisplayToastType type, bool isBonusRoll, uint32 quantity, DisplayToastMethod method, uint32 questId, Item* item /*= nullptr*/) const

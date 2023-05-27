@@ -536,6 +536,19 @@ void Unit::MonsterMoveWithSpeed(float x, float y, float z, float speed, bool gen
     GetMotionMaster()->LaunchMoveSpline(std::move(initializer), 0, MOTION_PRIORITY_NORMAL, POINT_MOTION_TYPE);
 }
 
+void Unit::AtStartOfEncounter()
+{
+    RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags2::StartOfEncounter);
+
+    if (IsAlive())
+        Unit::ProcSkillsAndAuras(this, nullptr, PROC_FLAG_ENCOUNTER_START, PROC_FLAG_NONE, PROC_SPELL_TYPE_MASK_ALL, PROC_SPELL_PHASE_NONE, PROC_HIT_NONE, nullptr, nullptr, nullptr);
+}
+
+void Unit::AtEndOfEncounter()
+{
+    RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags2::EndOfEncounter);
+}
+
 void Unit::UpdateSplineMovement(uint32 t_diff)
 {
     if (movespline->Finalized())
@@ -5459,7 +5472,7 @@ void Unit::SetPowerType(Powers new_powertype, bool sendUpdate/* = true*/)
     }
 }
 
-void Unit::UpdateDisplayPower()
+Powers Unit::CalculateDisplayPowerType() const
 {
     Powers displayPower = POWER_MANA;
     switch (GetShapeshiftForm())
@@ -5483,22 +5496,18 @@ void Unit::UpdateDisplayPower()
                 AuraEffect const* powerTypeAura = powerTypeAuras.front();
                 displayPower = Powers(powerTypeAura->GetMiscValue());
             }
-            else if (GetTypeId() == TYPEID_PLAYER)
+            else
             {
                 ChrClassesEntry const* cEntry = sChrClassesStore.LookupEntry(GetClass());
                 if (cEntry && cEntry->DisplayPower < MAX_POWERS)
                     displayPower = Powers(cEntry->DisplayPower);
-            }
-            else if (GetTypeId() == TYPEID_UNIT)
-            {
+
                 if (Vehicle* vehicle = GetVehicleKit())
                 {
                     if (PowerDisplayEntry const* powerDisplay = sPowerDisplayStore.LookupEntry(vehicle->GetVehicleInfo()->PowerDisplayID[0]))
                         displayPower = Powers(powerDisplay->ActualType);
-                    else if (GetClass() == CLASS_ROGUE)
-                        displayPower = POWER_ENERGY;
                 }
-                else if (Pet* pet = ToPet())
+                else if (Pet const* pet = ToPet())
                 {
                     if (pet->getPetType() == HUNTER_PET) // Hunter pets have focus
                         displayPower = POWER_FOCUS;
@@ -5510,7 +5519,12 @@ void Unit::UpdateDisplayPower()
         }
     }
 
-    SetPowerType(displayPower);
+    return displayPower;
+}
+
+void Unit::UpdateDisplayPower()
+{
+    SetPowerType(CalculateDisplayPowerType());
 }
 
 void Unit::SetSheath(SheathState sheathed)
@@ -6483,6 +6497,11 @@ void Unit::SendEnergizeSpellLog(Unit* victim, uint32 spellID, int32 damage, int3
 
 void Unit::EnergizeBySpell(Unit* victim, SpellInfo const* spellInfo, int32 damage, Powers powerType)
 {
+    if (Player* player = victim->ToPlayer())
+        if (PowerTypeEntry const* powerTypeEntry = sDB2Manager.GetPowerTypeEntry(powerType))
+            if (powerTypeEntry->GetFlags().HasFlag(PowerTypeFlags::UseRegenInterrupt))
+                player->InterruptPowerRegen(powerType);
+
     int32 gain = victim->ModifyPower(powerType, damage, false);
     int32 overEnergize = damage - gain;
     victim->GetThreatManager().ForwardThreatForAssistingMe(this, float(damage) / 2, spellInfo, true);
@@ -7866,7 +7885,7 @@ MountCapabilityEntry const* Unit::GetMountCapability(uint32 mountType) const
 
     uint32 areaId = GetAreaId();
     uint32 ridingSkill = 5000;
-    uint32 mountFlags = 0;
+    EnumFlag<AreaMountFlags> mountFlags = AreaMountFlags::None;
     bool isSubmerged = false;
     bool isInWater = false;
 
@@ -7876,10 +7895,10 @@ MountCapabilityEntry const* Unit::GetMountCapability(uint32 mountType) const
     if (HasAuraType(SPELL_AURA_MOUNT_RESTRICTIONS))
     {
         for (AuraEffect const* auraEffect : GetAuraEffectsByType(SPELL_AURA_MOUNT_RESTRICTIONS))
-            mountFlags |= auraEffect->GetMiscValue();
+            mountFlags |= AreaMountFlags(auraEffect->GetMiscValue());
     }
     else if (AreaTableEntry const* areaTable = sAreaTableStore.LookupEntry(areaId))
-        mountFlags = areaTable->MountFlags;
+        mountFlags = areaTable->GetMountFlags();
 
     LiquidData liquid;
     ZLiquidStatus liquidStatus = GetMap()->GetLiquidStatus(GetPhaseShift(), GetPositionX(), GetPositionY(), GetPositionZ(), map_liquidHeaderTypeFlags::AllLiquids, &liquid);
@@ -7897,13 +7916,13 @@ MountCapabilityEntry const* Unit::GetMountCapability(uint32 mountType) const
 
         if (!(mountCapability->Flags & MOUNT_CAPABIILTY_FLAG_IGNORE_RESTRICTIONS))
         {
-            if (mountCapability->Flags & MOUNT_CAPABILITY_FLAG_GROUND && !(mountFlags & AREA_MOUNT_FLAG_GROUND_ALLOWED))
+            if (mountCapability->Flags & MOUNT_CAPABILITY_FLAG_GROUND && !(mountFlags.HasFlag(AreaMountFlags::AllowGroundMounts)))
                 continue;
-            if (mountCapability->Flags & MOUNT_CAPABILITY_FLAG_FLYING && !(mountFlags & AREA_MOUNT_FLAG_FLYING_ALLOWED))
+            if (mountCapability->Flags & MOUNT_CAPABILITY_FLAG_FLYING && !(mountFlags.HasFlag(AreaMountFlags::AllowFlyingMounts)))
                 continue;
-            if (mountCapability->Flags & MOUNT_CAPABILITY_FLAG_FLOAT && !(mountFlags & AREA_MOUNT_FLAG_FLOAT_ALLOWED))
+            if (mountCapability->Flags & MOUNT_CAPABILITY_FLAG_FLOAT && !(mountFlags.HasFlag(AreaMountFlags::AllowSurfaceSwimmingMounts)))
                 continue;
-            if (mountCapability->Flags & MOUNT_CAPABILITY_FLAG_UNDERWATER && !(mountFlags & AREA_MOUNT_FLAG_UNDERWATER_ALLOWED))
+            if (mountCapability->Flags & MOUNT_CAPABILITY_FLAG_UNDERWATER && !(mountFlags.HasFlag(AreaMountFlags::AllowUnderwaterSwimmingMounts)))
                 continue;
         }
 
@@ -9367,17 +9386,6 @@ void Unit::TriggerOnPowerChangeAuras(Powers power, int32 oldVal, int32 newVal)
     }
 }
 
-int32 Unit::GetCreatePowerValue(Powers power) const
-{
-    if (power == POWER_MANA)
-        return GetCreateMana();
-
-    if (PowerTypeEntry const* powerType = sDB2Manager.GetPowerTypeEntry(power))
-        return powerType->MaxBasePower;
-
-    return 0;
-}
-
 void Unit::AIUpdateTick(uint32 diff)
 {
     if (UnitAI* ai = GetAI())
@@ -9471,6 +9479,12 @@ void Unit::RemoveFromWorld()
 
     if (IsInWorld())
     {
+        if (IsAreaSpiritHealer())
+        {
+            if (Creature* creature = ToCreature())
+                creature->SummonGraveyardTeleporter();
+        }
+
         m_duringRemoveFromWorld = true;
         if (UnitAI* ai = GetAI())
             ai->OnDespawn();
@@ -12433,6 +12447,8 @@ void Unit::_ExitVehicle(Position const* exitPosition)
         else
             ToTempSummon()->UnSummon(2000); // Approximation
     }
+
+    RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags2::AbandonVehicle);
 }
 
 bool Unit::IsFalling() const
@@ -12550,6 +12566,9 @@ bool Unit::UpdatePosition(float x, float y, float z, float orientation, bool tel
 
     _positionUpdateInfo.Relocated = relocated;
     _positionUpdateInfo.Turned = turn;
+
+    if (IsFalling())
+        RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags2::Falling);
 
     bool isInWater = IsInWater();
     if (!IsFalling() || isInWater || IsFlying())

@@ -1905,7 +1905,7 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
         {
             uint32 zoneId = referencePlayer->GetAreaId();
             if (AreaTableEntry const* areaEntry = sAreaTableStore.LookupEntry(zoneId))
-                if (areaEntry->Flags[0] & AREA_FLAG_UNK9)
+                if (areaEntry->GetFlags().HasFlag(AreaFlags::IsSubzone))
                     zoneId = areaEntry->ParentAreaID;
             if (zoneId != reqValue)
                 return false;
@@ -1917,7 +1917,7 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
                 return false;
             uint32 zoneId = ref->GetAreaId();
             if (AreaTableEntry const* areaEntry = sAreaTableStore.LookupEntry(zoneId))
-                if (areaEntry->Flags[0] & AREA_FLAG_UNK9)
+                if (areaEntry->GetFlags().HasFlag(AreaFlags::IsSubzone))
                     zoneId = areaEntry->ParentAreaID;
             if (zoneId != reqValue)
                 return false;
