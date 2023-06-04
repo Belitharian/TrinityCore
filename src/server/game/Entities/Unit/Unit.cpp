@@ -6806,7 +6806,7 @@ int32 Unit::SpellBaseDamageBonusDone(SpellSchoolMask schoolMask) const
             float basePct = GetPctModifierValue(unitMod, BASE_PCT) * attackSpeedMulti;
             float totalValue = GetFlatModifierValue(unitMod, TOTAL_VALUE);
             float totalPct = GetPctModifierValue(unitMod, TOTAL_PCT);
-            float dmgMultiplier = creature->GetCreatureTemplate()->ModDamage;
+            float dmgMultiplier = creature->GetCreatureDifficulty()->DamageModifier;
 
             DoneAdvertisedBenefit += ((weaponMaxDamage + baseValue) * dmgMultiplier * basePct + totalValue) * totalPct;
         }
@@ -7280,7 +7280,7 @@ int32 Unit::SpellBaseHealingBonusDone(SpellSchoolMask schoolMask) const
             float basePct = GetPctModifierValue(unitMod, BASE_PCT) * attackSpeedMulti;
             float totalValue = GetFlatModifierValue(unitMod, TOTAL_VALUE);
             float totalPct = GetPctModifierValue(unitMod, TOTAL_PCT);
-            float dmgMultiplier = creature->GetCreatureTemplate()->ModDamage;
+            float dmgMultiplier = creature->GetCreatureDifficulty()->DamageModifier;
 
             advertisedBenefit += ((weaponMaxDamage + baseValue) * dmgMultiplier * basePct + totalValue) * totalPct;
         }
