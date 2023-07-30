@@ -21,6 +21,7 @@
 #include "CriteriaHandler.h"
 #include <unordered_set>
 
+class Map;
 struct ScenarioData;
 struct ScenarioEntry;
 struct ScenarioStepEntry;
@@ -56,7 +57,7 @@ enum ScenarioInstanceType
 class TC_GAME_API Scenario : public CriteriaHandler
 {
     public:
-        Scenario(ScenarioData const* scenarioData);
+        Scenario(Map* map, ScenarioData const* scenarioData);
         ~Scenario();
 
         void Reset() override;
@@ -83,6 +84,7 @@ class TC_GAME_API Scenario : public CriteriaHandler
         void SendScenarioEvent(Player* player, uint32 eventId);
 
     protected:
+        Map const* _map;
         GuidUnorderedSet _players;
 
         void SendCriteriaUpdate(Criteria const* criteria, CriteriaProgress const* progress, Seconds timeElapsed, bool timedCompleted) const override;
@@ -107,6 +109,7 @@ class TC_GAME_API Scenario : public CriteriaHandler
         ScenarioData const* _data;
 
     private:
+        ObjectGuid const _guid;
         ScenarioStepEntry const* _currentstep;
         std::map<ScenarioStepEntry const*, ScenarioStepState> _stepStates;
 };

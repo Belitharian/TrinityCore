@@ -432,29 +432,8 @@ class FlaggedValuesArray32
         T_FLAGS m_flags;
 };
 
-struct TC_GAME_API FindCreatureOptions
+struct FindCreatureOptions
 {
-    FindCreatureOptions();
-    ~FindCreatureOptions();
-
-    FindCreatureOptions& SetCreatureId(uint32 creatureId) { CreatureId = creatureId; return *this; }
-    FindCreatureOptions& SetStringId(std::string_view stringId) { StringId = stringId; return *this; }
-
-    FindCreatureOptions& SetIsAlive(bool isAlive) { IsAlive = isAlive; return *this; }
-    FindCreatureOptions& SetIsInCombat(bool isInCombat) { IsInCombat = isInCombat; return *this; }
-    FindCreatureOptions& SetIsSummon(bool isSummon) { IsSummon = isSummon; return *this; }
-
-    FindCreatureOptions& SetIgnorePhases(bool ignorePhases) { IgnorePhases = ignorePhases; return *this; }
-    FindCreatureOptions& SetIgnoreNotOwnedPrivateObjects(bool ignoreNotOwnedPrivateObjects) { IgnoreNotOwnedPrivateObjects = ignoreNotOwnedPrivateObjects; return *this; }
-    FindCreatureOptions& SetIgnorePrivateObjects(bool ignorePrivateObjects) { IgnorePrivateObjects = ignorePrivateObjects; return *this; }
-
-    FindCreatureOptions& SetHasAura(uint32 spellId) { AuraSpellId = spellId; return *this; }
-    FindCreatureOptions& SetOwner(ObjectGuid ownerGuid) { OwnerGuid = ownerGuid; return *this; }
-    FindCreatureOptions& SetCharmer(ObjectGuid charmerGuid) { CharmerGuid = charmerGuid; return *this; }
-    FindCreatureOptions& SetCreator(ObjectGuid creatorGuid) { CreatorGuid = creatorGuid; return *this; }
-    FindCreatureOptions& SetDemonCreator(ObjectGuid demonCreatorGuid) { DemonCreatorGuid = demonCreatorGuid; return *this; }
-    FindCreatureOptions& SetPrivateObjectOwner(ObjectGuid privateObjectOwnerGuid) { PrivateObjectOwnerGuid = privateObjectOwnerGuid; return *this; }
-
     Optional<uint32> CreatureId;
     Optional<std::string_view> StringId;
 
@@ -472,12 +451,22 @@ struct TC_GAME_API FindCreatureOptions
     Optional<ObjectGuid> CreatorGuid;
     Optional<ObjectGuid> DemonCreatorGuid;
     Optional<ObjectGuid> PrivateObjectOwnerGuid;
+};
 
-    FindCreatureOptions(FindCreatureOptions const&) = delete;
-    FindCreatureOptions(FindCreatureOptions&&) = delete;
+struct FindGameObjectOptions
+{
+    Optional<uint32> GameObjectId;
+    Optional<std::string_view> StringId;
 
-    FindCreatureOptions& operator=(FindCreatureOptions const&) = delete;
-    FindCreatureOptions& operator=(FindCreatureOptions&&) = delete;
+    Optional<bool> IsSummon;
+    Optional<bool> IsSpawned;
+
+    bool IgnorePhases = false;
+    bool IgnoreNotOwnedPrivateObjects = true;
+    bool IgnorePrivateObjects = false;
+
+    Optional<ObjectGuid> OwnerGuid;
+    Optional<ObjectGuid> PrivateObjectOwnerGuid;
 };
 
 class TC_GAME_API WorldObject : public Object, public WorldLocation
@@ -630,6 +619,7 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         Creature*   FindNearestCreature(uint32 entry, float range, bool alive = true) const;
         Creature*   FindNearestCreatureWithOptions(float range, FindCreatureOptions const& options) const;
         GameObject* FindNearestGameObject(uint32 entry, float range, bool spawnedOnly = true) const;
+        GameObject* FindNearestGameObjectWithOptions(float range, FindGameObjectOptions const& options) const;
         GameObject* FindNearestUnspawnedGameObject(uint32 entry, float range) const;
         GameObject* FindNearestGameObjectOfType(GameobjectTypes type, float range) const;
         Player* SelectNearestPlayer(float distance) const;
@@ -691,6 +681,9 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
 
         template <typename Container>
         void GetGameObjectListWithEntryInGrid(Container& gameObjectContainer, uint32 entry, float maxSearchRange = 250.0f) const;
+
+        template <typename Container>
+        void GetGameObjectListWithOptionsInGrid(Container& gameObjectContainer, float maxSearchRange, FindGameObjectOptions const& options) const;
 
         template <typename Container>
         void GetCreatureListWithEntryInGrid(Container& creatureContainer, uint32 entry, float maxSearchRange = 250.0f) const;

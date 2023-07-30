@@ -19,13 +19,16 @@
 #include "InstanceScenario.h"
 #include "InstanceScript.h"
 #include "Log.h"
+#include "Map.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "ScenarioMgr.h"
 #include "ScenarioPackets.h"
 
-Scenario::Scenario(ScenarioData const* scenarioData) : _data(scenarioData), _currentstep(nullptr)
+Scenario::Scenario(Map* map, ScenarioData const* scenarioData) : _map(map), _data(scenarioData),
+    _guid(ObjectGuid::Create<HighGuid::Scenario>(map->GetId(), scenarioData->Entry->ID, map->GenerateLowGuid<HighGuid::Scenario>())),
+    _currentstep(nullptr)
 {
     ASSERT(_data);
 
@@ -41,7 +44,7 @@ Scenario::Scenario(ScenarioData const* scenarioData) : _data(scenarioData), _cur
 Scenario::~Scenario()
 {
     for (ObjectGuid guid : _players)
-        if (Player* player = ObjectAccessor::FindPlayer(guid))
+        if (Player* player = ObjectAccessor::GetPlayer(_map, guid))
             SendBootPlayer(player);
 
     _players.clear();
@@ -61,7 +64,7 @@ void Scenario::CompleteStep(ScenarioStepEntry const* step)
 
     if (Quest const* quest = sObjectMgr->GetQuestTemplate(step->RewardQuestID))
         for (ObjectGuid guid : _players)
-            if (Player* player = ObjectAccessor::FindPlayer(guid))
+            if (Player* player = ObjectAccessor::GetPlayer(_map, guid))
                 player->RewardQuest(quest, LootItemType::Item, 0, nullptr, false);
 
     if (step->IsBonusObjective())
@@ -236,12 +239,13 @@ void Scenario::OnCompletedCriteriaTree(CriteriaTree const* tree)
 void Scenario::SendPacket(WorldPacket const* data) const
 {
     for (ObjectGuid guid : _players)
-        if (Player* player = ObjectAccessor::FindPlayer(guid))
+        if (Player* player = ObjectAccessor::GetPlayer(_map, guid))
             player->SendDirectMessage(data);
 }
 
 void Scenario::BuildScenarioState(WorldPackets::Scenario::ScenarioState* scenarioState)
 {
+    scenarioState->ScenarioGUID = _guid;
     scenarioState->ScenarioID = _data->Entry->ID;
     if (ScenarioStepEntry const* step = GetStep())
         scenarioState->CurrentStep = step->ID;
@@ -355,6 +359,7 @@ CriteriaList const& Scenario::GetCriteriaByType(CriteriaType type, uint32 /*asse
 void Scenario::SendBootPlayer(Player* player)
 {
     WorldPackets::Scenario::ScenarioVacate scenarioBoot;
+    scenarioBoot.ScenarioGUID = _guid;
     scenarioBoot.ScenarioID = _data->Entry->ID;
     player->SendDirectMessage(scenarioBoot.Write());
 }
