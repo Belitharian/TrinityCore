@@ -27,6 +27,7 @@
 #include "GridNotifiers.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "PhasingHandler.h"
 #include "ScriptMgr.h"
 #include "SpellAuraEffects.h"
 #include "SpellHistory.h"
@@ -95,7 +96,11 @@ enum MageSpells
     SPELL_MAGE_CHAIN_REACTION_DUMMY              = 278309,
     SPELL_MAGE_CHAIN_REACTION                    = 278310,
     SPELL_MAGE_TOUCH_OF_THE_MAGI_EXPLODE         = 210833,
-    SPELL_MAGE_WINTERS_CHILL                     = 228358
+    SPELL_MAGE_WINTERS_CHILL                     = 228358,
+    SPELL_MAGE_METEOR_DAMAGE                     = 153564,
+    SPELL_MAGE_METEOR_TIMER                      = 177345,
+    SPELL_MAGE_METEOR_VISUAL                     = 174556,
+    SPELL_MAGE_METEOR_BURN                       = 155158
 };
 
 // 110909 - Alter Time Aura
@@ -1512,6 +1517,216 @@ class spell_mage_water_elemental_freeze : public SpellScript
     }
 };
 
+// 352278 Ice Wall
+class spell_ice_wall : public SpellScript
+{
+    PrepareSpellScript(spell_ice_wall);
+
+    void HandleSummon(SpellEffIndex effIndex)
+    {
+        PreventHitDefaultEffect(effIndex);
+        Unit* caster = GetCaster();
+        uint32 entry = uint32(GetEffectInfo().MiscValue);
+        SummonPropertiesEntry const* properties = sSummonPropertiesStore.LookupEntry(uint32(GetEffectInfo().MiscValueB));
+        uint32 duration = uint32(GetSpellInfo()->GetDuration());
+        uint32 healthPct = GetSpellInfo()->GetEffect(EFFECT_3).BasePoints;
+
+        WorldLocation* pos = GetHitDest();
+        if (Creature* summon = caster->GetMap()->SummonCreature(entry, pos->GetPosition(), properties, duration, caster, GetSpellInfo()->Id))
+        {
+            uint32 maxHealth = caster->CountPctFromMaxHealth(healthPct);
+            summon->SetMaxHealth(maxHealth);
+            summon->SetFullHealth();
+            summon->SetFaction(caster->GetFaction());
+
+            UnitState cannotMove = UnitState(UNIT_STATE_ROOT | UNIT_STATE_CANNOT_TURN);
+            summon->SetControlled(true, cannotMove);
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_ice_wall::HandleSummon, EFFECT_0, SPELL_EFFECT_SUMMON);
+    }
+};
+
+// Ring of Fire - 353082
+// AreaTriggerID - 22981
+struct at_ring_of_fire : AreaTriggerAI
+{
+    static constexpr Milliseconds TICK_PERIOD = Milliseconds(2000);
+
+    at_ring_of_fire(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger), _tickTimer(TICK_PERIOD) { }
+
+    enum Spells
+    {
+        SPELL_RING_OF_FIRE_DAMAGE = 353084
+    };
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        if (Unit* caster = at->GetCaster())
+        {
+            if (!caster->IsHostileTo(unit))
+                return;
+
+            if (unit->HasAura(SPELL_RING_OF_FIRE_DAMAGE))
+                return;
+
+            caster->CastSpell(unit, SPELL_RING_OF_FIRE_DAMAGE, true);
+        }
+    }
+
+    void OnUpdate(uint32 diff) override
+    {
+        _tickTimer -= Milliseconds(diff);
+
+        while (_tickTimer <= 0s)
+        {
+            if (Unit* caster = at->GetCaster())
+            {
+                for (ObjectGuid guid : at->GetInsideUnits())
+                {
+                    if (Unit* target = ObjectAccessor::GetUnit(*caster, guid))
+                    {
+                        if (!caster->IsHostileTo(target))
+                            continue;
+
+                        if (target->HasAura(SPELL_RING_OF_FIRE_DAMAGE))
+                            continue;
+
+                        caster->CastSpell(target, SPELL_RING_OF_FIRE_DAMAGE, true);
+                    }
+                }
+            }
+
+            _tickTimer += TICK_PERIOD;
+        }
+    }
+
+    private:
+    Milliseconds _tickTimer;
+};
+
+// Meteor - 153561
+class spell_mage_meteor : public SpellScript
+{
+    PrepareSpellScript(spell_mage_meteor);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_MAGE_METEOR_DAMAGE });
+    }
+
+    void HandleDummy()
+    {
+        Unit* caster = GetCaster();
+        WorldLocation const* dest = GetExplTargetDest();
+        if (!caster || !dest)
+            return;
+
+        caster->CastSpell(dest->GetPosition(), SPELL_MAGE_METEOR_TIMER, true);
+    }
+
+    void Register() override
+    {
+        AfterCast += SpellCastFn(spell_mage_meteor::HandleDummy);
+    }
+};
+
+// Meteor Damage - 153564
+class spell_mage_meteor_damage : public SpellScript
+{
+    PrepareSpellScript(spell_mage_meteor_damage);
+
+    int32 _targets;
+
+    void HandleHit(SpellEffIndex /*effIndex*/)
+    {
+        Unit* unit = GetHitUnit();
+        if (!unit)
+            return;
+
+        SetHitDamage(GetHitDamage() / _targets);
+    }
+
+    void CountTargets(std::list<WorldObject*>& targets)
+    {
+        _targets = targets.size();
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_mage_meteor_damage::HandleHit, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_mage_meteor_damage::CountTargets, EFFECT_0, TARGET_UNIT_DEST_AREA_ENEMY);
+    }
+};
+
+// Meteor - 177345
+// AreaTriggerID - 3467
+struct at_mage_meteor_timer : AreaTriggerAI
+{
+    at_mage_meteor_timer(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger) { }
+
+    void OnCreate(Spell const* /*creatingSpell*/) override
+    {
+        Unit* caster = at->GetCaster();
+        if (!caster)
+            return;
+
+        const Position pos = at->GetPosition();
+        if (TempSummon* tempSumm = caster->SummonCreature(WORLD_TRIGGER, at->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 5s))
+        {
+            tempSumm->SetFaction(caster->GetFaction());
+            tempSumm->SetOwnerGUID(caster->GetGUID());
+            PhasingHandler::InheritPhaseShift(tempSumm, caster);
+            caster->CastSpell(tempSumm, SPELL_MAGE_METEOR_VISUAL, true);
+        }
+
+    }
+
+    void OnRemove() override
+    {
+        Unit* caster = at->GetCaster();
+        if (!caster)
+            return;
+
+        if (TempSummon* tempSumm = caster->SummonCreature(WORLD_TRIGGER, at->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 5s))
+        {
+            tempSumm->SetFaction(caster->GetFaction());
+            tempSumm->SetOwnerGUID(caster->GetGUID());
+            PhasingHandler::InheritPhaseShift(tempSumm, caster);
+            caster->CastSpell(tempSumm, SPELL_MAGE_METEOR_DAMAGE, true);
+        }
+    }
+};
+
+// Meteor Burn - 175396
+// AreaTriggerID - 1712
+struct at_mage_meteor_burn : AreaTriggerAI
+{
+    at_mage_meteor_burn(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger) { }
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        Unit* caster = at->GetCaster();
+        if (!caster)
+            return;
+
+        caster->CastSpell(unit, SPELL_MAGE_METEOR_BURN, true);
+    }
+
+    void OnUnitExit(Unit* unit) override
+    {
+        Unit* caster = at->GetCaster();
+        if (!caster)
+            return;
+
+        if (Aura* meteor = unit->GetAura(SPELL_MAGE_METEOR_BURN, caster->GetGUID()))
+            meteor->SetDuration(0);
+    }
+};
+
 void AddSC_mage_spell_scripts()
 {
     RegisterSpellScript(spell_mage_alter_time_aura);
@@ -1559,4 +1774,10 @@ void AddSC_mage_spell_scripts()
     RegisterSpellScript(spell_mage_supernova);
     RegisterSpellScript(spell_mage_touch_of_the_magi_aura);
     RegisterSpellScript(spell_mage_water_elemental_freeze);
+    RegisterSpellScript(spell_ice_wall);
+    RegisterAreaTriggerAI(at_ring_of_fire);
+    RegisterSpellScript(spell_mage_meteor);
+    RegisterSpellScript(spell_mage_meteor_damage);
+    RegisterAreaTriggerAI(at_mage_meteor_timer);
+    RegisterAreaTriggerAI(at_mage_meteor_burn);
 }

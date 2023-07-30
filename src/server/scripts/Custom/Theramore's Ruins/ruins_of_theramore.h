@@ -35,9 +35,7 @@ enum RFTCreatures
 	NPC_BOMBARDING_ZEPPELIN             = 136957,
 	NPC_ARCHMAGE_TERVOSH	            = 500000,
 	NPC_KINNDY_SPARKSHINE	            = 500001,
-	NPC_DEAD_ROKNAH_TROOP               = 500015,
-
-    NPC_INVOKER                         = 550001,
+	NPC_DEAD_ROKNAH_TROOP               = 500015
 };
 
 enum RFTData

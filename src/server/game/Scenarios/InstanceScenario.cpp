@@ -26,7 +26,7 @@
 #include "ScenarioMgr.h"
 #include "StringFormat.h"
 
-InstanceScenario::InstanceScenario(InstanceMap* map, ScenarioData const* scenarioData) : Scenario(map, scenarioData)
+InstanceScenario::InstanceScenario(InstanceMap* map, ScenarioData const* scenarioData) : Scenario(map, scenarioData), _map(map)
 {
     ASSERT(_map);
     LoadInstanceData();

@@ -142,7 +142,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
                     hordeCounter = (uint32)hordes.size();
                     for (TempSummon* horde : hordes)
                     {
-                        horde->SetMaxHealth(horde->GetMaxHealth() * 10.f);
+                        horde->SetMaxHealth(horde->GetMaxHealth() * 6.f);
                         horde->SetFullHealth();
                         horde->SetTempSummonType(TEMPSUMMON_TIMED_OR_DEAD_DESPAWN);
 

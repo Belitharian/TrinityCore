@@ -187,6 +187,7 @@ struct npc_theramore_troop : public CustomAI
 	npc_theramore_troop(Creature* creature, AI_Type type) : CustomAI(creature, type), emoteReceived(false)
 	{
 		instance = creature->GetInstanceScript();
+        soundEmote = creature->GetGender() == GENDER_FEMALE ? 74679 : 74681;
 	}
 
 	enum Misc
@@ -195,6 +196,7 @@ struct npc_theramore_troop : public CustomAI
 	};
 
 	InstanceScript* instance;
+    uint32 soundEmote;
 	bool emoteReceived;
 
 	void ReceiveEmote(Player* player, uint32 emoteId) override
@@ -212,9 +214,28 @@ struct npc_theramore_troop : public CustomAI
 				{
 					if (player->IsWithinDist(me, 5.f))
 					{
-						me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
-						KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
-						emoteReceived = true;
+                        float orientation = me->GetOrientation();
+                        scheduler.Schedule(5ms, [orientation, player, this](TaskContext context)
+                        {
+                            switch (context.GetRepeatCounter())
+                            {
+                                case 0:
+                                    me->SetFacingToObject(player);
+                                    context.Repeat(1s);
+                                    break;
+                                case 1:
+                                    me->PlayDirectSound(soundEmote);
+                                    me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
+                                    KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
+                                    emoteReceived = true;
+                                    context.Repeat(3s);
+                                    break;
+                                case 2:
+                                    me->SetFacingTo(orientation);
+                                    break;
+                            }
+
+                        });
 					}
 				}
 			#endif

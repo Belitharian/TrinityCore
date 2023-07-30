@@ -19,6 +19,7 @@ enum class AI_Type
     Melee,
     Hybrid,
     Distance,
+    Stay
 };
 
 class FriendlyMissingBuff
@@ -58,6 +59,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         virtual void Initialize();
 
         virtual float GetDistance() { return 20.f; };
+        virtual float GetDamageReductionToUnit() { return 0.2f; };
 
         void JustSummoned(Creature* /*summon*/) override;
         void SummonedCreatureDespawn(Creature* /*summon*/) override;

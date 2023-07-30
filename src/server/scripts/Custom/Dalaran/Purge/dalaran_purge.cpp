@@ -188,7 +188,8 @@ struct npc_magister_rommath_purge : public CustomAI
         SPELL_EMBER_BLAST           = 325877,
         SPELL_BLAZING_SURGE         = 329509,
         SPELL_PHOENIX_FIRE          = 266964,
-        SPELL_PHOENIX_VISUAL        = 336658
+        SPELL_PHOENIX_VISUAL        = 336658,
+        SPELL_SCORCHING_DETONATION  = 401525
 	};
 
 	void Initialize()
@@ -284,6 +285,17 @@ struct npc_magister_rommath_purge : public CustomAI
 			}
 		}
 	}
+
+    void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
+    {
+        if (Unit* victim = target->ToUnit())
+        {
+            if (spellInfo->HasOnlyDamageEffects() && roll_chance_i(60))
+            {
+                DoCast(victim, SPELL_SCORCHING_DETONATION, true);
+            }
+        }
+    }
 
     void OnChannelFinished(SpellInfo const* spell) override
     {
@@ -417,7 +429,7 @@ struct npc_magister_rommath_purge : public CustomAI
                 case 2:
                     CastStop();
                     DoCastSelf(SPELL_FIRE_CHANNELING);
-                    events.ScheduleEvent(3, 1s);
+                    events.ScheduleEvent(3, 2s);
                     break;
                 case 3:
                     player->AddAura(SPELL_PHOENIX_FIRE, player);

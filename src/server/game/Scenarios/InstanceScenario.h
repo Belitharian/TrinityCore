@@ -29,9 +29,16 @@ class TC_GAME_API InstanceScenario : public Scenario
 
         void LoadInstanceData();
 
+        InstanceMap* const GetInstance()
+        {
+            return const_cast<InstanceMap*>(_map);
+        }
+
     protected:
         std::string GetOwnerInfo() const override;
         void SendPacket(WorldPacket const* data) const override;
+
+        InstanceMap const* _map;
 };
 
 #endif // InstanceScenario_h__

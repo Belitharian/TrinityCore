@@ -67,6 +67,8 @@ enum DLPData
 	DATA_MAGISTER_BRASAEL,
 	DATA_SECRET_PASSAGE,
     DATA_PORTAL_TO_PRISON,
+    DATA_PORTAL_TO_SEWERS,
+    DATA_PORTAL_TO_LIBRARY,
 	DATA_SCENARIO_PHASE
 };
 
@@ -193,7 +195,8 @@ enum DLPMisc
 	GOB_PORTAL_TO_STORMWIND             = 353823,
 	GOB_ICE_WALL_COLLISION              = 368620,
 	GOB_PORTAL_TO_PRISON                = 550001,
-	GOB_PORTAL_TO_LIBRARY               = 550002,
+	GOB_PORTAL_TO_SEWERS                = 550002,
+    GOB_PORTAL_TO_LIBRARY               = 550003,
 
 	// Criteria Trees
 	CRITERIA_TREE_DALARAN               = 1000047,  // Purple Citadel
@@ -242,13 +245,19 @@ inline Position const GetRandomPosition(Position center, float dist)
 	float r = dist * sqrtf(float(rand_norm()));
 	float x = r * cosf(alpha) + center.GetPositionX();
 	float y = r * sinf(alpha) + center.GetPositionY();
-	return { x, y, center.GetPositionZ(), 0.f };
+
+    Position result = { x, y, center.GetPositionZ(), 0.f };
+
+    float o = result.GetAbsoluteAngle(center);
+    result.SetOrientation(o);
+
+    return result;
 }
 
 inline Position const GetRandomPosition(Unit* target, float dist, bool fill = true)
 {
 	// Get center position
-	const Position center = target->GetPosition();
+	Position center = target->GetPosition();
 
 	// Random angle
 	float alpha = 2 * float(M_PI) * float(rand_norm());
@@ -258,47 +267,29 @@ inline Position const GetRandomPosition(Unit* target, float dist, bool fill = tr
 		? dist * sqrtf(float(rand_norm()))
 		: dist;
 
-	// Get X and Y position around the center with radius
-	float x = r * cosf(alpha) + center.GetPositionX();
-	float y = r * sinf(alpha) + center.GetPositionY();
+    // Move to first collision
+    target->MovePositionToFirstCollision(center, r, alpha);
 
-	// Get height map Z position
-	float z = center.GetPositionZ();
+    // Get orientation angle
+    float o = center.GetAbsoluteAngle(target);
 
-    Trinity::NormalizeMapCoord(x);
-    Trinity::NormalizeMapCoord(y);
-	target->UpdateGroundPositionZ(x, y, z);
-
-	// Get orientation angle
-	const Position position = { x, y, z };
-	float o = position.GetAbsoluteAngle(center);
-
-	// Set final position
-	return { x, y, z, o };
+    // Set final position
+    return { center.m_positionX, center.m_positionY, center.m_positionZ, o };
 }
 
-inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
+inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float dist)
 {
 	// Get center position
-	const Position center = target->GetPosition();
+	Position center = target->GetPosition();
 
-	// Get X and Y position around the center with radius
-	float x = radius * cosf(angle) + center.GetPositionX();
-	float y = radius * sinf(angle) + center.GetPositionY();
+    // Move to first collision
+    target->MovePositionToFirstCollision(center, dist, angle);
 
-	// Get height map Z position
-	float z = center.GetPositionZ();
-
-    Trinity::NormalizeMapCoord(x);
-    Trinity::NormalizeMapCoord(y);
-	target->UpdateGroundPositionZ(x, y, z);
-
-	// Get orientation angle
-	const Position position = { x, y, z };
-	float o = position.GetAbsoluteAngle(center);
+    // Set orientation
+    float o = center.GetAbsoluteAngle(target);
 
 	// Set final position
-	return { x, y, z, o };
+    return { center.m_positionX, center.m_positionY, center.m_positionZ, o };
 }
 
 inline void ClosePortal(GameObject*& portal)

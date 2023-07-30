@@ -20,10 +20,10 @@ struct npc_jaina_theramore : public CustomAI
 		Initialize();
 	}
 
-    enum NPCs
-    {
-        NPC_ARCANE_RIFT_TRIGGER     = 196664
-    };
+	enum NPCs
+	{
+		NPC_ARCANE_RIFT_TRIGGER     = 196664
+	};
 
 	enum Spells
 	{
@@ -32,13 +32,12 @@ struct npc_jaina_theramore : public CustomAI
 		SPELL_FIREBLAST             = 20679,
 		SPELL_FROSTBOLT_COSMETIC    = 237649,
 		SPELL_LIGHTNING_FX          = 278455,
-        SPELL_ARCANE_RIFT           = 388902,
-        SPELL_FROZEN_SHIELD         = 396780
+		SPELL_ARCANE_RIFT           = 388902
 	};
 
 	void Initialize() override
 	{
-        CustomAI::Initialize();
+		CustomAI::Initialize();
 
 		instance = me->GetInstanceScript();
 	}
@@ -50,71 +49,59 @@ struct npc_jaina_theramore : public CustomAI
 		Initialize();
 	}
 
-    void DoAction(int32 actionId) override
-    {
-        if (actionId == SPELL_TELEPORT_CAST_TIME)
-        {
-            uint32 waveId = instance->GetData(DATA_WAVE_GROUP_ID);
-
-            Position position;
-            switch (waveId)
-            {
-                // Portes
-                case DATA_WAVE_DOORS:
-                    position = JainaPoint03;
-                    me->AI()->Talk(SAY_BATTLE_GATE);
-                    break;
-                    // Citadelle
-                case DATA_WAVE_CITADEL:
-                    position = CitadelPoint01;
-                    me->AI()->Talk(SAY_BATTLE_CITADEL);
-                    break;
-                    // Docks
-                case DATA_WAVE_DOCKS:
-                    position = DocksPoint01;
-                    me->AI()->Talk(SAY_BATTLE_DOCKS);
-                    break;
-            }
-
-            DoCastSelf(SPELL_TELEPORT_CAST_TIME);
-            scheduler.Schedule(1800ms, [this, position](TaskContext /*teleport*/)
-            {
-                me->SetHomePosition(position);
-                me->NearTeleportTo(position);
-            });
-        }
-    }
-
-    void SummonedCreatureDespawn(Creature* summon) override
-    {
-        if (summon->GetEntry() == NPC_ARCANE_RIFT_TRIGGER)
-        {
-            summon->RemoveAllAuras();
-            summon->RemoveAllAreaTriggers();
-        }
-    }
-
-    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+	void DoAction(int32 actionId) override
 	{
-		if (!ShouldTakeDamage() && !me->HasAura(SPELL_FROZEN_SHIELD))
+		if (actionId == SPELL_TELEPORT_CAST_TIME)
 		{
-            CastSpellExtraArgs args(true);
-            args.AddSpellBP0(500);
+			uint32 waveId = instance->GetData(DATA_WAVE_GROUP_ID);
 
-			CastStop();
-			DoCastSelf(SPELL_FROZEN_SHIELD, args);
+			Position position;
+			switch (waveId)
+			{
+				// Portes
+				case DATA_WAVE_DOORS:
+					position = JainaPoint03;
+					me->AI()->Talk(SAY_BATTLE_GATE);
+					break;
+					// Citadelle
+				case DATA_WAVE_CITADEL:
+					position = CitadelPoint01;
+					me->AI()->Talk(SAY_BATTLE_CITADEL);
+					break;
+					// Docks
+				case DATA_WAVE_DOCKS:
+					position = DocksPoint01;
+					me->AI()->Talk(SAY_BATTLE_DOCKS);
+					break;
+			}
+
+			DoCastSelf(SPELL_TELEPORT_CAST_TIME);
+			scheduler.Schedule(1800ms, [this, position](TaskContext /*teleport*/)
+			{
+				me->SetHomePosition(position);
+				me->NearTeleportTo(position);
+			});
 		}
 	}
 
-    void EnterEvadeMode(EvadeReason why)
-    {
-        CustomAI::EnterEvadeMode(why);
+	void SummonedCreatureDespawn(Creature* summon) override
+	{
+		if (summon->GetEntry() == NPC_ARCANE_RIFT_TRIGGER)
+		{
+			summon->RemoveAllAuras();
+			summon->RemoveAllAreaTriggers();
+		}
+	}
 
-        me->RemoveAllAreaTriggers();
-        me->UnsummonAllTotems();
-    }
+	void EnterEvadeMode(EvadeReason why)
+	{
+		CustomAI::EnterEvadeMode(why);
 
-    void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
+		me->RemoveAllAreaTriggers();
+		me->UnsummonAllTotems();
+	}
+
+	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{
 		if (target->GetEntry() == NPC_THERAMORE_FIRE_CREDIT
 			&& spellInfo->Id == SPELL_FROSTBOLT_COSMETIC)
@@ -156,17 +143,17 @@ struct npc_jaina_theramore : public CustomAI
 			})
 			.Schedule(10s, [this](TaskContext arcane_rift)
 			{
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                {
-                    if (Creature* summon = me->SummonCreature(NPC_ARCANE_RIFT_TRIGGER, target->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 5s))
-                    {
-                        summon->SetFaction(me->GetFaction());
-                        summon->SetOwnerGUID(me->GetGUID());
-                        summon->CastSpell(summon, SPELL_ARCANE_RIFT);
-                    }
-                }
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+				{
+					if (Creature* summon = me->SummonCreature(NPC_ARCANE_RIFT_TRIGGER, target->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 5s))
+					{
+						summon->SetFaction(me->GetFaction());
+						summon->SetOwnerGUID(me->GetGUID());
+						summon->CastSpell(summon, SPELL_ARCANE_RIFT);
+					}
+				}
 
-                arcane_rift.Repeat(25s, 32s);
+				arcane_rift.Repeat(25s, 32s);
 			});
 	}
 
@@ -311,7 +298,7 @@ struct npc_archmage_tervosh : public CustomAI
 		}
 	}
 
-    void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
+	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{
 		switch (spellInfo->Id)
 		{
@@ -442,15 +429,15 @@ struct npc_rhonin : public CustomAI
 	{
 		GOSSIP_MENU_DEFAULT         = 65001,
 
-        NPC_ARCANIC_CRYSTAL         = 86602,
-        SPELL_ARCANE_AFFINITY       = 173213,
+		NPC_ARCANIC_CRYSTAL         = 86602,
+		SPELL_ARCANE_AFFINITY       = 173213,
 	};
 
-    enum Groups
-    {
-        GROUP_NORMAL,
-        GROUP_ARCANE_EXPLOSION
-    };
+	enum Groups
+	{
+		GROUP_NORMAL,
+		GROUP_ARCANE_EXPLOSION
+	};
 
 	enum Spells
 	{
@@ -498,8 +485,8 @@ struct npc_rhonin : public CustomAI
 		return true;
 	}
 
-    void OnSpellCast(SpellInfo const* spell) override
-    {
+	void OnSpellCast(SpellInfo const* spell) override
+	{
 		switch (spell->Id)
 		{
 			case SPELL_ARCANE_BLAST:
@@ -536,29 +523,29 @@ struct npc_rhonin : public CustomAI
 			{
 				if (me->GetPowerPct(POWER_MANA) < 10.0f)
 					DoCast(SPELL_EVOCATION);
-                evocation.Repeat(3s);
+				evocation.Repeat(3s);
 			})
-            .Schedule(5s, GROUP_NORMAL, [this](TaskContext arcane_cristal)
-            {
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                {
-                    const Position pos = target->GetRandomNearPosition(4.f);
-                    if (Creature* crystal = me->SummonCreature(NPC_ARCANIC_CRYSTAL, pos, TEMPSUMMON_TIMED_DESPAWN, 31s))
-                    {
-                        crystal->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-                        crystal->SetFaction(me->GetFaction());
-                        crystal->SetCanMelee(false);
-                        crystal->SetControlled(true, UNIT_STATE_ROOT);
-                        crystal->CastSpell(crystal, SPELL_ARCANE_AFFINITY);
-                    }
-                }
-                arcane_cristal.Repeat(1min);
-            })
+			.Schedule(5s, GROUP_NORMAL, [this](TaskContext arcane_cristal)
+			{
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+				{
+					const Position pos = target->GetRandomNearPosition(4.f);
+					if (Creature* crystal = me->SummonCreature(NPC_ARCANIC_CRYSTAL, pos, TEMPSUMMON_TIMED_DESPAWN, 31s))
+					{
+						crystal->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+						crystal->SetFaction(me->GetFaction());
+						crystal->SetCanMelee(false);
+						crystal->SetControlled(true, UNIT_STATE_ROOT);
+						crystal->CastSpell(crystal, SPELL_ARCANE_AFFINITY);
+					}
+				}
+				arcane_cristal.Repeat(1min);
+			})
 			.Schedule(5s, GROUP_ARCANE_EXPLOSION, [this](TaskContext arcane_explosion)
 			{
 				if (EnemiesInRange(9.f) >= 3)
 				{
-                    scheduler.DelayGroup(GROUP_NORMAL, 5s);
+					scheduler.DelayGroup(GROUP_NORMAL, 5s);
 
 					CastStop();
 					DoCast(SPELL_ARCANE_EXPLOSION);
@@ -601,12 +588,12 @@ struct npc_kinndy_sparkshine : public CustomAI
 	{
 		SPELL_ARCANE_BOLT           = 371306,
 		SPELL_SUPERNOVA             = 157980,
-        SPELL_EVOCATION             = 211765,
-        SPELL_UNCONTROLLED_ENERGY   = 388951,
-        SPELL_RUNE_OF_ALACRITY      = 388335
+		SPELL_EVOCATION             = 211765,
+		SPELL_UNCONTROLLED_ENERGY   = 388951,
+		SPELL_RUNE_OF_ALACRITY      = 388335
 	};
 
-    bool evocating;
+	bool evocating;
 
 	void MovementInform(uint32 type, uint32 id) override
 	{
@@ -627,74 +614,87 @@ struct npc_kinndy_sparkshine : public CustomAI
 		}
 	}
 
-    void EnterEvadeMode(EvadeReason why)
+    void AttackStart(Unit* who) override
     {
-        CustomAI::EnterEvadeMode(why);
+        if (!who)
+            return;
 
-        me->RemoveAllAreaTriggers();
-    }
-
-    void OnChannelFinished(SpellInfo const* spell) override
-    {
-        if (spell->Id == SPELL_EVOCATION)
-            evocating = false;
-    }
-
-    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
-    {
-        if (!ShouldTakeDamage())
+        if (who && me->Attack(who, true))
         {
-            if (evocating)
-                return;
-
-            evocating = true;
-
-            // On interrompt tous les sorts
-            CastStop();
-
-            // On lance Evocation
-            DoCast(me, SPELL_EVOCATION,
-                    CastSpellExtraArgs(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD)
-                    .AddSpellBP0(10)
-                    .AddSpellMod(SPELLVALUE_BASE_POINT1, 20));
+            me->GetMotionMaster()->Clear(MOTION_PRIORITY_NORMAL);
+            me->PauseMovement();
+            me->SetCanMelee(false);
         }
     }
 
+	void EnterEvadeMode(EvadeReason why)
+	{
+		CustomAI::EnterEvadeMode(why);
+
+		me->RemoveAllAreaTriggers();
+	}
+
+	void OnChannelFinished(SpellInfo const* spell) override
+	{
+		if (spell->Id == SPELL_EVOCATION)
+			evocating = false;
+	}
+
+	void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+	{
+		if (!ShouldTakeDamage())
+		{
+			if (evocating)
+				return;
+
+			evocating = true;
+
+			// On interrompt tous les sorts
+			CastStop();
+
+			// On lance Evocation
+			DoCast(me, SPELL_EVOCATION,
+					CastSpellExtraArgs(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD)
+					.AddSpellBP0(10)
+					.AddSpellMod(SPELLVALUE_BASE_POINT1, 20));
+		}
+	}
+
 	void JustEngagedWith(Unit* /*who*/) override
 	{
-        DoCast(SPELL_RUNE_OF_ALACRITY);
+		DoCast(SPELL_RUNE_OF_ALACRITY);
 
 		scheduler
-            .Schedule(45s, [this](TaskContext rune_of_alacrity)
-            {
-                DoCast(SPELL_RUNE_OF_ALACRITY);
-                rune_of_alacrity.Repeat(45s, 1min);
-            })
-			.Schedule(8s, 10s, [this](TaskContext supernova)
+			.Schedule(45s, [this](TaskContext rune_of_alacrity)
 			{
-                if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
-                {
-                    CastStop();
-                    DoCast(target, SPELL_SUPERNOVA);
-                }
+				DoCast(SPELL_RUNE_OF_ALACRITY);
+				rune_of_alacrity.Repeat(45s, 1min);
+			})
+			.Schedule(5s, 8s, [this](TaskContext supernova)
+			{
+				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
+				{
+					CastStop();
+					DoCast(target, SPELL_SUPERNOVA);
+				}
 				supernova.Repeat(10s, 15s);
-            })
-            .Schedule(5s, 15s, [this](TaskContext uncontrolled_energy)
-            {
-                float slice = 2 * float(M_PI) / 8;
+			})
+			.Schedule(10s, 15s, [this](TaskContext uncontrolled_energy)
+			{
+				float slice = 2 * float(M_PI) / 8;
 
-                uint8 index = 0;
-                for (uint8 i = 0; i < 8; ++i)
+				uint8 index = 0;
+				for (uint8 i = 0; i < 8; ++i)
 				{
 					float angle = slice * index;
 					const Position dest = GetRandomPositionAroundCircle(me, angle, 15.0f);
-                    me->CastSpell(dest, SPELL_UNCONTROLLED_ENERGY);
+					me->CastSpell(dest, SPELL_UNCONTROLLED_ENERGY);
 					index++;
 				}
 
-                uncontrolled_energy.Repeat(1min);
-            })
-			.Schedule(3s, [this](TaskContext arcane_bolt)
+				uncontrolled_energy.Repeat(1min);
+			})
+			.Schedule(5s, [this](TaskContext arcane_bolt)
 			{
 				DoCastVictim(SPELL_ARCANE_BOLT);
 				arcane_bolt.Repeat(2s);
@@ -756,18 +756,18 @@ struct npc_kalecgos_theramore : public CustomAI
 				case MOVEMENT_INFO_POINT_01:
 					scheduler.Schedule(1s, [this](TaskContext context)
 					{
-                        switch (context.GetRepeatCounter())
-                        {
-                            case 0:
-                                me->CastSpell(me, SPELL_TELEPORT);
-                                context.Repeat(4800ms);
-                                break;
-                            case 1:
-                                DoCastSelf(SPELL_DISSOLVE, true);
-                                me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-                                me->SetImmuneToAll(true);
-                                break;
-                        }
+						switch (context.GetRepeatCounter())
+						{
+							case 0:
+								me->CastSpell(me, SPELL_TELEPORT);
+								context.Repeat(4800ms);
+								break;
+							case 1:
+								DoCastSelf(SPELL_DISSOLVE, true);
+								me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+								me->SetImmuneToAll(true);
+								break;
+						}
 					});
 					break;
 				case MOVEMENT_INFO_POINT_02:
@@ -785,19 +785,19 @@ struct npc_kalecgos_theramore : public CustomAI
 			.Schedule(8s, 10s, [this](TaskContext chilled)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                {
-                    CastStop();
-                    DoCast(target, SPELL_CHILLED);
-                }
+				{
+					CastStop();
+					DoCast(target, SPELL_CHILLED);
+				}
 				chilled.Repeat(14s, 22s);
 			})
 			.Schedule(12s, 18s, [this](TaskContext comet_barrage)
 			{
-                if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
-                {
-                    CastStop();
-                    DoCast(target, SPELL_COMET_STORM);
-                }
+				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
+				{
+					CastStop();
+					DoCast(target, SPELL_COMET_STORM);
+				}
 				comet_barrage.Repeat(18s, 25s);
 			})
 			.Schedule(5ms, [this](TaskContext frostbolt)
@@ -825,7 +825,7 @@ struct npc_kalecgos_theramore : public CustomAI
 
 void AddSC_battle_for_theramore()
 {
-    RegisterTheramoreAI(npc_jaina_theramore);
+	RegisterTheramoreAI(npc_jaina_theramore);
 	RegisterTheramoreAI(npc_archmage_tervosh);
 	RegisterTheramoreAI(npc_amara_leeson);
 	RegisterTheramoreAI(npc_rhonin);

@@ -47,9 +47,11 @@ void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
     {
         wasInterrupted = true;
 
-        me->SetCanMelee(true);
-
-        SetCombatMove(true, 0.0f, false, true);
+        if (type != AI_Type::Stay)
+        {
+            me->SetCanMelee(true);
+            SetCombatMove(true, 0.0f, false, true);
+        }
 
         interruptCounter++;
         if (interruptCounter >= 3)
@@ -111,7 +113,15 @@ void CustomAI::AttackStart(Unit* who)
 	if (!who)
 		return;
 
-    if (who && me->Attack(who, true))
+    if (type == AI_Type::Stay && me->Attack(who, false))
+    {
+        me->SetCanMelee(false);
+        me->SetSheath(SHEATH_STATE_UNARMED);
+        SetCombatMovement(false);
+        return;
+    }
+
+    if (me->Attack(who, true))
     {
         if (me->GetWaypointPath() != 0)
         {

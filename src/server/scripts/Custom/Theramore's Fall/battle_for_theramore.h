@@ -134,9 +134,7 @@ enum BFTCreatures
 	NPC_THADER_WINDERMERE               = 500009,
 	NPC_THALEN_SONGWEAVER               = 500010,
 	NPC_THERAMORE_WOUNDED_TROOP         = 500012,
-	NPC_THERAMORE_FIRE_CREDIT           = 500013,
-
-    NPC_INVOKER                         = 550001,
+	NPC_THERAMORE_FIRE_CREDIT           = 500013
 };
 
 enum BFTMisc

@@ -33,7 +33,14 @@ const ObjectData gameobjectData[] =
 {
 	{ GOB_SECRET_PASSAGE,               DATA_SECRET_PASSAGE             },
 	{ GOB_PORTAL_TO_PRISON,             DATA_PORTAL_TO_PRISON           },
+	{ GOB_PORTAL_TO_SEWERS,             DATA_PORTAL_TO_SEWERS           },
+	{ GOB_PORTAL_TO_LIBRARY,            DATA_PORTAL_TO_LIBRARY          },
 	{ 0,                                0                               }   // END
+};
+
+enum PhasesShift
+{
+    PHASESHIFT_HIDE = 52,
 };
 
 class scenario_dalaran_purge : public InstanceMapScript
@@ -234,7 +241,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 
                         jaina->AI()->EnterEvadeMode(EvadeReason::Other);
 
-                        if (GameObject* portal = ObjectAccessor::GetGameObject(*jaina, savorPortal))
+                        if (GameObject* portal = ObjectAccessor::GetGameObject(*jaina, sewerPortal))
                             portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
                     }
 					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::RemainingSunreavers);
@@ -247,8 +254,14 @@ class scenario_dalaran_purge : public InstanceMapScript
 						Talk(rommath, SAY_INFILTRATE_ROMMATH_07);
 					if (Creature* jaina = GetJaina())
 					{
-                        if (GameObject* portal = ObjectAccessor::GetGameObject(*jaina, savorPortal))
+                        if (GameObject* portal = ObjectAccessor::GetGameObject(*jaina, sewerPortal))
                             ClosePortal(portal);
+
+                        if (GameObject* portal = ObjectAccessor::GetGameObject(*jaina, libraryPortal))
+                        {
+                            portal->GetPhaseShift().RemovePhase(PHASESHIFT_HIDE);
+                            portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
+                        }
 
                         jaina->NearTeleportTo(JainaPos02);
 						jaina->SetHomePosition(JainaPos02);
@@ -540,13 +553,23 @@ class scenario_dalaran_purge : public InstanceMapScript
 					go->SetLootState(GO_READY);
 					go->UseDoorOrButton();
 					break;
-                case GOB_PORTAL_TO_LIBRARY:
-                    if (savorPortal.IsEmpty())
+                case GOB_PORTAL_TO_SEWERS:
+                    if (sewerPortal.IsEmpty())
                     {
                         go->SetLootState(GO_READY);
                         go->UseDoorOrButton();
                         go->SetFlag(GO_FLAG_NOT_SELECTABLE);
-                        savorPortal = go->GetGUID();
+                        sewerPortal = go->GetGUID();
+                    }
+                    break;
+                case GOB_PORTAL_TO_LIBRARY:
+                    if (libraryPortal.IsEmpty())
+                    {
+                        go->SetLootState(GO_READY);
+                        go->UseDoorOrButton();
+                        go->SetFlag(GO_FLAG_NOT_SELECTABLE);
+                        go->GetPhaseShift().AddPhase(PHASESHIFT_HIDE, PhaseFlags::None, nullptr);
+                        libraryPortal = go->GetGUID();
                     }
                     break;
 			}
@@ -863,7 +886,9 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 						if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
 						{
+                            surdiel->SetImmuneToPC(true);
 							surdiel->AI()->AttackStart(narasi);
+
                             narasi->AI()->AttackStart(surdiel);
 						}
 					}
@@ -990,7 +1015,8 @@ class scenario_dalaran_purge : public InstanceMapScript
 		std::list<TempSummon*> prison;
 
 		ObjectGuid endPortal;
-        ObjectGuid savorPortal;
+        ObjectGuid sewerPortal;
+        ObjectGuid libraryPortal;
 
 		// Accesseurs
 		#pragma region ACCESSORS
