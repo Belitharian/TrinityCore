@@ -64,6 +64,7 @@ struct FactionTemplateEntry;
 struct Loot;
 struct PositionFullTerrainStatus;
 struct QuaternionData;
+struct SpellPowerCost;
 enum ZLiquidStatus : uint32;
 
 namespace WorldPackets
@@ -459,7 +460,7 @@ struct FindGameObjectOptions
     Optional<std::string_view> StringId;
 
     Optional<bool> IsSummon;
-    Optional<bool> IsSpawned;
+    Optional<bool> IsSpawned = true; // most searches should be for spawned objects only, to search for "any" just clear this field at call site
 
     bool IgnorePhases = false;
     bool IgnoreNotOwnedPrivateObjects = true;
@@ -642,7 +643,7 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         float GetSpellMinRangeForTarget(Unit const* target, SpellInfo const* spellInfo) const;
 
         double ApplyEffectModifiers(SpellInfo const* spellInfo, uint8 effIndex, double value) const;
-        int32 CalcSpellDuration(SpellInfo const* spellInfo) const;
+        int32 CalcSpellDuration(SpellInfo const* spellInfo, std::vector<SpellPowerCost> const* powerCosts) const;
         int32 ModSpellDuration(SpellInfo const* spellInfo, WorldObject const* target, int32 duration, bool positive, uint32 effectMask) const;
         void ModSpellCastTime(SpellInfo const* spellInfo, int32& castTime, Spell* spell = nullptr) const;
         void ModSpellDurationTime(SpellInfo const* spellInfo, int32& durationTime, Spell* spell = nullptr) const;
