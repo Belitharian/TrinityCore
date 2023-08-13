@@ -272,7 +272,8 @@ struct npc_archmage_tervosh : public CustomAI
 		SPELL_FLAMESTRIKE           = 330347,
 		SPELL_BLAZING_BARRIER       = 295238,
 		SPELL_SCORCH                = 358238,
-		SPELL_CONFLAGRATION         = 226757
+		SPELL_CONFLAGRATION         = 226757,
+        SPELL_LAVA_SPIN             = 392480
 	};
 
 	void MovementInform(uint32 type, uint32 id) override
@@ -343,6 +344,17 @@ struct npc_archmage_tervosh : public CustomAI
 					DoCast(target, SPELL_FLAMESTRIKE);
 				pyroblast.Repeat(22s, 35s);
 			})
+            .Schedule(12s, 18s, [this](TaskContext lava_spin)
+            {
+                if (EnemiesInRange(12.0f))
+                {
+                    CastStop(SPELL_LAVA_SPIN);
+                    DoCast(SPELL_LAVA_SPIN);
+                    lava_spin.Repeat(22s, 35s);
+                }
+                else
+                    lava_spin.Repeat(10s);
+            })
 			.Schedule(5ms, [this](TaskContext fireball)
 			{
 				DoCastVictim(SPELL_FIREBALL);

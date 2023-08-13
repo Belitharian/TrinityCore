@@ -34,15 +34,17 @@ struct npc_water_elementals_theramore : public CustomAI
 		return 5.f;
 	}
 
-	void JustEngagedWith(Unit* /*who*/) override
+	void JustEngagedWith(Unit* who) override
 	{
 		if (me->GetMap()->GetId() != 5002) DoCast(SPELL_IMMUNE);
+
+        DoCast(who, SPELL_WATER_BOLT);
 
 		scheduler
 			.Schedule(5ms, [this](TaskContext water_bolt)
 			{
 				DoCastVictim(SPELL_WATER_BOLT);
-				water_bolt.Repeat(3s);
+				water_bolt.Repeat(2s);
 			})
 			.Schedule(1min, [this](TaskContext watery_dome)
 			{

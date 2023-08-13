@@ -1532,7 +1532,7 @@ class spell_ice_wall : public SpellScript
         uint32 healthPct = GetSpellInfo()->GetEffect(EFFECT_3).BasePoints;
 
         WorldLocation* pos = GetHitDest();
-        if (Creature* summon = caster->GetMap()->SummonCreature(entry, pos->GetPosition(), properties, duration, caster, GetSpellInfo()->Id))
+        if (Creature* summon = caster->GetMap()->SummonCreature(entry, pos->GetPosition(), properties, Milliseconds(duration), caster, GetSpellInfo()->Id))
         {
             uint32 maxHealth = caster->CountPctFromMaxHealth(healthPct);
             summon->SetMaxHealth(maxHealth);

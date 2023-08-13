@@ -2910,21 +2910,21 @@ void Creature::AllLootRemovedFromCorpse()
     float decayRate = m_ignoreCorpseDecayRatio ? 1.f : sWorld->getRate(RATE_CORPSE_DECAY_LOOTED);
 
     // corpse skinnable, but without skinning flag, and then skinned, corpse will despawn next update
-    bool isFullySkinned = [&]() -> bool
-    {
-        if (m_loot && m_loot->loot_type == LOOT_SKINNING && m_loot->isLooted())
-            return true;
+    //bool isFullySkinned = [&]() -> bool
+    //{
+    //    if (m_loot && m_loot->loot_type == LOOT_SKINNING && m_loot->isLooted())
+    //        return true;
 
-        for (auto const& [_, loot] : m_personalLoot)
-            if (loot->loot_type != LOOT_SKINNING || !loot->isLooted())
-                return false;
+    //    for (auto const& [_, loot] : m_personalLoot)
+    //        if (loot->loot_type != LOOT_SKINNING || !loot->isLooted())
+    //            return false;
 
-        return true;
-    }();
+    //    return true;
+    //}();
 
-    if (isFullySkinned)
-        m_corpseRemoveTime = now;
-    else
+    //if (isFullySkinned)
+    //    m_corpseRemoveTime = now;
+    //else
         m_corpseRemoveTime = now + uint32(m_corpseDelay * decayRate);
 
     m_respawnTime = std::max<time_t>(m_corpseRemoveTime + m_respawnDelay, m_respawnTime);

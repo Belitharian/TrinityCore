@@ -32,6 +32,7 @@ struct npc_guardian_mage_dalaran : public CustomAI
 		SPELL_FROST_NOVA            = 284879,
 		SPELL_BLINK                 = 284877,
 		SPELL_BLIZZARD              = 284968,
+        SPELL_FREEZE_OVER           = 378886,
 	};
 
 	float GetDistance() override
@@ -51,26 +52,39 @@ struct npc_guardian_mage_dalaran : public CustomAI
 		}
 	}
 
-	void JustEngagedWith(Unit* /*who*/) override
+	void JustEngagedWith(Unit* who) override
 	{
+        DoCast(who, SPELL_FREEZE_OVER);
+
 		scheduler
-			.Schedule(1ms, [this](TaskContext ice_barrier)
+			.Schedule(5s, [this](TaskContext ice_barrier)
 			{
-				if (!me->HasAura(SPELL_ICE_BARRIER))
-				{
-					CastStop();
-					DoCastSelf(SPELL_ICE_BARRIER, true);
-					ice_barrier.Repeat(1min);
-				}
-				else
-					ice_barrier.Repeat(5s);
+                if (roll_chance_i(60))
+                {
+                    if (!me->HasAura(SPELL_ICE_BARRIER))
+                    {
+                        CastStop();
+                        DoCastSelf(SPELL_ICE_BARRIER, true);
+                        ice_barrier.Repeat(1min);
+                    }
+                    else
+                        ice_barrier.Repeat(32s);
+                }
+                else
+                    ice_barrier.Repeat(5s);
 			})
-			.Schedule(5ms, [this](TaskContext fireball)
+			.Schedule(2s, [this](TaskContext fireball)
 			{
 				DoCastVictim(SPELL_FROSTBOLT);
 				fireball.Repeat(2s);
 			})
-			.Schedule(2s, [this](TaskContext counterspell)
+            .Schedule(2s, [this](TaskContext freeze_over)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    DoCast(target, SPELL_FREEZE_OVER);
+                freeze_over.Repeat(8s, 15s);
+            })
+			.Schedule(10s, [this](TaskContext counterspell)
 			{
 				if (Unit* target = DoSelectCastingUnit(SPELL_COUNTERSPELL, 30.0f))
 				{
@@ -81,7 +95,7 @@ struct npc_guardian_mage_dalaran : public CustomAI
 				else
 					counterspell.Repeat(1s);
 			})
-			.Schedule(5s, [this](TaskContext frost_nova)
+			.Schedule(8s, [this](TaskContext frost_nova)
 			{
 				if (EnemiesInRange(12.0f) >= 2)
 				{
@@ -92,16 +106,11 @@ struct npc_guardian_mage_dalaran : public CustomAI
 				else
 					frost_nova.Repeat(1s);
 			})
-			.Schedule(4s, [this](TaskContext blizzard)
+			.Schedule(15s, [this](TaskContext blizzard)
 			{
-				if (me->GetThreatManager().GetThreatListSize() >= 2)
-				{
-					CastStop(SPELL_BLIZZARD);
-					DoCastVictim(SPELL_BLIZZARD);
-					blizzard.Repeat(5s, 8s);
-				}
-				else
-					blizzard.Repeat(2s);
+				CastStop(SPELL_BLIZZARD);
+				DoCastVictim(SPELL_BLIZZARD);
+				blizzard.Repeat(14s, 20s);
 			});
 	}
 
@@ -637,7 +646,9 @@ struct npc_mage_commander_zuros : public CustomAI
 
 struct npc_narasi_snowdawn : public CustomAI
 {
-	npc_narasi_snowdawn(Creature* creature) : CustomAI(creature, AI_Type::Distance)
+    static constexpr float DAMAGE_REDUCTION = 0.01f;
+
+    npc_narasi_snowdawn(Creature* creature) : CustomAI(creature, AI_Type::Melee)
 	{
 		Initialize();
 	}
@@ -648,8 +659,22 @@ struct npc_narasi_snowdawn : public CustomAI
 		SPELL_TIME_STOP             = 215005
 	};
 
+    void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    {
+        if (attacker->GetTypeId() == TYPEID_PLAYER)
+            damage = 0;
+
+        if (me->HealthBelowPctDamaged(25, damage))
+            damage *= DAMAGE_REDUCTION;
+        else
+            damage = 0;
+    }
+
 	void JustEngagedWith(Unit* who) override
 	{
+        if (who->GetTypeId() == TYPEID_PLAYER)
+            return;
+
 		DoCast(who, SPELL_ACCELERATING_BLAST);
 
 		scheduler
@@ -667,7 +692,8 @@ struct npc_narasi_snowdawn : public CustomAI
 
 	bool CanAIAttack(Unit const* who) const override
 	{
-		return who->IsAlive() && who->GetEntry() != NPC_GRAND_MAGISTER_ROMMATH;
+		return who->IsAlive() && who->GetEntry() != NPC_GRAND_MAGISTER_ROMMATH
+            && who->GetTypeId() == TYPEID_PLAYER;
 	}
 };
 
@@ -3063,7 +3089,6 @@ struct at_arcane_barrier : AreaTriggerAI
 
 	private:
 	Milliseconds _tickTimer;
-	int32 timeInterval;
 };
 
 // Arcane Barrier - 271187
@@ -3253,7 +3278,7 @@ class spell_purge_glacial_spike_summon : public SpellScript
 		uint32 health = caster->CountPctFromMaxHealth(5);
 
 		WorldLocation* pos = GetHitDest();
-		if (Creature* summon = caster->GetMap()->SummonCreature(entry, pos->GetPosition(), properties, duration, caster, GetSpellInfo()->Id))
+		if (Creature* summon = caster->GetMap()->SummonCreature(entry, pos->GetPosition(), properties, Milliseconds(duration), caster, GetSpellInfo()->Id))
 		{
 			summon->SetMaxHealth(health);
 			summon->SetFullHealth();
@@ -3354,7 +3379,7 @@ class spell_arcane_orb : public SpellScript
 		uint32 duration = uint32(GetSpellInfo()->GetDuration());
 
 		const Position pos = { caster->GetPositionX(), caster->GetPositionY(), caster->GetPositionZ() + 8.0f };
-		if (Creature* summon = caster->GetMap()->SummonCreature(entry, pos, properties, duration, caster, GetSpellInfo()->Id))
+		if (Creature* summon = caster->GetMap()->SummonCreature(entry, pos, properties, Milliseconds(duration), caster, GetSpellInfo()->Id))
 		{
 			uint32 maxHealth = caster->CountPctFromMaxHealth(HEALTH_PCR);
 			summon->SetMaxHealth(maxHealth);

@@ -975,16 +975,17 @@ struct npc_roknah_hag : public npc_theramore_horde
 
 	enum Spells
 	{
-		SPELL_BLINK         = 295236,
-		SPELL_CONE_OF_COLD  = 292294,
-		SPELL_EBONBOLT      = 284752,
-		SPELL_FLURRY        = 284858,
-		SPELL_FROST_NOVA    = 284879,
-		SPELL_FROSTBOLT     = 284703,
-		SPELL_GLACIAL_SPIKE = 284840,
-		SPELL_ICE_BLOCK     = 290049,
-		SPELL_ICE_BARRIER   = 198094,
-		SPELL_ICICLES       = 205473,
+		SPELL_BLINK             = 295236,
+		SPELL_CONE_OF_COLD      = 292294,
+		SPELL_EBONBOLT          = 284752,
+		SPELL_FLURRY            = 284858,
+		SPELL_FROST_NOVA        = 284879,
+		SPELL_FROSTBOLT         = 284703,
+		SPELL_GLACIAL_SPIKE     = 284840,
+		SPELL_ICE_BLOCK         = 290049,
+		SPELL_ICE_BARRIER       = 198094,
+		SPELL_ICICLES           = 205473,
+		SPELL_MASS_ICE_BARRIER  = 382561,
 	};
 
 	bool closeTarget;
@@ -1039,10 +1040,13 @@ struct npc_roknah_hag : public npc_theramore_horde
 
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-		if (roll_chance_i(80))
-			return;
+        if (roll_chance_i(60))
+        {
+            DoCastSelf(SPELL_MASS_ICE_BARRIER);
+            return;
+        }
 
-		if (!iceblock && me->HealthBelowPctDamaged(10, damage))
+		if (!iceblock && me->HealthBelowPctDamaged(20, damage))
 		{
 			damage = 0;
 
@@ -1068,7 +1072,8 @@ struct npc_roknah_hag : public npc_theramore_horde
 	{
 		npc_theramore_horde::JustEngagedWith(who);
 
-		DoCastSelf(SPELL_ICE_BARRIER);
+        if (roll_chance_i(30))
+		    DoCastSelf(SPELL_ICE_BARRIER);
 
 		scheduler
 			.Schedule(13s, 18s, GROUP_NORMAL, [this](TaskContext cone_of_cold)

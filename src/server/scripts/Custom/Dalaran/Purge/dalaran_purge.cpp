@@ -1,5 +1,7 @@
 #include "Custom/AI/CustomAI.h"
 #include "GameObject.h"
+#include "Group.h"
+#include "GroupMgr.h"
 #include "InstanceScript.h"
 #include "TemporarySummon.h"
 #include "ScriptMgr.h"

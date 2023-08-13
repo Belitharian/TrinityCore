@@ -224,10 +224,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			player->AddAura(SPELL_SKYBOX_EFFECT, player);
 		}
 
-        void OnPlayerLeave(Player* player) override
-        {
-            player->RemoveAurasDueToSpell(SPELL_SKYBOX_EFFECT);
-        }
+		void OnPlayerLeave(Player* player) override
+		{
+			player->RemoveAurasDueToSpell(SPELL_SKYBOX_EFFECT);
+		}
 
 		void SetData(uint32 dataId, uint32 value) override
 		{
@@ -422,12 +422,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						kalecgos->SetRegenerateHealth(false);
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle_Survive);
-					#ifdef CUSTOM_DEBUG
-						events.ScheduleEvent(WAVE_01, 3s);
-					#else
-						events.ScheduleEvent(91, 10s);
-						events.ScheduleEvent(92, 1s);
-					#endif
+					events.ScheduleEvent(91, 10s);
 					break;
 				}
 				// Step 9 : The Battle - Parent
@@ -545,7 +540,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				// Step 11 : Wait for Archmage Leeson returns - Parent
 				case CRITERIA_TREE_WAIT_ARCHMAGE_LEESON:
 					break;
-					// Step 11 : Wait for Archmage Leeson returns - Rejoin Lady Jaina Proudmoore
+				// Step 11 : Wait for Archmage Leeson returns - Rejoin Lady Jaina Proudmoore
 				case CRITERIA_TREE_JOIN_JAINA:
 				{
 					if (Creature* kalecgos = GetKalec())
@@ -604,10 +599,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case NPC_THERAMORE_CITIZEN_FEMALE:
 				case NPC_THERAMORE_CITIZEN_MALE:
-                case NPC_TRAINING_DUMMY:
-                    creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
-                    creature->RemoveUnitFlag(UNIT_FLAG_PVP_ENABLING);
-                    citizens.push_back(creature->GetGUID());
+				case NPC_TRAINING_DUMMY:
+					creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
+					creature->RemoveUnitFlag(UNIT_FLAG_PVP_ENABLING);
+					citizens.push_back(creature->GetGUID());
 					if (phase == BFTPhases::Evacuation)
 						break;
 					creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
@@ -618,8 +613,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					citizens.push_back(creature->GetGUID());
 					break;
 				case NPC_ALLIANCE_PEASANT:
-                    creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
-                    creature->RemoveUnitFlag(UNIT_FLAG_PVP_ENABLING);
+					creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
+					creature->RemoveUnitFlag(UNIT_FLAG_PVP_ENABLING);
 					creature->SetImmuneToNPC(true);
 					citizens.push_back(creature->GetGUID());
 					break;
@@ -644,9 +639,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 			switch (go->GetEntry())
 			{
-                case GOB_HERO_S_CALL:
-                    go->SetFlag(GO_FLAG_NOT_SELECTABLE);
-                    break;
 				case GOB_PORTAL_TO_DALARAN:
 				case GOB_PORTAL_TO_STORMWIND:
 				case GOB_PORTAL_TO_ORGRIMMAR:
@@ -823,7 +815,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						}
 					}
 					#ifdef CUSTOM_DEBUG
+					{
+						GetPerith()->DespawnOrUnsummon();
+						GetKnight()->DespawnOrUnsummon();
+
 						events.ScheduleEvent(70, 2s);
+					}
 					#else
 						Next(7s);
 					#endif
@@ -1059,21 +1056,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				#pragma region A_LITTLE_HELP
 
 				case 71:
-					#ifdef CUSTOM_DEBUG
-						events.ScheduleEvent(77, 1s);
-					#else
-						EnsurePlayerHaveShaker();
-						if (Creature* hedric = GetHedric())
-						{
-							hedric->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-							hedric->GetMotionMaster()->Clear();
-							hedric->GetMotionMaster()->MoveIdle();
-							hedric->NearTeleportTo(HedricPoint01);
-							hedric->PlayDirectSound(SOUND_FEARFUL_CROWD);
-							Talk(hedric, SAY_PRE_BATTLE_1);
-						}
-						Next(3s);
-					#endif
+					EnsurePlayerHaveShaker();
+					if (Creature* hedric = GetHedric())
+					{
+						hedric->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+						hedric->GetMotionMaster()->Clear();
+						hedric->GetMotionMaster()->MoveIdle();
+						hedric->NearTeleportTo(HedricPoint01);
+						hedric->PlayDirectSound(SOUND_FEARFUL_CROWD);
+						Talk(hedric, SAY_PRE_BATTLE_1);
+					}
+					Next(3s);
 					break;
 				case 72:
 					Talk(GetJaina(), SAY_PRE_BATTLE_2);
@@ -1102,13 +1095,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 77:
 					if (archmagesIndex >= ARCHMAGES_LOCATION)
-					{
-						#ifdef CUSTOM_DEBUG
-							events.ScheduleEvent(90, 1s);
-						#else
-							Next(2s);
-						#endif
-					}
+						Next(2s);
 					else if (Creature* creature = instance->SummonCreature(archmagesLocation[archmagesIndex].dataId, PortalPoint01))
 					{
 						creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
@@ -1210,13 +1197,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						if (Creature* creature = GetCreature(actorsRelocation[i].dataId))
 						{
+							creature->RemoveAllAuras();
+							creature->SetTarget(ObjectGuid::Empty);
 							creature->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 							creature->SetSheath(SHEATH_STATE_MELEE);
 							creature->GetMotionMaster()->Clear();
 							creature->GetMotionMaster()->MoveIdle();
 							creature->NearTeleportTo(actorsRelocation[i].destination);
 							creature->SetHomePosition(actorsRelocation[i].destination);
-							creature->RemoveAllAuras();
 
 							switch (creature->GetEntry())
 							{
@@ -1360,14 +1348,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					#ifdef CUSTOM_DEBUG
-						for (uint8 i = 0; i < 10; i++)
-							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
-					#else
-						HordeMembersInvoker(Waves[waves]);
-						waves++;
-						events.ScheduleEvent(++wavesInvoker, 1s);
-					#endif
+					HordeMembersInvoker(Waves[waves]);
+					waves++;
+					events.ScheduleEvent(++wavesInvoker, 1s);
 					break;
 
 				case WAVE_01_CHECK:
@@ -1451,22 +1434,16 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 				// PART II
 				case 128:
-				{
-					#ifdef CUSTOM_DEBUG
-						events.ScheduleEvent(141, 2s);
-					#else
-						if (Creature* jaina = GetJaina())
+					if (Creature* jaina = GetJaina())
+					{
+						if (Creature* kinndy = GetKinndy())
 						{
-							if (Creature* kinndy = GetKinndy())
-							{
-								jaina->SetTarget(kinndy->GetGUID());
-								kinndy->SetTarget(jaina->GetGUID());
-							}
+							jaina->SetTarget(kinndy->GetGUID());
+							kinndy->SetTarget(jaina->GetGUID());
 						}
-						Next(800ms);
-					#endif
+					}
+					Next(800ms);
 					break;
-				}
 				case 129:
 					GetKinndy()->AI()->Talk(SAY_POST_BATTLE_04);
 					Next(5s);
@@ -1840,9 +1817,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 		void HordeMembersInvoker(uint32 waveId)
 		{
-            hordeMembers.clear();
+			hordeMembers.clear();
 
-            std::list<TempSummon*> members;
+			std::list<TempSummon*> members;
 			instance->SummonCreatureGroup(waveId, &members);
 
 			for (TempSummon* horde : members)
@@ -1850,13 +1827,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				if (Unit* target = SelectNearestHostileInRange(horde))
 					horde->AI()->AttackStart(target);
 
-                horde->SetTempSummonType(TEMPSUMMON_TIMED_OR_DEAD_DESPAWN);
-
 				hordeMembers.push_back(horde->GetGUID());
 			}
 
-            if (Creature* jaina = GetJaina())
-                jaina->AI()->DoAction(SPELL_TELEPORT_CAST_TIME);
+			if (Creature* jaina = GetJaina())
+				jaina->AI()->DoAction(SPELL_TELEPORT_CAST_TIME);
 		}
 
 		void MassDespawn(uint32 entry)

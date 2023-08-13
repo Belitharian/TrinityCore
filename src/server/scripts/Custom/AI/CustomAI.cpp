@@ -171,7 +171,7 @@ void CustomAI::UpdateAI(uint32 diff)
 		{
             DoMeleeAttackIfReady();
 
-            if (type == AI_Type::Distance || type == AI_Type::None)
+            if (type != AI_Type::Melee)
             {
                 if (Unit* target = me->GetVictim())
                 {

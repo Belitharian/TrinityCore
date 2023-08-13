@@ -13,7 +13,7 @@
 #define ROMMATH_PATH_01                 41
 #define TRACKING_PATH_01                9
 
-#define CUSTOM_DEBUG
+//#define CUSTOM_DEBUG
 
 enum DLPCreatures
 {

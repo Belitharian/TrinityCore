@@ -87,6 +87,7 @@ struct npc_jaina_ruins : public CustomAI
         summons.clear();
 
         me->RemoveAurasDueToSpell(SPELL_DISSOLVE);
+        me->RemoveUnitFlag2(UNIT_FLAG2_UNTARGETABLE_BY_CLIENT);
 	}
 
     void JustSummoned(Creature* summon) override

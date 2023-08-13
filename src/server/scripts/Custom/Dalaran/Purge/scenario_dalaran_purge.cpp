@@ -3,6 +3,8 @@
 #include "InstanceScript.h"
 #include "KillRewarder.h"
 #include "Map.h"
+#include "Group.h"
+#include "GroupMgr.h"
 #include "MotionMaster.h"
 #include "Player.h"
 #include "TemporarySummon.h"
@@ -470,7 +472,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 					citizens.push_back(creature->GetGUID());
 					break;
                 case NPC_NARASI_SNOWDAWN:
-                    creature->SetImmuneToPC(true);
                     creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP | UNIT_NPC_FLAG_QUESTGIVER);
                     break;
                 case NPC_MAGE_COMMANDER_ZUROS:
@@ -850,7 +851,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 						{
 							if (rommath->IsWithinDist(narasi, 45.0f))
 							{
-								events.CancelEvent(33);
+                                events.CancelEvent(33);
 
 								Talk(rommath, SAY_INFILTRATE_ROMMATH_06);
 
@@ -870,10 +871,16 @@ class scenario_dalaran_purge : public InstanceMapScript
 					}
 					break;
 				case 34:
-					if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
-						Talk(narasi, SAY_INFILTRATE_NARASI_01);
+                    if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
+                    {
+                        Talk(narasi, SAY_INFILTRATE_NARASI_01);
+                        narasi->SetImmuneToNPC(false);
+                        narasi->SetReactState(REACT_AGGRESSIVE);
+                    }
                     if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
                     {
+                        surdiel->SetImmuneToNPC(false);
+                        surdiel->SetReactState(REACT_AGGRESSIVE);
                         surdiel->SetHomePosition(SurdielPos03);
                         surdiel->CastSpell(SurdielPos03, SPELL_TELEPORT);
                     }
@@ -886,9 +893,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 						if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
 						{
-                            surdiel->SetImmuneToPC(true);
 							surdiel->AI()->AttackStart(narasi);
-
                             narasi->AI()->AttackStart(surdiel);
 						}
 					}
@@ -928,6 +933,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 							narasi->SetImmuneToAll(true);
 
 							surdiel->CombatStop();
+                            surdiel->RemoveAllAreaTriggers();
                             surdiel->SetImmuneToAll(true);
 
 							narasi->CastSpell(surdiel, SPELL_ARCANE_IMPRISONMENT);

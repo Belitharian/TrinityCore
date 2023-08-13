@@ -1921,6 +1921,10 @@ TempSummon* Map::SummonCreature(uint32 entry, Position const& pos, SummonPropert
 
     summon->SetPrivateObjectOwner(privateObjectOwner);
 
+    summon->SetFullHealth();
+
+    summon->SetFullPower(summon->GetPowerType());
+
     if (smoothPhasingInfo)
     {
         if (summoner && smoothPhasingInfo->ReplaceObject)

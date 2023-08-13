@@ -132,6 +132,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					break;
 				// Return to Theramore
 				case CRITERIA_TREE_FIND_JAINA_02:
+                    if (Creature* jaina = GetJaina())
+                        SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, jaina);
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::Standards);
 					break;
 				// Cleaning
@@ -299,7 +301,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(2s);
 					break;
 				case 14:
-					if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, GetJaina()->GetPosition(), nullptr, 10 * IN_MILLISECONDS))
+					if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, GetJaina()->GetPosition(), nullptr, 10s))
 						trigger->CastSpell(trigger, SPELL_ECHO_OF_ALUNETH_SPAWN, true);
 					Next(8s);
 					break;
@@ -309,7 +311,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					{
 						jaina->SetTarget(ObjectGuid::Empty);
 						jaina->CastSpell(jaina, SPELL_COSMETIC_ARCANE_DISSOLVE, true);
-						if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, GetJaina()->GetPosition(), nullptr, 5 * IN_MILLISECONDS))
+						if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, GetJaina()->GetPosition(), nullptr, 5s))
 							trigger->CastSpell(trigger, SPELL_ALUNETH_FREED_EXPLOSION, true);
 					}
 					Next(800ms);
@@ -433,7 +435,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(5s);
 					break;
 				case 29:
-					if (TempSummon* zeppelin = instance->SummonCreature(NPC_BOMBARDING_ZEPPELIN, ZeppelinPoint.spawn, nullptr, 13 * IN_MILLISECONDS))
+					if (TempSummon* zeppelin = instance->SummonCreature(NPC_BOMBARDING_ZEPPELIN, ZeppelinPoint.spawn, nullptr, 13s))
 					{
 						zeppelin->SetSpeedRate(MOVE_RUN, 5.f);
 						zeppelin->PlayDirectSound(SOUND_ZEPPELIN_FLIGHT);
@@ -587,6 +589,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					{
 						for (Creature* elemental : elementals)
 							elemental->DespawnOrUnsummon(1s);
+
+                        SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, jaina);
 
 						jaina->CastSpell(jaina, SPELL_COSMETIC_ARCANE_DISSOLVE);
 						jaina->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
