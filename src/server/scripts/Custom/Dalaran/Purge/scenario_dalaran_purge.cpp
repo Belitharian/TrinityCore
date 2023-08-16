@@ -36,7 +36,6 @@ const ObjectData gameobjectData[] =
 	{ GOB_SECRET_PASSAGE,               DATA_SECRET_PASSAGE             },
 	{ GOB_PORTAL_TO_PRISON,             DATA_PORTAL_TO_PRISON           },
 	{ GOB_PORTAL_TO_SEWERS,             DATA_PORTAL_TO_SEWERS           },
-	{ GOB_PORTAL_TO_LIBRARY,            DATA_PORTAL_TO_LIBRARY          },
 	{ 0,                                0                               }   // END
 };
 
@@ -243,7 +242,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 
                         jaina->AI()->EnterEvadeMode(EvadeReason::Other);
 
-                        if (GameObject* portal = ObjectAccessor::GetGameObject(*jaina, sewerPortal))
+                        if (GameObject* portal = GetGameObject(DATA_PORTAL_TO_SEWERS))
                             portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
                     }
 					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::RemainingSunreavers);
@@ -256,14 +255,8 @@ class scenario_dalaran_purge : public InstanceMapScript
 						Talk(rommath, SAY_INFILTRATE_ROMMATH_07);
 					if (Creature* jaina = GetJaina())
 					{
-                        if (GameObject* portal = ObjectAccessor::GetGameObject(*jaina, sewerPortal))
+                        if (GameObject* portal = GetGameObject(DATA_PORTAL_TO_SEWERS))
                             ClosePortal(portal);
-
-                        if (GameObject* portal = ObjectAccessor::GetGameObject(*jaina, libraryPortal))
-                        {
-                            portal->GetPhaseShift().RemovePhase(PHASESHIFT_HIDE);
-                            portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
-                        }
 
                         jaina->NearTeleportTo(JainaPos02);
 						jaina->SetHomePosition(JainaPos02);
@@ -275,6 +268,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 						sorin->RemoveAllAuras();
 						sorin->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 						sorin->CastSpell(sorin, SPELL_CHAT_BUBBLE);
+                        sorin->CastSpell(SorinPoint01, SPELL_TELEPORT);
 					}
 					if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
 					{
@@ -296,7 +290,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 						Cell::VisitGridObjects(jaina, worker, INFINITY);
 
 						std::vector<RespawnInfo const*> data;
-						instance->GetRespawnInfo(data, SPAWN_TYPEMASK_ALL);
+						instance->GetRespawnInfo(data, SPAWN_TYPEMASK_CREATURE);
 
 						if (!data.empty())
 						{
@@ -323,7 +317,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					});
 
 					if (Creature* zuros = GetCreature(DATA_MAGE_COMMANDER_ZUROS))
-						zuros->NearTeleportTo(ZurosPos01);
+                        zuros->SetVisible(false);
 
 					if (Creature* rathaella = GetCreature(DATA_ARCANIST_RATHAELLA))
 						rathaella->SetVisible(false);
@@ -555,23 +549,9 @@ class scenario_dalaran_purge : public InstanceMapScript
 					go->UseDoorOrButton();
 					break;
                 case GOB_PORTAL_TO_SEWERS:
-                    if (sewerPortal.IsEmpty())
-                    {
-                        go->SetLootState(GO_READY);
-                        go->UseDoorOrButton();
-                        go->SetFlag(GO_FLAG_NOT_SELECTABLE);
-                        sewerPortal = go->GetGUID();
-                    }
-                    break;
-                case GOB_PORTAL_TO_LIBRARY:
-                    if (libraryPortal.IsEmpty())
-                    {
-                        go->SetLootState(GO_READY);
-                        go->UseDoorOrButton();
-                        go->SetFlag(GO_FLAG_NOT_SELECTABLE);
-                        go->GetPhaseShift().AddPhase(PHASESHIFT_HIDE, PhaseFlags::None, nullptr);
-                        libraryPortal = go->GetGUID();
-                    }
+                    go->SetLootState(GO_READY);
+                    go->UseDoorOrButton();
+                    go->SetFlag(GO_FLAG_NOT_SELECTABLE);
                     break;
 			}
 		}
@@ -879,10 +859,12 @@ class scenario_dalaran_purge : public InstanceMapScript
                     }
                     if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
                     {
+                        surdiel->AI()->SetBoundary(nullptr);
+                        surdiel->CombatStop();
                         surdiel->SetImmuneToNPC(false);
                         surdiel->SetReactState(REACT_AGGRESSIVE);
-                        surdiel->SetHomePosition(SurdielPos03);
                         surdiel->CastSpell(SurdielPos03, SPELL_TELEPORT);
+                        surdiel->SetHomePosition(SurdielPos03);
                     }
 					Next(1s);
 					break;
@@ -890,11 +872,10 @@ class scenario_dalaran_purge : public InstanceMapScript
 					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
 					{
 						Talk(surdiel, SAY_INFILTRATE_SURDIEL_02);
-
 						if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
 						{
-							surdiel->AI()->AttackStart(narasi);
-                            narasi->AI()->AttackStart(surdiel);
+							surdiel->Attack(narasi, true);
+                            narasi->Attack(surdiel, true);
 						}
 					}
                     Next(5s);
@@ -918,26 +899,28 @@ class scenario_dalaran_purge : public InstanceMapScript
                     Next(5s);
                     break;
 				case 38:
-					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
-						Talk(surdiel, SAY_INFILTRATE_SURDIEL_04);
+                    if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
+                    {
+                        Talk(surdiel, SAY_INFILTRATE_SURDIEL_04);
+                        if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
+                        {
+                            narasi->CombatStop();
+                            narasi->SetReactState(REACT_PASSIVE);
+                            narasi->SetImmuneToPC(true);
+
+                            surdiel->CombatStop();
+                            surdiel->SetReactState(REACT_PASSIVE);
+                            surdiel->SetImmuneToPC(true);
+                        }
+                    }
 					Next(5s);
 					break;
 				case 39:
 					if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
 					{
 						Talk(narasi, SAY_INFILTRATE_NARASI_05);
-
 						if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
-						{
-							narasi->CombatStop();
-							narasi->SetImmuneToAll(true);
-
-							surdiel->CombatStop();
-                            surdiel->RemoveAllAreaTriggers();
-                            surdiel->SetImmuneToAll(true);
-
 							narasi->CastSpell(surdiel, SPELL_ARCANE_IMPRISONMENT);
-						}
 					}
 					Next(2s);
 					break;
@@ -1021,8 +1004,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 		std::list<TempSummon*> prison;
 
 		ObjectGuid endPortal;
-        ObjectGuid sewerPortal;
-        ObjectGuid libraryPortal;
 
 		// Accesseurs
 		#pragma region ACCESSORS

@@ -141,7 +141,7 @@ struct npc_jaina_theramore : public CustomAI
 					DoCast(target, SPELL_BLIZZARD);
 				blizzard.Repeat(14s, 22s);
 			})
-			.Schedule(10s, [this](TaskContext arcane_rift)
+			.Schedule(24s, [this](TaskContext arcane_rift)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
@@ -153,7 +153,7 @@ struct npc_jaina_theramore : public CustomAI
 					}
 				}
 
-				arcane_rift.Repeat(25s, 32s);
+				arcane_rift.Repeat(32s, 45s);
 			});
 	}
 
@@ -694,14 +694,11 @@ struct npc_kinndy_sparkshine : public CustomAI
 			.Schedule(10s, 15s, [this](TaskContext uncontrolled_energy)
 			{
 				float slice = 2 * float(M_PI) / 8;
-
-				uint8 index = 0;
 				for (uint8 i = 0; i < 8; ++i)
 				{
-					float angle = slice * index;
+					float angle = slice * i;
 					const Position dest = GetRandomPositionAroundCircle(me, angle, 15.0f);
 					me->CastSpell(dest, SPELL_UNCONTROLLED_ENERGY);
-					index++;
 				}
 
 				uncontrolled_energy.Repeat(1min);
@@ -826,7 +823,8 @@ struct npc_kalecgos_theramore : public CustomAI
 					{
 						CastStop();
 						DoCast(target, SPELL_ICE_NOVA);
-						ice_nova.Repeat(3s, 5s);
+                        DoCast(target, SPELL_COMET_STORM);
+                        ice_nova.Repeat(3s, 5s);
 						return;
 					}
 				}
@@ -835,8 +833,51 @@ struct npc_kalecgos_theramore : public CustomAI
 	}
 };
 
+struct npc_ziradormi_theramore : public CustomAI
+{
+	enum Misc
+	{
+		GOSSIP_MENU_DEFAULT = 65007,
+	};
+
+    npc_ziradormi_theramore(Creature* creature) : CustomAI(creature)
+	{
+	}
+
+	bool OnGossipHello(Player* player) override
+	{
+		player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
+		player->SendPreparedGossip(me);
+		return true;
+	}
+
+	bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
+	{
+		ClearGossipMenuFor(player);
+
+		switch (gossipListId)
+		{
+			case 0:
+                player->TeleportTo(5000, -3735.03f, -4425.95f, 30.55f, 0.f, TELE_REVIVE_AT_TELEPORT);
+				break;
+		}
+
+		CloseGossipMenuFor(player);
+		return true;
+	}
+
+    void Reset() override
+    {
+        CustomAI::Reset();
+
+        me->AddAura(SPELL_CHAT_BUBBLE, me);
+    }
+};
+
 void AddSC_battle_for_theramore()
 {
+    RegisterCreatureAI(npc_ziradormi_theramore);
+
 	RegisterTheramoreAI(npc_jaina_theramore);
 	RegisterTheramoreAI(npc_archmage_tervosh);
 	RegisterTheramoreAI(npc_amara_leeson);

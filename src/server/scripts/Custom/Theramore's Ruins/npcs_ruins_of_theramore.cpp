@@ -46,12 +46,12 @@ struct npc_water_elementals_theramore : public CustomAI
 				DoCastVictim(SPELL_WATER_BOLT);
 				water_bolt.Repeat(2s);
 			})
-			.Schedule(1min, [this](TaskContext watery_dome)
+			.Schedule(45s, 1min, [this](TaskContext watery_dome)
 			{
 				DoCastSelf(SPELL_WATERY_DOME);
 				watery_dome.Repeat(30s, 45s);
 			})
-			.Schedule(8s, 10s, [this](TaskContext water_spout)
+			.Schedule(10s, 15s, [this](TaskContext water_spout)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 					DoCast(target, SPELL_WATER_SPOUT);

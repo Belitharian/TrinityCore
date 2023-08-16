@@ -12,8 +12,9 @@
 #define RATHAELLA_PATH_02               16
 #define ROMMATH_PATH_01                 41
 #define TRACKING_PATH_01                9
+#define SPECTRAL_BARRIER_COUNT          8
 
-//#define CUSTOM_DEBUG
+#define CUSTOM_DEBUG
 
 enum DLPCreatures
 {
@@ -68,7 +69,6 @@ enum DLPData
 	DATA_SECRET_PASSAGE,
     DATA_PORTAL_TO_PRISON,
     DATA_PORTAL_TO_SEWERS,
-    DATA_PORTAL_TO_LIBRARY,
 	DATA_SCENARIO_PHASE
 };
 
@@ -192,6 +192,7 @@ enum DLPMisc
 	GOB_SECRET_PASSAGE                  = 251033,
 	GOB_PORTAL_TO_SILVERMOON            = 323854,
 	GOB_MYSTIC_BARRIER_01               = 323860,
+    GOB_SPECTRAL_BARRIER                = 345361,
 	GOB_PORTAL_TO_STORMWIND             = 353823,
 	GOB_ICE_WALL_COLLISION              = 368620,
 	GOB_PORTAL_TO_PRISON                = 550001,
@@ -347,6 +348,7 @@ const Position RommathPos02     = { -854.29f, 4475.16f, 588.85f, 5.60f };
 const Position RommathPos03     = { -875.18f, 4492.31f, 580.07f, 2.47f };
 const Position HathorelPos01    = { -805.92f, 4430.16f, 598.65f, 1.76f };
 const Position HathorelPos02    = { -876.22f, 4489.65f, 580.05f, 2.37f };
+const Position SorinPoint01     = { -856.22f, 4477.19f, 653.60f, 4.78f };
 const Position EndPortalPos01   = { -893.05f, 4506.48f, 580.45f, 5.59f };
 
 const Position RathaellaPath01[RATHAELLA_PATH_01] =

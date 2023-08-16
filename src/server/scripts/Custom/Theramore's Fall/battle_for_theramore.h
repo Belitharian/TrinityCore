@@ -152,7 +152,7 @@ enum BFTMisc
 	SPELL_RUNIC_SHIELD                  = 346057,
 	SPELL_FROST_BREATH                  = 300548,
 	SPELL_THERAMORE_EXPLOSION_SCENE     = 128446,
-    SPELL_SKYBOX_EFFECT                 = 279122,
+    SPELL_SKYBOX_EFFECT                 = 199644,
 	SPELL_TELEPORT_TARGET               = 268294,
 	SPELL_THALYSSRA_SPAWNS              = 302492,
 	SPELL_CHAT_BUBBLE                   = 140812,
