@@ -31,6 +31,13 @@ struct CreatureData;
 
 enum class FlagState : uint8;
 
+enum class EncounterType : uint8
+{
+    DungeonEncounter,
+    Battleground,
+    MythicPlusRun
+};
+
 class TC_GAME_API ZoneScript
 {
     public:
@@ -71,6 +78,9 @@ class TC_GAME_API ZoneScript
         virtual void ProcessEvent(WorldObject* /*obj*/, uint32 /*eventId*/, WorldObject* /*invoker*/) { }
 
         virtual void OnFlagStateChange([[maybe_unused]] GameObject* flagInBase, [[maybe_unused]] FlagState oldValue, [[maybe_unused]] FlagState newValue, [[maybe_unused]] Player* player) { }
+
+        virtual bool CanCaptureFlag([[maybe_unused]] AreaTrigger* areaTrigger, [[maybe_unused]] Player* player) { return false; }
+        virtual void OnCaptureFlag([[maybe_unused]] AreaTrigger* areaTrigger, [[maybe_unused]] Player* player) { }
 };
 
 #endif

@@ -99,6 +99,7 @@ class UnitAura;
 class Vehicle;
 class VehicleJoinEvent;
 
+enum class EncounterType : uint8;
 enum class PetActionFeedback : uint8;
 enum MovementGeneratorType : uint8;
 enum ProcFlagsHit : uint32;
@@ -1208,7 +1209,7 @@ class TC_GAME_API Unit : public WorldObject
         void SendPlaySpellVisualKit(uint32 id, uint32 type, uint32 duration) const;
         void SendCancelSpellVisualKit(uint32 id);
 
-        void CancelSpellMissiles(uint32 spellId, bool reverseMissile = false);
+        void CancelSpellMissiles(uint32 spellId, bool reverseMissile = false, bool abortSpell = false);
 
         void DeMorph();
 
@@ -2025,8 +2026,8 @@ class TC_GAME_API Unit : public WorldObject
         virtual void AtDisengage() {}
 
     public:
-        void AtStartOfEncounter();
-        void AtEndOfEncounter();
+        void AtStartOfEncounter(EncounterType type);
+        void AtEndOfEncounter(EncounterType type);
 
     private:
 
