@@ -191,7 +191,7 @@ void TempSummon::InitStats(WorldObject* summoner, Milliseconds duration)
     m_timer = duration;
     m_lifetime = duration;
 
-    if (m_type == TEMPSUMMON_MANUAL_DESPAWN)
+    if (m_type == TEMPSUMMON_MANUAL_DESPAWN && duration != -1ms)
         m_type = (duration == 0ms) ? TEMPSUMMON_DEAD_DESPAWN : TEMPSUMMON_TIMED_DESPAWN;
 
     if (summoner && summoner->IsPlayer())
