@@ -233,11 +233,24 @@ void AreaTriggerDataStore::LoadAreaTriggerTemplates()
             createProperties.ScriptId = sObjectMgr->GetScriptId(fields[20].GetString());
 
             if (shape == AREATRIGGER_TYPE_POLYGON)
+            {
                 if (createProperties.Shape.PolygonDatas.Height <= 0.0f)
+                {
                     createProperties.Shape.PolygonDatas.Height = 1.0f;
+                    if (createProperties.Shape.PolygonDatas.HeightTarget <= 0.0f)
+                        createProperties.Shape.PolygonDatas.HeightTarget = 1.0f;
+                }
+            }
 
             createProperties.PolygonVertices       = std::move(verticesByCreateProperties[createProperties.Id]);
             createProperties.PolygonVerticesTarget = std::move(verticesTargetByCreateProperties[createProperties.Id]);
+            if (!createProperties.PolygonVerticesTarget.empty() && createProperties.PolygonVertices.size() != createProperties.PolygonVerticesTarget.size())
+            {
+                TC_LOG_ERROR("sql.sql", "Table `areatrigger_create_properties_polygon_vertex` has invalid target vertices, either all or none vertices must have a corresponding target vertex (AreaTriggerCreatePropertiesId: {}).",
+                    createProperties.Id);
+                createProperties.PolygonVerticesTarget.clear();
+            }
+
             createProperties.SplinePoints          = std::move(splinesByCreateProperties[createProperties.Id]);
 
             _areaTriggerCreateProperties[createProperties.Id] = createProperties;
