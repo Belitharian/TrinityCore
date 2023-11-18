@@ -34,7 +34,7 @@
 
 #define FIRE_LOCATION           32
 
-#define NUMBER_OF_MEMBERS       10
+#define HORDE_WAVES_COUNT       10
 #define NUMBER_OF_WOUNDED       6
 #define NUMBER_OF_CITIZENS      8
 #define NUMBER_OF_TROOPS        5
@@ -82,6 +82,9 @@ enum BFTData
 	DATA_AMARA_LEESON,
 	DATA_THADER_WINDERMERE,
 	DATA_ROKNAH_HAG,
+	DATA_CAPTAIN_DROK,
+	DATA_WAVE_CALLER_GRUHTA,
+	DATA_ADMIRAL_AUBREY,
 
 	DATA_SCENARIO_PHASE,
 	DATA_WOUNDED_TROOPS,
@@ -93,11 +96,15 @@ enum BFTData
 	DATA_PORTAL_TO_ORGRIMMAR,
 	DATA_MYSTIC_BARRIER_01,
 	DATA_MYSTIC_BARRIER_02,
+	DATA_ENERGY_BARRIER,
+    DATA_POWDER_BARREL,
 
 	// Invokers
 	DATA_WAVE_DOORS                     = 100,
 	DATA_WAVE_CITADEL,
-	DATA_WAVE_DOCKS
+	DATA_WAVE_DOCKS,
+	DATA_WAVE_WEST,
+    DATA_WAVE_BOAT,
 };
 
 enum BFTCreatures
@@ -109,19 +116,23 @@ enum BFTCreatures
 	NPC_HEDRIC_EVENCANE                 = 58840,
 	NPC_KNIGHT_OF_THERAMORE             = 59654,
 	NPC_INVISIBLE_STALKER               = 32780,
-	NPC_THERAMORE_FOOTMAN               = 58612,
 	NPC_UNMANNED_TANK                   = 58788,
+	NPC_CAPTAIN_DROK                    = 58870,
 	NPC_THERAMORE_FAITHFUL              = 59595,
 	NPC_THERAMORE_ARCANIST              = 59596,
 	NPC_THERAMORE_OFFICER               = 58913,
+	NPC_THERAMORE_MARKSMAN              = 59317,
+	NPC_THERAMORE_FOOTMAN               = 58612,
 	NPC_THERAMORE_CITIZEN_MALE          = 143773,
 	NPC_THERAMORE_CITIZEN_FEMALE        = 143776,
 	NPC_BISHOP_DELAVEY                  = 500022,
+	NPC_ADMIRAL_AUBREY                  = 121953,
 
 	NPC_ROKNAH_GRUNT                    = 64732,
 	NPC_ROKNAH_LOA_SINGER               = 64733,
 	NPC_ROKNAH_HAG                      = 64734,
 	NPC_ROKNAH_FELCASTER                = 65507,
+	NPC_WAVE_CALLER_GRUHTA              = 65510,
 
 	NPC_ARCHMAGE_TERVOSH 	            = 500000,
 	NPC_KINNDY_SPARKSHINE 	            = 500001,
@@ -140,31 +151,39 @@ enum BFTCreatures
 enum BFTMisc
 {
 	// Spells
-	SPELL_COSMETIC_LARGE_FIRE           = 277763,
-	SPELL_COSMETIC_FIRE_LIGHT           = 320348,
+	SPELL_TELEPORT_DUMMY                = 51347,
+	SPELL_THERAMORE_EXPLOSION_SCENE     = 128446,
+	SPELL_CHAT_BUBBLE                   = 140812,
+	SPELL_SKYBOX_EFFECT                 = 148137,
+    SPELL_FOR_THE_ALLIANCE              = 185265,
+    SPELL_ARCANE_FX                     = 200065,
 	SPELL_CAMERA_SHAKE_VOLCANO          = 246439,
 	SPELL_REPAIR                        = 262554,
-	SPELL_TELEPORT_DUMMY                = 51347,
-	SPELL_KILL_CREDIT                   = 347365,
-	SPELL_PORTAL_CHANNELING_01          = 286636,
+	SPELL_TELEPORT_TARGET               = 268294,
 	SPELL_PORTAL_CHANNELING_02          = 287432,
 	SPELL_PORTAL_CHANNELING_03          = 288451,
-	SPELL_RUNIC_SHIELD                  = 346057,
+	SPELL_PORTAL_CHANNELING_01          = 286636,
+	SPELL_RENEW                         = 294342,
 	SPELL_FROST_BREATH                  = 300548,
-	SPELL_THERAMORE_EXPLOSION_SCENE     = 128446,
-    SPELL_SKYBOX_EFFECT                 = 199644,
-	SPELL_TELEPORT_TARGET               = 268294,
 	SPELL_THALYSSRA_SPAWNS              = 302492,
-	SPELL_CHAT_BUBBLE                   = 140812,
-	SPELL_TELEPORT_CAST_TIME            = 373184,
+	SPELL_WATER_CHANNELLING             = 305033,
+	SPELL_COSMETIC_FIRE_LIGHT           = 320348,
+	SPELL_RUNIC_SHIELD                  = 346057,
+	SPELL_KILL_CREDIT                   = 347365,
+    SPELL_SHOW_OFF_FIRE                 = 364153,
+    SPELL_CHANNEL_BLUE_MOVING           = 381450,
+    SPELL_STASIS                        = 398620,
+	SPELL_COSMETIC_LARGE_FIRE           = 414772,
 
 	// GameObjects
+    GOB_POWDER_BARREL                   = 294148,
 	GOB_MYSTIC_BARRIER_01               = 323860,
 	GOB_MYSTIC_BARRIER_02               = 323862,
 	GOB_PORTAL_TO_STORMWIND             = 353823,
 	GOB_PORTAL_TO_DALARAN               = 323842,
 	GOB_PORTAL_TO_ORGRIMMAR             = 353822,
-	GOB_REFRESHMENT                     = 336432,
+	GOB_LAVISH_REFRESHMENT_TABLE        = 550006,
+	GOB_ENERGY_BARRIER                  = 369744,
 
 	// Criteria Trees
 	CRITERIA_TREE_FIND_JAINA            = 1000000,
@@ -181,7 +200,7 @@ enum BFTMisc
 	CRITERIA_TREE_REPAIR_TANKS          = 1000015,
 	CRITERIA_TREE_THE_BATTLE            = 1000017,
 	CRITERIA_TREE_RETRIEVE_JAINA        = 1000018,
-	CRITERIA_TREE_SURVIVE_THE_BATTLE    = 1000020,
+	CRITERIA_TREE_SURVIVE_THE_BATTLE    = 1000019,
 	CRITERIA_TREE_HELP_THE_WOUNDED      = 1000021,
 	CRITERIA_TREE_FOLLOW_JAINA          = 1000022,
 	CRITERIA_TREE_HELP_THE_TROOPS       = 1000023,
@@ -192,6 +211,8 @@ enum BFTMisc
 	CRITERIA_TREE_RETRIEVE_RHONIN       = 1000028,
 	CRITERIA_TREE_RETRIEVE              = 1000029,
 	CRITERIA_TREE_REDUCE_EXPLOSION      = 1000030,
+	CRITERIA_TREE_DESTROY_SEA_WOLF      = 1000074,
+	CRITERIA_TREE_KILL_CAPTAIN_DROK     = 1000075,
 
 	// Phase
 	PHASE_THERAMORE_SCENE_EXPLOSION     = 1503,
@@ -205,6 +226,7 @@ enum BFTMisc
 	MOVEMENT_INFO_POINT_01              = 89644940,
 	MOVEMENT_INFO_POINT_02              = 89644941,
 	MOVEMENT_INFO_POINT_03              = 89644942,
+	MOVEMENT_INFO_POINT_04              = 89644943,
 
 	// Events
 	EVENT_FIND_JAINA_01                 = 65800,    // Find Jaina - Tower
@@ -217,7 +239,8 @@ enum BFTMisc
 	EVENT_FIND_JAINA_05                 = 65807,    // Find Jaina - After wounded / fires
 	EVENT_WAIT_ARCHMAGE_LESSON          = 65808,
 	EVENT_RETRIEVE_RHONIN               = 65809,
-	EVENT_REDUCE_IMPACT                 = 65810
+	EVENT_REDUCE_IMPACT                 = 65810,
+	EVENT_DESTROY_SEA_WOLF              = 65823,
 };
 
 enum BFTTalks
@@ -299,11 +322,14 @@ enum BFTTalks
 	SAY_BATTLE_02         = 33,
 	SAY_BATTLE_03         = 34,
 	SAY_BATTLE_04         = 35,
+	SAY_BATTLE_05         = 0,
+	SAY_BATTLE_06         = 0,
 	
 	SAY_BATTLE_ALERT      = 36,
 	SAY_BATTLE_CITADEL    = 37,
 	SAY_BATTLE_GATE       = 38,
 	SAY_BATTLE_DOCKS      = 39,
+	SAY_BATTLE_WEST       = 62,
 
 	SAY_POST_BATTLE_01    = 43,
 	SAY_POST_BATTLE_02    = 2,
@@ -385,9 +411,9 @@ Location const actorsRelocation[ACTORS_RELOCATION] =
 	{ DATA_HEDRIC_EVENCANE,      { 0.f, 0.f, 0.f, 0.f }, { -3661.38f, -4376.67f,  9.35f, 0.69f } },
 	{ DATA_RHONIN,               { 0.f, 0.f, 0.f, 0.f }, { -3677.44f, -4521.55f, 10.21f, 0.50f } },
 	{ DATA_THALEN_SONGWEAVER,    { 0.f, 0.f, 0.f, 0.f }, { -3652.05f, -4365.66f,  9.53f, 0.69f } },
-	{ DATA_TARI_COGG,            { 0.f, 0.f, 0.f, 0.f }, { -3786.33f, -4256.64f,  6.52f, 1.59f } },
+	{ DATA_TARI_COGG,            { 0.f, 0.f, 0.f, 0.f }, { -3786.55f, -4276.78f,  7.99f, 1.56f } },
 	{ DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3649.58f, -4369.21f,  9.57f, 0.69f } },
-	{ DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3778.19f, -4256.27f,  6.51f, 1.53f } },
+	{ DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3779.07f, -4276.96f,  7.93f, 1.52f } },
 	{ DATA_KALECGOS,             { 0.f, 0.f, 0.f, 0.f }, { -3730.39f, -4550.39f, 27.11f, 0.54f } }
 };
 
@@ -395,7 +421,7 @@ Location const archmagesRelocation[ARCHMAGES_RELOCATION] =
 {
 	{ DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3629.75f, -4462.69f, 13.62f, 0.58f } },
 	{ DATA_TARI_COGG,            { 0.f, 0.f, 0.f, 0.f }, { -3629.33f, -4458.57f, 14.33f, 5.77f } },
-	{ DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3618.39f, -4457.64f, 13.62f, 3.74f } },
+	{ DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3611.58f, -4452.25f, 14.24f, 3.41f } },
 	{ DATA_RHONIN,               { 0.f, 0.f, 0.f, 0.f }, { -3624.61f, -4456.55f, 13.62f, 4.12f } },
 	{ DATA_KINNDY_SPARKSHINE,    { 0.f, 0.f, 0.f, 0.f }, { -3618.42f, -4463.22f, 13.62f, 2.41f } },
 	{ DATA_ARCHMAGE_TERVOSH,     { 0.f, 0.f, 0.f, 0.f }, { -3626.40f, -4453.89f, 14.24f, 0.44f } }
@@ -654,7 +680,7 @@ Position const TervoshPoint01   = { -3720.83f, -4551.10f, 25.82f, 1.35f };
 Position const KalecgosPoint01  = { -3730.39f, -4550.39f, 27.11f, 0.54f };
 Position const KalecgosPoint02  = { -3717.96f, -4356.52f, 90.82f, 0.00f };
 Position const PortalPoint01    = { -3712.42f, -4539.62f, 25.82f, 3.59f };
-Position const PortalPoint02    = { -3783.17f, -4205.77f,  7.60f, 4.71f };
+Position const PortalPoint02    = { -3782.81f, -4256.24f,  6.52f, 4.69f };
 Position const PortalPoint03    = { -3750.82f, -4449.65f, 64.90f, 0.63f };
 Position const HedricPoint01    = { -3717.79f, -4522.24f, 25.82f, 5.16f };
 Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f };
@@ -663,9 +689,8 @@ Position const ExplodingPoint01 = { -3648.24f, -4364.96f,  9.68f, 3.78f };
 Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f };
 Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };
 Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f };
-Position const CitadelPoint01   = { -3668.74f, -4511.64f, 10.09f, 1.54f };
-Position const DocksPoint01     = { -3826.84f, -4539.05f,  9.21f, 5.96f };
 Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f };
+Position const TheramorePoint02 = { -3764.61f, -4327.58f,  9.82f, 5.20f };
 
 inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
 {
@@ -690,7 +715,6 @@ inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, f
 	// Set final position
 	return { x, y, z, o };
 }
-
 
 template <class AI>
 class TheramoreCreatureScript : public CreatureScript

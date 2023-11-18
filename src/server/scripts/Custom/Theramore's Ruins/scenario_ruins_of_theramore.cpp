@@ -3,12 +3,15 @@
 #include "InstanceScript.h"
 #include "KillRewarder.h"
 #include "Map.h"
+#include "MiscPackets.h"
 #include "MotionMaster.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "TemporarySummon.h"
+#include "Weather.h"
+#include "WorldPacket.h"
 #include "ruins_of_theramore.h"
 
 const ObjectData creatureData[] =
@@ -83,13 +86,18 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					events.ScheduleEvent(25, 1s);
 					break;
 				case EVENT_WARLORD_ROKNAH_SLAIN:
-					GetJaina()->CastSpell(GetJaina(), SPELL_EXPLOSIVE_BRAND, true);
-					for (Creature* horde : hordes)
-					{
-						if (horde && horde->IsAlive() && horde->GetEntry() != NPC_ROKNAH_WARLORD)
-							horde->CastSpell(horde, SPELL_EXPLOSIVE_BRAND_DAMAGE);
-					}
-					events.ScheduleEvent(39, 800ms);
+                    if (Creature* jaina = GetJaina())
+                    {
+                        jaina->CastSpell(jaina, SPELL_EXPLOSIVE_BRAND, true);
+
+                        for (Creature* horde : hordes)
+                        {
+                            if (horde && horde->IsAlive() && horde->GetEntry() != NPC_ROKNAH_WARLORD)
+                                horde->CastSpell(horde, SPELL_EXPLOSIVE_BRAND_DAMAGE);
+                        }
+
+                        events.ScheduleEvent(39, 800ms);
+                    }
 					break;
 			}
 		}
@@ -144,8 +152,6 @@ class scenario_ruins_of_theramore : public InstanceMapScript
                     hordeCounter = (uint32)hordes.size();
                     for (TempSummon* horde : hordes)
                     {
-                        horde->SetMaxHealth(horde->GetMaxHealth() * 6.f);
-                        horde->SetFullHealth();
                         horde->SetTempSummonType(TEMPSUMMON_TIMED_OR_DEAD_DESPAWN);
 
                         hordeChecker.push_back(horde->GetGUID());
@@ -194,8 +200,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						creature->AddAura(RAND(SPELL_GLACIAL_SPIKE_COSMETIC, SPELL_BURNING), creature);
 					break;
 				case NPC_GENERAL_TIRAS_ALAN:
-				case NPC_ADMIRAL_AUBREY:
-					creature->SetLevel(60);
+                case NPC_ADMIRAL_AUBREY:
 				case NPC_HEDRIC_EVENCANE:
 				case NPC_THERAMORE_FAITHFUL:
 				case NPC_THERAMORE_ARCANIST:
@@ -203,7 +208,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case NPC_ARCHMAGE_TERVOSH:
 				case NPC_KINNDY_SPARKSHINE:
 					FeingDeath(creature);
-					creature->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+					creature->SetUninteractible(true);
 					creature->AddAura(SPELL_SHIMMERDUST, creature);
 					creature->AddAura(SPELL_COSMETIC_PURPLE_VERTEX_STATE, creature);
 					break;
@@ -335,7 +340,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(5s);
 					break;
 				case 18:
-					DoTeleportPlayers(instance->GetPlayers(), PlayerPoint01, 12.f);
+                    ForceWeather(WEATHER_ARCANE_BUILD, true);
+					TeleportPlayers(PlayerPoint01, 12.f);
 					DoRemoveAurasDueToSpellOnPlayers(SPELL_SKYBOX_EFFECT_ENTRANCE);
 					DoCastSpellOnPlayers(SPELL_SKYBOX_EFFECT_RUINS);
 					TriggerGameEvent(EVENT_HELP_KALECGOS);
@@ -544,7 +550,6 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						if (Creature* dummy = instance->GetCreature(irisDummy))
 							dummy->DespawnOrUnsummon();
 
-						jaina->SetImmuneToAll(true);
 						jaina->SetWalk(true);
 
 						if (GameObject* brokenGlass = GetGameObject(DATA_BROKEN_GLASS))
@@ -627,6 +632,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 							jaina->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
 							jaina->SetReactState(REACT_PASSIVE);
+                            jaina->LoadEquipment(2);
 
 							events.CancelEvent(44);
 
@@ -697,7 +703,38 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			creature->SetUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
 			creature->SetUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
 			creature->SetImmuneToAll(true);
-		}
+        }
+
+        void TeleportPlayers(const Position center, float distance)
+        {
+            float angle = (float)rand_norm() * static_cast<float>(2 * M_PI);
+            float new_dist = (float)rand_norm() + (float)rand_norm();
+            new_dist = distance * (new_dist > 1 ? new_dist - 2 : new_dist);
+
+            float rand_x = center.m_positionX + new_dist * std::cos(angle);
+            float rand_y = center.m_positionY + new_dist * std::sin(angle);
+
+            Trinity::NormalizeMapCoord(rand_x);
+            Trinity::NormalizeMapCoord(rand_y);
+
+            instance->DoOnPlayers([center, rand_x, rand_y](Player* player)
+            {
+                float rand_z = center.m_positionZ;
+                player->UpdateGroundPositionZ(rand_x, rand_y, rand_z);
+                player->NearTeleportTo({ rand_x, rand_y, rand_z, center.GetOrientation() });
+            });
+        }
+
+        void ForceWeather(uint32 weatherEntry, bool apply)
+        {
+            instance->DoOnPlayers([weatherEntry, apply](Player* player)
+            {
+                if (apply)
+                    player->SendDirectMessage(WorldPackets::Misc::Weather(WeatherState(weatherEntry), 1.0f).Write());
+                else
+                    player->GetMap()->SendZoneWeather(player->GetZoneId(), player);
+            });
+        }
 
 		#pragma endregion
 	};

@@ -412,6 +412,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 						player->RemoveAurasDueToSpell(SPELL_HORDE_ILLUSION);
 						player->RemoveAurasDueToSpell(SPELL_FACTION_OVERRIDE);
 						player->RemoveAurasDueToSpell(SPELL_FLASHBACK_EFFECT);
+						player->RemoveAurasDueToSpell(SPELL_FOR_THE_HORDE);
 					});
 
 					break;
@@ -691,6 +692,8 @@ class scenario_dalaran_purge : public InstanceMapScript
 					{
 						player->NearTeleportTo(SewersPos01);
 						player->CastSpell(player, SPELL_FLASHBACK_EFFECT, true);
+                        for (uint8 i = 0; i < 20; i++)
+                            player->CastSpell(player, SPELL_FOR_THE_HORDE);
 					});
 					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
 						surdiel->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, SurdielPos02, true, SurdielPos02.GetOrientation());

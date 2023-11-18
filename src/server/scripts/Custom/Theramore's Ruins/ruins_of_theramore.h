@@ -96,7 +96,7 @@ enum RFTSpells
 	SPELL_WATER_BOSS_ENTRANCE           = 240261,
 	SPELL_COSMETIC_ARCANE_DISSOLVE		= 254799,
 	SPELL_SHIMMERDUST					= 278917,
-    SPELL_SKYBOX_EFFECT_ENTRANCE        = 279122,
+    SPELL_SKYBOX_EFFECT_ENTRANCE        = 148137,
 	SPELL_BURNING                       = 282051,
 	SPELL_ARCANE_CHANNELING             = 294676,
 	SPELL_EMPOWERED_SUMMON              = 303681,
@@ -115,6 +115,9 @@ enum RFTMisc
 
 	// Sounds
 	SOUND_ZEPPELIN_FLIGHT               = 85549,
+
+    // Weather
+    WEATHER_ARCANE_BUILD                = 182,
 
 	// Events
 	EVENT_FIND_JAINA_01                 = 65811,    // Isle
@@ -245,30 +248,6 @@ inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, f
 
     // Set final position
     return { x, y, z, o };
-}
-
-inline void DoTeleportPlayers(Map::PlayerList const& players, const Position center, float dist = 8.0f)
-{
-	if (players.isEmpty())
-		return;
-
-	for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
-	{
-		Position pos = GetRandomPosition(center, dist);
-		if (Player* player = i->GetSource())
-		{
-			player->CastSpell(player, SPELL_TELEPORT_VISUAL_ONLY, true);
-
-            float x = pos.GetPositionX();
-            float y = pos.GetPositionY();
-
-            Trinity::NormalizeMapCoord(x);
-            Trinity::NormalizeMapCoord(y);
-			player->UpdateGroundPositionZ(x, y, pos.m_positionZ);
-
-            player->NearTeleportTo(pos);
-		}
-	}
 }
 
 template <class AI>

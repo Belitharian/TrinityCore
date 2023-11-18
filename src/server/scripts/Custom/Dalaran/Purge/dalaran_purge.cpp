@@ -9,7 +9,7 @@
 
 struct npc_jaina_dalaran_purge : public CustomAI
 {
-	npc_jaina_dalaran_purge(Creature* creature) : CustomAI(creature, AI_Type::None)
+	npc_jaina_dalaran_purge(Creature* creature) : CustomAI(creature, AI_Type::Distance)
 	{
 		Initialize();
 	}
@@ -191,7 +191,7 @@ struct npc_magister_rommath_purge : public CustomAI
         SPELL_BLAZING_SURGE         = 329509,
         SPELL_PHOENIX_FIRE          = 266964,
         SPELL_PHOENIX_VISUAL        = 336658,
-        SPELL_SCORCHING_DETONATION  = 401525
+        SPELL_SCORCHING_DETONATION  = 401525,
 	};
 
 	void Initialize()
@@ -225,7 +225,7 @@ struct npc_magister_rommath_purge : public CustomAI
 			case MOVEMENT_INFO_POINT_01:
 				me->AI()->Talk(SAY_INFILTRATE_ROMMATH_04);
 				if (GameObject* passage = instance->GetGameObject(DATA_SECRET_PASSAGE))
-					passage->UseDoorOrButton();
+					passage->UseDoorOrButton(7200000);
                 for (uint8 i = 0; i < TRACKING_PATH_01; i++)
                 {
                     if (TempSummon* tracking = me->GetMap()->SummonCreature(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
@@ -237,6 +237,7 @@ struct npc_magister_rommath_purge : public CustomAI
                     me->SetImmuneToAll(false);
                     me->GetMotionMaster()->Clear();
                     me->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, me->GetFollowAngle());
+                    player->SetMinionGUID(me->GetGUID());
                 }
 				break;
             case MOVEMENT_INFO_POINT_02:
@@ -259,7 +260,7 @@ struct npc_magister_rommath_purge : public CustomAI
 
 	void MoveInLineOfSight(Unit* who) override
 	{
-		ScriptedAI::MoveInLineOfSight(who);
+        ScriptedAI::MoveInLineOfSight(who);
 
 		if (me->IsEngaged())
 			return;
@@ -435,7 +436,7 @@ struct npc_magister_rommath_purge : public CustomAI
                     break;
                 case 3:
                     player->AddAura(SPELL_PHOENIX_FIRE, player);
-                    events.ScheduleEvent(4, 1s);
+                    events.ScheduleEvent(4, 2800ms);
                     break;
                 case 4:
                     player->CastSpell(player, SPELL_PHOENIX_VISUAL);

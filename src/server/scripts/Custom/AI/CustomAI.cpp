@@ -4,9 +4,15 @@
 #include "GridNotifiers.h"
 
 CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
-	type(type), summons(creature), wasInterrupted(false), canCombatMove(true)
+	type(type), summons(creature), canCombatMove(true), damageReduction(false)
 {
 	Initialize();
+}
+
+CustomAI::CustomAI(Creature* creature, bool damageReduction, AI_Type type) : ScriptedAI(creature),
+    type(type), summons(creature), canCombatMove(true), damageReduction(damageReduction)
+{
+    Initialize();
 }
 
 void CustomAI::Initialize()
@@ -45,8 +51,6 @@ void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
     if (caster->GetGUID() != me->GetGUID()
         && (spellInfo->HasEffect(SPELL_EFFECT_INTERRUPT_CAST) || spellInfo->HasEffect(SPELL_EFFECT_KNOCK_BACK)))
     {
-        wasInterrupted = true;
-
         if (type != AI_Type::Stay)
         {
             me->SetCanMelee(true);
@@ -75,8 +79,6 @@ void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
             int32 duration = spellInfo->GetDuration() / IN_MILLISECONDS;
             scheduler.Schedule(Seconds(duration), [this](TaskContext /*context*/)
             {
-                wasInterrupted = false;
-
                 me->SetCanMelee(false);
 
                 SetCombatMove(false, GetDistance());
@@ -92,15 +94,28 @@ void CustomAI::EnterEvadeMode(EvadeReason why)
         me->ResumeMovement();
     }
 
+    me->RemoveAllAreaTriggers();
+
 	summons.DespawnAll();
 	scheduler.CancelAll();
 
 	ScriptedAI::EnterEvadeMode(why);
 }
 
+void CustomAI::DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* /*spellInfo = nullptr*/)
+{
+    if (damageReduction)
+    {
+        DamageFromNPC(attacker, damage, damageType);
+    }
+}
+
 void CustomAI::Reset()
 {
 	Initialize();
+
+    me->RemoveAllAreaTriggers();
+    me->RemoveAllDynObjects();
 
 	summons.DespawnAll();
 	scheduler.CancelAll();
@@ -294,6 +309,17 @@ uint32 CustomAI::EnemiesInFront(float distance)
 		if (me->isInFrontInMap(ref->GetVictim(), distance))
 			++count;
 	return count;
+}
+
+void CustomAI::DamageFromNPC(Unit* attacker, uint32& damage, DamageEffectType damageType)
+{
+    if (!attacker || damageType == HEAL)
+        return;
+
+    if (attacker->GetTypeId() == TYPEID_UNIT && attacker->ToCreature())
+    {
+        damage *= GetDamageReductionToUnit();
+    }
 }
 
 bool CustomAI::HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic)

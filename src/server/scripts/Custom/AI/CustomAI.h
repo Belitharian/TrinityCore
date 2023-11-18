@@ -54,12 +54,15 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 {
     public:
         CustomAI(Creature* creature, AI_Type type = AI_Type::Distance);
+        CustomAI(Creature* creature, bool damageReduction, AI_Type type = AI_Type::Distance);
         virtual ~CustomAI() { }
 
         virtual void Initialize();
 
         virtual float GetDistance() { return 20.f; };
-        virtual float GetDamageReductionToUnit() { return 0.2f; };
+
+        virtual float GetDamageReductionToUnit() { return 0.08f; };
+        virtual void DamageFromNPC(Unit* attacker, uint32& damage, DamageEffectType damageType);
 
         void JustSummoned(Creature* /*summon*/) override;
         void SummonedCreatureDespawn(Creature* /*summon*/) override;
@@ -68,6 +71,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void SpellHit(WorldObject* /*caster*/, SpellInfo const* /*spellInfo*/) override;
 
         void EnterEvadeMode(EvadeReason why = EvadeReason::Other) override;
+        void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override;
 
         void Reset() override;
         void AttackStart(Unit* /*who*/) override;
@@ -89,7 +93,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         AI_Type type;
         uint8 interruptCounter;
         bool canCombatMove;
-        bool wasInterrupted;
+        bool damageReduction;
 
         uint32 EnemiesInRange(float distance);
         uint32 EnemiesInFront(float distance);

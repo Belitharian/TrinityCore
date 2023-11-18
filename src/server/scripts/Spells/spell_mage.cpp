@@ -1554,9 +1554,7 @@ class spell_ice_wall : public SpellScript
 // AreaTriggerID - 22981
 struct at_ring_of_fire : AreaTriggerAI
 {
-    static constexpr Milliseconds TICK_PERIOD = Milliseconds(2000);
-
-    at_ring_of_fire(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger), _tickTimer(TICK_PERIOD) { }
+    at_ring_of_fire(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger) { }
 
     enum Spells
     {
@@ -1576,36 +1574,6 @@ struct at_ring_of_fire : AreaTriggerAI
             caster->CastSpell(unit, SPELL_RING_OF_FIRE_DAMAGE, true);
         }
     }
-
-    void OnUpdate(uint32 diff) override
-    {
-        _tickTimer -= Milliseconds(diff);
-
-        while (_tickTimer <= 0s)
-        {
-            if (Unit* caster = at->GetCaster())
-            {
-                for (ObjectGuid guid : at->GetInsideUnits())
-                {
-                    if (Unit* target = ObjectAccessor::GetUnit(*caster, guid))
-                    {
-                        if (!caster->IsHostileTo(target))
-                            continue;
-
-                        if (target->HasAura(SPELL_RING_OF_FIRE_DAMAGE))
-                            continue;
-
-                        caster->CastSpell(target, SPELL_RING_OF_FIRE_DAMAGE, true);
-                    }
-                }
-            }
-
-            _tickTimer += TICK_PERIOD;
-        }
-    }
-
-    private:
-    Milliseconds _tickTimer;
 };
 
 // Meteor - 153561

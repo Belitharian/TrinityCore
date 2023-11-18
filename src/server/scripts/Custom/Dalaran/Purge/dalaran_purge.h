@@ -14,7 +14,7 @@
 #define TRACKING_PATH_01                9
 #define SPECTRAL_BARRIER_COUNT          8
 
-#define CUSTOM_DEBUG
+//#define CUSTOM_DEBUG
 
 enum DLPCreatures
 {
@@ -130,7 +130,8 @@ enum DLPSpells
 	SPELL_FROST_CANALISATION            = 192353,
 	SPELL_CLOSE_PORTAL                  = 203542,
 	SPELL_RUNES_OF_SHIELDING        	= 217859,
-	SPELL_TELEPORT_CASTER               = 238689,
+    SPELL_FOR_THE_HORDE                 = 224811,
+    SPELL_TELEPORT_CASTER               = 238689,
 	SPELL_WAND_OF_DISPELLING            = 243043,
 	SPELL_FACTION_OVERRIDE              = 195838,
     SPELL_ARCANIC_TRACKING              = 210126,

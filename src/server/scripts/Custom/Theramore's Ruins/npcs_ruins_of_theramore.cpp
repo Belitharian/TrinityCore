@@ -16,7 +16,7 @@
 
 struct npc_water_elementals_theramore : public CustomAI
 {
-	npc_water_elementals_theramore(Creature* creature) : CustomAI(creature)
+	npc_water_elementals_theramore(Creature* creature) : CustomAI(creature, AI_Type::Melee), shielded(false)
 	{
 	}
 
@@ -25,31 +25,34 @@ struct npc_water_elementals_theramore : public CustomAI
 		SPELL_WATER_SPOUT           = 271287,
 		SPELL_WATERY_DOME           = 258153,
 		SPELL_WATER_BOLT_VOLLEY     = 290084,
-		SPELL_IMMUNE                = 299144,
 		SPELL_WATER_BOLT            = 355225,
 	};
+
+    bool shielded;
 
 	float GetDistance() override
 	{
 		return 5.f;
 	}
 
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    {
+        if (me->HealthBelowPctDamaged(30, damage) && !shielded)
+        {
+            DoCastSelf(SPELL_WATERY_DOME);
+            shielded = true;
+        }
+    }
+
 	void JustEngagedWith(Unit* who) override
 	{
-		if (me->GetMap()->GetId() != 5002) DoCast(SPELL_IMMUNE);
-
-        DoCast(who, SPELL_WATER_BOLT);
+		DoCast(who, SPELL_WATER_BOLT);
 
 		scheduler
 			.Schedule(5ms, [this](TaskContext water_bolt)
 			{
 				DoCastVictim(SPELL_WATER_BOLT);
-				water_bolt.Repeat(2s);
-			})
-			.Schedule(45s, 1min, [this](TaskContext watery_dome)
-			{
-				DoCastSelf(SPELL_WATERY_DOME);
-				watery_dome.Repeat(30s, 45s);
+				water_bolt.Repeat(2s, 8s);
 			})
 			.Schedule(10s, 15s, [this](TaskContext water_spout)
 			{
@@ -59,7 +62,7 @@ struct npc_water_elementals_theramore : public CustomAI
 			})
 			.Schedule(12s, 22s, [this](TaskContext water_bolt_volley)
 			{
-				CastStop(SPELL_WATER_BOLT_VOLLEY);
+				CastStop();
 				DoCast(SPELL_WATER_BOLT_VOLLEY);
 				water_bolt_volley.Repeat(18s, 20s);
 			});
@@ -79,7 +82,7 @@ struct npc_jaina_image : public CustomAI
 		SPELL_SUPERNOVA             = 157980,
 		SPELL_ARCANE_BLAST          = 291316,
 		SPELL_ARCANE_BARRAGE        = 291318,
-        SPELL_MIRROR_IMAGE_FX       = 370617,
+		SPELL_MIRROR_IMAGE_FX       = 370617,
 	};
 
 	void Reset()
@@ -94,61 +97,61 @@ struct npc_jaina_image : public CustomAI
 		scheduler
 			.Schedule(5ms, [this](TaskContext context)
 			{
-                if (me->GetPowerPct(POWER_MANA) <= 20)
-                {
-                    if (Spell* spell = me->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
-                    {
-                        if (spell->getState() != SPELL_STATE_FINISHED && spell->IsChannelActive())
-                        {
-                            context.Repeat(2s);
-                        }
-                    }
-                    else
-                    {
-                        const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
-                        Milliseconds ms = Milliseconds(info->CalcDuration());
-                        CastSpellExtraArgs args(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD);
+				if (me->GetPowerPct(POWER_MANA) <= 20)
+				{
+					if (Spell* spell = me->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+					{
+						if (spell->getState() != SPELL_STATE_FINISHED && spell->IsChannelActive())
+						{
+							context.Repeat(2s);
+						}
+					}
+					else
+					{
+						const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
+						Milliseconds ms = Milliseconds(info->CalcDuration());
+						CastSpellExtraArgs args(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD);
 
-                        me->CastSpell(me, SPELL_EVOCATION, args);
-                        me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
+						me->CastSpell(me, SPELL_EVOCATION, args);
+						me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
 
-                        context.Repeat(ms + 800ms);
-                    }
-                }
-                else
-                {
-                    Milliseconds ms = 50ms;
-                    if (!me->HasUnitState(UNIT_STATE_CASTING))
-                    {
-                        uint32 spellId = SPELL_ARCANE_BLAST;
-                        if (roll_chance_i(30))
-                        {
-                            spellId = SPELL_ARCANE_PROJECTILES;
-                        }
-                        else if (roll_chance_i(20))
-                        {
-                            spellId = SPELL_ARCANE_BARRAGE;
-                        }
-                        else if (roll_chance_i(10))
-                        {
-                            spellId = SPELL_SUPERNOVA;
-                        }
+						context.Repeat(ms + 800ms);
+					}
+				}
+				else
+				{
+					Milliseconds ms = 50ms;
+					if (!me->HasUnitState(UNIT_STATE_CASTING))
+					{
+						uint32 spellId = SPELL_ARCANE_BLAST;
+						if (roll_chance_i(30))
+						{
+							spellId = SPELL_ARCANE_PROJECTILES;
+						}
+						else if (roll_chance_i(20))
+						{
+							spellId = SPELL_ARCANE_BARRAGE;
+						}
+						else if (roll_chance_i(10))
+						{
+							spellId = SPELL_SUPERNOVA;
+						}
 
-                        const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
-                        ms = Milliseconds(info->CalcCastTime());
+						const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
+						ms = Milliseconds(info->CalcCastTime());
 
-                        if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                        {
-                            me->CastSpell(target, spellId);
-                            me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
-                        }
+						if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+						{
+							me->CastSpell(target, spellId);
+							me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
+						}
 
-                        if (info->IsChanneled())
-                            ms = Milliseconds(info->CalcDuration(me));
-                    }
+						if (info->IsChanneled())
+							ms = Milliseconds(info->CalcDuration(me));
+					}
 
-                    context.Repeat(ms + 500ms);
-                }
+					context.Repeat(ms + 500ms);
+				}
 			});
 	}
 };
@@ -202,9 +205,6 @@ struct npc_roknah_warlord : public CustomAI
 			if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
 			{
 				jaina->RemoveAllAuras();
-				jaina->SetReactState(REACT_PASSIVE);
-				jaina->SetImmuneToAll(false);
-
 				instance->SetData(EVENT_WARLORD_ROKNAH_SLAIN, 0U);
 			}
 		}
