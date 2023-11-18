@@ -117,6 +117,7 @@ namespace WorldPackets
     namespace Character
     {
         struct CharacterCreateInfo;
+        struct CustomTabardInfo;
     }
 
     namespace Movement
@@ -1780,7 +1781,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void SendRemoveControlBar() const;
         bool HasSpell(uint32 spell) const override;
         bool HasActiveSpell(uint32 spell) const;            // show in spellbook
-        SpellInfo const* GetCastSpellInfo(SpellInfo const* spellInfo) const override;
+        SpellInfo const* GetCastSpellInfo(SpellInfo const* spellInfo, TriggerCastFlags& triggerFlag) const override;
         bool IsSpellFitByClassAndRace(uint32 spell_id) const;
         bool HandlePassiveSpellLearn(SpellInfo const* spellInfo);
 
@@ -1984,6 +1985,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         Guild const* GetGuild() const;
         ObjectGuid::LowType GetGuildIdInvited() const { return m_GuildIdInvited; }
         static void RemovePetitionsAndSigns(ObjectGuid guid);
+        void SetPersonalTabard(uint32 style, uint32 color, uint32 borderStyle, uint32 borderColor, uint32 backgroundColor);
 
         // Arena Team
         void SetInArenaTeam(uint32 ArenaTeamId, uint8 slot, uint8 type);
@@ -2625,7 +2627,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
 
         bool isAllowedToLoot(Creature const* creature) const;
 
-        DeclinedName const* GetDeclinedNames() const { return m_declinedname.get(); }
+        UF::DeclinedNames const* GetDeclinedNames() const { return m_playerData->DeclinedNames.has_value() ? &*m_playerData->DeclinedNames : nullptr; }
         uint8 GetRunesState() const;
         uint32 GetRuneCooldown(uint8 index) const { return m_runes->Cooldown[index]; }
         uint32 GetRuneBaseCooldown() const;
@@ -3110,7 +3112,6 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         WorldLocation m_recall_location;
         uint32 m_recall_instanceId;
 
-        std::unique_ptr<DeclinedName> m_declinedname;
         std::unique_ptr<Runes> m_runes;
         EquipmentSetContainer _equipmentSets;
 

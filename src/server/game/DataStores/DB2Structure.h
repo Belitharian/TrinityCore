@@ -165,7 +165,7 @@ struct AreaTriggerEntry
     DBCPosition3D Pos;
     uint32 ID;
     int16 ContinentID;
-    int8 PhaseUseFlags;
+    int32 PhaseUseFlags;
     int16 PhaseID;
     int16 PhaseGroupID;
     float Radius;
@@ -702,6 +702,7 @@ struct ChrCustomizationDisplayInfoEntry
     int32 DisplayID;
     float BarberShopMinCameraDistance;
     float BarberShopHeightOffset;
+    float BarberShopCameraZoomOffset;
 };
 
 struct ChrCustomizationElementEntry
@@ -719,6 +720,7 @@ struct ChrCustomizationElementEntry
     int32 ChrCustomizationVoiceID;
     int32 AnimKitID;
     int32 ParticleColorID;
+    int32 ChrCustGeoComponentLinkID;
 };
 
 struct ChrCustomizationOptionEntry
@@ -963,6 +965,7 @@ struct ConversationLineEntry
 {
     uint32 ID;
     uint32 BroadcastTextID;
+    uint32 Unused1020;
     uint32 SpellVisualKitID;
     int32 AdditionalDuration;
     uint16 NextConversationLineID;
@@ -1132,6 +1135,8 @@ struct CriteriaEntry
         int32 AchievementID;
 
         // CriteriaType::CompleteQuestsInZone                       = 11
+        // CriteriaType::EnterTopLevelArea                          = 225
+        // CriteriaType::LeaveTopLevelArea                          = 226
         int32 ZoneID;
 
         // CriteriaType::CurrencyGained                             = 12
@@ -1165,8 +1170,6 @@ struct CriteriaEntry
         // CriteriaType::PVPKillInArea                              = 31
         // CriteriaType::EnterArea                                  = 163
         // CriteriaType::LeaveArea                                  = 164
-        // CriteriaType::EnterTopLevelArea                          = 225
-        // CriteriaType::LeaveTopLevelArea                          = 226
         int32 AreaID;
 
         // CriteriaType::AcquireItem                                = 36
@@ -1423,7 +1426,7 @@ struct CurvePointEntry
     DBCPosition2D Pos;
     DBCPosition2D PreSLSquishPos;
     uint32 ID;
-    int32 CurveID;
+    uint32 CurveID;
     uint8 OrderIndex;
 };
 
@@ -2849,7 +2852,7 @@ struct MountEntry
     LocalizedString Description;
     uint32 ID;
     uint16 MountTypeID;
-    uint16 Flags;
+    int32 Flags;
     int8 SourceTypeEnum;
     int32 SourceSpellID;
     uint32 PlayerConditionID;
@@ -2864,7 +2867,7 @@ struct MountEntry
 struct MountCapabilityEntry
 {
     uint32 ID;
-    uint8 Flags;
+    int32 Flags;
     uint16 ReqRidingSkill;
     uint16 ReqAreaID;
     uint32 ReqSpellAuraID;
@@ -2898,7 +2901,7 @@ struct MovieEntry
     uint8 KeyID;
     uint32 AudioFileDataID;
     uint32 SubtitleFileDataID;
-    int32 SubtitleFileFormat;
+    uint32 SubtitleFileFormat;
 };
 
 struct MythicPlusSeasonEntry
@@ -2966,7 +2969,7 @@ struct ParagonReputationEntry
 struct PhaseEntry
 {
     uint32 ID;
-    uint16 Flags;
+    int32 Flags;
 
     EnumFlag<PhaseEntryFlags> GetFlags() const { return static_cast<PhaseEntryFlags>(Flags); }
 };
@@ -3018,7 +3021,7 @@ struct PlayerConditionEntry
     int32 MaxAvgItemLevel;
     uint16 MinAvgEquippedItemLevel;
     uint16 MaxAvgEquippedItemLevel;
-    uint8 PhaseUseFlags;
+    int32 PhaseUseFlags;
     uint16 PhaseID;
     uint32 PhaseGroupID;
     int32 Flags;
@@ -3337,6 +3340,12 @@ struct SceneScriptTextEntry
     uint32 ID;
     char const* Name;
     char const* Script;
+};
+
+struct ServerMessagesEntry
+{
+    uint32 ID;
+    LocalizedString Text;
 };
 
 struct SkillLineEntry
@@ -3825,6 +3834,7 @@ struct SpellShapeshiftFormEntry
 {
     uint32 ID;
     LocalizedString Name;
+    uint32 CreatureDisplayID;
     int8 CreatureType;
     int32 Flags;
     int32 AttackIconFileID;
@@ -3832,7 +3842,6 @@ struct SpellShapeshiftFormEntry
     int16 CombatRoundTime;
     float DamageVariance;
     uint16 MountTypeID;
-    std::array<uint32, 4> CreatureDisplayID;
     std::array<uint32, MAX_SHAPESHIFT_SPELLS> PresetSpellID;
 
     EnumFlag<SpellShapeshiftFormFlags> GetFlags() const { return static_cast<SpellShapeshiftFormFlags>(Flags); }
@@ -4002,6 +4011,23 @@ struct TaxiNodesEntry
     uint32 SpecialIconConditionID;
     uint32 VisibilityConditionID;
     std::array<int32, 2> MountCreatureID;
+
+    EnumFlag<TaxiNodeFlags> GetFlags() const { return static_cast<TaxiNodeFlags>(Flags); }
+
+    bool IsPartOfTaxiNetwork() const
+    {
+        return GetFlags().HasFlag(TaxiNodeFlags::ShowOnAllianceMap | TaxiNodeFlags::ShowOnHordeMap)
+            // manually whitelisted nodes
+            || ID == 1985   // [Hidden] Argus Ground Points Hub (Ground TP out to here, TP to Vindicaar from here)
+            || ID == 1986   // [Hidden] Argus Vindicaar Ground Hub (Vindicaar TP out to here, TP to ground from here)
+            || ID == 1987   // [Hidden] Argus Vindicaar No Load Hub (Vindicaar No Load transition goes through here)
+            || ID == 2627   // [Hidden] 9.0 Bastion Ground Points Hub (Ground TP out to here, TP to Sanctum from here)
+            || ID == 2628   // [Hidden] 9.0 Bastion Ground Hub (Sanctum TP out to here, TP to ground from here)
+            || ID == 2732   // [HIDDEN] 9.2 Resonant Peaks - Teleport Network - Hidden Hub (Connects all Nodes to each other without unique paths)
+            || ID == 2835   // [Hidden] 10.0 Travel Network - Destination Input
+            || ID == 2843   // [Hidden] 10.0 Travel Network - Destination Output
+        ;
+    }
 };
 
 struct TaxiPathEntry
@@ -4331,7 +4357,7 @@ struct UiMapEntry
     uint32 ID;
     int32 ParentUiMapID;
     int32 Flags;
-    uint8 System;
+    int8 System;
     uint8 Type;
     int32 BountySetID;
     uint32 BountyDisplayLocation;

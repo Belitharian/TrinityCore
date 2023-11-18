@@ -19,6 +19,7 @@
 #include "AchievementMgr.h"
 #include "AreaTrigger.h"
 #include "AreaTriggerDataStore.h"
+#include "Battleground.h"
 #include "BattlePetMgr.h"
 #include "Containers.h"
 #include "ConversationDataStore.h"
@@ -38,16 +39,16 @@
 #include "Map.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
-#include "PhasingHandler.h"
 #include "Pet.h"
+#include "PhasingHandler.h"
 #include "Player.h"
 #include "RaceMask.h"
 #include "Realm.h"
 #include "ReputationMgr.h"
 #include "ScriptMgr.h"
 #include "Spell.h"
-#include "SpellAuras.h"
 #include "SpellAuraEffects.h"
+#include "SpellAuras.h"
 #include "SpellMgr.h"
 #include "World.h"
 #include "WorldSession.h"
@@ -189,18 +190,15 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo) const
             break;
         case CONDITION_INSTANCE_INFO:
         {
-            if (map->IsDungeon())
+            if (InstanceMap const* instanceMap = map->ToInstanceMap())
             {
-                if (InstanceScript const* instance = ((InstanceMap*)map)->GetInstanceScript())
+                if (InstanceScript const* instance = instanceMap->GetInstanceScript())
                 {
                     switch (ConditionValue3)
                     {
                         case INSTANCE_INFO_DATA:
                             condMeets = instance->GetData(ConditionValue1) == ConditionValue2;
                             break;
-                        //case INSTANCE_INFO_GUID_DATA:
-                        //    condMeets = instance->GetGuidData(ConditionValue1) == ObjectGuid(uint64(ConditionValue2));
-                        //    break;
                         case INSTANCE_INFO_BOSS_STATE:
                             condMeets = instance->GetBossState(ConditionValue1) == EncounterState(ConditionValue2);
                             break;
@@ -211,6 +209,22 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo) const
                             condMeets = false;
                             break;
                     }
+                }
+            }
+            else if (BattlegroundMap const* bgMap = map->ToBattlegroundMap())
+            {
+                ZoneScript const* zoneScript = bgMap->GetBG();
+                switch (ConditionValue3)
+                {
+                    case INSTANCE_INFO_DATA:
+                        condMeets = zoneScript->GetData(ConditionValue1) == ConditionValue2;
+                        break;
+                    case INSTANCE_INFO_DATA64:
+                        condMeets = zoneScript->GetData64(ConditionValue1) == ConditionValue2;
+                        break;
+                    default:
+                        condMeets = false;
+                        break;
                 }
             }
             break;
@@ -362,7 +376,7 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo) const
             break;
         }
         case CONDITION_AREAID:
-            condMeets = object->GetAreaId() == ConditionValue1;
+            condMeets = DB2Manager::IsInArea(object->GetAreaId(), ConditionValue1);
             break;
         case CONDITION_SPELL:
         {
@@ -2698,6 +2712,12 @@ bool ConditionMgr::isConditionTypeValid(Condition* cond) const
             }
             break;
         case CONDITION_INSTANCE_INFO:
+            if (cond->ConditionValue3 == INSTANCE_INFO_GUID_DATA)
+            {
+                TC_LOG_ERROR("sql.sql", "{} has unsupported ConditionValue3 {} (INSTANCE_INFO_GUID_DATA), skipped.", cond->ToString(true), cond->ConditionValue3);
+                return false;
+            }
+            break;
         case CONDITION_AREAID:
         case CONDITION_ALIVE:
         case CONDITION_IN_WATER:
@@ -3308,7 +3328,7 @@ bool ConditionMgr::IsPlayerMeetingCondition(Player const* player, PlayerConditio
         results.fill(true);
         for (std::size_t i = 0; i < condition->AreaID.size(); ++i)
             if (condition->AreaID[i])
-                results[i] = player->GetAreaId() == condition->AreaID[i] || player->GetZoneId() == condition->AreaID[i];
+                results[i] = DB2Manager::IsInArea(player->GetAreaId(), condition->AreaID[i]);
 
         if (!PlayerConditionLogic(condition->AreaLogic, results))
             return false;
