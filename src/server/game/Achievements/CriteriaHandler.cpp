@@ -1222,15 +1222,12 @@ bool CriteriaHandler::IsCompletedCriteria(Criteria const* criteria, uint64 requi
         case CriteriaType::CompleteQuest:
         case CriteriaType::LearnOrKnowSpell:
         case CriteriaType::RevealWorldMapOverlay:
-        case CriteriaType::GotHaircut:
-        case CriteriaType::EquipItemInSlot:
-        case CriteriaType::EquipItem:
         case CriteriaType::LearnedNewPet:
         case CriteriaType::HonorLevelIncrease:
         case CriteriaType::PrestigeLevelIncrease:
-        case CriteriaType::EnterArea:
-        case CriteriaType::LeaveArea:
-        case CriteriaType::RecruitGarrisonFollower:
+        case CriteriaType::GotHaircut:
+        case CriteriaType::EquipItemInSlot:
+        case CriteriaType::EquipItem:
         case CriteriaType::ActivelyReachLevel:
         case CriteriaType::CollectTransmogSetFromGroup:
         case CriteriaType::EnterTopLevelArea:
@@ -3627,7 +3624,7 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
                 return false;
             std::vector<uint32> areas = sDB2Manager.GetAreasForGroup(reqValue);
             for (uint32 areaInGroup : areas)
-                if (DB2Manager::IsInArea(ref->GetAreaId(), areaInGroup))
+                if (DB2Manager::IsInArea(referencePlayer->GetAreaId(), areaInGroup))
                     return true;
             return false;
         }
