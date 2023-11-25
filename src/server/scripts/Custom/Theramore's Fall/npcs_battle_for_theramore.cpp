@@ -646,11 +646,11 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 
 	enum Spells
 	{
-		SPELL_ARCANE_BLAST      = 270543,
-		SPELL_ARCANE_EXPLOSION  = 277012,
-		SPELL_ARCANE_MISSILES   = 191293,
+		SPELL_ARCANE_HASTE      = 50182,
 		SPELL_MAGE_ARMOR        = 183079,
-		SPELL_ARCANE_HASTE      = 50182
+		SPELL_ARCANE_MISSILES   = 191293,
+		SPELL_ARCANE_EXPLOSION  = 277012,
+		SPELL_ARCANE_BLAST      = 427885
 	};
 
 	float GetDistance() override
