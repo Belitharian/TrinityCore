@@ -49,12 +49,6 @@ enum ScenarioStepState
     SCENARIO_STEP_DONE          = 3
 };
 
-enum ScenarioInstanceType
-{
-    SCENARIO_INSTANCE_TYPE_SCENARIO = 1,
-    SCENARIO_INSTANCE_TYPE_INSTANCE_SCENARIO = 2,
-};
-
 class TC_GAME_API Scenario : public CriteriaHandler
 {
     public:
@@ -71,18 +65,17 @@ class TC_GAME_API Scenario : public CriteriaHandler
         virtual void OnPlayerExit(Player* player);
         virtual void Update(uint32 /*diff*/) { }
 
-        bool IsComplete();
+        bool IsComplete() const;
         bool IsCompletedStep(ScenarioStepEntry const* step);
         void SetStepState(ScenarioStepEntry const* step, ScenarioStepState state) { _stepStates[step] = state; }
         ScenarioEntry const* GetEntry() const;
-        ScenarioStepState GetStepState(ScenarioStepEntry const* step);
+        ScenarioStepState GetStepState(ScenarioStepEntry const* step) const;
         ScenarioStepEntry const* GetStep() const { return _currentstep; }
         ScenarioStepEntry const* GetFirstStep() const;
         ScenarioStepEntry const* GetLastStep() const;
 
-        void SendScenarioState(Player* player);
-        void SendBootPlayer(Player* player);
-        void SendScenarioEvent(Player* player, uint32 eventId);
+        void SendScenarioState(Player const* player) const;
+        void SendBootPlayer(Player const* player) const;
 
     protected:
         Map const* _map;
@@ -94,17 +87,17 @@ class TC_GAME_API Scenario : public CriteriaHandler
         bool CanUpdateCriteriaTree(Criteria const* criteria, CriteriaTree const* tree, Player* referencePlayer) const override;
         bool CanCompleteCriteriaTree(CriteriaTree const* tree) override;
         void CompletedCriteriaTree(CriteriaTree const* tree, Player* referencePlayer) override;
-        void OnCompletedCriteriaTree(CriteriaTree const* tree);
         void AfterCriteriaTreeUpdate(CriteriaTree const* /*tree*/, Player* /*referencePlayer*/) override { }
 
+        void DoForAllPlayers(std::function<void(Player*)> const& worker) const;
         void SendPacket(WorldPacket const* data) const override;
 
         void SendAllData(Player const* /*receiver*/) const override { }
 
-        void BuildScenarioState(WorldPackets::Scenario::ScenarioState* scenarioState);
+        void BuildScenarioStateFor(Player const* player, WorldPackets::Scenario::ScenarioState* scenarioState) const;
 
-        std::vector<WorldPackets::Scenario::BonusObjectiveData> GetBonusObjectivesData();
-        std::vector<WorldPackets::Achievement::CriteriaProgress> GetCriteriasProgress();
+        std::vector<WorldPackets::Scenario::BonusObjectiveData> GetBonusObjectivesData() const;
+        std::vector<WorldPackets::Achievement::CriteriaProgress> GetCriteriasProgressFor(Player const* player) const;
 
         CriteriaList const& GetCriteriaByType(CriteriaType type, uint32 asset) const override;
         ScenarioData const* _data;
