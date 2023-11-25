@@ -1222,6 +1222,7 @@ bool CriteriaHandler::IsCompletedCriteria(Criteria const* criteria, uint64 requi
         case CriteriaType::CompleteQuest:
         case CriteriaType::LearnOrKnowSpell:
         case CriteriaType::RevealWorldMapOverlay:
+        case CriteriaType::AnyoneTriggerGameEventScenario:
         case CriteriaType::LearnedNewPet:
         case CriteriaType::HonorLevelIncrease:
         case CriteriaType::PrestigeLevelIncrease:
