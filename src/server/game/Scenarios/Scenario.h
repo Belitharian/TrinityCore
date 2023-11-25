@@ -76,6 +76,7 @@ class TC_GAME_API Scenario : public CriteriaHandler
 
         void SendScenarioState(Player const* player) const;
         void SendBootPlayer(Player const* player) const;
+        void SendScenarioEvent(Player* player, uint32 eventId);
 
     protected:
         Map const* _map;
@@ -87,6 +88,7 @@ class TC_GAME_API Scenario : public CriteriaHandler
         bool CanUpdateCriteriaTree(Criteria const* criteria, CriteriaTree const* tree, Player* referencePlayer) const override;
         bool CanCompleteCriteriaTree(CriteriaTree const* tree) override;
         void CompletedCriteriaTree(CriteriaTree const* tree, Player* referencePlayer) override;
+        void OnCompletedCriteriaTree(CriteriaTree const* tree);
         void AfterCriteriaTreeUpdate(CriteriaTree const* /*tree*/, Player* /*referencePlayer*/) override { }
 
         void DoForAllPlayers(std::function<void(Player*)> const& worker) const;
