@@ -518,7 +518,7 @@ struct TC_GAME_API CreatureTemplate
     float   speed_walk;
     float   speed_run;
     float   scale;
-    uint32  rank;
+    CreatureClassifications  Classification;
     uint32  dmgschool;
     uint32  BaseAttackTime;
     uint32  RangeAttackTime;
@@ -640,6 +640,7 @@ struct CreatureSummonedData
     Optional<uint32> CreatureIDVisibleToSummoner;
     Optional<uint32> GroundMountDisplayID;
     Optional<uint32> FlyingMountDisplayID;
+    Optional<std::vector<uint32>> DespawnOnQuestsRemoved;
 };
 
 enum InhabitTypeValues
@@ -656,7 +657,7 @@ enum InhabitTypeValues
 // `creature_addon` table
 struct CreatureAddon
 {
-    uint32 path_id;
+    uint32 PathId;
     uint32 mount;
     uint8 standState;
     uint8 animTier;
