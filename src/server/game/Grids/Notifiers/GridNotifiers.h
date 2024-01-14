@@ -1615,23 +1615,23 @@ namespace Trinity
 
     class AnyPlayerInPositionRangeCheck
     {
-    public:
-        AnyPlayerInPositionRangeCheck(Position const* pos, float range, bool reqAlive = true) : _pos(pos), _range(range), _reqAlive(reqAlive) { }
-        bool operator()(Player* u)
-        {
-            if (_reqAlive && !u->IsAlive())
-                return false;
+        public:
+            AnyPlayerInPositionRangeCheck(Position const* pos, float range, bool reqAlive = true) : _pos(pos), _range(range), _reqAlive(reqAlive) { }
+            bool operator()(Player* u)
+            {
+                if (_reqAlive && !u->IsAlive())
+                    return false;
 
-            if (!u->IsWithinDist3d(_pos, _range))
-                return false;
+                if (!u->IsWithinDist3d(_pos, _range))
+                    return false;
 
-            return true;
-        }
+                return true;
+            }
 
-    private:
-        Position const* _pos;
-        float _range;
-        bool _reqAlive;
+        private:
+            Position const* _pos;
+            float _range;
+            bool _reqAlive;
     };
 
     class NearestPlayerInObjectRangeCheck
@@ -1649,11 +1649,45 @@ namespace Trinity
 
                 return false;
             }
+
         private:
             WorldObject const* i_obj;
             float i_range;
 
             NearestPlayerInObjectRangeCheck(NearestPlayerInObjectRangeCheck const&) = delete;
+    };
+
+    class AllUnitsInRange
+    {
+        public:
+            AllUnitsInRange(Unit const* obj, float range) : i_obj(obj), i_range(range) { }
+
+            bool operator()(Unit* u) const
+            {
+                if (u->isDead() && !u->IsVisible())
+                    return false;
+
+                if (!u->InSamePhase(i_obj))
+                    return false;
+
+                Creature* creature = u->ToCreature();
+                if (creature && creature->IsTrigger())
+                    return false;
+
+                if (!i_obj->IsWithinDist(u, i_range, false))
+                    return false;
+
+                if (!i_obj->IsWithinLOSInMap(u))
+                    return false;
+
+                return true;
+            }
+
+        private:
+            Unit const* i_obj;
+            float i_range;
+
+            AllUnitsInRange(AllUnitsInRange const&) = delete;
     };
 
     class AllFriendlyCreaturesInGrid

@@ -1681,7 +1681,8 @@ struct at_mage_meteor_burn : AreaTriggerAI
         if (!caster)
             return;
 
-        caster->CastSpell(unit, SPELL_MAGE_METEOR_BURN, true);
+        if (unit->IsHostileTo(caster))
+            caster->CastSpell(unit, SPELL_MAGE_METEOR_BURN, true);
     }
 
     void OnUnitExit(Unit* unit) override
