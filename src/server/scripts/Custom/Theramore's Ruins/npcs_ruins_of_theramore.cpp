@@ -16,7 +16,7 @@
 
 struct npc_water_elementals_theramore : public CustomAI
 {
-	npc_water_elementals_theramore(Creature* creature) : CustomAI(creature, AI_Type::Melee), shielded(false)
+	npc_water_elementals_theramore(Creature* creature) : CustomAI(creature), shielded(false)
 	{
 	}
 
@@ -52,17 +52,20 @@ struct npc_water_elementals_theramore : public CustomAI
 			.Schedule(5ms, [this](TaskContext water_bolt)
 			{
 				DoCastVictim(SPELL_WATER_BOLT);
-				water_bolt.Repeat(2s, 8s);
+				water_bolt.Repeat(2800ms);
 			})
 			.Schedule(10s, 15s, [this](TaskContext water_spout)
 			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-					DoCast(target, SPELL_WATER_SPOUT);
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                {
+                    CastStop();
+                    DoCast(target, SPELL_WATER_SPOUT);
+                }
 				water_spout.Repeat(24s, 32s);
 			})
 			.Schedule(12s, 22s, [this](TaskContext water_bolt_volley)
 			{
-				CastStop();
+				CastStop(SPELL_WATER_SPOUT);
 				DoCast(SPELL_WATER_BOLT_VOLLEY);
 				water_bolt_volley.Repeat(18s, 20s);
 			});

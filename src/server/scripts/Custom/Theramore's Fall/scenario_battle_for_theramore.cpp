@@ -64,8 +64,8 @@ class KalecgosSpellEvent : public BasicEvent
 
 	bool Execute(uint64 timer, uint32 /*updateTime*/) override
 	{
-		if (roll_chance_i(20))
-			owner->AI()->Talk(SAY_KALECGOS_SPELL_01);
+		if (roll_chance_i(80))
+			ENSURE_AI(CustomAI, owner->AI())->TalkInCombat(SAY_KALECGOS_SPELL_01);
 
 		owner->CastSpell(owner, SPELL_FROST_BREATH);
 		owner->m_Events.AddEvent(this, Milliseconds(timer) + randtime(8s, 10s));
@@ -582,7 +582,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case NPC_THERAMORE_ARCANIST:
 				case NPC_THERAMORE_FAITHFUL:
 				case NPC_THERAMORE_OFFICER:
-                    if (creature->GetWaypointPath() || creature->IsFormationLeader() || creature->GetFormation())
+                    if (creature->GetWaypointPathId() || creature->IsFormationLeader() || creature->GetFormation())
                         break;
 					troops.push_back(creature->GetGUID());
 					break;

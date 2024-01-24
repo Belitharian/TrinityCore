@@ -4,13 +4,13 @@
 #include "GridNotifiers.h"
 
 CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
-	type(type), summons(creature), canCombatMove(true), damageReduction(false)
+	type(type), summons(creature), canCombatMove(true), damageReduction(false), textOnCooldown(false)
 {
 	Initialize();
 }
 
 CustomAI::CustomAI(Creature* creature, bool damageReduction, AI_Type type) : ScriptedAI(creature),
-    type(type), summons(creature), canCombatMove(true), damageReduction(damageReduction)
+    type(type), summons(creature), canCombatMove(true), damageReduction(damageReduction), textOnCooldown(false)
 {
     Initialize();
 }
@@ -21,7 +21,11 @@ void CustomAI::Initialize()
 
     scheduler.SetValidator([this]
     {
-        return !me->HasUnitState(UNIT_STATE_CASTING) || !me->HasUnitState(UNIT_STATE_FLEEING) || !me->HasUnitState(UNIT_STATE_FLEEING_MOVE);
+        return !me->HasBreakableByDamageCrowdControlAura()
+            || !me->HasAuraType(SPELL_AURA_MOD_FEAR_2)
+            || !me->HasUnitState(UNIT_STATE_CASTING)
+            || !me->HasUnitState(UNIT_STATE_FLEEING)
+            || !me->HasUnitState(UNIT_STATE_FLEEING_MOVE);
     });
 }
 
@@ -89,7 +93,7 @@ void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
 
 void CustomAI::EnterEvadeMode(EvadeReason why)
 {
-    if (me->GetWaypointPath() != 0)
+    if (me->GetWaypointPathId() != 0)
     {
         me->ResumeMovement();
     }
@@ -138,7 +142,7 @@ void CustomAI::AttackStart(Unit* who)
 
     if (me->Attack(who, true))
     {
-        if (me->GetWaypointPath() != 0)
+        if (me->GetWaypointPathId() != 0)
         {
             me->GetMotionMaster()->Clear(MOTION_PRIORITY_NORMAL);
         }
@@ -152,9 +156,6 @@ void CustomAI::AttackStart(Unit* who)
                 me->SetSheath(SHEATH_STATE_UNARMED);
                 break;
             case AI_Type::Melee:
-                me->SetCanMelee(true);
-                me->GetMotionMaster()->MoveChase(who);
-                break;
             case AI_Type::Hybrid:
                 me->SetCanMelee(true);
                 me->GetMotionMaster()->MoveChase(who);
@@ -180,37 +181,35 @@ void CustomAI::JustDied(Unit* killer)
 
 void CustomAI::UpdateAI(uint32 diff)
 {
-	scheduler.Update(diff, [this]
-	{
-		if (UpdateVictim())
-		{
-            DoMeleeAttackIfReady();
+    scheduler.Update(diff);
 
-            if (type == AI_Type::Hybrid || type == AI_Type::Distance)
+    if (!UpdateVictim())
+        return;
+
+    if (type != AI_Type::Hybrid
+        && type != AI_Type::Distance)
+    {
+        return;
+    }
+
+    if (Unit* target = me->GetVictim())
+    {
+        if (target->IsWithinDist(me, GetDistance(), false))
+        {
+            if (me->IsWithinLOSInMap(target))
             {
-                if (Unit* target = me->GetVictim())
-                {
-                    if (!me->IsWithinLOSInMap(target))
-                    {
-                        SetCombatMove(true, GetDistance());
-                    }
-                    else
-                    {
-                        if (me->IsInRange(target, me->GetCombatReach(), GetDistance()))
-                        {
-                            me->SetCanMelee(false);
-                            SetCombatMove(false);
-                        }
-                        else
-                        {
-                            me->SetCanMelee(true);
-                            SetCombatMove(true, GetDistance());
-                        }
-                    }
-                }
+                SetCombatMove(false);
             }
-		}
-	});
+            else
+            {
+                SetCombatMove(true, GetDistance());
+            }
+        }
+        else
+        {
+            SetCombatMove(true, GetDistance());
+        }
+    }
 }
 
 bool CustomAI::CanAIAttack(Unit const* who) const
@@ -258,7 +257,10 @@ void CustomAI::CastStop(uint32 exception)
 
 void CustomAI::SetCombatMove(bool on, float distance, bool stopMoving, bool force)
 {
-    if (distance) distance = me->GetCombatReach();
+    me->SetCanMelee(on);
+
+    if (distance)
+        distance = me->GetCombatReach();
 
     if (me->IsEngaged())
     {
@@ -330,6 +332,20 @@ bool CustomAI::HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic)
 bool CustomAI::ShouldTakeDamage()
 {
     return me->GetHealthPct() > me->GetSparringHealthPct();
+}
+
+void CustomAI::TalkInCombat(uint8 textId, uint64 cooldown)
+{
+    if (!textOnCooldown)
+    {
+        me->AI()->Talk(textId);
+
+        textOnCooldown = true;
+        scheduler.Schedule(Seconds(cooldown), [this](TaskContext /*context*/)
+        {
+            textOnCooldown = false;
+        });
+    }
 }
 
 std::list<Unit*> CustomAI::DoFindMissingBuff(uint32 spellId)

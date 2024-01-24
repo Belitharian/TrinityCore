@@ -59,7 +59,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         virtual void Initialize();
 
-        virtual float GetDistance() { return 20.f; };
+        virtual float GetDistance() { return 40.f; };
 
         virtual float GetDamageReductionToUnit() { return 0.08f; };
         virtual void DamageFromNPC(Unit* attacker, uint32& damage, DamageEffectType damageType);
@@ -84,6 +84,8 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void CastStop(const std::vector<uint32>& exceptions);
         void SetCombatMove(bool on, float distance = 0.0f, bool stopMoving = false, bool force = false);
 
+        void TalkInCombat(uint8 textId, uint64 cooldown = 10);
+
         std::list<Unit*> DoFindMissingBuff(uint32 spellId);
         Unit* SelectRandomMissingBuff(uint32 spell);
 
@@ -94,6 +96,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         uint8 interruptCounter;
         bool canCombatMove;
         bool damageReduction;
+        bool textOnCooldown;
 
         uint32 EnemiesInRange(float distance);
         uint32 EnemiesInFront(float distance);

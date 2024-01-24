@@ -22,6 +22,17 @@ CreatureBoundary const surdielBoundaries    = { &surdielCenter };
 CreatureBoundary const brasaelBoundaries    = { &brasaelCenter };
 CreatureBoundary const savorBoundaries      = { &savorCenter };
 
+enum Atonement
+{
+    SPELL_ATONEMENT                 = 292010,
+    SPELL_ATONEMENT_EFFECT          = 292011,
+    SPELL_PRIEST_ATONEMENT_HEAL     = 81751,
+    SPELL_POWER_WORD_RADIANCE       = 218589,
+    SPELL_RENEW                     = 294342,
+    SPELL_FLASH_HEAL                = 314655,
+    SPELL_POWER_WORD_SHIELD         = 284471,
+};
+
 ///
 ///     ALLIANCE NPC
 ///
@@ -145,10 +156,10 @@ struct npc_assassin_dalaran : public CustomAI
 
 	enum Spells
 	{
+		SPELL_STEALTH               = 32615,
 		SPELL_SPRINT                = 66060,
-		SPELL_FAN_OF_KNIVES         = 273606,
 		SPELL_SINISTER_STRIKE       = 172028,
-		SPELL_STEALTH               = 228928
+		SPELL_FAN_OF_KNIVES         = 273606,
 	};
 
 	void Reset() override
@@ -219,6 +230,7 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 		CustomAI::Initialize();
 
 		instance = me->GetInstanceScript();
+        textOnCooldown = false;
 
 		me->AddAura(SPELL_COSMETIC_SNOW, me);
 	}
@@ -252,7 +264,7 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 		if (!me->HasAura(SPELL_FROZEN_SHIELD)
 			&& me->HealthBelowPctDamaged(30, damage))
 		{
-			CastStop();
+			CastStop(SPELL_FROZEN_SHIELD);
 			DoCast(SPELL_FROZEN_SHIELD);
 		}
 	}
@@ -338,11 +350,9 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 
 	void KilledUnit(Unit* victim) override
 	{
-		if (roll_chance_i(30)
-			&& victim->GetEntry() == NPC_SUNREAVER_CITIZEN
-			&& !victim->HasAura(SPELL_TELEPORT))
+		if (victim->GetEntry() == NPC_SUNREAVER_CITIZEN && !victim->HasAura(SPELL_TELEPORT))
 		{
-			me->AI()->Talk(SAY_JAINA_PURGE_SLAIN);
+            TalkInCombat(SAY_JAINA_PURGE_SLAIN);
 		}
 
 		if (victim->GetEntry() == NPC_SUNREAVER_CITIZEN)
@@ -384,9 +394,7 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 				}
 				else
 				{
-					if (roll_chance_i(60))
-						me->AI()->Talk(SAY_JAINA_PURGE_TELEPORT);
-
+                    TalkInCombat(SAY_JAINA_PURGE_TELEPORT);
 					DoCast(who, SPELL_TELEPORT);
 				}
 			}
@@ -498,141 +506,110 @@ struct npc_vereesa_windrunner_dalaran : public CustomAI
 
 struct npc_stormwind_cleric : public CustomAI
 {
-	npc_stormwind_cleric(Creature* creature) : CustomAI(creature), ascension(false)
+	npc_stormwind_cleric(Creature* creature) : CustomAI(creature),
+        ultimatePenitence(false)
 	{
 	}
 
 	enum Spells
 	{
-		SPELL_SMITE                 = 332705,
-		SPELL_HEAL                  = 332706,
-		SPELL_FLASH_HEAL            = 314655,
-		SPELL_RENEW                 = 294342,
-		SPELL_PRAYER_OF_HEALING     = 266969,
-		SPELL_POWER_WORD_FORTITUDE  = 267528,
-		SPELL_POWER_WORD_SHIELD     = 318158,
-		SPELL_PAIN_SUPPRESSION      = 69910,
-		SPELL_PSYCHIC_SCREAM        = 65543,
-	};
+        SPELL_POWER_WORD_BARRIER        = 62618,
+        SPELL_PURGE_THE_WICKED          = 204197,
+        SPELL_PURGE_THE_WICKED_DEBUFF   = 204213,
+        SPELL_POWER_WORD_AEGIS          = 222403,
+		SPELL_SMITE                     = 291463,
+        SPELL_ULTIMATE_PENITENCE        = 421434,
+        SPELL_FLASH_HEAL                = 314655,
+    };
 
-	bool ascension;
+    bool ultimatePenitence;
 
-	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
-	{
-		if (!ascension && me->HealthBelowPctDamaged(10, damage))
-		{
-			ascension = true;
+    void Reset() override
+    {
+        CustomAI::Reset();
 
-			scheduler.CancelAll();
+        ultimatePenitence = false;
+    }
 
-			CastSpellExtraArgs args;
-			args.AddSpellBP0(85000);
+    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    {
+        if (!ultimatePenitence && HealthBelowPct(30))
+        {
+            ultimatePenitence = true;
 
-			CastStop();
-			DoCastSelf(SPELL_PRAYER_OF_HEALING, args);
-			DoCastSelf(SPELL_PAIN_SUPPRESSION, true);
+            Unit* target = DoSelectLowestHpFriendly(40.f);
+            if (target && roll_chance_i(30))
+                me->CastSpell(target->GetPosition(), SPELL_POWER_WORD_BARRIER, true);
 
-			scheduler
-				.Schedule(4s, [this](TaskContext /*context*/)
-				{
-					StartCombatRoutine();
-				})
-				.Schedule(1min, [this](TaskContext /*context*/)
-				{
-					ascension = false;
-				});
-		}
-	}
-
-	float GetDistance() override
-	{
-		return 20.f;
-	}
-
-	void Reset() override
-	{
-		CustomAI::Reset();
-
-		scheduler.Schedule(1s, 5s, [this](TaskContext fortitude)
-		{
-			CastSpellExtraArgs args(true);
-			args.SetTriggerFlags(TRIGGERED_IGNORE_SET_FACING);
-
-			if (Unit* target = SelectRandomMissingBuff(SPELL_POWER_WORD_FORTITUDE))
-				DoCast(target, SPELL_POWER_WORD_FORTITUDE, args);
-
-			fortitude.Repeat(2s);
-		});
-	}
+            CastStop();
+            DoCastSelf(SPELL_POWER_WORD_AEGIS, true);
+            DoCastSelf(SPELL_ULTIMATE_PENITENCE);
+        }
+    }
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
-		StartCombatRoutine();
-	}
+        scheduler
+            .Schedule(1s, [this](TaskContext smite)
+            {
+                DoCastVictim(SPELL_SMITE);
+                smite.Repeat(2s);
+            })
+            .Schedule(3s, [this](TaskContext purge_the_wicked)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_PURGE_THE_WICKED_DEBUFF))
+                {
+                    CastStop({ SPELL_ULTIMATE_PENITENCE, SPELL_POWER_WORD_RADIANCE, SPELL_FLASH_HEAL });
+                    DoCast(target, SPELL_PURGE_THE_WICKED);
+                }
+                purge_the_wicked.Repeat(2s, 3s);
+            })
+            .Schedule(15s, 20s, [this](TaskContext power_word_shield)
+            {
+                if (Unit* target = SelectRandomMissingBuff(SPELL_ATONEMENT_EFFECT))
+                {
+                    CastSpellExtraArgs args;
+                    args.AddSpellBP0(target->CountPctFromMaxHealth(20));
 
-	void StartCombatRoutine()
-	{
-		scheduler
-			.Schedule(1ms, [this](TaskContext smite)
-			{
-				DoCastVictim(SPELL_SMITE);
-				smite.Repeat(2s);
-			})
-			.Schedule(1s, 2s, [this](TaskContext power_word_shield)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 80))
-				{
-					CastSpellExtraArgs args;
-					args.AddSpellBP0(target->CountPctFromMaxHealth(50));
-
-					CastStop();
-					DoCast(target, SPELL_POWER_WORD_SHIELD, args);
-				}
-				power_word_shield.Repeat(8s);
-			})
-			.Schedule(5s, 7s, [this](TaskContext renew)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 50))
-					DoCast(target, SPELL_RENEW);
-				renew.Repeat(10s, 15s);
-			})
-			.Schedule(12s, 14s, [this](TaskContext prayer_of_healing)
-			{
-				CastStop(SPELL_PRAYER_OF_HEALING);
-				DoCastSelf(SPELL_PRAYER_OF_HEALING);
-				prayer_of_healing.Repeat(25s);
-			})
-			.Schedule(1s, 3s, [this](TaskContext heal)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
-				{
-					CastStop(SPELL_HEAL);
-					DoCast(target, SPELL_HEAL);
-				}
-				heal.Repeat(2s);
-			})
-			.Schedule(1s, 3s, [this](TaskContext psychic_scream)
-			{
-				if (EnemiesInRange(10.f) >= 2)
-				{
-					DoCast(SPELL_PSYCHIC_SCREAM);
-					psychic_scream.Repeat(10s, 25s);
-				}
-				else
-					psychic_scream.Repeat(1s);
-			})
-			.Schedule(1s, 8s, [this](TaskContext flash_heal)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 40))
-					DoCast(target, SPELL_FLASH_HEAL);
-				flash_heal.Repeat(2s);
-			});
+                    CastStop({ SPELL_ULTIMATE_PENITENCE, SPELL_POWER_WORD_RADIANCE, SPELL_FLASH_HEAL });
+                    DoCast(target, SPELL_POWER_WORD_SHIELD, args);
+                }
+                power_word_shield.Repeat(8s, 12s);
+            })
+            .Schedule(18s, 24s, [this](TaskContext renew)
+            {
+                if (Unit* target = SelectRandomMissingBuff(SPELL_ATONEMENT_EFFECT))
+                {
+                    CastStop({ SPELL_ULTIMATE_PENITENCE, SPELL_POWER_WORD_RADIANCE, SPELL_FLASH_HEAL });
+                    DoCast(target, SPELL_RENEW);
+                }
+                renew.Repeat(20s, 30s);
+            })
+            .Schedule(5s, 8s, [this](TaskContext flash_heal)
+            {
+                if (Unit* target = DoSelectLowestHpFriendly(40.0f))
+                {
+                    CastStop({ SPELL_ULTIMATE_PENITENCE, SPELL_POWER_WORD_RADIANCE, SPELL_FLASH_HEAL });
+                    DoCast(target, SPELL_FLASH_HEAL);
+                }
+                flash_heal.Repeat(8s, 12s);
+            })
+            .Schedule(10s, 15s, [this](TaskContext power_word_radiance)
+            {
+                if (Unit* target = DoSelectLowestHpFriendly(40.0f))
+                {
+                    CastStop({ SPELL_ULTIMATE_PENITENCE, SPELL_POWER_WORD_RADIANCE });
+                    DoCast(target, SPELL_POWER_WORD_RADIANCE);
+                }
+                power_word_radiance.Repeat(15s, 22s);
+            });
 	}
 };
 
 struct npc_mage_commander_zuros : public CustomAI
 {
-	npc_mage_commander_zuros(Creature* creature) : CustomAI(creature, true, AI_Type::Melee)
+	npc_mage_commander_zuros(Creature* creature) : CustomAI(creature, true, AI_Type::Melee),
+        cleric(nullptr), surdiel(nullptr)
 	{
 		Initialize();
 
@@ -775,7 +752,7 @@ struct npc_mage_commander_zuros : public CustomAI
                 case 4:
                     if (Creature* dummy = DoSummon(NPC_INVISIBLE_STALKER, me->GetPosition(), 20s, TEMPSUMMON_TIMED_DESPAWN))
                         dummy->CastSpell(dummy, SPELL_ARCANE_DETONATION);
-                    events.ScheduleEvent(5, 3s);
+                    events.ScheduleEvent(5, 2s);
                     break;
                 case 5:
                     FeingDeath(me);
@@ -821,54 +798,72 @@ struct npc_mage_commander_zuros : public CustomAI
 
 struct npc_narasi_snowdawn : public CustomAI
 {
-	static constexpr float DAMAGE_REDUCTION = 0.01f;
-
-	npc_narasi_snowdawn(Creature* creature) : CustomAI(creature, AI_Type::Melee)
+	npc_narasi_snowdawn(Creature* creature) : CustomAI(creature, true)
 	{
 		Initialize();
+
+        blastInfo = sSpellMgr->AssertSpellInfo(SPELL_ACCELERATING_BLAST, DIFFICULTY_NONE);
 	}
 
 	enum Spells
 	{
 		SPELL_ACCELERATING_BLAST    = 203176,
-		SPELL_TIME_STOP             = 215005
+		SPELL_TIME_STOP             = 215005,
+        SPELL_ORB_OF_DEVASTATION    = 382261,
+        SPELL_TEMPORAL_BURST        = 376679,
 	};
 
-	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    const SpellInfo* blastInfo;
+
+    float GetDamageReductionToUnit() override
+    {
+        return 0.01f;
+    };
+
+    void DamageFromNPC(Unit* attacker, uint32& damage, DamageEffectType damageType) override
+    {
+        if (!attacker || damageType == HEAL)
+            return;
+
+        if (attacker->GetTypeId() == TYPEID_PLAYER)
+        {
+            damage = 0;
+        }
+        else if (attacker->GetTypeId() == TYPEID_UNIT && attacker->ToCreature())
+        {
+            damage *= GetDamageReductionToUnit();
+        }
+    }
+
+	void JustEngagedWith(Unit* /*who*/) override
 	{
-		if (attacker->GetTypeId() == TYPEID_PLAYER)
-			damage = 0;
-
-		if (me->HealthBelowPctDamaged(25, damage))
-			damage *= DAMAGE_REDUCTION;
-		else
-			damage = 0;
-	}
-
-	void JustEngagedWith(Unit* who) override
-	{
-		if (who->GetTypeId() == TYPEID_PLAYER)
-			return;
-
-		DoCast(who, SPELL_ACCELERATING_BLAST);
-
 		scheduler
 			.Schedule(8s, [this](TaskContext accelerating_blast)
 			{
 				DoCastVictim(SPELL_ACCELERATING_BLAST);
-				accelerating_blast.Repeat(3s);
+				accelerating_blast.Repeat(Milliseconds(blastInfo->CalcCastTime()));
 			})
+            .Schedule(18s, 25s, [this](TaskContext temporal_burst)
+            {
+                CastStop();
+                DoCastAOE(SPELL_TEMPORAL_BURST);
+                temporal_burst.Repeat(50s, 1min);
+            })
 			.Schedule(12s, [this](TaskContext time_stop)
 			{
 				DoCastVictim(SPELL_TIME_STOP);
 				time_stop.Repeat(45s, 50s);
-			});
+            })
+            .Schedule(21s, [this](TaskContext orb_of_devastation)
+            {
+                DoCastVictim(SPELL_ORB_OF_DEVASTATION);
+                orb_of_devastation.Repeat(30s, 50s);
+            });
 	}
 
 	bool CanAIAttack(Unit const* who) const override
 	{
-		return who->IsAlive() && who->GetEntry() != NPC_GRAND_MAGISTER_ROMMATH
-			&& who->GetTypeId() == TYPEID_PLAYER;
+		return who->IsAlive() && who->GetEntry() != NPC_GRAND_MAGISTER_ROMMATH && who->GetTypeId() != TYPEID_PLAYER;
 	}
 };
 
@@ -903,7 +898,7 @@ struct npc_archmage_landalock : public NullCreatureAI
 	enum Misc
 	{
 		// Spells
-		SPELL_ICE_BURST             = 69108,
+		SPELL_ICE_BURST             = 283591,
 		// Gossips
 		GOSSIP_MENU_DEFAULT         = 65003,
 		// NPCs
@@ -2136,8 +2131,6 @@ struct npc_magister_surdiel : public CustomAI
         CustomAI::Initialize();
 
         fireballInfo = sSpellMgr->AssertSpellInfo(SPELL_FIREBALL, DIFFICULTY_NONE);
-
-        SetBoundary(&surdielBoundaries);
     }
 
     void Reset() override
@@ -2389,7 +2382,7 @@ struct npc_magister_surdiel : public CustomAI
     {
         DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
         if (phase >= DLPPhases::TheEscape)
-            return CreatureAI::CheckInRoom();
+            return true;
 
         if (Unit* victim = me->GetVictim())
         {
@@ -3854,6 +3847,166 @@ class spell_big_bang : public SpellScript
 	}
 };
 
+// Atonement - 292010
+class spell_atonement_stormwind_cleric : public AuraScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellInfo({ SPELL_PRIEST_ATONEMENT_HEAL }) && ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } });
+    }
+
+    static bool CheckProc(ProcEventInfo const& eventInfo)
+    {
+        return eventInfo.GetDamageInfo() != nullptr;
+    }
+
+    void HandleOnProc(AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
+    {
+        TriggerAtonementHealOnTargets(aurEff, eventInfo);
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_atonement_stormwind_cleric::CheckProc);
+        OnEffectProc += AuraEffectProcFn(spell_atonement_stormwind_cleric::HandleOnProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+
+    std::vector<ObjectGuid> _appliedAtonements;
+
+public:
+    void AddAtonementTarget(ObjectGuid const& target)
+    {
+        _appliedAtonements.push_back(target);
+    }
+
+    void RemoveAtonementTarget(ObjectGuid const& target)
+    {
+        std::erase(_appliedAtonements, target);
+    }
+
+    std::vector<ObjectGuid> const& GetAtonementTargets() const
+    {
+        return _appliedAtonements;
+    }
+
+    struct TriggerArgs
+    {
+        SpellInfo const* TriggeredBy = nullptr;
+        SpellSchoolMask DamageSchoolMask = SPELL_SCHOOL_MASK_NONE;
+    };
+
+    void TriggerAtonementHealOnTargets(AuraEffect const* atonementEffect, ProcEventInfo const& eventInfo)
+    {
+        Unit* priest = GetUnitOwner();
+        DamageInfo* damageInfo = eventInfo.GetDamageInfo();
+        CastSpellExtraArgs args(TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
+
+        // Note: atonementEffect holds the correct amount since we passed the effect in the AuraScript that calls this method.
+        args.AddSpellMod(SPELLVALUE_BASE_POINT0, CalculatePct(damageInfo->GetDamage(), atonementEffect->GetAmount()));
+
+        args.SetCustomArg(TriggerArgs{
+            .TriggeredBy = eventInfo.GetSpellInfo(),
+            .DamageSchoolMask = eventInfo.GetDamageInfo()->GetSchoolMask() });
+
+        float distanceLimit = GetEffectInfo(EFFECT_1).CalcValue();
+
+        std::erase_if(_appliedAtonements, [priest, distanceLimit, &args](ObjectGuid const& targetGuid)
+        {
+            if (Unit* target = ObjectAccessor::GetUnit(*priest, targetGuid))
+            {
+                if (target->IsInDist2d(priest, distanceLimit))
+                    priest->CastSpell(target, SPELL_PRIEST_ATONEMENT_HEAL, args);
+
+                return false;
+            }
+
+            return true;
+        });
+    }
+};
+
+// Renew - 294342
+// Flash Heal - 314655
+// Power Word: Shield - 318158
+// Power Word: Radiance - 218589
+class spell_atonement_effect_stormwind_cleric : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo
+        ({
+            SPELL_ATONEMENT,
+            SPELL_ATONEMENT_EFFECT,
+            SPELL_POWER_WORD_RADIANCE,
+            SPELL_POWER_WORD_SHIELD
+        })
+            && ValidateSpellEffect({ { SPELL_POWER_WORD_RADIANCE, EFFECT_3 } });
+    }
+
+    bool Load() override
+    {
+        Unit* caster = GetCaster();
+        if (!caster->HasAura(SPELL_ATONEMENT))
+            return false;
+
+        return true;
+    }
+
+    void HandleOnHitTarget() const
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetHitUnit();
+
+        CastSpellExtraArgs args(TRIGGERED_FULL_MASK);
+        args.SetTriggeringSpell(GetSpell());
+
+        // Power Word: Radiance applies Atonement at 100 % (without modifiers) of its total duration.
+        if (GetSpellInfo()->Id == SPELL_POWER_WORD_RADIANCE)
+            args.AddSpellMod(SPELLVALUE_DURATION_PCT, GetSpellInfo()->GetEffect(EFFECT_3).CalcValue(caster));
+
+        caster->CastSpell(target, SPELL_ATONEMENT_EFFECT, args);
+    }
+
+    void Register() override
+    {
+        AfterHit += SpellHitFn(spell_atonement_effect_stormwind_cleric::HandleOnHitTarget);
+    }
+};
+
+// Atonement (buff) - 292011
+class spell_atonement_aura_stormwind_cleric : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_ATONEMENT });
+    }
+
+    void HandleOnApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        RegisterHelper<&spell_atonement_stormwind_cleric::AddAtonementTarget>();
+    }
+
+    void HandleOnRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        RegisterHelper<&spell_atonement_stormwind_cleric::RemoveAtonementTarget>();
+    }
+
+    template<void(spell_atonement_stormwind_cleric::* func)(ObjectGuid const&)>
+    void RegisterHelper()
+    {
+        if (Unit* caster = GetCaster())
+            if (Aura* atonement = caster->GetAura(SPELL_ATONEMENT))
+                if (spell_atonement_stormwind_cleric* script = atonement->GetScript<spell_atonement_stormwind_cleric>())
+                    (script->*func)(GetTarget()->GetGUID());
+    }
+
+    void Register() override
+    {
+        OnEffectApply += AuraEffectApplyFn(spell_atonement_aura_stormwind_cleric::HandleOnApply, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+        OnEffectRemove += AuraEffectRemoveFn(spell_atonement_aura_stormwind_cleric::HandleOnRemove, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
 void AddSC_npcs_dalaran_purge()
 {
 	// Neutral
@@ -3901,6 +4054,9 @@ void AddSC_npcs_dalaran_purge()
 	RegisterSpellScript(spell_speed);
 	RegisterSpellScript(spell_arcane_orb);
 	RegisterSpellScript(spell_big_bang);
+    RegisterSpellScript(spell_atonement_stormwind_cleric);
+    RegisterSpellScript(spell_atonement_effect_stormwind_cleric);
+    RegisterSpellScript(spell_atonement_aura_stormwind_cleric);
 
 	// Gameobjects
 	RegisterGameObjectAI(go_portal_savor);

@@ -15,7 +15,8 @@
 
 struct npc_jaina_theramore : public CustomAI
 {
-    npc_jaina_theramore(Creature* creature) : CustomAI(creature, true, AI_Type::Melee), instance(nullptr)
+    npc_jaina_theramore(Creature* creature) : CustomAI(creature, true, AI_Type::Melee),
+        instance(nullptr)
 	{
         instance = me->GetInstanceScript();
 	}
@@ -31,6 +32,13 @@ struct npc_jaina_theramore : public CustomAI
     };
 
 	InstanceScript* instance;
+
+    void Reset() override
+    {
+        CustomAI::Reset();
+
+        textOnCooldown = false;
+    }
 
 	void DoAction(int32 actionId) override
 	{
@@ -70,8 +78,7 @@ struct npc_jaina_theramore : public CustomAI
 
 	void KilledUnit(Unit* /*victim*/) override
 	{
-		if (roll_chance_i(15))
-			Talk(SAY_JAINA_SLAY_01);
+        TalkInCombat(SAY_JAINA_SLAY_01);
 	}
 
 	void JustEngagedWith(Unit* /*who*/) override
@@ -81,8 +88,7 @@ struct npc_jaina_theramore : public CustomAI
 		scheduler
 			.Schedule(1s, [this](TaskContext fireball)
 			{
-				if (roll_chance_i(20))
-					Talk(SAY_JAINA_SPELL_01);
+                TalkInCombat(SAY_JAINA_SPELL_01);
 				DoCastVictim(SPELL_FIREBALL);
 				fireball.Repeat(2s, 8s);
 			})
@@ -94,10 +100,11 @@ struct npc_jaina_theramore : public CustomAI
 			})
 			.Schedule(8s, [this](TaskContext blizzard)
 			{
-				if (roll_chance_i(10))
-					Talk(SAY_JAINA_BLIZZARD_01);
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-					DoCast(target, SPELL_BLIZZARD);
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                {
+                    TalkInCombat(SAY_JAINA_BLIZZARD_01);
+                    DoCast(target, SPELL_BLIZZARD);
+                }
 				blizzard.Repeat(14s, 22s);
 			});
 	}
@@ -731,11 +738,11 @@ struct npc_kalecgos_theramore : public CustomAI
 	enum Spells
 	{
 		SPELL_COMET_STORM           = 153595,
+        SPELL_ICE_NOVA              = 157997,
 		SPELL_DISSOLVE              = 255295,
+        SPELL_FROSTBOLT             = 284703,
+		SPELL_FROZEN_BEAM           = 391825,
 		SPELL_TELEPORT              = 400542,
-		SPELL_CHILLED               = 333602,
-		SPELL_FLURRY                = 320008,
-		SPELL_ICE_NOVA              = 157997
 	};
 
 	InstanceScript* instance;
@@ -775,28 +782,23 @@ struct npc_kalecgos_theramore : public CustomAI
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		scheduler
-			.Schedule(8s, 10s, [this](TaskContext chilled)
+			.Schedule(8s, 10s, [this](TaskContext frozen_beam)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-					CastStop();
-					DoCast(target, SPELL_CHILLED);
+                    CastStop({ SPELL_FROZEN_BEAM });
+					DoCast(target, SPELL_FROZEN_BEAM);
 				}
-				chilled.Repeat(14s, 22s);
+                frozen_beam.Repeat(14s, 22s);
 			})
 			.Schedule(12s, 18s, [this](TaskContext comet_barrage)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 				{
-					CastStop();
+					CastStop({ SPELL_FROZEN_BEAM });
 					DoCast(target, SPELL_COMET_STORM);
 				}
 				comet_barrage.Repeat(18s, 25s);
-			})
-			.Schedule(5ms, [this](TaskContext frostbolt)
-			{
-				DoCastVictim(SPELL_FLURRY);
-				frostbolt.Repeat(2s);
 			})
 			.Schedule(5s, [this](TaskContext ice_nova)
 			{
@@ -815,6 +817,38 @@ struct npc_kalecgos_theramore : public CustomAI
 				ice_nova.Repeat(1s);
 			});
 	}
+
+    void UpdateAI(uint32 diff) override
+    {
+        scheduler.Update(diff, [this]
+        {
+            if (UpdateVictim())
+            {
+                DoSpellAttackIfReady(SPELL_FROSTBOLT);
+
+                if (Unit* target = me->GetVictim())
+                {
+                    if (!me->IsWithinLOSInMap(target))
+                    {
+                        SetCombatMove(true, GetDistance());
+                    }
+                    else
+                    {
+                        if (me->IsInRange(target, me->GetCombatReach(), GetDistance()))
+                        {
+                            me->SetCanMelee(false);
+                            SetCombatMove(false);
+                        }
+                        else
+                        {
+                            me->SetCanMelee(true);
+                            SetCombatMove(true, GetDistance());
+                        }
+                    }
+                }
+            }
+        });
+    }
 };
 
 struct npc_ziradormi_theramore : public CustomAI

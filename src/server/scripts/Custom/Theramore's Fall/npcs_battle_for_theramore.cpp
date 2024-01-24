@@ -647,10 +647,11 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 	enum Spells
 	{
 		SPELL_ARCANE_HASTE      = 50182,
+		SPELL_ARCANE_BLAST      = 169825,
 		SPELL_MAGE_ARMOR        = 183079,
-		SPELL_ARCANE_MISSILES   = 191293,
-		SPELL_ARCANE_EXPLOSION  = 277012,
-		SPELL_ARCANE_BLAST      = 427885
+		SPELL_ARCANE_MISSILES   = 314734,
+        SPELL_MASS_POLYMORPH    = 383121,
+		SPELL_ARCANE_EXPLOSION  = 414381,
 	};
 
 	float GetDistance() override
@@ -678,17 +679,28 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 				DoCastVictim(SPELL_ARCANE_BLAST);
 				arcane_blast.Repeat(2300ms);
 			})
-			.Schedule(3s, 5s, [this](TaskContext arcane_explosion)
+			.Schedule(3s, 5s, [this](TaskContext mass_polymorph)
 			{
-				if (EnemiesInRange(10.f) >= 2)
+				if (EnemiesInRange(10.f) >= 4)
 				{
 					CastStop();
-					DoCastSelf(SPELL_ARCANE_EXPLOSION);
-					arcane_explosion.Repeat(10s, 14s);
+					DoCastSelf(SPELL_MASS_POLYMORPH);
+                    mass_polymorph.Repeat(2min);
 				}
 				else
-					arcane_explosion.Repeat(1s);
+                    mass_polymorph.Repeat(1s);
 			})
+            .Schedule(8s, 10s, [this](TaskContext arcane_explosion)
+            {
+                if (EnemiesInRange(10.f) >= 2)
+                {
+                    CastStop();
+                    DoCastSelf(SPELL_ARCANE_EXPLOSION);
+                    arcane_explosion.Repeat(2min);
+                }
+                else
+                    arcane_explosion.Repeat(1s);
+            })
 			.Schedule(4s, 8s, [this](TaskContext arcane_missiles)
 			{
 				if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
@@ -1282,8 +1294,6 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 {
 	npc_roknah_loasinger(Creature* creature) : npc_theramore_horde(creature, AI_Type::Distance)
 	{
-		flameShock = sSpellMgr->AssertSpellInfo(SPELL_FLAME_SHOCK, DIFFICULTY_NONE);
-		frostShock = sSpellMgr->AssertSpellInfo(SPELL_FROST_SHOCK, DIFFICULTY_NONE);
 	}
 
 	enum Spells
@@ -1307,8 +1317,6 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 		NPC_HEALING_TIDE_TOTEM  = 65349,
 	};
 
-	const SpellInfo* flameShock;
-	const SpellInfo* frostShock;
 
 	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spellInfo) override
 	{
@@ -1339,13 +1347,13 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 			})
 			.Schedule(5s, 8s, [this](TaskContext frost_shock)
 			{
-				if (Unit* target = DoFindEnemyMissingDot(frostShock))
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_FROST_SHOCK))
 					DoCast(target, SPELL_FROST_SHOCK);
 				frost_shock.Repeat(8s, 10s);
 			})
 			.Schedule(5s, 8s, [this](TaskContext flame_shock)
 			{
-				if (Unit* target = DoFindEnemyMissingDot(flameShock))
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_FLAME_SHOCK))
 					DoCast(target, SPELL_FLAME_SHOCK);
 				flame_shock.Repeat(5s, 8s);
 			})
@@ -1431,8 +1439,6 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 {
 	npc_roknah_felcaster(Creature* creature) : npc_theramore_horde(creature, AI_Type::Distance)
 	{
-		immolateInfo = sSpellMgr->AssertSpellInfo(SPELL_IMMOLATE, DIFFICULTY_NONE);
-		corruptionInfo = sSpellMgr->AssertSpellInfo(SPELL_CORRUPTION, DIFFICULTY_NONE);
 	}
 
 	enum NPCs
@@ -1452,9 +1458,6 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 		SPELL_SUMMON_WILD_IMPS  = 138685,
 		SPELL_CORRUPTION        = 251406,
 	};
-
-	const SpellInfo* immolateInfo;
-	const SpellInfo* corruptionInfo;
 
 	float GetDistance() override
 	{
@@ -1509,13 +1512,13 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 			})
 			.Schedule(1ms, [this](TaskContext immolate)
 			{
-				if (Unit* target = DoFindEnemyMissingDot(immolateInfo))
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_IMMOLATE))
 					DoCast(target, SPELL_IMMOLATE);
 				immolate.Repeat(2s, 5s);
 			})
 			.Schedule(1ms, [this](TaskContext corruption)
 			{
-				if (Unit* target = DoFindEnemyMissingDot(corruptionInfo))
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_CORRUPTION))
 					DoCast(target, SPELL_CORRUPTION);
 				corruption.Repeat(2s, 5s);
 			})

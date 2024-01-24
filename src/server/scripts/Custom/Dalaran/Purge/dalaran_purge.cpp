@@ -203,6 +203,7 @@ struct npc_magister_rommath_purge : public CustomAI
     EventMap events;
     uint32 eventId;
     bool evocating;
+    GuidVector tracks;
 
     void Reset() override
     {
@@ -228,8 +229,11 @@ struct npc_magister_rommath_purge : public CustomAI
 					passage->UseDoorOrButton(7200000);
                 for (uint8 i = 0; i < TRACKING_PATH_01; i++)
                 {
-                    if (TempSummon* tracking = me->GetMap()->SummonCreature(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
+                    if (Creature* tracking = me->GetMap()->SummonCreature(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
+                    {
                         tracking->AddAura(SPELL_ARCANIC_TRACKING, tracking);
+                        tracks.push_back(tracking->GetGUID());
+                    }
                 }
                 if (Player* player = me->GetMap()->GetPlayers().begin()->GetSource())
                 {
@@ -246,6 +250,11 @@ struct npc_magister_rommath_purge : public CustomAI
                 me->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
                 break;
             case MOVEMENT_INFO_POINT_03:
+                for (ObjectGuid guid : tracks)
+                {
+                    if (Creature* tracking = ObjectAccessor::GetCreature(*me, guid))
+                        tracking->DespawnOrUnsummon();
+                }
                 DoCast(SPELL_TELEPORT_VISUAL_ONLY);
                 me->SetVisible(false);
                 scheduler.Schedule(5s, [this](TaskContext /*context*/)

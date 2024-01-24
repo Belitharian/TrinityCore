@@ -124,10 +124,9 @@ enum DLPSpells
 	SPELL_TELEPORT_VISUAL_ONLY		    = 51347,
 	SPELL_COSMETIC_YELLOW_ARROW         = 92230,
 	SPELL_WATERFALL                     = 125563,
-	SPELL_FROSTBOLT                     = 135285,
+	SPELL_FROSTBOLT                     = 427863,
 	SPELL_CHAT_BUBBLE                   = 140812,
 	SPELL_HORDE_ILLUSION                = 161013,
-	SPELL_FROST_CANALISATION            = 192353,
 	SPELL_CLOSE_PORTAL                  = 203542,
 	SPELL_RUNES_OF_SHIELDING        	= 217859,
     SPELL_FOR_THE_HORDE                 = 224811,
@@ -158,6 +157,7 @@ enum DLPSpells
 	SPELL_FROZEN_SOLID                  = 290090,
 	SPELL_ARCANE_BOMBARDMENT            = 352556,
 	SPELL_TELEPORT                      = 357601,
+	SPELL_FROST_CANALISATION            = 369850,
 };
 
 enum DLPMisc

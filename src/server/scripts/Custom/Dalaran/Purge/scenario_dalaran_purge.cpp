@@ -899,7 +899,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 				case 37:
 					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
 						Talk(surdiel, SAY_INFILTRATE_SURDIEL_03);
-                    Next(5s);
+                    Next(2s);
                     break;
 				case 38:
                     if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
@@ -916,7 +916,7 @@ class scenario_dalaran_purge : public InstanceMapScript
                             surdiel->SetImmuneToPC(true);
                         }
                     }
-					Next(5s);
+					Next(3s);
 					break;
 				case 39:
 					if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
@@ -925,7 +925,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 						if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
 							narasi->CastSpell(surdiel, SPELL_ARCANE_IMPRISONMENT);
 					}
-					Next(2s);
+					Next(1s);
 					break;
 				case 40:
 					if (Creature* hathorel = GetCreature(DATA_MAGISTER_HATHOREL))
@@ -935,7 +935,7 @@ class scenario_dalaran_purge : public InstanceMapScript
                         jaina->SetImmuneToAll(true);
                         jaina->SetWalk(true);
                         jaina->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos03);
-                        jaina->DespawnOrUnsummon(13s);
+                        jaina->DespawnOrUnsummon(11s);
                     }
                     Next(2s);
 					break;
