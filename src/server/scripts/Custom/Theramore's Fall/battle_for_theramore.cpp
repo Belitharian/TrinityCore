@@ -410,7 +410,6 @@ struct npc_rhonin : public CustomAI
 
 	enum Spells
 	{
-		SPELL_ARCANE_PROJECTILES    = 5143,
 		SPELL_TEMPORAL_DISPLACEMENT = 80354,
 		SPELL_ARCANE_CAST_INSTANT   = 135030,
 		SPELL_ARCANE_EXPLOSION      = 210479,
@@ -419,6 +418,7 @@ struct npc_rhonin : public CustomAI
 		SPELL_ARCANE_BLAST          = 291316,
 		SPELL_ARCANE_BARRAGE        = 291318,
 		SPELL_TIME_WARP             = 342242,
+		SPELL_ARCANE_SALVO          = 378850,
 	};
 
 	npc_rhonin(Creature* creature) : CustomAI(creature, true), arcaneCharges(0)
@@ -466,7 +466,7 @@ struct npc_rhonin : public CustomAI
 					CastStop();
 					me->AddAura(SPELL_TIME_WARP, me);
 					me->AddAura(SPELL_TEMPORAL_DISPLACEMENT, me);
-					DoCastVictim(SPELL_ARCANE_PROJECTILES);
+					DoCastVictim(SPELL_ARCANE_BARRAGE);
 				}
 				break;
 			case SPELL_ARCANE_BARRAGE:
@@ -498,7 +498,7 @@ struct npc_rhonin : public CustomAI
 			})
 			.Schedule(2s, [this](TaskContext arcane_projectiles)
 			{
-				DoCastVictim(SPELL_ARCANE_PROJECTILES);
+				DoCastVictim(SPELL_ARCANE_SALVO);
 				arcane_projectiles.Repeat(14s, 25s);
 			})
 			.Schedule(5s, GROUP_NORMAL, [this](TaskContext arcane_cristal)
@@ -568,7 +568,6 @@ struct npc_kinndy_sparkshine : public CustomAI
 		SPELL_EVOCATION             = 211765,
 		SPELL_ARCANE_BOLT           = 371306,
 		SPELL_UNCONTROLLED_ENERGY   = 388951,
-		SPELL_RUNE_OF_ALACRITY      = 388335,
 		SPELL_MANA_BOLT             = 389583,
 	};
 
@@ -658,15 +657,7 @@ struct npc_kinndy_sparkshine : public CustomAI
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
-		DoCast(SPELL_RUNE_OF_ALACRITY);
-
 		scheduler
-			.Schedule(45s, [this](TaskContext rune_of_alacrity)
-			{
-				CastStop();
-				DoCast(SPELL_RUNE_OF_ALACRITY);
-				rune_of_alacrity.Repeat(45s, 1min);
-			})
 			.Schedule(5s, 8s, [this](TaskContext supernova)
 			{
 				if (Unit* target = DoSelectCastingUnit(SPELL_SUPERNOVA, 30.f))
@@ -680,7 +671,7 @@ struct npc_kinndy_sparkshine : public CustomAI
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-					CastStop(SPELL_RUNE_OF_ALACRITY);
+					CastStop();
 					me->CastSpell(target, SPELL_UNCONTROLLED_ENERGY);
 				}
 				uncontrolled_energy.Repeat(20s, 25s);
@@ -892,6 +883,76 @@ struct npc_ziradormi_theramore : public CustomAI
 	}
 };
 
+struct npc_kalecgos_dragon : public CustomAI
+{
+    const float m_circleRadius = 95.0f;
+
+    npc_kalecgos_dragon(Creature* creature) : CustomAI(creature), m_loopTime(0)
+    {
+        instance = me->GetInstanceScript();
+    }
+
+    enum Spells
+    {
+        SPELL_FROST_BREATH = 300548,
+    };
+
+    InstanceScript* instance;
+    uint64 m_loopTime;
+
+    void Reset() override
+    {
+        CustomAI::Reset();
+
+        float perimeter = 2.f * float(M_PI) * m_circleRadius;
+        m_loopTime = (perimeter / me->GetSpeed(MOVE_RUN)) * 1000.f;
+    }
+
+    void SetData(uint32 id, uint32 /*value*/) override
+    {
+        switch (id)
+        {
+            case DATA_KALECGOS_SPELL_EVENT:
+            {
+                scheduler.Schedule(1s, [this](TaskContext frost_breath)
+                {
+                    if (roll_chance_i(30))
+                        TalkInCombat(SAY_KALECGOS_SPELL_01);
+                    DoCastAOE(SPELL_FROST_BREATH);
+                    frost_breath.Repeat(8s, 12s);
+                });
+                break;
+            }
+            case DATA_KALECGOS_CIRCLE_EVENT:
+            {
+                scheduler.Schedule(1s, [this](TaskContext circle_path)
+                {
+                    me->GetMotionMaster()->MoveCirclePath
+                    (
+                        TheramorePoint01.GetPositionX(),
+                        TheramorePoint01.GetPositionY(),
+                        TheramorePoint01.GetPositionZ(),
+                        m_circleRadius,
+                        true,
+                        16
+                    );
+                    circle_path.Repeat(Milliseconds(m_loopTime));
+                });
+                break;
+            }
+            case DATA_KALECGOS_CANCEL_EVENT:
+            {
+                me->CastStop();
+                me->GetMotionMaster()->Clear();
+                me->GetMotionMaster()->MoveIdle();
+                scheduler.CancelAll();
+                break;
+            }
+        }
+    }
+};
+
+
 void AddSC_battle_for_theramore()
 {
 	RegisterCreatureAI(npc_ziradormi_theramore);
@@ -903,4 +964,5 @@ void AddSC_battle_for_theramore()
 	RegisterTheramoreAI(npc_kinndy_sparkshine);
 	RegisterTheramoreAI(npc_pained);
 	RegisterTheramoreAI(npc_kalecgos_theramore);
+	RegisterTheramoreAI(npc_kalecgos_dragon);
 }

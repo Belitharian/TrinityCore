@@ -33,8 +33,6 @@ const ObjectData creatureData[] =
 	{ NPC_TARI_COGG,            DATA_TARI_COGG              },
 	{ NPC_AMARA_LEESON,         DATA_AMARA_LEESON           },
 	{ NPC_THADER_WINDERMERE,    DATA_THADER_WINDERMERE      },
-
-	// NPCs don't serve events
 	{ NPC_KALECGOS_DRAGON,      DATA_KALECGOS_DRAGON        },
 	{ NPC_ADMIRAL_AUBREY,       DATA_ADMIRAL_AUBREY         },
 	{ NPC_CAPTAIN_DROK,         DATA_CAPTAIN_DROK           },
@@ -52,54 +50,6 @@ const ObjectData gameobjectData[] =
 	{ GOB_ENERGY_BARRIER,       DATA_ENERGY_BARRIER         },
 	{ GOB_POWDER_BARREL,        DATA_POWDER_BARREL          },
 	{ 0,                        0                           }   // END
-};
-
-class KalecgosSpellEvent : public BasicEvent
-{
-	public:
-	KalecgosSpellEvent(Creature* owner) : owner(owner)
-	{
-		owner->SetReactState(REACT_PASSIVE);
-	}
-
-	bool Execute(uint64 timer, uint32 /*updateTime*/) override
-	{
-		if (roll_chance_i(80))
-			ENSURE_AI(CustomAI, owner->AI())->TalkInCombat(SAY_KALECGOS_SPELL_01);
-
-		owner->CastSpell(owner, SPELL_FROST_BREATH);
-		owner->m_Events.AddEvent(this, Milliseconds(timer) + randtime(8s, 10s));
-		return false;
-	}
-
-	private:
-	Creature* owner;
-};
-
-class KalecgosLoopEvent : public BasicEvent
-{
-	public:
-	KalecgosLoopEvent(Creature* owner) : owner(owner), m_loopTime(0.f)
-	{
-		owner->SetCanFly(true);
-		owner->SetDisableGravity(true);
-		owner->SetSpeed(MOVE_RUN, 25.f);
-
-		float perimeter = 2.f * float(M_PI) * m_circleRadius;
-		m_loopTime = (perimeter / owner->GetSpeed(MOVE_RUN)) * 1000.f;
-	}
-
-	bool Execute(uint64 timer, uint32 /*updateTime*/) override
-	{
-		owner->GetMotionMaster()->MoveCirclePath(TheramorePoint01.GetPositionX(), TheramorePoint01.GetPositionY(), TheramorePoint01.GetPositionZ(), m_circleRadius, true, 16);
-		owner->m_Events.AddEvent(this, Milliseconds(timer + m_loopTime));
-		return false;
-	}
-
-	private:
-	const float m_circleRadius = 95.0f;
-	Creature* owner;
-	uint64 m_loopTime;
 };
 
 class scenario_battle_for_theramore : public InstanceMapScript
@@ -589,6 +539,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case NPC_ADMIRAL_AUBREY:
 				case NPC_CAPTAIN_DROK:
 				case NPC_WAVE_CALLER_GRUHTA:
+                case NPC_KALECGOS_DRAGON:
 					creature->SetVisible(false);
 					break;
 			}
@@ -1151,13 +1102,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 90:
 					EnsureBarrierHaveDamage();
-					if (Creature* kalecgos = instance->SummonCreature(NPC_KALECGOS_DRAGON, KalecgosPoint02))
+					if (Creature* kalecgos = GetKalecgos())
 					{
-						kalecgos->GetMotionMaster()->Clear();
-						kalecgos->GetMotionMaster()->MoveIdle();
-
-						kalecgos->m_Events.AddEvent(new KalecgosLoopEvent(kalecgos),
-							kalecgos->m_Events.CalculateTime(1s));
+                        kalecgos->SetSpeed(MOVE_RUN, 25.f);
+                        kalecgos->AI()->SetData(DATA_KALECGOS_CIRCLE_EVENT, 0U);
 					}
 					for (uint8 i = 0; i < ACTORS_RELOCATION; i++)
 					{
@@ -1315,7 +1263,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					}
 					if (Creature* kalecgos = GetKalecgos())
 					{
-						kalecgos->m_Events.AddEvent(new KalecgosSpellEvent(kalecgos), kalecgos->m_Events.CalculateTime(2s));
+                        kalecgos->AI()->SetData(DATA_KALECGOS_SPELL_EVENT, 0U);
 					}
 					GetJaina()->CastSpell(actorsRelocation[0].destination, SPELL_TELEPORT);
 					Next(2s);
@@ -1917,10 +1865,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			if (Creature* kalecgos = GetKalecgos())
 			{
 				SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, kalecgos);
-
-				kalecgos->m_Events.KillAllEvents(true);
-				kalecgos->GetMotionMaster()->Clear();
-				kalecgos->GetMotionMaster()->MoveIdle();
+                kalecgos->AI()->SetData(DATA_KALECGOS_CANCEL_EVENT, 0U);
 				kalecgos->SetVisible(false);
 			}
 

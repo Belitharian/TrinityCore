@@ -2131,56 +2131,6 @@ struct at_blizzard_theramore : AreaTriggerAI
 	Milliseconds _tickTimer;
 };
 
-// Rune of Alacrity
-// AreaTriggerID - 26613
-struct at_rune_alacrity : AreaTriggerAI
-{
-	at_rune_alacrity(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
-	{
-	}
-
-	enum Spells
-	{
-		SPELL_RUNE_OF_ALACRITY = 388334
-	};
-
-	void OnUnitEnter(Unit* /*unit*/) override
-	{
-		if (Unit* caster = at->GetCaster())
-		{
-			for (ObjectGuid unit : at->GetInsideUnits())
-			{
-				if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
-				{
-					if (caster->IsHostileTo(target))
-						continue;
-
-					target->CastSpell(target, SPELL_RUNE_OF_ALACRITY);
-				}
-			}
-		}
-	}
-
-	void OnUnitExit(Unit* unit) override
-	{
-		unit->RemoveAurasDueToSpell(SPELL_RUNE_OF_ALACRITY);
-	}
-
-	void OnRemove() override
-	{
-		if (Unit* caster = at->GetCaster())
-		{
-			for (ObjectGuid unit : at->GetInsideUnits())
-			{
-				if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
-				{
-					target->RemoveAurasDueToSpell(SPELL_RUNE_OF_ALACRITY);
-				}
-			}
-		}
-	}
-};
-
 // Waternado
 // AreaTriggerID - 12065
 struct at_waternado : AreaTriggerAI
@@ -2380,7 +2330,6 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterSpellScript(spell_powder_keg);
 
 	RegisterAreaTriggerAI(at_blizzard_theramore);
-	RegisterAreaTriggerAI(at_rune_alacrity);
 	RegisterAreaTriggerAI(at_waternado);
 	RegisterAreaTriggerAI(at_consecrated_ground);
 	RegisterAreaTriggerAI(at_uncontrolled_energy);

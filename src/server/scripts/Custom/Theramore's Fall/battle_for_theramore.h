@@ -90,6 +90,11 @@ enum BFTData
 	DATA_WOUNDED_TROOPS,
 	DATA_WAVE_GROUP_ID,
 
+    // Kalecgos Events
+    DATA_KALECGOS_CIRCLE_EVENT,
+    DATA_KALECGOS_SPELL_EVENT,
+    DATA_KALECGOS_CANCEL_EVENT,
+
 	// GameObjects
 	DATA_PORTAL_TO_STORMWIND,
 	DATA_PORTAL_TO_DALARAN,
@@ -158,13 +163,12 @@ enum BFTMisc
     SPELL_FOR_THE_ALLIANCE              = 185265,
     SPELL_ARCANE_FX                     = 200065,
 	SPELL_CAMERA_SHAKE_VOLCANO          = 246439,
-	SPELL_REPAIR                        = 262554,
+	SPELL_REPAIR                        = 290880,
 	SPELL_TELEPORT_TARGET               = 268294,
 	SPELL_PORTAL_CHANNELING_02          = 287432,
 	SPELL_PORTAL_CHANNELING_03          = 288451,
 	SPELL_PORTAL_CHANNELING_01          = 286636,
 	SPELL_RENEW                         = 294342,
-	SPELL_FROST_BREATH                  = 300548,
 	SPELL_THALYSSRA_SPAWNS              = 302492,
 	SPELL_WATER_CHANNELLING             = 305033,
 	SPELL_COSMETIC_FIRE_LIGHT           = 320348,
@@ -678,7 +682,6 @@ Position const OfficerPoint01   = { -3748.43f, -4432.99f, 30.54f, 4.66f };
 Position const QuillPoint01     = { -3751.32f, -4438.13f, 31.26f, 3.33f };
 Position const TervoshPoint01   = { -3720.83f, -4551.10f, 25.82f, 1.35f };
 Position const KalecgosPoint01  = { -3730.39f, -4550.39f, 27.11f, 0.54f };
-Position const KalecgosPoint02  = { -3717.96f, -4356.52f, 90.82f, 0.00f };
 Position const PortalPoint01    = { -3712.42f, -4539.62f, 25.82f, 3.59f };
 Position const PortalPoint02    = { -3782.81f, -4256.24f,  6.52f, 4.69f };
 Position const PortalPoint03    = { -3750.82f, -4449.65f, 64.90f, 0.63f };

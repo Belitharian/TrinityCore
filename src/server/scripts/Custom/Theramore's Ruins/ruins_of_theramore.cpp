@@ -174,8 +174,8 @@ struct npc_jaina_ruins : public CustomAI
 			}
 			case SPELL_ICEBOUND_ESCAPE:
 			{
-                me->LoadEquipment(0);
 				me->PauseMovement();
+                me->LoadEquipment(0, true);
                 me->SetUninteractible(true);
 				me->SetUnitFlag2(UNIT_FLAG2_UNTARGETABLE_BY_CLIENT);
 				me->SetDisplayId(DISPLAYID_INVISIBLE);
