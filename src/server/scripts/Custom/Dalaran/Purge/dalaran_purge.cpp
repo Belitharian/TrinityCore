@@ -219,31 +219,36 @@ struct npc_magister_rommath_purge : public CustomAI
         Initialize();
     }
 
+    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+    {
+        if (pathId == PATH_ROMMATH_01)
+        {
+            me->AI()->Talk(SAY_INFILTRATE_ROMMATH_04);
+            if (GameObject* passage = instance->GetGameObject(DATA_SECRET_PASSAGE))
+                passage->UseDoorOrButton(7200000);
+            for (uint8 i = 0; i < TRACKING_PATH_01; i++)
+            {
+                if (Creature* tracking = me->GetMap()->SummonCreature(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
+                {
+                    tracking->AddAura(SPELL_ARCANIC_TRACKING, tracking);
+                    tracks.push_back(tracking->GetGUID());
+                }
+            }
+            if (Player* player = me->GetMap()->GetPlayers().begin()->GetSource())
+            {
+                me->SetOwnerGUID(player->GetGUID());
+                me->SetImmuneToAll(false);
+                me->GetMotionMaster()->Clear();
+                me->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, me->GetFollowAngle());
+                player->SetMinionGUID(me->GetGUID());
+            }
+        }
+    }
+
 	void MovementInform(uint32 /*type*/, uint32 id) override
 	{
 		switch (id)
 		{
-			case MOVEMENT_INFO_POINT_01:
-				me->AI()->Talk(SAY_INFILTRATE_ROMMATH_04);
-				if (GameObject* passage = instance->GetGameObject(DATA_SECRET_PASSAGE))
-					passage->UseDoorOrButton(7200000);
-                for (uint8 i = 0; i < TRACKING_PATH_01; i++)
-                {
-                    if (Creature* tracking = me->GetMap()->SummonCreature(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
-                    {
-                        tracking->AddAura(SPELL_ARCANIC_TRACKING, tracking);
-                        tracks.push_back(tracking->GetGUID());
-                    }
-                }
-                if (Player* player = me->GetMap()->GetPlayers().begin()->GetSource())
-                {
-                    me->SetOwnerGUID(player->GetGUID());
-                    me->SetImmuneToAll(false);
-                    me->GetMotionMaster()->Clear();
-                    me->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, me->GetFollowAngle());
-                    player->SetMinionGUID(me->GetGUID());
-                }
-				break;
             case MOVEMENT_INFO_POINT_02:
                 if (GameObject* portal = instance->GetGameObject(DATA_PORTAL_TO_PRISON))
                     portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);

@@ -566,7 +566,11 @@ class scenario_dalaran_purge : public InstanceMapScript
 				#pragma region DALARAN
 
 				case 1:
-					Talk(GetJaina(), SAY_PURGE_JAINA_01);
+                    if (Creature* jaina = GetJaina())
+                    {
+                        jaina->SetAIAnimKitId(18213);
+                        Talk(jaina, SAY_PURGE_JAINA_01);
+                    }
 					Next(2s);
 					break;
 				case 2:
@@ -726,7 +730,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					Next(5s);
 					break;
 				case 25:
-					GetRommath()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, RommathPath01, ROMMATH_PATH_01);
+					GetRommath()->GetMotionMaster()->MovePath(RommathPath01, false);
 					Next(15s);
 					break;
 				case 26:

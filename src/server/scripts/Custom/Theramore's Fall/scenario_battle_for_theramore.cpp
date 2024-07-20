@@ -7,12 +7,15 @@
 #include "Log.h"
 #include "Map.h"
 #include "MotionMaster.h"
+#include "MiscPackets.h"
 #include "ObjectMgr.h"
 #include "PhasingHandler.h"
 #include "Player.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "TemporarySummon.h"
+#include "Weather.h"
+#include "WorldPacket.h"
 #include "battle_for_theramore.h"
 
 #define EVENT_CREATURE_DATA_SIZE 14
@@ -147,6 +150,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 		void OnPlayerEnter(Player* player) override
 		{
+            ForceWeather(WEATHER_STATE_THUNDERS, true);
+
 			player->AddAura(SPELL_SKYBOX_EFFECT, player);
 		}
 
@@ -214,12 +219,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* kinndy = GetKinndy())
 					{
 						kinndy->SetVisible(true);
-						kinndy->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, KinndyPath02, KINNDY_PATH_02, true);
+						kinndy->GetMotionMaster()->MovePath(KinndyPath02, false);
 					}
 					if (Creature* tervosh = GetTervosh())
 					{
 						tervosh->SetVisible(true);
-						tervosh->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_03, TervoshPath03, TERVOSH_PATH_03, true);
+						tervosh->GetMotionMaster()->MovePath(TervoshPath03, false);
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Evacuation);
 					break;
@@ -450,7 +455,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				{
 					if (Creature* kalecgos = GetKalec())
 					{
-						kalecgos->NearTeleportTo(KalecgosPath02[0]);
+                        kalecgos->NearTeleportTo(KalecgosPath02.Nodes[0].X, KalecgosPath02.Nodes[0].Y, KalecgosPath02.Nodes[0].Z, *KalecgosPath02.Nodes[0].Orientation);
 						kalecgos->SetSpeedRate(MOVE_WALK, 0.85f);
 						kalecgos->SetSpeedRate(MOVE_RUN, 0.85f);
 					}
@@ -582,7 +587,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* tervosh = GetTervosh())
 					{
 						tervosh->SetEmoteState(EMOTE_STAND_STATE_NONE);
-						tervosh->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, TervoshPath01, TERVOSH_PATH_01, true);
+						tervosh->GetMotionMaster()->MovePath(TervoshPath01, false);
 					}
 					Next(5s);
 					break;
@@ -684,16 +689,16 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* kalecgos = GetKalec())
 					{
 						kalecgos->SetSpeedRate(MOVE_WALK, 1.6f);
-						kalecgos->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, KalecgosPath01, KALECGOS_PATH_01, true);
+						kalecgos->GetMotionMaster()->MovePath(KalecgosPath01, false);
 					}
 					Next(2s);
 					break;
 				case 21:
-					GetTervosh()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, TervoshPath02, TERVOSH_PATH_02, true);
+					GetTervosh()->GetMotionMaster()->MovePath(TervoshPath02, false);
 					Next(5s);
 					break;
 				case 22:
-					GetKinndy()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, KinndyPath01, KINNDY_PATH_01, true);
+					GetKinndy()->GetMotionMaster()->MovePath(KinndyPath01, false);
 					Next(6s);
 					break;
 				case 23:
@@ -826,7 +831,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					Talk(GetPained(), SAY_WARN_13);
 					if (Creature* officer = GetKnight())
 					{
-						officer->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, OfficerPath01, OFFICER_PATH_01, true);
+						officer->GetMotionMaster()->MovePath(OfficerPath01, false);
 						officer->DespawnOrUnsummon(15s);
 					}
 					GetPerith()->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, GetJaina(), 3.0f);
@@ -943,7 +948,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					GetPained()->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					if (Creature* perith = GetPerith())
 					{
-						perith->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, OfficerPath01, OFFICER_PATH_01, true);
+						perith->GetMotionMaster()->MovePath(OfficerPath01, false);
 						perith->DespawnOrUnsummon(15s);
 					}
 					Next(5s);
@@ -964,7 +969,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 70:
 					GetJaina()->SetFacingTo(0.39f);
-					GetPained()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, KinndyPath01, KINNDY_PATH_01, true);
+					GetPained()->GetMotionMaster()->MovePath(KinndyPath01, false);
 					break;
 
 				#pragma endregion
@@ -987,7 +992,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 72:
 					Talk(GetJaina(), SAY_PRE_BATTLE_2);
-					GetHedric()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, HedricPath01, HEDRIC_PATH_01);
+					GetHedric()->GetMotionMaster()->MovePath(HedricPath01, false);
 					Next(2s);
 					break;
 				case 73:
@@ -1372,16 +1377,16 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					ClearTarget();
                     if (Creature* jaina = GetJaina())
                     {
-                        jaina->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, JainaPath01, JAINA_PATH_01);
-                        jaina->SetHomePosition(JainaPath01[JAINA_PATH_01 - 1]);
+                        jaina->GetMotionMaster()->MovePath(JainaPath01, false);
+                        jaina->SetHomePosition(JainaPoint06);
                     }
 					Next(1500ms);
 					break;
 				case 127:
                     if (Creature* hedric = GetHedric())
                     {
-                        hedric->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, JainaPath01, JAINA_PATH_01);
-                        hedric->SetHomePosition(JainaPath01[JAINA_PATH_01 - 1]);
+                        hedric->GetMotionMaster()->MovePath(JainaPath01, false);
+                        hedric->SetHomePosition(JainaPoint06);
                     }
                     break;
 
@@ -1474,7 +1479,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						kalecgos->SetVisible(true);
 						kalecgos->SetSpeedRate(MOVE_RUN, 0.85f);
-						kalecgos->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, KalecgosPath02, KALECGOS_PATH_02);
+						kalecgos->GetMotionMaster()->MovePath(KalecgosPath02, false);
 					}
 					Next(5s);
 					break;
@@ -1524,18 +1529,18 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 152:
 					ClearTarget();
-					GetKalec()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, KalecgosPath03, KALECGOS_PATH_03);
+					GetKalec()->GetMotionMaster()->MovePath(KalecgosPath03, false);
 					Next(2s);
 					break;
 				case 153:
-					GetRhonin()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, RhoninPath01, RHONIN_PATH_01);
+					GetRhonin()->GetMotionMaster()->MovePath(RhoninPath01, false);
 					Next(2s);
 					break;
 				case 154:
 					if (Creature* amara = GetAmara())
 					{
 						amara->SetSpeedRate(MOVE_RUN, 0.85f);
-						amara->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, AmaraPath01, AMARA_PATH_01);
+						amara->GetMotionMaster()->MovePath(AmaraPath01, false);
 					}
 					Next(10s);
 					break;
@@ -1543,7 +1548,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* amara = GetAmara())
 					{
 						amara->SetVisible(true);
-						amara->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, KalecgosPath02, KALECGOS_PATH_02);
+						amara->GetMotionMaster()->MovePath(KalecgosPath02, false);
 					}
 					break;
 
@@ -1569,11 +1574,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 159:
 					ClearTarget();
-					GetAmara()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_03, KalecgosPath03, KALECGOS_PATH_03);
+					GetAmara()->GetMotionMaster()->MovePath(KalecgosPath03, false);
 					Next(2s);
 					break;
 				case 160:
-					GetJaina()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_03, RhoninPath01, RHONIN_PATH_01);
+					GetJaina()->GetMotionMaster()->MovePath(JainaPath02, false);
 					break;
 
 				#pragma endregion
@@ -2005,6 +2010,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				}
 			});
 		}
+
+        void ForceWeather(uint32 weatherEntry, bool apply)
+        {
+            instance->DoOnPlayers([weatherEntry, apply](Player* player)
+            {
+                if (apply)
+                    player->SendDirectMessage(WorldPackets::Misc::Weather(WeatherState(weatherEntry), 1.0f).Write());
+                else
+                    player->GetMap()->SendZoneWeather(player->GetZoneId(), player);
+            });
+        }
 
 		Unit* SelectNearestHostileInRange(Creature* creature) const
 		{

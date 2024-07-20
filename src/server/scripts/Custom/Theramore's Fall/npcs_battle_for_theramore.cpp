@@ -1251,7 +1251,7 @@ struct npc_roknah_grunt : public npc_theramore_horde
 			DoCastSelf(SPELL_OVERPOWER);
 
 		scheduler
-			.Schedule(5ms, [this](TaskContext hammer_stun)
+			.Schedule(15s, 35s, [this](TaskContext hammer_stun)
 			{
 				if (Unit* target = DoSelectCastingUnit(SPELL_HAMMER_STUN, 1.5f))
 				{

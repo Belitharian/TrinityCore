@@ -9,9 +9,6 @@
 
 //#define CUSTOM_DEBUG
 
-#define KALECGOS_PATH_01                5
-#define FELHUNTER_PATH_01               11
-
 #define ELEMENTALS_SIZE                 2
 
 enum RFTCreatures
@@ -185,28 +182,17 @@ const SpawnPoint ZeppelinPoint =
 	{ -3479.77f, -4314.78f, 37.16f, 0.89f }
 };
 
-const Position KalecgosPath01[KALECGOS_PATH_01] =
+WaypointPath const KalecgosPath01 =
 {
-	{ -3044.71f, -4328.60f, 7.38f, 0.64f },
-	{ -3040.14f, -4325.38f, 6.72f, 0.55f },
-	{ -3031.74f, -4324.43f, 7.66f, 5.94f },
-	{ -3024.75f, -4327.67f, 7.68f, 5.77f },
-	{ -3013.87f, -4332.47f, 7.10f, 4.84f }
-};
-
-const Position FelhunterPath01[FELHUNTER_PATH_01] =
-{
-    { -3736.67f, -4289.79f, 8.68f, 4.13f },
-    { -3739.53f, -4292.73f, 8.68f, 3.71f },
-    { -3743.88f, -4294.67f, 8.68f, 3.34f },
-    { -3750.13f, -4295.33f, 8.53f, 3.12f },
-    { -3761.51f, -4294.25f, 8.26f, 3.23f },
-    { -3767.71f, -4295.11f, 8.66f, 3.36f },
-    { -3776.86f, -4300.76f, 9.34f, 5.15f },
-    { -3762.99f, -4330.62f, 9.90f, 5.21f },
-    { -3751.70f, -4351.62f, 10.6f, 5.42f },
-    { -3746.43f, -4361.38f, 10.6f, 5.06f },
-    { -3741.30f, -4376.29f, 10.6f, 5.03f }
+    1,
+    {
+        { 0, -3044.71f, -4328.60f, 7.38f, 0.64f },
+        { 1, -3040.14f, -4325.38f, 6.72f, 0.55f },
+        { 2, -3031.74f, -4324.43f, 7.66f, 5.94f },
+        { 3, -3024.75f, -4327.67f, 7.68f, 5.77f },
+        { 4, -3013.87f, -4332.47f, 7.10f, 4.84f }
+    },
+    WaypointMoveType::Run
 };
 
 const Position PlayerPoint01    = { -3878.20f, -4589.90f,   8.67f, 0.78f };
@@ -214,7 +200,8 @@ const Position JainaPoint01     = { -3012.72f, -4340.22f,   6.64f, 1.70f };
 const Position JainaPoint02     = { -3698.21f, -4457.47f, -20.88f, 1.27f };
 const Position JainaPoint03     = { -3711.41f, -4467.89f, -20.54f, 0.02f };
 const Position JainaPoint04     = { -3825.77f, -4537.44f,   9.21f, 0.73f };
-const Position KalecgosPoint01  = { -3013.10f, -4336.91f,   6.77f, 4.82f };
+const Position KalecgosPoint01  = { -3044.71f, -4328.60f, 7.38f, 0.64f };
+const Position KalecgosPoint02  = { -3013.10f, -4336.91f,   6.77f, 4.82f };
 const Position DummyPoint01     = { -3698.69f, -4467.94f, -20.87f, 3.55f };
 
 inline Position GetRandomPosition(Position center, float dist)

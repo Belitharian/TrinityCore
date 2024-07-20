@@ -109,11 +109,11 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				// Retrieve Jaina
 				case CRITERIA_TREE_FIND_JAINA_01:
 				{
-					instance->SummonCreature(NPC_KALECGOS, KalecgosPath01[0]);
+					instance->SummonCreature(NPC_KALECGOS, KalecgosPoint01);
 					if (Creature* kalecgos = GetKalecgos())
 					{
 						kalecgos->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-						kalecgos->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_NONE, KalecgosPath01, KALECGOS_PATH_01, false, false, KalecgosPath01[KALECGOS_PATH_01 - 1].GetOrientation());
+						kalecgos->GetMotionMaster()->MovePath(KalecgosPath01, false);
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::FindJaina_Isle_Valided);
 					#ifdef CUSTOM_DEBUG
@@ -269,7 +269,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					{
 						Talk(kalecgos, SAY_AFTER_BATTLE_KALECGOS_04);
 						kalecgos->SetSpeedRate(MOVE_WALK, 0.6f);
-						kalecgos->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, KalecgosPoint01, true, KalecgosPoint01.GetOrientation());
+						kalecgos->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, KalecgosPoint02, true, KalecgosPoint02.GetOrientation());
 					}
 					Next(8s);
 					break;

@@ -149,31 +149,31 @@ class instance_dalaran_convo : public InstanceMapScript
 
                 // Part II
                 case 6:
-                    if (Creature* jaina = GetJaina())
-                    {
-                        Talk(jaina, SAY_JAINA_CONVO_01);
-                        jaina->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, ActorsPath01, ACTORS_PATH_01, true);
-                    }
+                    //if (Creature* jaina = GetJaina())
+                    //{
+                    //    Talk(jaina, SAY_JAINA_CONVO_01);
+                    //    jaina->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, ActorsPath01, ACTORS_PATH_01, true);
+                    //}
                     Next(1s);
                     break;
                 case 7:
-                    GetAnduin()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, ActorsPath01, ACTORS_PATH_01, true);;
+                    //GetAnduin()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, ActorsPath01, ACTORS_PATH_01, true);;
                     break;
 
                 // Visions
                 #pragma region VISIONS
 
                 case EVENT_VISION_01:
-                    if (Creature* jaina = GetJaina())
-                    {
-                        Talk(jaina, SAY_JAINA_CONVO_02);
-                        jaina->RemoveAurasDueToSpell(SPELL_SIT_CHAIR_MED);
-                        jaina->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, JainaPath02, ACTORS_PATH_02, true);
-                    }
+                    //if (Creature* jaina = GetJaina())
+                    //{
+                    //    Talk(jaina, SAY_JAINA_CONVO_02);
+                    //    jaina->RemoveAurasDueToSpell(SPELL_SIT_CHAIR_MED);
+                    //    jaina->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, JainaPath02, ACTORS_PATH_02, true);
+                    //}
                     Next(5s);
                     break;
                 case EVENT_VISION_02:
-                    GetAnduin()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, AnduinPath02, ACTORS_PATH_02, true);
+                    //GetAnduin()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, AnduinPath02, ACTORS_PATH_02, true);
                     Talk(GetJaina(), SAY_JAINA_CONVO_03);
                     Next(9s);
                     break;

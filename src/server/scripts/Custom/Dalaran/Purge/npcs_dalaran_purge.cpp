@@ -1200,28 +1200,26 @@ struct npc_arcanist_rathaella : public CustomAI
 		#endif
 	}
 
-	void MovementInform(uint32 /*type*/, uint32 id) override
-	{
-		switch (id)
-		{
-			case MOVEMENT_INFO_POINT_01:
-				me->SetFacingTo(5.41f);
-				me->AI()->Talk(SAY_ARCANIST_RATHAELLA_03);
-				scheduler.Schedule(4s, [this](TaskContext /*context*/)
-				{
-					me->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, RathaellaPath02, RATHAELLA_PATH_02);
-					if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
-						KillRewarder::Reward(player, me);
-				});
-
-				break;
-			case MOVEMENT_INFO_POINT_02:
-				me->SetFacingTo(0.05f);
-				me->AddAura(SPELL_READING_BOOK_STANDING, me);
-				me->SetHomePosition(me->GetPosition());
-				break;
-		}
-	}
+    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+    {
+        if (pathId == PATH_RATHAELLA_01)
+        {
+            me->SetFacingTo(5.41f);
+            me->AI()->Talk(SAY_ARCANIST_RATHAELLA_03);
+            scheduler.Schedule(4s, [this](TaskContext /*context*/)
+            {
+                me->GetMotionMaster()->MovePath(RathaellaPath02, false);
+                if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
+                    KillRewarder::Reward(player, me);
+            });
+        }
+        else if (pathId == PATH_RATHAELLA_02)
+        {
+            me->SetFacingTo(0.05f);
+            me->AddAura(SPELL_READING_BOOK_STANDING, me);
+            me->SetHomePosition(me->GetPosition());
+        }
+    }
 
 	void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
 	{
@@ -1249,7 +1247,7 @@ struct npc_arcanist_rathaella : public CustomAI
 					context.Repeat(1s);
 					break;
 				case 2:
-					me->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, RathaellaPath01, RATHAELLA_PATH_01);
+					me->GetMotionMaster()->MovePath(RathaellaPath01, false);
 					context.Repeat(2s);
 					break;
 				case 3:
@@ -1339,15 +1337,8 @@ struct npc_sunreaver_citizen : public CustomAI
 	{
 		instance = me->GetInstanceScript();
 
-		if (CreatureData const* data = me->GetCreatureData())
-		{
-			if (data->curhealth)
-			{
-				me->SetMaxHealth(data->curhealth);
-				me->SetFullHealth();
-			}
-		}
-
+		me->SetSpawnHealth();
+		me->SetFullHealth();
 		me->SetEmoteState(EMOTE_STATE_COWER);
 	}
 
@@ -2517,13 +2508,13 @@ struct npc_high_arcanist_savor : public CustomAI
         SPELL_AREA_ZONE_FX          = 230330,
 
 		// Savor
-		SPELL_VOLATILE_MAGIC        = 196562,
 		SPELL_ARCANE_MISSILES       = 5143,
 		SPELL_IMMUNE                = 299144,
 		SPELL_ARCANE_ORB            = 213316,
 		SPELL_THROW_ARCANE_TOME     = 239101,
 		SPELL_ARCANE_BOLT           = 242170,
 		SPELL_LEVITATE              = 252620,
+        SPELL_DELPHURIC_BEAM        = 423771
 	};
 
 	enum Misc
@@ -2584,6 +2575,8 @@ struct npc_high_arcanist_savor : public CustomAI
     {
         CustomAI::Initialize();
 
+        me->SetRegenerateHealth(false);
+
         SetBoundary(&savorBoundaries);
     }
 
@@ -2596,7 +2589,7 @@ struct npc_high_arcanist_savor : public CustomAI
             player->RemoveAura(SPELL_ALT_POWER_BAR);
         });
 
-		phase = Phases::None;
+        phase = Phases::None;
 	}
 
 	void EnterEvadeMode(EvadeReason why) override
@@ -2693,7 +2686,6 @@ struct npc_high_arcanist_savor : public CustomAI
 							me->RemoveAurasDueToSpell(SPELL_PORTAL_CHANNELING_03);
 							me->RemoveAurasDueToSpell(SPELL_LEVITATE);
 							me->SetReactState(REACT_AGGRESSIVE);
-							me->SetImmuneToAll(false);
 
 							ClosePortal(sunreaversPortal);
 
@@ -2737,14 +2729,14 @@ struct npc_high_arcanist_savor : public CustomAI
 		}
 	}
 
-	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+	void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
 		if (phase != Phases::Time)
 			return;
 
 		// Only in Time phase
 
-		if (me->HealthBelowPctDamaged(20, damage))
+		if (HealthBelowPct(20))
 		{
 			timeCount++;
 			if (phase != Phases::Final && timeCount >= 3)
@@ -2762,7 +2754,6 @@ struct npc_high_arcanist_savor : public CustomAI
 
 				summons.DespawnAll();
 
-				me->SetRegenerateHealth(false);
 				me->SetReactState(REACT_PASSIVE);
 				me->GetMotionMaster()->MoveTargetedHome();
 
@@ -2825,6 +2816,7 @@ struct npc_high_arcanist_savor : public CustomAI
         {
             for (Creature* creature : creatures)
             {
+                creature->SetImmuneToAll(true);
                 creature->CastSpell(creature, SPELL_TELEPORT_VISUAL_ONLY);
                 creature->DespawnOrUnsummon(1300ms);
             }
@@ -2832,7 +2824,7 @@ struct npc_high_arcanist_savor : public CustomAI
 
 		me->RemoveAllAuras();
 		me->AddAura(SPELL_LEVITATE, me);
-		me->SetImmuneToAll(false);
+        me->SetImmuneToAll(false);
 
 		DoCast(me, SPELL_IMMUNE, true);
 	}
@@ -2856,11 +2848,11 @@ struct npc_high_arcanist_savor : public CustomAI
 				DoCastVictim(SPELL_ARCANE_MISSILES);
 				arcane_missiles.Repeat(3s);
 			})
-			.Schedule(3s, GROUP_ALWAYS, [this](TaskContext volatile_magic)
+			.Schedule(10s, GROUP_ALWAYS, [this](TaskContext delphuric_beam)
 			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-					DoCast(target, SPELL_VOLATILE_MAGIC);
-				volatile_magic.Repeat(5s, 10s);
+                CastStop({ SPELL_EVOCATION, SPELL_THROW_ARCANE_TOME });
+				DoCastAOE(SPELL_DELPHURIC_BEAM);
+                delphuric_beam.Repeat(8s, 30s);
 			})
 			.Schedule(3s, GROUP_ALWAYS, [this](TaskContext evocation)
 			{
@@ -2872,10 +2864,10 @@ struct npc_high_arcanist_savor : public CustomAI
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-					CastStop();
+                    CastStop(SPELL_EVOCATION);
 					DoCast(target, SPELL_THROW_ARCANE_TOME);
 				}
-				throw_arcane_tome.Repeat(8s, 14s);
+				throw_arcane_tome.Repeat(14s, 45s);
 			})
 			.Schedule(1s, GROUP_ORB, [this](TaskContext arcanic_orb)
 			{
@@ -3261,6 +3253,7 @@ struct npc_book_of_arcane_monstrosities : public CustomAI
 	{
 		// Spells
 		SPELL_CLEANSING_FORCE       = 196115,
+		SPELL_CLEANSING_FORCE_AT    = 196088,
 
 		// Gameobjects
 		GOB_OPEN_BOOK_VISUAL        = 329740
@@ -3283,7 +3276,8 @@ struct npc_book_of_arcane_monstrosities : public CustomAI
 		scheduler
 			.Schedule(1ms, [this](TaskContext cleansing_force)
 			{
-				DoCast(me, SPELL_CLEANSING_FORCE, true);
+				DoCast(me, SPELL_CLEANSING_FORCE);
+                DoCast(me, SPELL_CLEANSING_FORCE_AT, true);
 			});
 	}
 
@@ -3613,6 +3607,30 @@ struct at_frigid_blizzard_dalaran : AreaTriggerAI
 	}
 };
 
+// 5234 - Cleansing Force
+struct at_cleansing_force : AreaTriggerAI
+{
+    at_cleansing_force(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
+    {
+    }
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        if (!unit->IsPlayer())
+            return;
+
+        unit->ApplyMovementForce(at->GetGUID(), at->GetPosition(), 5.0f, MovementForceType::Gravity);
+    }
+
+    void OnUnitExit(Unit* unit) override
+    {
+        if (!unit->IsPlayer())
+            return;
+
+        unit->RemoveMovementForce(at->GetGUID());
+    }
+};
+
 struct go_portal_savor : public GameObjectAI
 {
 	go_portal_savor(GameObject* gameobject) : GameObjectAI(gameobject)
@@ -3803,14 +3821,11 @@ class spell_arcane_orb : public SpellScript
         {
             if (Creature* summon = ObjectAccessor::GetCreature(*caster, summonedObject.Victim))
             {
-                summon->NearTeleportTo(pos);
-
                 uint32 maxHealth = caster->CountPctFromMaxHealth(HEALTH_PERCENT);
                 summon->SetMaxHealth(maxHealth);
                 summon->SetFullHealth();
 
-                UnitState cannotMove = UnitState(UNIT_STATE_ROOT | UNIT_STATE_CANNOT_TURN);
-                summon->SetControlled(true, cannotMove);
+                summon->GetMotionMaster()->MoveRandom(19.0f);
 
                 if (caster->GetVictim())
                     summon->Attack(caster->EnsureVictim(), false);
@@ -4007,6 +4022,40 @@ class spell_atonement_aura_stormwind_cleric : public AuraScript
     }
 };
 
+// Delphuric Beam - 423771
+class spell_delphuric_beam : public SpellScript
+{
+    PrepareSpellScript(spell_delphuric_beam);
+
+    enum Misc
+    {
+        SPELL_DELPHURIC_BEAM_DAMAGE = 423634
+    };
+
+    void HandleDummy(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        for (auto const& itr : caster->GetThreatManager().GetUnsortedThreatList())
+        {
+            if (Unit* victim = itr->GetVictim())
+            {
+                if (Creature* trigger = caster->SummonCreature(NPC_INVISIBLE_STALKER, caster->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 4s))
+                {
+                    trigger->SetFaction(caster->GetFaction());
+                    trigger->SetTarget(victim->GetGUID());
+                    trigger->SetControlled(true, UNIT_STATE_ROOT);
+                    trigger->CastSpell(trigger, SPELL_DELPHURIC_BEAM_DAMAGE);
+                }
+            }
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_delphuric_beam::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
 void AddSC_npcs_dalaran_purge()
 {
 	// Neutral
@@ -4046,6 +4095,7 @@ void AddSC_npcs_dalaran_purge()
 	RegisterAreaTriggerAI(at_fire_bomb);
 	RegisterAreaTriggerAI(at_rain_of_fire);
 	RegisterAreaTriggerAI(at_frigid_blizzard_dalaran);
+	RegisterAreaTriggerAI(at_cleansing_force);
 
 	// Spells
 	RegisterSpellScript(spell_purge_teleport);
@@ -4057,6 +4107,7 @@ void AddSC_npcs_dalaran_purge()
     RegisterSpellScript(spell_atonement_stormwind_cleric);
     RegisterSpellScript(spell_atonement_effect_stormwind_cleric);
     RegisterSpellScript(spell_atonement_aura_stormwind_cleric);
+    RegisterSpellScript(spell_delphuric_beam);
 
 	// Gameobjects
 	RegisterGameObjectAI(go_portal_savor);

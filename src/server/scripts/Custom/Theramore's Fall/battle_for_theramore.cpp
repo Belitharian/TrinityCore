@@ -109,6 +109,48 @@ struct npc_jaina_theramore : public CustomAI
 			});
 	}
 
+    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+    {
+        if (pathId == 1)
+        {
+            me->StopMoving();
+            me->GetMotionMaster()->Clear();
+            me->GetMotionMaster()->MoveIdle();
+            me->SetFacingTo(3.13f);
+
+            if (Creature* hedric = instance->GetCreature(DATA_HEDRIC_EVENCANE))
+            {
+                hedric->StopMoving();
+                hedric->SetSheath(SHEATH_STATE_UNARMED);
+                hedric->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
+                hedric->GetMotionMaster()->Clear();
+                hedric->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HedricPoint03, true, HedricPoint03.GetOrientation());
+                hedric->SetFacingTo(4.99f);
+            }
+
+            instance->TriggerGameEvent(EVENT_FIND_JAINA_04);
+        }
+        else if (pathId == 2)
+        {
+            me->SetVisible(false);
+            scheduler.Schedule(2s, [this](TaskContext /*context*/)
+            {
+                me->SetVisible(true);
+                me->NearTeleportTo(JainaPoint05);
+                if (GameObject* portal = me->SummonGameObject(GOB_PORTAL_TO_STORMWIND, PortalPoint03, QuaternionData::fromEulerAnglesZYX(PortalPoint03.GetOrientation(), 0.f, 0.f), 0s))
+                    portal->SetObjectScale(0.8f);
+                if (TempSummon* summon = me->SummonCreature(WORLD_TRIGGER, PortalPoint03, TEMPSUMMON_MANUAL_DESPAWN))
+                {
+                    summon->SetObjectScale(1.8f);
+                    summon->CastSpell(summon, SPELL_LIGHTNING_FX, true);
+                }
+                DoCastSelf(SPELL_PORTAL_CHANNELING_01);
+
+                instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin);
+            });
+        }
+    }
+
 	void MovementInform(uint32 type, uint32 id) override
 	{
 		if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
@@ -117,40 +159,6 @@ struct npc_jaina_theramore : public CustomAI
 			{
 				case MOVEMENT_INFO_POINT_01:
 					instance->TriggerGameEvent(EVENT_THE_COUNCIL);
-					break;
-				case MOVEMENT_INFO_POINT_02:
-					me->StopMoving();
-					me->GetMotionMaster()->Clear();
-					me->GetMotionMaster()->MoveIdle();
-					me->SetFacingTo(3.13f);
-					if (Creature* hedric = instance->GetCreature(DATA_HEDRIC_EVENCANE))
-					{
-						hedric->StopMoving();
-						hedric->SetSheath(SHEATH_STATE_UNARMED);
-						hedric->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
-						hedric->GetMotionMaster()->Clear();
-						hedric->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HedricPoint03, true, HedricPoint03.GetOrientation());
-						hedric->SetFacingTo(4.99f);
-					}
-					instance->TriggerGameEvent(EVENT_FIND_JAINA_04);
-					break;
-				case MOVEMENT_INFO_POINT_03:
-					me->SetVisible(false);
-					scheduler.Schedule(2s, [this](TaskContext /*context*/)
-					{
-						me->SetVisible(true);
-						me->NearTeleportTo(JainaPoint05);
-						if (GameObject* portal = me->SummonGameObject(GOB_PORTAL_TO_STORMWIND, PortalPoint03, QuaternionData::fromEulerAnglesZYX(PortalPoint03.GetOrientation(), 0.f, 0.f), 0s))
-							portal->SetObjectScale(0.8f);
-						if (TempSummon* summon = me->SummonCreature(WORLD_TRIGGER, PortalPoint03, TEMPSUMMON_MANUAL_DESPAWN))
-						{
-							summon->SetObjectScale(1.8f);
-							summon->CastSpell(summon, SPELL_LIGHTNING_FX, true);
-						}
-						DoCastSelf(SPELL_PORTAL_CHANNELING_01);
-
-						instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin);
-					});
 					break;
 				default:
 					break;
@@ -228,28 +236,23 @@ struct npc_archmage_tervosh : public CustomAI
 		SPELL_TONGUES_OF_FLAME      = 412486
 	};
 
-	void MovementInform(uint32 type, uint32 id) override
-	{
-		if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
-		{
-			switch (id)
-			{
-				case MOVEMENT_INFO_POINT_01:
-					me->SetFacingTo(0.70f);
-					break;
-				case MOVEMENT_INFO_POINT_02:
-					me->SetFacingTo(2.14f);
-					me->SetVisible(false);
-					break;
-				case MOVEMENT_INFO_POINT_03:
-					me->SetFacingTo(4.05f);
-					me->SetEmoteState(EMOTE_STATE_READ);
-					break;
-				default:
-					break;
-			}
-		}
-	}
+    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+    {
+        switch (pathId)
+        {
+            case 1:
+                me->SetFacingTo(0.70f);
+                break;
+            case 2:
+                me->SetFacingTo(2.14f);
+                me->SetVisible(false);
+                break;
+            case 3:
+                me->SetFacingTo(4.05f);
+                me->SetEmoteState(EMOTE_STATE_READ);
+                break;
+        }
+    }
 
 	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{
@@ -367,24 +370,17 @@ struct npc_amara_leeson : public CustomAI
 			});
 	}
 
-	void MovementInform(uint32 type, uint32 id) override
-	{
-		if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
-		{
-			switch (id)
-			{
-				case MOVEMENT_INFO_POINT_01:
-				case MOVEMENT_INFO_POINT_03:
-					me->SetVisible(false);
-					break;
-				case MOVEMENT_INFO_POINT_02:
-					instance->TriggerGameEvent(EVENT_WAIT_ARCHMAGE_LESSON);
-					break;
-				default:
-					break;
-			}
-		}
-	}
+    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+    {
+        if (pathId == 1 || pathId == 3)
+        {
+            me->SetVisible(false);
+        }
+        else if (pathId == 2)
+        {
+            instance->TriggerGameEvent(EVENT_WAIT_ARCHMAGE_LESSON);
+        }
+    }
 };
 
 struct npc_rhonin : public CustomAI
@@ -405,20 +401,20 @@ struct npc_rhonin : public CustomAI
 	enum Groups
 	{
 		GROUP_NORMAL,
-		GROUP_ARCANE_EXPLOSION
+		GROUP_ARCANE_PULSE
 	};
 
 	enum Spells
 	{
 		SPELL_TEMPORAL_DISPLACEMENT = 80354,
 		SPELL_ARCANE_CAST_INSTANT   = 135030,
-		SPELL_ARCANE_EXPLOSION      = 210479,
 		SPELL_PRISMATIC_BARRIER     = 235450,
 		SPELL_EVOCATION             = 243070,
 		SPELL_ARCANE_BLAST          = 291316,
 		SPELL_ARCANE_BARRAGE        = 291318,
 		SPELL_TIME_WARP             = 342242,
 		SPELL_ARCANE_SALVO          = 378850,
+		SPELL_ARCANE_PULSE          = 423607,
 	};
 
 	npc_rhonin(Creature* creature) : CustomAI(creature, true), arcaneCharges(0)
@@ -509,6 +505,7 @@ struct npc_rhonin : public CustomAI
 					if (Creature* crystal = me->SummonCreature(NPC_ARCANIC_CRYSTAL, pos, TEMPSUMMON_TIMED_DESPAWN, 31s))
 					{
 						crystal->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+                        crystal->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						crystal->SetFaction(me->GetFaction());
 						crystal->SetCanMelee(false);
 						crystal->SetControlled(true, UNIT_STATE_ROOT);
@@ -518,41 +515,34 @@ struct npc_rhonin : public CustomAI
 				}
 				arcane_cristal.Repeat(1min);
 			})
-			.Schedule(5s, GROUP_ARCANE_EXPLOSION, [this](TaskContext arcane_explosion)
+			.Schedule(5s, GROUP_ARCANE_PULSE, [this](TaskContext arcane_pulse)
 			{
 				if (EnemiesInRange(9.f) >= 3)
 				{
 					scheduler.DelayGroup(GROUP_NORMAL, 5s);
 
 					CastStop();
-					DoCast(SPELL_ARCANE_EXPLOSION);
-					arcane_explosion.Repeat(2s);
+					DoCast(SPELL_ARCANE_PULSE);
+                    arcane_pulse.Repeat(2s);
 				}
 				else
-					arcane_explosion.Repeat(5ms);
+                    arcane_pulse.Repeat(5ms);
 			});
 	}
 
-	void MovementInform(uint32 type, uint32 id) override
-	{
-		if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
-		{
-			switch (id)
-			{
-				case MOVEMENT_INFO_POINT_01:
-					me->SetVisible(false);
-					scheduler.Schedule(2s, [this](TaskContext /*context*/)
-					{
-						me->SetVisible(true);
-						me->NearTeleportTo(RhoninPoint02);
-						DoCastSelf(SPELL_PORTAL_CHANNELING_03);
-					});
-					break;
-				default:
-					break;
-			}
-		}
-	}
+    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+    {
+        if (pathId == 1)
+        {
+            me->SetVisible(false);
+            scheduler.Schedule(2s, [this](TaskContext /*context*/)
+            {
+                me->SetVisible(true);
+                me->NearTeleportTo(RhoninPoint02);
+                DoCastSelf(SPELL_PORTAL_CHANNELING_03);
+            });
+        }
+    }
 };
 
 struct npc_kinndy_sparkshine : public CustomAI
@@ -568,7 +558,7 @@ struct npc_kinndy_sparkshine : public CustomAI
 		SPELL_EVOCATION             = 211765,
 		SPELL_ARCANE_BOLT           = 371306,
 		SPELL_UNCONTROLLED_ENERGY   = 388951,
-		SPELL_MANA_BOLT             = 389583,
+		SPELL_ARCANE_SALVO          = 378850,
 	};
 
 	bool evocating;
@@ -588,24 +578,18 @@ struct npc_kinndy_sparkshine : public CustomAI
 		});
 	}
 
-	void MovementInform(uint32 type, uint32 id) override
-	{
-		if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
-		{
-			switch (id)
-			{
-				case MOVEMENT_INFO_POINT_01:
-					me->SetFacingTo(4.62f);
-					me->SetVisible(false);
-					break;
-				case MOVEMENT_INFO_POINT_02:
-					me->SetFacingTo(1.24f);
-					break;
-				default:
-					break;
-			}
-		}
-	}
+    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+    {
+        if (pathId == 1)
+        {
+            me->SetFacingTo(4.62f);
+            me->SetVisible(false);
+        }
+        else if(pathId == 2)
+        {
+            me->SetFacingTo(1.24f);
+        }
+    }
 
 	void AttackStart(Unit* who) override
 	{
@@ -662,7 +646,7 @@ struct npc_kinndy_sparkshine : public CustomAI
 			{
 				if (Unit* target = DoSelectCastingUnit(SPELL_SUPERNOVA, 30.f))
 				{
-					CastStop();
+					CastStop({ SPELL_ARCANE_SALVO });
 					DoCast(target, SPELL_SUPERNOVA);
 				}
 				supernova.Repeat(10s, 15s);
@@ -671,19 +655,19 @@ struct npc_kinndy_sparkshine : public CustomAI
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-					CastStop();
+                    CastStop({ SPELL_ARCANE_SALVO });
 					me->CastSpell(target, SPELL_UNCONTROLLED_ENERGY);
 				}
 				uncontrolled_energy.Repeat(20s, 25s);
 			})
-			.Schedule(10s, 12s, [this](TaskContext mana_bolt)
+			.Schedule(10s, 12s, [this](TaskContext arcane_salvo)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-					CastStop();
-					DoCast(target, SPELL_MANA_BOLT);
+                    CastStop({ SPELL_ARCANE_SALVO });
+					DoCast(target, SPELL_ARCANE_SALVO);
 				}
-				mana_bolt.Repeat(8s, 14s);
+                arcane_salvo.Repeat(8s, 14s);
 			})
 			.Schedule(2s, [this](TaskContext arcane_bolt)
 			{
@@ -702,21 +686,14 @@ struct npc_pained : public ScriptedAI
 
 	InstanceScript* instance;
 
-	void MovementInform(uint32 type, uint32 id) override
-	{
-		if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
-		{
-			switch (id)
-			{
-				case MOVEMENT_INFO_POINT_02:
-					me->SetVisible(false);
-					instance->TriggerGameEvent(EVENT_THE_UNKNOWN_TAUREN);
-					break;
-				default:
-					break;
-			}
-		}
-	}
+    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+    {
+        if (pathId == 1)
+        {
+            me->SetVisible(false);
+            instance->TriggerGameEvent(EVENT_THE_UNKNOWN_TAUREN);
+        }
+    }
 };
 
 struct npc_kalecgos_theramore : public CustomAI
@@ -738,37 +715,31 @@ struct npc_kalecgos_theramore : public CustomAI
 
 	InstanceScript* instance;
 
-	void MovementInform(uint32 type, uint32 id) override
-	{
-		if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
-		{
-			switch (id)
-			{
-				case MOVEMENT_INFO_POINT_01:
-					scheduler.Schedule(1s, [this](TaskContext context)
-					{
-						switch (context.GetRepeatCounter())
-						{
-							case 0:
-								me->CastSpell(me, SPELL_TELEPORT);
-								context.Repeat(4800ms);
-								break;
-							case 1:
-								DoCastSelf(SPELL_DISSOLVE, true);
-								me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-								me->SetImmuneToAll(true);
-								break;
-						}
-					});
-					break;
-				case MOVEMENT_INFO_POINT_02:
-					me->SetVisible(false);
-					break;
-				default:
-					break;
-			}
-		}
-	}
+    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+    {
+        if (pathId == 1)
+        {
+            scheduler.Schedule(1s, [this](TaskContext context)
+            {
+                switch (context.GetRepeatCounter())
+                {
+                    case 0:
+                        me->CastSpell(me, SPELL_TELEPORT);
+                        context.Repeat(4800ms);
+                        break;
+                    case 1:
+                        DoCastSelf(SPELL_DISSOLVE, true);
+                        me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+                        me->SetImmuneToAll(true);
+                        break;
+                }
+            });
+        }
+        else if (pathId == 2)
+        {
+            me->SetVisible(false);
+        }
+    }
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
