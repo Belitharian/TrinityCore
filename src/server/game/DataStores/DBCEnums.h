@@ -177,6 +177,39 @@ enum class AreaMountFlags : uint8
 
 DEFINE_ENUM_FLAG(AreaMountFlags);
 
+enum class AreaTriggerActionSetFlag : uint32
+{
+    None                            = 0x0000,
+    OnlyTriggeredByCaster           = 0x0001,
+    ResurrectIfConditionFails       = 0x0002, /*NYI*/
+    Obsolete                        = 0x0004,
+    AllowWhileGhost                 = 0x0008,
+    AllowWhileDead                  = 0x0010,
+    UnifyAllInstances               = 0x0020, /*NYI*/
+    SuppressConditionError          = 0x0040, // NYI
+    NotTriggeredbyCaster            = 0x0080,
+    CreatorsPartyOnly               = 0x0100,
+    DontRunOnLeaveWhenExpiring      = 0x0200, /*NYI*/
+    CanAffectUninteractible         = 0x0400,
+    DontDespawnWithCreator          = 0x0800, /*NYI*/
+    CanAffectBeastmaster            = 0x1000, // Can affect GMs
+    RequiresLineOfSight             = 0x2000  /*NYI*/
+};
+
+DEFINE_ENUM_FLAG(AreaTriggerActionSetFlag);
+
+enum class AreaTriggerShapeType : int8
+{
+    Sphere                         = 0,
+    Box                            = 1,
+    Unk                            = 2,
+    Polygon                        = 3,
+    Cylinder                       = 4,
+    Disk                           = 5,
+    BoundedPlane                   = 6,
+    Max
+};
+
 enum ArtifactCategory : uint32
 {
     ARTIFACT_CATEGORY_PRIMARY = 1,
@@ -399,9 +432,10 @@ enum class ChrSpecialization : uint32
 
 enum class ContentTuningCalcType : int32
 {
-    Base                        = 0,
-    PlusOne                     = 1,
-    PlusMaxLevelForExpansion    = 2
+    None                    = 0,
+    MinLevel                = 1,
+    MaxLevel                = 2,
+    PrevExpansionMaxLevel   = 3,
 };
 
 enum class ContentTuningFlag : int32
@@ -534,7 +568,7 @@ enum class CriteriaType : int16
     TrackedWorldStateUIModified                    = 30,  // Tracked WorldStateUI value "{WorldStateUI}" is modified
     PVPKillInArea                                  = 31,  // Kill someone in PVP in "{AreaTable}"
     WinArena                                       = 32,  // Win arena "{Map}"
-    ParticipateInArena                             = 33,  /*NYI*/ // Participate in arena "{Map}"
+    ParticipateInArena                             = 33,  // Participate in arena "{Map}"
     LearnOrKnowSpell                               = 34,  // Learn or Know spell "{Spell}"
     EarnHonorableKill                              = 35,  // Earn an honorable kill
     AcquireItem                                    = 36,  // Acquire item "{Item}"
@@ -619,7 +653,7 @@ enum class CriteriaType : int16
     EarnAchievementPoints                          = 115, // Earn achievement points
     RollDisenchant                                 = 116, /*NYI*/ // Roll disenchant and get {#Disenchant Roll}
     RollAnyDisenchant                              = 117, /*NYI*/ // Roll any number on disenchant
-    CompletedLFGDungeon                            = 118, /*NYI*/ // Completed an LFG dungeon
+    CompletedLFGDungeon                            = 118, // Completed an LFG dungeon
     CompletedLFGDungeonWithStrangers               = 119, // Completed an LFG dungeon with strangers
     KickInitiatorInLFGDungeon                      = 120, /*NYI*/ // Kicked in an LFG dungeon (initiator)
     KickVoterInLFGDungeon                          = 121, /*NYI*/ // Kicked in an LFG dungeon (voter)
@@ -652,10 +686,10 @@ enum class CriteriaType : int16
     KickVoterInLFRDungeon                          = 148, /*NYI*/ // Kicked in an LFR dungeon (voter)
     KickTargetInLFRDungeon                         = 149, /*NYI*/ // Kicked in an LFR dungeon (target)
     GroupedTankLeftEarlyInLFRDungeon               = 150, /*NYI*/ // Grouped tank left early in an LFR dungeon
-    CompleteAnyScenario                            = 151, /*NYI*/ // Complete a Scenario
-    CompleteScenario                               = 152, /*NYI*/ // Complete scenario "{Scenario}"
-    EnterAreaTriggerWithActionSet                  = 153, /*NYI*/ // Enter area trigger "{AreaTriggerActionSet}"
-    LeaveAreaTriggerWithActionSet                  = 154, /*NYI*/ // Leave area trigger "{AreaTriggerActionSet}"
+    CompleteAnyScenario                            = 151, // Complete a Scenario
+    CompleteScenario                               = 152, // Complete scenario "{Scenario}"
+    EnterAreaTriggerWithActionSet                  = 153, // Enter area trigger "{AreaTriggerActionSet}"
+    LeaveAreaTriggerWithActionSet                  = 154, // Leave area trigger "{AreaTriggerActionSet}"
     LearnedNewPet                                  = 155, // (Account Only) Learned a new pet
     UniquePetsOwned                                = 156, // (Account Only) Unique pets owned
     AccountObtainPetThroughBattle                  = 157, /*NYI*/ // (Account Only) Obtain a pet through battle
@@ -689,12 +723,12 @@ enum class CriteriaType : int16
     LearnToy                                       = 185, /*NYI*/ // Learn Toy "{Item}"
     LearnAnyToy                                    = 186, /*NYI*/ // Learn Any Toy
     QualityUpgradedForGarrisonFollower             = 187, /*NYI*/ // Garrison Follower: Quality Upgraded
-    LearnHeirloom                                  = 188, /*NYI*/ // Learn Heirloom "{Item}"
-    LearnAnyHeirloom                               = 189, /*NYI*/ // Learn Any Heirloom
-    EarnArtifactXP                                 = 190, /*NYI*/ // Earn Artifact XP
-    AnyArtifactPowerRankPurchased                  = 191, /*NYI*/ // Artifact Power Ranks Purchased
+    LearnHeirloom                                  = 188, // Learn Heirloom "{Item}"
+    LearnAnyHeirloom                               = 189, // Learn Any Heirloom
+    EarnArtifactXP                                 = 190, // Earn Artifact XP
+    AnyArtifactPowerRankPurchased                  = 191, // Artifact Power Ranks Purchased
     LearnTransmog                                  = 192, /*NYI*/ // Learn Transmog "{ItemModifiedAppearance}"
-    LearnAnyTransmog                               = 193, /*NYI*/ // Learn Any Transmog
+    LearnAnyTransmog                               = 193, // Learn Any Transmog
     HonorLevelIncrease                             = 194, // (Player) honor level increase
     PrestigeLevelIncrease                          = 195, /*NYI*/ // (Player) prestige level increase
     ActivelyReachLevel                             = 196, // Actively level to level {#Level}
@@ -748,7 +782,13 @@ enum class CriteriaType : int16
     CompleteTrackingQuest                          = 250, /*NYI*/
 
     GainLevels                                     = 253, // Gain levels
-    Count                                          = 257
+
+    CompleteQuestsCountOnAccount                   = 257, /*NYI*/
+
+    WarbandBankTabPurchased                        = 260, /*NYI*/
+
+    LearnTaxiNode                                  = 262,
+    Count                                          = 263
 };
 
 enum class CriteriaTreeFlags : uint16
@@ -1162,6 +1202,11 @@ enum class ItemContext : uint8
     Template_Character_2                = 98,
     Template_Character_3                = 99,
     Template_Character_4                = 100,
+    Dungeon_Normal_Jackpot              = 101,
+    Dungeon_Heroic_Jackpot              = 102,
+    Dungeon_Mythic_Jackpot              = 103,
+    Delves                              = 104,
+    Timerunning                         = 105,
 
     Max
 };
@@ -1723,6 +1768,25 @@ enum MountFlags
     MOUNT_FLAG_HIDE_IF_UNKNOWN          = 0x40
 };
 
+enum class PathPropertyIndex : uint8
+{
+    UseNewLiquidGenerateCode    = 0,
+    AnimaCableId                = 1,
+    AnimaPlayerCondition        = 2,
+    AnimaStartTaper             = 3,
+    AnimaEndTaper               = 4,
+    VolumeHeight                = 5,
+    AiPathGraphMaxStartDist     = 6,
+    AiPathGraphMinTotalDist     = 7,
+    AiPathGraphAreaControl      = 8,
+    AiPathGraphAreaId           = 9,
+    AiPathGraphWidth            = 10,
+    AiPathDefaultFollowStyle    = 11,
+    AiPathConstrainSteering     = 12,
+    Phase                       = 13,
+    SteepSlopeDegrees           = 14
+};
+
 enum class PhaseEntryFlags : int32
 {
     ReadOnly                = 0x001,
@@ -2099,7 +2163,7 @@ enum class SummonPropertiesFlags : uint32
     DespawnOnSummonerDeath            = 0x00000008, // NYI
     OnlyVisibleToSummoner             = 0x00000010,
     CannotDismissPet                  = 0x00000020, // NYI
-    UseDemonTimeout                   = 0x00000040, // NYI
+    UseDemonTimeout                   = 0x00000040,
     UnlimitedSummons                  = 0x00000080, // NYI
     UseCreatureLevel                  = 0x00000100,
     JoinSummonerSpawnGroup            = 0x00000200, // NYI

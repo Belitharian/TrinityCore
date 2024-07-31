@@ -44,6 +44,7 @@ TC_GAME_API extern DB2Storage<AnimationDataEntry>                   sAnimationDa
 TC_GAME_API extern DB2Storage<AnimKitEntry>                         sAnimKitStore;
 TC_GAME_API extern DB2Storage<AreaTableEntry>                       sAreaTableStore;
 TC_GAME_API extern DB2Storage<AreaTriggerEntry>                     sAreaTriggerStore;
+TC_GAME_API extern DB2Storage<AreaTriggerActionSetEntry>            sAreaTriggerActionSetStore;
 TC_GAME_API extern DB2Storage<ArmorLocationEntry>                   sArmorLocationStore;
 TC_GAME_API extern DB2Storage<ArtifactEntry>                        sArtifactStore;
 TC_GAME_API extern DB2Storage<ArtifactCategoryEntry>                sArtifactCategoryStore;
@@ -181,6 +182,7 @@ TC_GAME_API extern DB2Storage<LanguagesEntry>                       sLanguagesSt
 TC_GAME_API extern DB2Storage<LFGDungeonsEntry>                     sLFGDungeonsStore;
 TC_GAME_API extern DB2Storage<LightEntry>                           sLightStore;
 TC_GAME_API extern DB2Storage<LiquidTypeEntry>                      sLiquidTypeStore;
+TC_GAME_API extern DB2Storage<LocationEntry>                        sLocationStore;
 TC_GAME_API extern DB2Storage<LockEntry>                            sLockStore;
 TC_GAME_API extern DB2Storage<MailTemplateEntry>                    sMailTemplateStore;
 TC_GAME_API extern DB2Storage<MapEntry>                             sMapStore;
@@ -230,6 +232,8 @@ TC_GAME_API extern DB2Storage<SpellClassOptionsEntry>               sSpellClassO
 TC_GAME_API extern DB2Storage<SpellCooldownsEntry>                  sSpellCooldownsStore;
 TC_GAME_API extern DB2Storage<SpellDurationEntry>                   sSpellDurationStore;
 TC_GAME_API extern DB2Storage<SpellEffectEntry>                     sSpellEffectStore;
+TC_GAME_API extern DB2Storage<SpellEmpowerEntry>                    sSpellEmpowerStore;
+TC_GAME_API extern DB2Storage<SpellEmpowerStageEntry>               sSpellEmpowerStageStore;
 TC_GAME_API extern DB2Storage<SpellEquippedItemsEntry>              sSpellEquippedItemsStore;
 TC_GAME_API extern DB2Storage<SpellFocusObjectEntry>                sSpellFocusObjectStore;
 TC_GAME_API extern DB2Storage<SpellInterruptsEntry>                 sSpellInterruptsStore;
@@ -311,6 +315,13 @@ struct ContentTuningLevels
     int16 MaxLevelWithDelta = 0;
     int16 TargetLevelMin = 0;
     int16 TargetLevelMax = 0;
+};
+
+struct PathDb2
+{
+    uint32 ID;
+    std::vector<DBCPosition3D> Locations;
+    std::vector<PathPropertyEntry const*> Properties;
 };
 
 struct ShapeshiftFormModelData
@@ -490,6 +501,7 @@ public:
     ResponseCodes ValidateName(std::wstring const& name, LocaleConstant locale) const;
     static int32 GetNumTalentsAtLevel(uint32 level, Classes playerClass);
     ParagonReputationEntry const* GetParagonReputation(uint32 factionId) const;
+    PathDb2 const* GetPath(uint32 pathId) const;
     std::vector<uint32> const* GetPhasesForGroup(uint32 group) const;
     PowerTypeEntry const* GetPowerTypeEntry(Powers power) const;
     PowerTypeEntry const* GetPowerTypeByName(std::string const& name) const;

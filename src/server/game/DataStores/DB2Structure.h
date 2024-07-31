@@ -33,7 +33,7 @@ struct AchievementEntry
     uint32 ID;
     int16 InstanceID;                                               // -1 = none
     int8 Faction;                                                   // -1 = all, 0 = horde, 1 = alliance
-    int16 Supercedes;                                               // its Achievement parent (can`t start while parent uncomplete, use its Criteria if don`t have own, use its progress on begin)
+    int32 Supercedes;                                               // its Achievement parent (can`t start while parent uncomplete, use its Criteria if don`t have own, use its progress on begin)
     int16 Category;
     int8 MinimumCriteria;                                           // need this count of completed criterias (own or referenced achievement criterias)
     int8 Points;
@@ -177,6 +177,16 @@ struct AreaTriggerEntry
     int16 ShapeID;
     int32 AreaTriggerActionSetID;
     int8 Flags;
+
+    AreaTriggerShapeType GetShapeType() const { return static_cast<AreaTriggerShapeType>(ShapeType); }
+};
+
+struct AreaTriggerActionSetEntry
+{
+    uint32 ID;
+    int32 Flags;
+
+    EnumFlag<AreaTriggerActionSetFlag> GetFlags() const { return static_cast<AreaTriggerActionSetFlag>(Flags); }
 };
 
 struct ArmorLocationEntry
@@ -927,6 +937,8 @@ struct ContentTuningEntry
     uint32 ID;
     int32 Flags;
     int32 ExpansionID;
+    int32 HealthItemLevelCurveID;
+    int32 DamageItemLevelCurveID;
     int32 MinLevel;
     int32 MaxLevel;
     int32 MinLevelType;
@@ -2346,6 +2358,7 @@ struct ItemModifiedAppearanceEntry
     int32 ItemAppearanceID;
     int32 OrderIndex;
     uint8 TransmogSourceTypeEnum;
+    int32 Flags;
 };
 
 struct ItemModifiedAppearanceExtraEntry
@@ -2676,6 +2689,13 @@ struct LiquidTypeEntry
     std::array<float, 4> Coefficient;
 };
 
+struct LocationEntry
+{
+    uint32 ID;
+    DBCPosition3D Pos;
+    std::array<float, 3> Rot;
+};
+
 #define MAX_LOCK_CASE 8
 
 struct LockEntry
@@ -2972,6 +2992,36 @@ struct ParagonReputationEntry
     int32 FactionID;
     int32 LevelThreshold;
     int32 QuestID;
+};
+
+struct PathEntry
+{
+    uint32 ID;
+    uint8 Type;
+    uint8 SplineType;
+    uint8 Red;
+    uint8 Green;
+    uint8 Blue;
+    uint8 Alpha;
+    uint8 Flags;
+};
+
+struct PathNodeEntry
+{
+    uint32 ID;
+    uint16 PathID;
+    int16 Sequence;
+    int32 LocationID;
+};
+
+struct PathPropertyEntry
+{
+    uint32 ID;
+    uint16 PathID;
+    uint8 PropertyIndex;
+    int32 Value;
+
+    PathPropertyIndex GetPropertyIndex() const { return static_cast<PathPropertyIndex>(PropertyIndex); }
 };
 
 struct PhaseEntry
@@ -3611,6 +3661,21 @@ struct SpellEffectEntry
     uint32 SpellID;
 
     SpellEffectAttributes GetEffectAttributes() const { return static_cast<SpellEffectAttributes>(EffectAttributes); }
+};
+
+struct SpellEmpowerEntry
+{
+    uint32 ID;
+    int32 SpellID;
+    int32 Unused1000;
+};
+
+struct SpellEmpowerStageEntry
+{
+    uint32 ID;
+    int32 Stage;
+    int32 DurationMs;
+    uint32 SpellEmpowerID;
 };
 
 struct SpellEquippedItemsEntry

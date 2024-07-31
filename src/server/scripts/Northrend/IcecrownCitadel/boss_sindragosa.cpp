@@ -280,7 +280,6 @@ struct boss_sindragosa : public BossAI
         DoCastSelf(SPELL_PERMAEATING_CHILL);
         Talk(SAY_AGGRO);
         instance->SetBossState(DATA_SINDRAGOSA, IN_PROGRESS);
-        me->SetCombatPulseDelay(5);
         me->setActive(true);
         me->SetFarVisible(true);
         DoZoneInCombat();
@@ -1049,7 +1048,7 @@ class spell_sindragosa_s_fury : public SpellScript
         if (!GetHitUnit()->IsAlive() || !_targetCount)
             return;
 
-        if (GetHitUnit()->IsImmunedToDamage(GetSpellInfo(), &GetEffectInfo()))
+        if (GetHitUnit()->IsImmunedToDamage(GetCaster(), GetSpellInfo(), &GetEffectInfo()))
         {
             GetCaster()->SendSpellDamageImmune(GetHitUnit(), GetSpellInfo()->Id, false);
             return;

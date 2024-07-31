@@ -66,9 +66,10 @@ namespace fs = boost::filesystem;
 
 #if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
 #include "ServiceWin32.h"
-char serviceName[] = "bnetserver";
-char serviceLongName[] = "TrinityCore bnet service";
-char serviceDescription[] = "TrinityCore Battle.net emulator authentication service";
+#include <tchar.h>
+TCHAR serviceName[] = _T("bnetserver");
+TCHAR serviceLongName[] = _T("TrinityCore bnet service");
+TCHAR serviceDescription[] = _T("TrinityCore Battle.net emulator authentication service");
 /*
 * -1 - not in service mode
 *  0 - stopped
@@ -217,7 +218,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    auto sLoginServiceHandle = Trinity::make_unique_ptr_with_deleter(&dummy, [](void*) { sLoginService.StopNetwork(); });
+    auto sLoginServiceHandle = Trinity::make_unique_ptr_with_deleter(&sLoginService, [](Battlenet::LoginRESTService* service) { service->StopNetwork(); });
 
     // Start the listening port (acceptor) for auth connections
     int32 bnport = sConfigMgr->GetIntDefault("BattlenetPort", 1119);
@@ -230,7 +231,7 @@ int main(int argc, char** argv)
     // Get the list of realms for the server
     sRealmList->Initialize(*ioContext, sConfigMgr->GetIntDefault("RealmsStateUpdateDelay", 10));
 
-    auto sRealmListHandle = Trinity::make_unique_ptr_with_deleter(&dummy, [](void*) { sRealmList->Close(); });
+    auto sRealmListHandle = Trinity::make_unique_ptr_with_deleter(sRealmList, [](RealmList* realmList) { realmList->Close(); });
 
     std::string bindIp = sConfigMgr->GetStringDefault("BindIP", "0.0.0.0");
 
@@ -240,7 +241,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    auto sSessionMgrHandle = Trinity::make_unique_ptr_with_deleter(&dummy, [](void*) { sSessionMgr.StopNetwork(); });
+    auto sSessionMgrHandle = Trinity::make_unique_ptr_with_deleter(&sSessionMgr, [](Battlenet::SessionManager* sessMgr) { sessMgr->StopNetwork(); });
 
     // Set signal handlers
     boost::asio::signal_set signals(*ioContext, SIGINT, SIGTERM);

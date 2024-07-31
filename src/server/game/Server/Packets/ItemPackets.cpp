@@ -264,14 +264,14 @@ WorldPacket const* WorldPackets::Item::ItemPushResult::Write()
     for (UiEventToast const& uiEventToast : Toasts)
         _worldPacket << uiEventToast;
 
-    _worldPacket.WriteBit(Pushed);
-    _worldPacket.WriteBit(Created);
-    _worldPacket.WriteBit(Unused_1017);
-    _worldPacket.WriteBits(DisplayText, 3);
-    _worldPacket.WriteBit(IsBonusRoll);
-    _worldPacket.WriteBit(IsEncounterLoot);
-    _worldPacket.WriteBit(CraftingData.has_value());
-    _worldPacket.WriteBit(FirstCraftOperationID.has_value());
+    _worldPacket << Bits<1>(Pushed);
+    _worldPacket << Bits<1>(Created);
+    _worldPacket << Bits<1>(Unused_1017);
+    _worldPacket << Bits<3>(DisplayText);
+    _worldPacket << Bits<1>(IsBonusRoll);
+    _worldPacket << Bits<1>(IsEncounterLoot);
+    _worldPacket << OptionalInit(CraftingData);
+    _worldPacket << OptionalInit(FirstCraftOperationID);
     _worldPacket.FlushBits();
 
     _worldPacket << Item;
@@ -372,4 +372,56 @@ WorldPacket const* WorldPackets::Item::SocketGemsSuccess::Write()
 void WorldPackets::Item::RemoveNewItem::Read()
 {
     _worldPacket >> ItemGuid;
+}
+
+void WorldPackets::Item::ChangeBagSlotFlag::Read()
+{
+    _worldPacket >> BagIndex;
+    FlagToChange = _worldPacket.read<BagSlotFlags, uint32>();
+    On = _worldPacket.ReadBit();
+}
+
+void WorldPackets::Item::ChangeBankBagSlotFlag::Read()
+{
+    _worldPacket >> BagIndex;
+    FlagToChange = _worldPacket.read<BagSlotFlags, uint32>();
+    On = _worldPacket.ReadBit();
+}
+
+void WorldPackets::Item::SetBackpackAutosortDisabled::Read()
+{
+    Disable = _worldPacket.ReadBit();
+}
+
+void WorldPackets::Item::SetBackpackSellJunkDisabled::Read()
+{
+    Disable = _worldPacket.ReadBit();
+}
+
+void WorldPackets::Item::SetBankAutosortDisabled::Read()
+{
+    Disable = _worldPacket.ReadBit();
+}
+
+WorldPacket const* WorldPackets::Item::AddItemPassive::Write()
+{
+    _worldPacket << int32(SpellID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WorldPackets::Item::RemoveItemPassive::Write()
+{
+    _worldPacket << int32(SpellID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WorldPackets::Item::SendItemPassives::Write()
+{
+    _worldPacket << uint32(SpellID.size());
+    if (!SpellID.empty())
+        _worldPacket.append(SpellID.data(), SpellID.size());
+
+    return &_worldPacket;
 }
