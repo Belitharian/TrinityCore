@@ -164,6 +164,8 @@ enum BFTMisc
     SPELL_CHANNEL_BLUE_MOVING           = 381450,
     SPELL_STASIS                        = 398620,
 	SPELL_COSMETIC_LARGE_FIRE           = 414772,
+    SPELL_COSMETIC_EAT_SOUP             = 424589,
+    SPELL_COSMETIC_DRINK                = 154242,
 
 	// GameObjects
     GOB_POWDER_BARREL                   = 294148,

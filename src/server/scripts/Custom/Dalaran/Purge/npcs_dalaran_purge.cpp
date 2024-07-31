@@ -752,7 +752,7 @@ struct npc_mage_commander_zuros : public CustomAI
                 case 4:
                     if (Creature* dummy = DoSummon(NPC_INVISIBLE_STALKER, me->GetPosition(), 20s, TEMPSUMMON_TIMED_DESPAWN))
                         dummy->CastSpell(dummy, SPELL_ARCANE_DETONATION);
-                    events.ScheduleEvent(5, 2s);
+                    events.ScheduleEvent(5, 1500ms);
                     break;
                 case 5:
                     FeingDeath(me);

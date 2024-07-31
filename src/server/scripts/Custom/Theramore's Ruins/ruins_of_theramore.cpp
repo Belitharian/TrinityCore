@@ -234,14 +234,14 @@ struct npc_jaina_ruins : public CustomAI
             {
                 if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                 {
-                    CastStop({ SPELL_ICEBOUND_ESCAPE, SPELL_FRIGID_SHARD });
+                    CastStop({ SPELL_ICEBOUND_ESCAPE, SPELL_RING_OF_ICE, SPELL_FRIGID_SHARD });
                     DoCast(target, SPELL_GRASP_OF_FROST);
                 }
                 grasp_of_frost.Repeat(18s, 32s);
             })
             .Schedule(12s, GROUP_COMBAT, [this](TaskContext arcane_surge)
             {
-                CastStop(SPELL_ICEBOUND_ESCAPE);
+                CastStop({ SPELL_ICEBOUND_ESCAPE, SPELL_RING_OF_ICE });
 
                 me->GetSpellHistory()->ResetCooldown(SPELL_ARCANE_SURGE);
                 me->GetSpellHistory()->ResetCooldown(SPELL_EVOCATION);
@@ -269,7 +269,7 @@ struct npc_jaina_ruins : public CustomAI
 				{
 					if (me->IsWithinDist(target, 10.f))
 					{
-                        CastStop(SPELL_ICEBOUND_ESCAPE);
+                        CastStop({ SPELL_ICEBOUND_ESCAPE, SPELL_RING_OF_ICE });
 						DoCastAOE(SPELL_RING_OF_ICE);
 					}
 					else
@@ -278,7 +278,7 @@ struct npc_jaina_ruins : public CustomAI
 
                         Position dest = me->GetRandomPoint(target->GetPosition(), 6.0f);
 
-                        CastStop(SPELL_ICEBOUND_ESCAPE);
+                        CastStop({ SPELL_ICEBOUND_ESCAPE, SPELL_RING_OF_ICE });
 						me->CastSpell(dest, SPELL_BLINK, true);
 
 						scheduler.Schedule(1s, [this](TaskContext /*ring_of_ice*/)

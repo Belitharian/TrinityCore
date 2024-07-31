@@ -211,9 +211,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						{
 							if (Creature* faithful = citizen->FindNearestCreature(NPC_THERAMORE_FAITHFUL, 10.f))
 								continue;
-							if (citizen->GetEntry() == NPC_ALLIANCE_PEASANT)
-								continue;
-							citizen->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                            if (citizen->GetEntry() == NPC_THERAMORE_CITIZEN_FEMALE || citizen->GetEntry() == NPC_THERAMORE_CITIZEN_MALE)
+                                citizen->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 						}
 					}
 					if (Creature* kinndy = GetKinndy())
@@ -512,10 +511,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case NPC_TRAINING_DUMMY:
 					creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
 					creature->RemoveUnitFlag(UNIT_FLAG_PVP_ENABLING);
-					citizens.push_back(creature->GetGUID());
-					if (phase == BFTPhases::Evacuation)
-						break;
-					creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                    creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                    citizens.push_back(creature->GetGUID());
 					break;
 				case NPC_BISHOP_DELAVEY:
 					creature->SetImmuneToNPC(true);
@@ -1899,10 +1896,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				{
 					case 0:
 						creature->SetStandState(UNIT_STAND_STATE_SIT);
-						creature->SetEmoteState(EMOTE_STATE_EAT);
+						creature->AddAura(SPELL_COSMETIC_EAT_SOUP, creature);
 						break;
 					case 1:
-						creature->SetEmoteState(EMOTE_STATE_WADRUNKSTAND);
+                        creature->SetStandState(UNIT_STAND_STATE_SIT);
+                        creature->AddAura(SPELL_COSMETIC_DRINK, creature);
 						break;
 					default:
 						break;
