@@ -1233,6 +1233,7 @@ bool CriteriaHandler::IsCompletedCriteria(Criteria const* criteria, uint64 requi
         case CriteriaType::CompleteQuest:
         case CriteriaType::LearnOrKnowSpell:
         case CriteriaType::RevealWorldMapOverlay:
+        case CriteriaType::AnyoneTriggerGameEventScenario:
         case CriteriaType::GotHaircut:
         case CriteriaType::EquipItemInSlot:
         case CriteriaType::EquipItem:
