@@ -5045,6 +5045,10 @@ void SpellMgr::LoadSpellInfoCorrections()
 
         if (spellInfo->IsSingleTarget() && !spellInfo->MaxAffectedTargets)
             spellInfo->MaxAffectedTargets = 1;
+
+        // disable can only target players
+        if (spellInfo->HasAttribute(SPELL_ATTR3_ONLY_ON_PLAYER))
+            spellInfo->AttributesEx3 &= ~SPELL_ATTR3_ONLY_ON_PLAYER;
     }
 
     if (SummonPropertiesEntry* properties = const_cast<SummonPropertiesEntry*>(sSummonPropertiesStore.LookupEntry(121)))
