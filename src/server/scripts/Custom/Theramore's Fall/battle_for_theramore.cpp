@@ -66,6 +66,11 @@ struct npc_jaina_theramore : public CustomAI
 		}
 	}
 
+    float GetDamageReductionToUnit() override
+    {
+        return 1.0f;
+    };
+
 	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{
 		if (target->GetEntry() == NPC_THERAMORE_FIRE_CREDIT
@@ -253,6 +258,11 @@ struct npc_archmage_tervosh : public CustomAI
                 break;
         }
     }
+
+    float GetDamageReductionToUnit() override
+    {
+        return 1.0f;
+    };
 
 	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{
@@ -547,7 +557,27 @@ struct npc_rhonin : public CustomAI
 
 struct npc_kinndy_sparkshine : public CustomAI
 {
-	npc_kinndy_sparkshine(Creature* creature) : CustomAI(creature, true, AI_Type::Stay), evocating(false)
+	npc_kinndy_sparkshine(Creature* creature) : CustomAI(creature, true, AI_Type::Stay)
+	{
+	}
+
+    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+    {
+        if (pathId == 1)
+        {
+            me->SetFacingTo(4.62f);
+            me->SetVisible(false);
+        }
+        else if(pathId == 2)
+        {
+            me->SetFacingTo(1.24f);
+        }
+    }
+};
+
+struct npc_tari_cogg : public CustomAI
+{
+    npc_tari_cogg(Creature* creature) : CustomAI(creature, true, AI_Type::Stay), evocating(false)
 	{
 	}
 
@@ -577,19 +607,6 @@ struct npc_kinndy_sparkshine : public CustomAI
 			DoCastSelf(SPELL_RUNIC_INTELLECT);
 		});
 	}
-
-    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
-    {
-        if (pathId == 1)
-        {
-            me->SetFacingTo(4.62f);
-            me->SetVisible(false);
-        }
-        else if(pathId == 2)
-        {
-            me->SetFacingTo(1.24f);
-        }
-    }
 
 	void AttackStart(Unit* who) override
 	{
@@ -858,7 +875,7 @@ struct npc_kalecgos_dragon : public CustomAI
 {
     const float m_circleRadius = 95.0f;
 
-    npc_kalecgos_dragon(Creature* creature) : CustomAI(creature), m_loopTime(0)
+    npc_kalecgos_dragon(Creature* creature) : CustomAI(creature)
     {
         instance = me->GetInstanceScript();
     }
@@ -869,15 +886,6 @@ struct npc_kalecgos_dragon : public CustomAI
     };
 
     InstanceScript* instance;
-    uint64 m_loopTime;
-
-    void Reset() override
-    {
-        CustomAI::Reset();
-
-        float perimeter = 2.f * float(M_PI) * m_circleRadius;
-        m_loopTime = (perimeter / me->GetSpeed(MOVE_RUN)) * 1000.f;
-    }
 
     void SetData(uint32 id, uint32 /*value*/) override
     {
@@ -887,7 +895,7 @@ struct npc_kalecgos_dragon : public CustomAI
             {
                 scheduler.Schedule(1s, [this](TaskContext frost_breath)
                 {
-                    if (roll_chance_i(30))
+                    if (roll_chance_i(10))
                         TalkInCombat(SAY_KALECGOS_SPELL_01);
                     DoCastAOE(SPELL_FROST_BREATH);
                     frost_breath.Repeat(8s, 12s);
@@ -895,22 +903,8 @@ struct npc_kalecgos_dragon : public CustomAI
                 break;
             }
             case DATA_KALECGOS_CIRCLE_EVENT:
-            {
-                scheduler.Schedule(1s, [this](TaskContext circle_path)
-                {
-                    me->GetMotionMaster()->MoveCirclePath
-                    (
-                        TheramorePoint01.GetPositionX(),
-                        TheramorePoint01.GetPositionY(),
-                        TheramorePoint01.GetPositionZ(),
-                        m_circleRadius,
-                        true,
-                        16
-                    );
-                    circle_path.Repeat(Milliseconds(m_loopTime));
-                });
+                me->GetMotionMaster()->MovePath(KalecgosPath01, true, {}, {}, MovementWalkRunSpeedSelectionMode::Default, std::pair<Milliseconds, Milliseconds> { 0s, 0s }, {}, {}, {}, false, {});
                 break;
-            }
             case DATA_KALECGOS_CANCEL_EVENT:
             {
                 me->CastStop();
@@ -933,6 +927,7 @@ void AddSC_battle_for_theramore()
 	RegisterTheramoreAI(npc_amara_leeson);
 	RegisterTheramoreAI(npc_rhonin);
 	RegisterTheramoreAI(npc_kinndy_sparkshine);
+	RegisterTheramoreAI(npc_tari_cogg);
 	RegisterTheramoreAI(npc_pained);
 	RegisterTheramoreAI(npc_kalecgos_theramore);
 	RegisterTheramoreAI(npc_kalecgos_dragon);

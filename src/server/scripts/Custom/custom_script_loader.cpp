@@ -31,6 +31,10 @@ void AddSC_npcs_dalaran_purge();
 void AddSC_instance_dalaran_convo();
 void AddSC_npcs_dalaran_convo();
 
+void AddSC_instance_pit_of_saron_custom();
+void AddSC_pit_of_saron_custom();
+void AddSC_boss_tyrannus_custom();
+
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
 void AddCustomScripts()
@@ -49,4 +53,8 @@ void AddCustomScripts()
 
     AddSC_instance_dalaran_convo();
     AddSC_npcs_dalaran_convo();
+
+    AddSC_instance_pit_of_saron_custom();
+    AddSC_pit_of_saron_custom();
+    AddSC_boss_tyrannus_custom();
 }

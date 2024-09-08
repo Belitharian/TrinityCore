@@ -60,7 +60,7 @@ struct npc_theramore_citizen : public ScriptedAI
 		{
 			case 0:
 			{
-				#ifdef CUSTOM_DEBUG
+				#ifndef CUSTOM_DEBUG
 					for (uint8 i = 0; i < NUMBER_OF_CITIZENS; ++i)
 					{
 						KillRewarder::Reward(player, me, NPC_THERAMORE_CITIZEN_CREDIT);
@@ -71,6 +71,7 @@ struct npc_theramore_citizen : public ScriptedAI
 
 				me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 				me->SetEmoteState(EMOTE_STATE_NONE);
+
 				scheduler.Schedule(5ms, [this, player](TaskContext context)
 				{
 					switch (context.GetRepeatCounter())
@@ -93,6 +94,7 @@ struct npc_theramore_citizen : public ScriptedAI
 							break;
 					}
 				});
+
 				break;
 			}
 		}
@@ -225,7 +227,7 @@ struct npc_theramore_troop : public CustomAI
 		BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
 		if (phase == BFTPhases::Preparation || phase == BFTPhases::Preparation_Rhonin)
 		{
-			#ifdef CUSTOM_DEBUG
+			#ifndef CUSTOM_DEBUG
 				for (uint8 i = 0; i < NUMBER_OF_TROOPS; i++)
 				{
 					KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
@@ -245,7 +247,7 @@ struct npc_theramore_troop : public CustomAI
 						for (Creature* troop : troops)
 						{
 							float orientation = troop->GetOrientation();
-							scheduler.Schedule(5ms, [troop, orientation, player, this](TaskContext context)
+							scheduler.Schedule(2ms, 8ms, [troop, orientation, player, this](TaskContext context)
 							{
 								switch (context.GetRepeatCounter())
 								{
@@ -254,7 +256,7 @@ struct npc_theramore_troop : public CustomAI
 										context.Repeat(1s);
 										break;
 									case 1:
-										troop->PlayDistanceSound(soundEmote);
+										troop->PlayDirectSound(soundEmote, player);
 										troop->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
 										KillRewarder::Reward(player, troop, NPC_THERAMORE_TROOPS_CREDIT);
 										emoteReceived = true;
@@ -314,8 +316,8 @@ struct npc_thader_windermere : public CustomAI
 							context.Repeat(1s);
 							break;
 						case 1:
-							if (Creature* tari = instance->GetCreature(DATA_TARI_COGG))
-								tari->CastSpell(tari, SPELL_PORTAL_CHANNELING_01);
+							if (Creature* kinndy = instance->GetCreature(DATA_KINNDY_SPARKSHINE))
+                                kinndy->CastSpell(kinndy, SPELL_PORTAL_CHANNELING_01);
 							context.Repeat(1800ms);
 							break;
 						case 2:
@@ -1091,12 +1093,12 @@ struct npc_roknah_hag : public npc_theramore_horde
 	{
 		npc_theramore_horde::DamageTaken(attacker, damage, damageType, spellInfo);
 
-		if (roll_chance_i(60))
+		if (roll_chance_i(30))
 		{
 			DoCastSelf(SPELL_MASS_ICE_BARRIER);
 		}
 
-		if (!iceblock && me->HealthBelowPctDamaged(20, damage))
+		if (!iceblock && HealthBelowPct(20))
 		{
 			damage = 0;
 
@@ -1369,7 +1371,7 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 			})
 			.Schedule(3s, [this](TaskContext healing_surge)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
+				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 40))
 				{
 					CastStop(SPELL_HEALING_SURGE);
 					DoCast(target, SPELL_HEALING_SURGE);
@@ -1378,7 +1380,7 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 			})
 			.Schedule(5s, [this](TaskContext riptide)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 80))
+				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
 				{
 					if (!target->HasAura(SPELL_RIPTIDE))
 						DoCast(target, SPELL_RIPTIDE);
@@ -1387,7 +1389,7 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 			})
 			.Schedule(2s, [this](TaskContext healing_tide)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(60.f, 20))
+				if (Unit* target = DoSelectBelowHpPctFriendly(60.f, 5))
 				{
 					Creature* totem = me->FindNearestCreature(NPC_HEALING_TIDE_TOTEM, 60.f);
 					if (!totem)
@@ -1406,7 +1408,7 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 			})
 			.Schedule(2s, [this](TaskContext chain_heal)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 50))
+				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 30))
 					DoCast(target, SPELL_CHAIN_HEAL);
 				chain_heal.Repeat(2s);
 			})
@@ -1546,7 +1548,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 
 struct npc_wave_caller_gruhta : public CustomAI
 {
-    npc_wave_caller_gruhta(Creature* creature) : CustomAI(creature, true, AI_Type::Distance)
+    npc_wave_caller_gruhta(Creature* creature) : CustomAI(creature, true, AI_Type::Hybrid)
 	{
 		instance = creature->GetInstanceScript();
 	}
@@ -1618,7 +1620,7 @@ struct npc_wave_caller_gruhta : public CustomAI
 					CastStop(SPELL_HEALING_WATERS);
 					DoCast(target, SPELL_WATERNADO);
 				}
-				waternado.Repeat(15s, 25s);
+				waternado.Repeat(8s, 15s);
 			})
 			.Schedule(3s, 5s, GROUP_NORMAL, [this](TaskContext healing_waters)
 			{

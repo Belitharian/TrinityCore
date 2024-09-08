@@ -10,7 +10,7 @@
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader "BFT"
 
-//#define CUSTOM_DEBUG
+#define CUSTOM_DEBUG
 
 #define PERITH_LOCATION          3
 #define ARCHMAGES_LOCATION       6
@@ -145,7 +145,6 @@ enum BFTMisc
 	SPELL_TELEPORT_DUMMY                = 51347,
 	SPELL_THERAMORE_EXPLOSION_SCENE     = 128446,
 	SPELL_CHAT_BUBBLE                   = 140812,
-	SPELL_SKYBOX_EFFECT                 = 148137,
     SPELL_FOR_THE_ALLIANCE              = 185265,
     SPELL_ARCANE_FX                     = 200065,
 	SPELL_CAMERA_SHAKE_VOLCANO          = 246439,
@@ -164,8 +163,8 @@ enum BFTMisc
     SPELL_CHANNEL_BLUE_MOVING           = 381450,
     SPELL_STASIS                        = 398620,
 	SPELL_COSMETIC_LARGE_FIRE           = 414772,
-    SPELL_COSMETIC_EAT_SOUP             = 424589,
-    SPELL_COSMETIC_DRINK                = 154242,
+    SPELL_COSMETIC_EAT_SOUP             = 416237,
+    SPELL_COSMETIC_DRINK                = 303243,
 
 	// GameObjects
     GOB_POWDER_BARREL                   = 294148,
@@ -398,12 +397,12 @@ Location const archmagesLocation[ARCHMAGES_LOCATION] =
 Location const actorsRelocation[ACTORS_RELOCATION] =
 {
 	{ DATA_JAINA_PROUDMOORE,     { 0.f, 0.f, 0.f, 0.f }, { -3658.39f, -4372.87f,  9.35f, 0.69f } },
-	{ DATA_KINNDY_SPARKSHINE,    { 0.f, 0.f, 0.f, 0.f }, { -3666.15f, -4519.95f, 10.03f, 2.44f } },
+	{ DATA_TARI_COGG,            { 0.f, 0.f, 0.f, 0.f }, { -3666.15f, -4519.95f, 10.03f, 2.44f } },
 	{ DATA_ARCHMAGE_TERVOSH,     { 0.f, 0.f, 0.f, 0.f }, { -3808.72f, -4541.01f, 10.68f, 3.09f } },
 	{ DATA_HEDRIC_EVENCANE,      { 0.f, 0.f, 0.f, 0.f }, { -3661.38f, -4376.67f,  9.35f, 0.69f } },
 	{ DATA_RHONIN,               { 0.f, 0.f, 0.f, 0.f }, { -3677.44f, -4521.55f, 10.21f, 0.50f } },
 	{ DATA_THALEN_SONGWEAVER,    { 0.f, 0.f, 0.f, 0.f }, { -3652.05f, -4365.66f,  9.53f, 0.69f } },
-	{ DATA_TARI_COGG,            { 0.f, 0.f, 0.f, 0.f }, { -3786.55f, -4276.78f,  7.99f, 1.56f } },
+	{ DATA_KINNDY_SPARKSHINE,            { 0.f, 0.f, 0.f, 0.f }, { -3786.55f, -4276.78f,  7.99f, 1.56f } },
 	{ DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3649.58f, -4369.21f,  9.57f, 0.69f } },
 	{ DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3779.07f, -4276.96f,  7.93f, 1.52f } },
 	{ DATA_KALECGOS,             { 0.f, 0.f, 0.f, 0.f }, { -3730.39f, -4550.39f, 27.11f, 0.54f } }
@@ -522,7 +521,7 @@ WaypointPath const KinndyPath02 =
     WaypointPathFlags::ExactSplinePath
 };
 
-WaypointPath const KalecgosPath01 =
+WaypointPath const KalecPath01 =
 {
     1,
     {
@@ -548,7 +547,7 @@ WaypointPath const KalecgosPath01 =
     WaypointPathFlags::ExactSplinePath
 };
 
-WaypointPath const KalecgosPath02 =
+WaypointPath const KalecPath02 =
 {
     2,
     {
@@ -562,7 +561,7 @@ WaypointPath const KalecgosPath02 =
     WaypointPathFlags::ExactSplinePath
 };
 
-WaypointPath const KalecgosPath03 =
+WaypointPath const KalecPath03 =
 {
     3,
     {
@@ -690,6 +689,21 @@ WaypointPath const JainaPath02 =
     WaypointPathFlags::ExactSplinePath
 };
 
+WaypointPath const KalecgosPath01 =
+{
+    1,
+    {
+        { 0, -3669.02f, -4380.43f, 91.73f, 3.83f },
+        { 1, -3632.02f, -4446.40f, 86.31f, 4.46f },
+        { 2, -3698.27f, -4535.35f, 82.01f, 3.74f },
+        { 3, -3826.22f, -4533.19f, 81.69f, 3.09f },
+        { 4, -3852.28f, -4422.11f, 76.68f, 1.76f },
+        { 5, -3757.79f, -4344.35f, 73.02f, 0.48f }
+    },
+    WaypointMoveType::Run,
+    WaypointPathFlags::FlyingPath
+};
+
 Position const FireLocation[FIRE_LOCATION]
 {
 	{ -3678.40f, -4371.85f, 11.68f, 2.03f },
@@ -761,8 +775,6 @@ Position const ExplodingPoint01 = { -3648.24f, -4364.96f,  9.68f, 3.78f };
 Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f };
 Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };
 Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f };
-Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f };
-Position const TheramorePoint02 = { -3764.61f, -4327.58f,  9.82f, 5.20f };
 
 inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
 {

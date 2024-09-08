@@ -148,16 +148,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			return 0;
 		}
 
-		void OnPlayerEnter(Player* player) override
+		void OnPlayerEnter(Player* /*player*/) override
 		{
             ForceWeather(WEATHER_STATE_THUNDERS, true);
-
-			player->AddAura(SPELL_SKYBOX_EFFECT, player);
-		}
-
-		void OnPlayerLeave(Player* player) override
-		{
-			player->RemoveAurasDueToSpell(SPELL_SKYBOX_EFFECT);
 		}
 
 		void SetData(uint32 dataId, uint32 value) override
@@ -366,13 +359,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* rhonin = GetRhonin())
 					{
 						SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, rhonin);
-
 						rhonin->SetRegenerateHealth(false);
 					}
 					if (Creature* kalecgos = GetKalecgos())
 					{
 						SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, kalecgos);
-
 						kalecgos->SetRegenerateHealth(false);
 					}
 					if (Creature* drok = GetDrok())
@@ -454,7 +445,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				{
 					if (Creature* kalecgos = GetKalec())
 					{
-                        kalecgos->NearTeleportTo(KalecgosPath02.Nodes[0].X, KalecgosPath02.Nodes[0].Y, KalecgosPath02.Nodes[0].Z, *KalecgosPath02.Nodes[0].Orientation);
+                        kalecgos->NearTeleportTo(KalecPath02.Nodes[0].X, KalecPath02.Nodes[0].Y, KalecPath02.Nodes[0].Z, *KalecPath02.Nodes[0].Orientation);
 						kalecgos->SetSpeedRate(MOVE_WALK, 0.85f);
 						kalecgos->SetSpeedRate(MOVE_RUN, 0.85f);
 					}
@@ -686,7 +677,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* kalecgos = GetKalec())
 					{
 						kalecgos->SetSpeedRate(MOVE_WALK, 1.6f);
-						kalecgos->GetMotionMaster()->MovePath(KalecgosPath01, false);
+						kalecgos->GetMotionMaster()->MovePath(KalecPath01, false);
 					}
 					Next(2s);
 					break;
@@ -1008,7 +999,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* hedric = GetHedric())
 					{
 						hedric->SetWalk(true);
-						hedric->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HedricPoint02, false, HedricPoint02.GetOrientation());
+                        hedric->SetFacingTo(0.178294f, true);
+						hedric->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HedricPoint02, true, HedricPoint02.GetOrientation());
 					}
 					Next(500ms);
 					break;
@@ -1106,6 +1098,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					EnsureBarrierHaveDamage();
 					if (Creature* kalecgos = GetKalecgos())
 					{
+                        kalecgos->SetVisible(true);
                         kalecgos->SetSpeed(MOVE_RUN, 25.f);
                         kalecgos->AI()->SetData(DATA_KALECGOS_CIRCLE_EVENT, 0U);
 					}
@@ -1241,13 +1234,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						thader->SetHealth(thader->CountPctFromMaxHealth(5));
 						thader->CastSpell(thader, SPELL_ARCANE_FX);
 
-						if (Creature* tari = GetCreature(DATA_TARI_COGG))
+						if (Creature* kinndy = GetCreature(DATA_KINNDY_SPARKSHINE))
 						{
-							Talk(tari, SAY_BATTLE_06);
-							tari->RemoveAllAuras();
-							tari->SetReactState(REACT_PASSIVE);
-							tari->CastSpell(tari, SPELL_CHANNEL_BLUE_MOVING);
-							tari->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, thader, 0.8f);
+							kinndy->RemoveAllAuras();
+							kinndy->SetReactState(REACT_PASSIVE);
+							kinndy->CastSpell(kinndy, SPELL_CHANNEL_BLUE_MOVING);
+							kinndy->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, thader, 0.8f);
 						}
 					}
 					GetBarrier02()->ResetDoorOrButton();
@@ -1265,6 +1257,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					}
 					if (Creature* kalecgos = GetKalecgos())
 					{
+                        kalecgos->SetVisible(true);
                         kalecgos->AI()->SetData(DATA_KALECGOS_SPELL_EVENT, 0U);
 					}
 					GetJaina()->CastSpell(actorsRelocation[0].destination, SPELL_TELEPORT);
@@ -1286,7 +1279,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					#ifdef CUSTOM_DEBUG
+					#ifndef CUSTOM_DEBUG
 						for (uint8 i = 0; i < HORDE_WAVES_COUNT; i++)
 						{
 							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
@@ -1476,7 +1469,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						kalecgos->SetVisible(true);
 						kalecgos->SetSpeedRate(MOVE_RUN, 0.85f);
-						kalecgos->GetMotionMaster()->MovePath(KalecgosPath02, false);
+						kalecgos->GetMotionMaster()->MovePath(KalecPath02, false);
 					}
 					Next(5s);
 					break;
@@ -1526,7 +1519,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 152:
 					ClearTarget();
-					GetKalec()->GetMotionMaster()->MovePath(KalecgosPath03, false);
+					GetKalec()->GetMotionMaster()->MovePath(KalecPath03, false);
 					Next(2s);
 					break;
 				case 153:
@@ -1545,7 +1538,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* amara = GetAmara())
 					{
 						amara->SetVisible(true);
-						amara->GetMotionMaster()->MovePath(KalecgosPath02, false);
+						amara->GetMotionMaster()->MovePath(KalecPath02, false);
 					}
 					break;
 
@@ -1571,7 +1564,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 159:
 					ClearTarget();
-					GetAmara()->GetMotionMaster()->MovePath(KalecgosPath03, false);
+					GetAmara()->GetMotionMaster()->MovePath(KalecPath03, false);
 					Next(2s);
 					break;
 				case 160:
@@ -1892,19 +1885,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				creature->RemoveAllAuras();
 				creature->Dismount();
 
-				switch (urand(0, 2))
-				{
-					case 0:
-						creature->SetStandState(UNIT_STAND_STATE_SIT);
-						creature->AddAura(SPELL_COSMETIC_EAT_SOUP, creature);
-						break;
-					case 1:
-                        creature->SetStandState(UNIT_STAND_STATE_SIT);
-                        creature->AddAura(SPELL_COSMETIC_DRINK, creature);
-						break;
-					default:
-						break;
-				}
+                if (roll_chance_i(60))
+                {
+                    creature->AddAura(RAND(SPELL_COSMETIC_EAT_SOUP, SPELL_COSMETIC_DRINK), creature);
+                }
 			}
 
 			for (uint8 i = 0; i < ARCHMAGES_RELOCATION; i++)
@@ -2046,11 +2030,26 @@ class scene_theramore_explosion : public SceneScript
 	enum Misc
 	{
 		MAP_THERAMORE_RUINS     = 5001,
+        NPC_BOMB_TARGET         = 65443,
 		SPELL_DROP_BOMBE        = 128438
 	};
 
 	const Position Center = { -3009.70f, -4334.41f, 6.73f, 4.24f };
+	const Position BombPosition = { -3819.17f, -4350.76f, 270.0f, 0.0f };
+
 	const float Distance = 8.f;
+
+    void OnSceneTriggerEvent(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/, std::string const& triggerName) override
+    {
+        if (triggerName == "DropBombServer")
+        {
+            if (Creature* bombModel = player->SummonCreature(WORLD_TRIGGER, BombPosition))
+            {
+                if (Creature* bombTarget = GetClosestCreatureWithEntry(player, NPC_BOMB_TARGET, SIZE_OF_GRIDS))
+                    bombModel->CastSpell(bombTarget, SPELL_DROP_BOMBE);
+            }
+        }
+    }
 
 	void OnSceneStart(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/) override
 	{
