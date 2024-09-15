@@ -1319,7 +1319,6 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 		NPC_HEALING_TIDE_TOTEM  = 65349,
 	};
 
-
 	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spellInfo) override
 	{
 		npc_theramore_horde::DamageTaken(attacker, damage, damageType, spellInfo);
@@ -1509,13 +1508,17 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 			})
 			.Schedule(3s, 5s, [this](TaskContext chaos_bolt)
 			{
+                CastStop(SPELL_DRAIN_LIFE);
 				DoCastVictim(SPELL_CHAOS_BOLT);
 				chaos_bolt.Repeat(5s, 8s);
 			})
 			.Schedule(1ms, [this](TaskContext immolate)
 			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_IMMOLATE))
-					DoCast(target, SPELL_IMMOLATE);
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_IMMOLATE))
+                {
+                    CastStop(SPELL_DRAIN_LIFE);
+                    DoCast(target, SPELL_IMMOLATE);
+                }
 				immolate.Repeat(2s, 5s);
 			})
 			.Schedule(1ms, [this](TaskContext corruption)
@@ -1526,7 +1529,8 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 			})
 			.Schedule(1ms, [this](TaskContext incinerate)
 			{
-				DoCastVictim(SPELL_INCINERATE);
+                CastStop({ SPELL_DRAIN_LIFE, SPELL_CHAOS_BOLT });
+                DoCastVictim(SPELL_INCINERATE);
 				incinerate.Repeat(2s);
 			})
 			.Schedule(12s, 14s, [this](TaskContext mortal_coil)
@@ -1883,7 +1887,7 @@ struct npc_healing_tide_totem : public TotemAI
 	enum Spells
 	{
 		SPELL_HEALING_TIDE_TOTEM_DUMMY      = 114941,
-		SPELL_HEALING_TIDE_TOTEM_HEAL       = 114942,
+		SPELL_HEALING_TIDE_TOTEM_HEAL       = 255021,
 	};
 
 	void Initialize()
