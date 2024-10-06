@@ -381,11 +381,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							tank->KillSelf();
 						}
 					}
-                    instance->DoOnPlayers([this](Player* player)
-                    {
-                        for (uint8 i = 0; i < 20; i++)
-                            player->CastSpell(player, SPELL_FOR_THE_ALLIANCE);
-                    });
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle_Survive);
 					events.ScheduleEvent(91, 10s);
 					break;
@@ -446,6 +441,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* kalecgos = GetKalec())
 					{
                         kalecgos->NearTeleportTo(KalecPath02.Nodes[0].X, KalecPath02.Nodes[0].Y, KalecPath02.Nodes[0].Z, *KalecPath02.Nodes[0].Orientation);
+                        kalecgos->GetMotionMaster()->Clear();
+                        kalecgos->GetMotionMaster()->MoveIdle();
 						kalecgos->SetSpeedRate(MOVE_WALK, 0.85f);
 						kalecgos->SetSpeedRate(MOVE_RUN, 0.85f);
 					}
@@ -454,6 +451,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						rhonin->SetSpeedRate(MOVE_RUN, 0.85f);
 						rhonin->SetSpeedRate(MOVE_WALK, 0.85f);
 						rhonin->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RhoninPoint01, true, RhoninPoint01.GetOrientation());
+
+                        for (uint8 i = 0; i < TOWER_BARRIERS_LOCATION; i++)
+                        {
+                            rhonin->SummonGameObject(GOB_ENERGY_BARRIER_TOWER, TowerBarriers[i].position, TowerBarriers[i].quaternion, 0s);
+                        }
 					}
 					for (uint8 i = 0; i < EVENT_CREATURE_DATA_SIZE; i++)
 					{
@@ -1279,7 +1281,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					#ifndef CUSTOM_DEBUG
+					#ifdef CUSTOM_DEBUG
 						for (uint8 i = 0; i < HORDE_WAVES_COUNT; i++)
 						{
 							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
@@ -1835,11 +1837,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		void RelocateTroops()
 		{
 			SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, GetRhonin());
-
-            instance->DoOnPlayers([this](Player* player)
-            {
-                player->RemoveAurasDueToSpell(SPELL_FOR_THE_ALLIANCE);
-            });
 
 			if (Creature* jaina = GetJaina())
 			{

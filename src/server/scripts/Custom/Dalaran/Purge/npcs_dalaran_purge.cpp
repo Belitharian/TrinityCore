@@ -422,9 +422,9 @@ struct npc_vereesa_windrunner_dalaran : public CustomAI
 
 	enum Spells
 	{
-		SPELL_SHOOT                 = 22907,
-		SPELL_MULTI_SHOOT           = 38310,
 		SPELL_ARCANE_SHOOT          = 255644,
+		SPELL_MULTI_SHOOT           = 384868,
+		SPELL_SHOOT                 = 445949,
 	};
 
 	float GetDistance() override
@@ -481,17 +481,21 @@ struct npc_vereesa_windrunner_dalaran : public CustomAI
 			.Schedule(2s, [this](TaskContext shoot)
 			{
 				DoCastVictim(SPELL_SHOOT);
-				shoot.Repeat(500ms);
+				shoot.Repeat(2s);
 			})
 			.Schedule(8s, [this](TaskContext arcane_shoot)
 			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-					DoCast(target, SPELL_ARCANE_SHOOT);
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                {
+                    CastStop({ SPELL_ARCANE_SHOOT, SPELL_MULTI_SHOOT });
+                    DoCast(target, SPELL_ARCANE_SHOOT);
+                }
 				arcane_shoot.Repeat(1s, 2s);
 			})
 			.Schedule(15s, [this](TaskContext multi_shoot)
 			{
-				DoCastVictim(SPELL_MULTI_SHOOT);
+                CastStop();
+                DoCastVictim(SPELL_MULTI_SHOOT);
 				multi_shoot.Repeat(4s, 8s);
 			});
 	}
@@ -1652,7 +1656,7 @@ struct npc_sunreaver_captain : public CustomAI
 
 	enum Spells
 	{
-		SPELL_BATTER                = 66408,
+		SPELL_BATTER                = 43518,
 		SPELL_RECENTLY_BANDAGED     = 11196,
 		SPELL_RISING_ANGER          = 136323,
 		SPELL_MORTAL_CLEAVE         = 177147,
@@ -2508,11 +2512,10 @@ struct npc_high_arcanist_savor : public CustomAI
         SPELL_AREA_ZONE_FX          = 230330,
 
 		// Savor
-		SPELL_ARCANE_MISSILES       = 5143,
 		SPELL_IMMUNE                = 299144,
-		SPELL_ARCANE_ORB            = 213316,
+		SPELL_LIVING_LEDGERS        = 224745,
 		SPELL_THROW_ARCANE_TOME     = 239101,
-		SPELL_ARCANE_BOLT           = 242170,
+		SPELL_ARCANE_BOLT           = 290007,
 		SPELL_LEVITATE              = 252620,
         SPELL_DELPHURIC_BEAM        = 423771
 	};
@@ -2523,7 +2526,6 @@ struct npc_high_arcanist_savor : public CustomAI
 		NPC_SUNREAVER_PYROMANCER    = 68757,
 		NPC_SUNREAVER_AEGIS         = 68051,
 		NPC_SUNREAVER_SUMMONER      = 68760,
-        NPC_ARCANE_ORB              = 107510,
 		NPC_BOOK_OF_ARCANE          = 120646,
 		NPC_PLAYER_CLONE            = 500018,
 		NPC_HORDE_PEON              = 126471,
@@ -2545,7 +2547,7 @@ struct npc_high_arcanist_savor : public CustomAI
 	{
 		None,
 		Intro,
-		Orb,
+		LivingLedger,
 		Time,
 		Portal,
 		Final
@@ -2554,7 +2556,7 @@ struct npc_high_arcanist_savor : public CustomAI
 	enum Groups
 	{
 		GROUP_ALWAYS,
-		GROUP_ORB,
+		GROUP_LIVING_LEDGERS,
 		GROUP_TIME,
 		GROUP_PORTAL
 	};
@@ -2607,6 +2609,11 @@ struct npc_high_arcanist_savor : public CustomAI
 		CustomAI::JustDied(killer);
 		DoCastOnPlayers(SPELL_SPEED_NORMAL);
 		ClosePortal(sunreaversPortal);
+
+        DoOnPlayers([this](Player* player)
+        {
+            player->RemoveAura(SPELL_ALT_POWER_BAR);
+        });
 	}
 
 	void JustSummoned(Creature* summon) override
@@ -2618,7 +2625,7 @@ struct npc_high_arcanist_savor : public CustomAI
 			case NPC_SUNREAVER_PYROMANCER:
 			case NPC_SUNREAVER_AEGIS:
 			case NPC_SUNREAVER_SUMMONER:
-				summon->SetMaxHealth(me->CountPctFromMaxHealth(urand(20, 35)));
+				summon->SetMaxHealth(me->CountPctFromMaxHealth(urand(8, 15)));
 				summon->SetFullHealth();
 				break;
 		}
@@ -2630,9 +2637,6 @@ struct npc_high_arcanist_savor : public CustomAI
 
 		switch (summon->GetEntry())
 		{
-            case NPC_ARCANE_ORB:
-                summon->DespawnOrUnsummon();
-                break;
 			case NPC_SUNREAVER_PYROMANCER:
 			case NPC_SUNREAVER_AEGIS:
 			case NPC_SUNREAVER_SUMMONER:
@@ -2648,7 +2652,7 @@ struct npc_high_arcanist_savor : public CustomAI
 			case ACTION_ARCANE_ORB_DESPAWN:
 				phase = Phases::Time;
 				me->RemoveAurasDueToSpell(SPELL_IMMUNE);
-				scheduler.CancelGroup(GROUP_ORB);
+				scheduler.CancelGroup(GROUP_LIVING_LEDGERS);
 				scheduler.Schedule(2s, GROUP_TIME, [this](TaskContext spell_speed)
 				{
 					if (lastSpeed == SPELL_SPEED_FAST)
@@ -2736,7 +2740,7 @@ struct npc_high_arcanist_savor : public CustomAI
 
 		// Only in Time phase
 
-		if (HealthBelowPct(20))
+		if (HealthBelowPct(30))
 		{
 			timeCount++;
 			if (phase != Phases::Final && timeCount >= 3)
@@ -2839,14 +2843,14 @@ struct npc_high_arcanist_savor : public CustomAI
         });
 
 		scheduler
-			.Schedule(500ms, [this](TaskContext /*summon_time*/)
+			.Schedule(1ms, [this](TaskContext /*summon_time*/)
 			{
 				SummonPlayerClones();
 			})
-			.Schedule(1s, GROUP_ALWAYS,[this](TaskContext arcane_missiles)
+			.Schedule(2s, GROUP_ALWAYS,[this](TaskContext arcane_bolt)
 			{
-				DoCastVictim(SPELL_ARCANE_MISSILES);
-				arcane_missiles.Repeat(3s);
+				DoCastVictim(SPELL_ARCANE_BOLT);
+                arcane_bolt.Repeat(3s);
 			})
 			.Schedule(10s, GROUP_ALWAYS, [this](TaskContext delphuric_beam)
 			{
@@ -2860,7 +2864,7 @@ struct npc_high_arcanist_savor : public CustomAI
 					DoCast(SPELL_EVOCATION);
 				evocation.Repeat(3s);
 			})
-			.Schedule(5s, GROUP_ORB, [this](TaskContext throw_arcane_tome)
+			.Schedule(5s, GROUP_LIVING_LEDGERS, [this](TaskContext throw_arcane_tome)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
@@ -2869,10 +2873,10 @@ struct npc_high_arcanist_savor : public CustomAI
 				}
 				throw_arcane_tome.Repeat(14s, 45s);
 			})
-			.Schedule(1s, GROUP_ORB, [this](TaskContext arcanic_orb)
+			.Schedule(1s, GROUP_LIVING_LEDGERS, [this](TaskContext /*living_ledgers*/)
 			{
-				phase = Phases::Orb;
-				DoCast(SPELL_ARCANE_ORB);
+				phase = Phases::LivingLedger;
+				DoCast(SPELL_LIVING_LEDGERS);
 			});
 	}
 
@@ -3245,21 +3249,15 @@ struct npc_book_of_arcane_monstrosities : public CustomAI
 {
 	npc_book_of_arcane_monstrosities(Creature* creature) : CustomAI(creature, AI_Type::Distance)
 	{
-		if (GameObject* book = me->SummonGameObject(GOB_OPEN_BOOK_VISUAL, me->GetPosition(), QuaternionData::fromEulerAnglesZYX(me->GetOrientation(), 0.0f, 0.0f), 0s))
-			bookGUID = book->GetGUID();
+
 	}
 
 	enum Misc
 	{
 		// Spells
 		SPELL_CLEANSING_FORCE       = 196115,
-		SPELL_CLEANSING_FORCE_AT    = 196088,
-
-		// Gameobjects
-		GOB_OPEN_BOOK_VISUAL        = 329740
+		SPELL_CLEANSING_FORCE_AT    = 196088
 	};
-
-	ObjectGuid bookGUID;
 
 	void Initialize() override
 	{
@@ -3276,7 +3274,7 @@ struct npc_book_of_arcane_monstrosities : public CustomAI
 		scheduler
 			.Schedule(1ms, [this](TaskContext cleansing_force)
 			{
-				DoCast(me, SPELL_CLEANSING_FORCE);
+				DoCast(me, SPELL_CLEANSING_FORCE, CastSpellExtraArgs(TRIGGERED_CAST_DIRECTLY));
                 DoCast(me, SPELL_CLEANSING_FORCE_AT, true);
 			});
 	}
@@ -3287,18 +3285,9 @@ struct npc_book_of_arcane_monstrosities : public CustomAI
 			me->DespawnOrUnsummon(Milliseconds(spellInfo->GetDuration()));
 	}
 
-	void OnDespawn() override
-	{
-		if (GameObject* book = ObjectAccessor::GetGameObject(*me, bookGUID))
-			book->Delete();
-	}
-
 	void JustDied(Unit* killer) override
 	{
 		CustomAI::JustDied(killer);
-
-		if (GameObject* book = ObjectAccessor::GetGameObject(*me, bookGUID))
-			book->Delete();
 
 		me->DespawnOrUnsummon();
 	}
@@ -3309,12 +3298,11 @@ struct npc_book_of_arcane_monstrosities : public CustomAI
 	}
 };
 
-struct npc_arcane_orb : public CustomAI
+struct npc_living_ledgers : public CustomAI
 {
-	npc_arcane_orb(Creature* creature) : CustomAI(creature, AI_Type::Distance)
+    npc_living_ledgers(Creature* creature) : CustomAI(creature, AI_Type::Distance)
 	{
 		instance = creature->GetInstanceScript();
-
 		me->SetCombatReach(50.f);
 	}
 
@@ -3357,14 +3345,14 @@ struct npc_arcane_orb : public CustomAI
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
-		scheduler.Schedule(1s, [this](TaskContext arcane_barrage)
+		scheduler.Schedule(1ms, [this](TaskContext arcane_barrage)
 		{
             for (auto* ref : me->GetThreatManager().GetUnsortedThreatList())
             {
                 if (Unit* target = ref->GetVictim())
                 {
                     DoCast(target, SPELL_ARCANE_RAIN);
-                    arcane_barrage.Repeat(1s);
+                    arcane_barrage.Repeat(3s);
                 }
             }
 		});
@@ -3631,6 +3619,7 @@ struct at_cleansing_force : AreaTriggerAI
     }
 };
 
+// GameObjects
 struct go_portal_savor : public GameObjectAI
 {
 	go_portal_savor(GameObject* gameobject) : GameObjectAI(gameobject)
@@ -3803,29 +3792,41 @@ class spell_speed : public AuraScript
 	}
 };
 
-// Arcane Orb - 213316
-class spell_arcane_orb : public SpellScript
+// Living Ledgers - 224745
+class spell_living_ledgers : public SpellScript
 {
-	static constexpr uint32 HEALTH_PERCENT = 50;
+	static constexpr uint32 HEALTH_PERCENT = 10;
 
-	PrepareSpellScript(spell_arcane_orb);
+	PrepareSpellScript(spell_living_ledgers);
 
-	void HandleSummon(SpellEffIndex effIndex)
+    enum NPCs
+    {
+        NPC_LIVING_LEDGERS = 112906
+    };
+
+	void HandleDummy(SpellEffIndex effIndex)
 	{
 		PreventHitDefaultEffect(effIndex);
 
         Unit* caster = GetCaster();
-        const Position pos = { caster->GetPositionX(), caster->GetPositionY(), caster->GetPositionZ() + 8.0f };
+        if (!caster)
+            return;
 
-        for (SpellLogEffectGenericVictimParams const& summonedObject : GetSpell()->GetExecuteLogEffectTargets(SPELL_EFFECT_SUMMON, &SpellLogEffect::GenericVictimTargets))
+        uint32 creatureId = NPC_LIVING_LEDGERS;
+        if (sObjectMgr->GetCreatureTemplate(creatureId))
         {
-            if (Creature* summon = ObjectAccessor::GetCreature(*caster, summonedObject.Victim))
+            if (Creature* summon = caster->SummonCreature(creatureId, -852.50885f, 4456.1465f, 653.60596f, 6.630659f))
             {
+                PhasingHandler::InheritPhaseShift(summon, caster);
+
+                summon->SetReactState(REACT_PASSIVE);
+                summon->SetFaction(caster->GetFaction());
+                //summon->SetFacingTo(pos.GetOrientation());
+                summon->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+
                 uint32 maxHealth = caster->CountPctFromMaxHealth(HEALTH_PERCENT);
                 summon->SetMaxHealth(maxHealth);
                 summon->SetFullHealth();
-
-                summon->GetMotionMaster()->MoveRandom(19.0f);
 
                 if (caster->GetVictim())
                     summon->Attack(caster->EnsureVictim(), false);
@@ -3835,7 +3836,7 @@ class spell_arcane_orb : public SpellScript
 
 	void Register() override
 	{
-		OnEffectHit += SpellEffectFn(spell_arcane_orb::HandleSummon, EFFECT_0, SPELL_EFFECT_SUMMON);
+		OnEffectHit += SpellEffectFn(spell_living_ledgers::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
 	}
 };
 
@@ -4086,7 +4087,7 @@ void AddSC_npcs_dalaran_purge()
 	// Special
 	RegisterCreatureAI(npc_arcane_barrier);
 	RegisterCreatureAI(npc_glacial_spike);
-	RegisterCreatureAI(npc_arcane_orb);
+	RegisterCreatureAI(npc_living_ledgers);
 	RegisterCreatureAI(npc_book_of_arcane_monstrosities);
 
 	// Area Triggers
@@ -4102,7 +4103,7 @@ void AddSC_npcs_dalaran_purge()
 	RegisterSpellScript(spell_purge_glacial_spike);
 	RegisterSpellScript(spell_purge_glacial_spike_summon);
 	RegisterSpellScript(spell_speed);
-	RegisterSpellScript(spell_arcane_orb);
+	RegisterSpellScript(spell_living_ledgers);
 	RegisterSpellScript(spell_big_bang);
     RegisterSpellScript(spell_atonement_stormwind_cleric);
     RegisterSpellScript(spell_atonement_effect_stormwind_cleric);

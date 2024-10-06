@@ -15,30 +15,30 @@
 
 struct npc_jaina_theramore : public CustomAI
 {
-    npc_jaina_theramore(Creature* creature) : CustomAI(creature, true, AI_Type::Melee),
-        instance(nullptr)
+	npc_jaina_theramore(Creature* creature) : CustomAI(creature, true, AI_Type::Melee),
+		instance(nullptr)
 	{
-        instance = me->GetInstanceScript();
+		instance = me->GetInstanceScript();
 	}
 
 	enum Spells
 	{
 		SPELL_FIREBALL                  = 20678,
 		SPELL_FIREBLAST                 = 20679,
-        SPELL_SUMMON_WATER_ELEMENTALS   = 20681,
+		SPELL_SUMMON_WATER_ELEMENTALS   = 20681,
 		SPELL_FROSTBOLT_COSMETIC        = 237649,
 		SPELL_LIGHTNING_FX              = 278455,
 		SPELL_BLIZZARD                  = 284968,
-    };
+	};
 
 	InstanceScript* instance;
 
-    void Reset() override
-    {
-        CustomAI::Reset();
+	void Reset() override
+	{
+		CustomAI::Reset();
 
-        textOnCooldown = false;
-    }
+		textOnCooldown = false;
+	}
 
 	void DoAction(int32 actionId) override
 	{
@@ -58,18 +58,18 @@ struct npc_jaina_theramore : public CustomAI
 				break;
 			// Portes Ouest
 			case DATA_WAVE_WEST:
-                me->AI()->Talk(SAY_BATTLE_WEST);
-                break;
-            // Ne rien faire par défaut
-            default:
-                break;
+				me->AI()->Talk(SAY_BATTLE_WEST);
+				break;
+			// Ne rien faire par défaut
+			default:
+				break;
 		}
 	}
 
-    float GetDamageReductionToUnit() override
-    {
-        return 1.0f;
-    };
+	float GetDamageReductionToUnit() override
+	{
+		return 1.0f;
+	};
 
 	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{
@@ -83,17 +83,17 @@ struct npc_jaina_theramore : public CustomAI
 
 	void KilledUnit(Unit* /*victim*/) override
 	{
-        TalkInCombat(SAY_JAINA_SLAY_01);
+		TalkInCombat(SAY_JAINA_SLAY_01);
 	}
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
-        DoCastSelf(SPELL_SUMMON_WATER_ELEMENTALS);
+		DoCastSelf(SPELL_SUMMON_WATER_ELEMENTALS);
 
 		scheduler
 			.Schedule(1s, [this](TaskContext fireball)
 			{
-                TalkInCombat(SAY_JAINA_SPELL_01);
+				TalkInCombat(SAY_JAINA_SPELL_01);
 				DoCastVictim(SPELL_FIREBALL);
 				fireball.Repeat(2s, 8s);
 			})
@@ -105,56 +105,56 @@ struct npc_jaina_theramore : public CustomAI
 			})
 			.Schedule(8s, [this](TaskContext blizzard)
 			{
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                {
-                    TalkInCombat(SAY_JAINA_BLIZZARD_01);
-                    DoCast(target, SPELL_BLIZZARD);
-                }
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+				{
+					TalkInCombat(SAY_JAINA_BLIZZARD_01);
+					DoCast(target, SPELL_BLIZZARD);
+				}
 				blizzard.Repeat(14s, 22s);
 			});
 	}
 
-    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
-    {
-        if (pathId == 1)
-        {
-            me->StopMoving();
-            me->GetMotionMaster()->Clear();
-            me->GetMotionMaster()->MoveIdle();
-            me->SetFacingTo(3.13f);
+	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+	{
+		if (pathId == 1)
+		{
+			me->StopMoving();
+			me->GetMotionMaster()->Clear();
+			me->GetMotionMaster()->MoveIdle();
+			me->SetFacingTo(3.13f);
 
-            if (Creature* hedric = instance->GetCreature(DATA_HEDRIC_EVENCANE))
-            {
-                hedric->StopMoving();
-                hedric->SetSheath(SHEATH_STATE_UNARMED);
-                hedric->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
-                hedric->GetMotionMaster()->Clear();
-                hedric->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HedricPoint03, true, HedricPoint03.GetOrientation());
-                hedric->SetFacingTo(4.99f);
-            }
+			if (Creature* hedric = instance->GetCreature(DATA_HEDRIC_EVENCANE))
+			{
+				hedric->StopMoving();
+				hedric->SetSheath(SHEATH_STATE_UNARMED);
+				hedric->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
+				hedric->GetMotionMaster()->Clear();
+				hedric->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HedricPoint03, true, HedricPoint03.GetOrientation());
+				hedric->SetFacingTo(4.99f);
+			}
 
-            instance->TriggerGameEvent(EVENT_FIND_JAINA_04);
-        }
-        else if (pathId == 2)
-        {
-            me->SetVisible(false);
-            scheduler.Schedule(2s, [this](TaskContext /*context*/)
-            {
-                me->SetVisible(true);
-                me->NearTeleportTo(JainaPoint05);
-                if (GameObject* portal = me->SummonGameObject(GOB_PORTAL_TO_STORMWIND, PortalPoint03, QuaternionData::fromEulerAnglesZYX(PortalPoint03.GetOrientation(), 0.f, 0.f), 0s))
-                    portal->SetObjectScale(0.8f);
-                if (TempSummon* summon = me->SummonCreature(WORLD_TRIGGER, PortalPoint03, TEMPSUMMON_MANUAL_DESPAWN))
-                {
-                    summon->SetObjectScale(1.8f);
-                    summon->CastSpell(summon, SPELL_LIGHTNING_FX, true);
-                }
-                DoCastSelf(SPELL_PORTAL_CHANNELING_01);
+			instance->TriggerGameEvent(EVENT_FIND_JAINA_04);
+		}
+		else if (pathId == 2)
+		{
+			me->SetVisible(false);
+			scheduler.Schedule(2s, [this](TaskContext /*context*/)
+			{
+				me->SetVisible(true);
+				me->NearTeleportTo(JainaPoint05);
+				if (GameObject* portal = me->SummonGameObject(GOB_PORTAL_TO_STORMWIND, PortalPoint03, QuaternionData::fromEulerAnglesZYX(PortalPoint03.GetOrientation(), 0.f, 0.f), 0s))
+					portal->SetObjectScale(0.8f);
+				if (TempSummon* summon = me->SummonCreature(WORLD_TRIGGER, PortalPoint03, TEMPSUMMON_MANUAL_DESPAWN))
+				{
+					summon->SetObjectScale(1.8f);
+					summon->CastSpell(summon, SPELL_LIGHTNING_FX, true);
+				}
+				DoCastSelf(SPELL_PORTAL_CHANNELING_01);
 
-                instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin);
-            });
-        }
-    }
+				instance->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin);
+			});
+		}
+	}
 
 	void MovementInform(uint32 type, uint32 id) override
 	{
@@ -241,28 +241,28 @@ struct npc_archmage_tervosh : public CustomAI
 		SPELL_TONGUES_OF_FLAME      = 412486
 	};
 
-    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
-    {
-        switch (pathId)
-        {
-            case 1:
-                me->SetFacingTo(0.70f);
-                break;
-            case 2:
-                me->SetFacingTo(2.14f);
-                me->SetVisible(false);
-                break;
-            case 3:
-                me->SetFacingTo(4.05f);
-                me->SetEmoteState(EMOTE_STATE_READ);
-                break;
-        }
-    }
+	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+	{
+		switch (pathId)
+		{
+			case 1:
+				me->SetFacingTo(0.70f);
+				break;
+			case 2:
+				me->SetFacingTo(2.14f);
+				me->SetVisible(false);
+				break;
+			case 3:
+				me->SetFacingTo(4.05f);
+				me->SetEmoteState(EMOTE_STATE_READ);
+				break;
+		}
+	}
 
-    float GetDamageReductionToUnit() override
-    {
-        return 1.0f;
-    };
+	float GetDamageReductionToUnit() override
+	{
+		return 1.0f;
+	};
 
 	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{
@@ -380,32 +380,32 @@ struct npc_amara_leeson : public CustomAI
 			});
 	}
 
-    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
-    {
-        if (pathId == 1 || pathId == 3)
-        {
-            me->SetVisible(false);
-        }
-        else if (pathId == 2)
-        {
-            instance->TriggerGameEvent(EVENT_WAIT_ARCHMAGE_LESSON);
-        }
-    }
+	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+	{
+		if (pathId == 1 || pathId == 3)
+		{
+			me->SetVisible(false);
+		}
+		else if (pathId == 2)
+		{
+			instance->TriggerGameEvent(EVENT_WAIT_ARCHMAGE_LESSON);
+		}
+	}
 };
 
 struct npc_rhonin : public CustomAI
 {
 	enum Misc
 	{
-        // Gossip
+		// Gossip
 		GOSSIP_MENU_DEFAULT         = 65001,
 
-        // NPCs
+		// NPCs
 		NPC_ARCANIC_CRYSTAL         = 86602,
 
-        // Spells
-        SPELL_ARCANE_AFFINITY       = 173213,
-        SPELL_SHIELD_PLAYERS        = 388194,
+		// Spells
+		SPELL_ARCANE_AFFINITY       = 173213,
+		SPELL_SHIELD_PLAYERS        = 388194,
 	};
 
 	enum Groups
@@ -515,7 +515,7 @@ struct npc_rhonin : public CustomAI
 					if (Creature* crystal = me->SummonCreature(NPC_ARCANIC_CRYSTAL, pos, TEMPSUMMON_TIMED_DESPAWN, 31s))
 					{
 						crystal->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-                        crystal->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+						crystal->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						crystal->SetFaction(me->GetFaction());
 						crystal->SetCanMelee(false);
 						crystal->SetControlled(true, UNIT_STATE_ROOT);
@@ -533,26 +533,26 @@ struct npc_rhonin : public CustomAI
 
 					CastStop();
 					DoCast(SPELL_ARCANE_PULSE);
-                    arcane_pulse.Repeat(2s);
+					arcane_pulse.Repeat(2s);
 				}
 				else
-                    arcane_pulse.Repeat(5ms);
+					arcane_pulse.Repeat(5ms);
 			});
 	}
 
-    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
-    {
-        if (pathId == 1)
-        {
-            me->SetVisible(false);
-            scheduler.Schedule(2s, [this](TaskContext /*context*/)
-            {
-                me->SetVisible(true);
-                me->NearTeleportTo(RhoninPoint02);
-                DoCastSelf(SPELL_PORTAL_CHANNELING_03);
-            });
-        }
-    }
+	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+	{
+		if (pathId == 1)
+		{
+			me->SetVisible(false);
+			scheduler.Schedule(2s, [this](TaskContext /*context*/)
+			{
+				me->SetVisible(true);
+				me->NearTeleportTo(RhoninPoint02);
+				DoCastSelf(SPELL_PORTAL_CHANNELING_03);
+			});
+		}
+	}
 };
 
 struct npc_kinndy_sparkshine : public CustomAI
@@ -561,23 +561,23 @@ struct npc_kinndy_sparkshine : public CustomAI
 	{
 	}
 
-    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
-    {
-        if (pathId == 1)
-        {
-            me->SetFacingTo(4.62f);
-            me->SetVisible(false);
-        }
-        else if(pathId == 2)
-        {
-            me->SetFacingTo(1.24f);
-        }
-    }
+	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+	{
+		if (pathId == 1)
+		{
+			me->SetFacingTo(4.62f);
+			me->SetVisible(false);
+		}
+		else if(pathId == 2)
+		{
+			me->SetFacingTo(1.24f);
+		}
+	}
 };
 
 struct npc_tari_cogg : public CustomAI
 {
-    npc_tari_cogg(Creature* creature) : CustomAI(creature, true, AI_Type::Stay), evocating(false)
+	npc_tari_cogg(Creature* creature) : CustomAI(creature, true, AI_Type::Stay), evocating(false)
 	{
 	}
 
@@ -672,7 +672,7 @@ struct npc_tari_cogg : public CustomAI
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-                    CastStop({ SPELL_ARCANE_SALVO });
+					CastStop({ SPELL_ARCANE_SALVO });
 					me->CastSpell(target, SPELL_UNCONTROLLED_ENERGY);
 				}
 				uncontrolled_energy.Repeat(20s, 25s);
@@ -681,10 +681,10 @@ struct npc_tari_cogg : public CustomAI
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-                    CastStop({ SPELL_ARCANE_SALVO });
+					CastStop({ SPELL_ARCANE_SALVO });
 					DoCast(target, SPELL_ARCANE_SALVO);
 				}
-                arcane_salvo.Repeat(8s, 14s);
+				arcane_salvo.Repeat(8s, 14s);
 			})
 			.Schedule(2s, [this](TaskContext arcane_bolt)
 			{
@@ -703,14 +703,14 @@ struct npc_pained : public ScriptedAI
 
 	InstanceScript* instance;
 
-    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
-    {
-        if (pathId == 1)
-        {
-            me->SetVisible(false);
-            instance->TriggerGameEvent(EVENT_THE_UNKNOWN_TAUREN);
-        }
-    }
+	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+	{
+		if (pathId == 1)
+		{
+			me->SetVisible(false);
+			instance->TriggerGameEvent(EVENT_THE_UNKNOWN_TAUREN);
+		}
+	}
 };
 
 struct npc_kalecgos_theramore : public CustomAI
@@ -723,40 +723,40 @@ struct npc_kalecgos_theramore : public CustomAI
 	enum Spells
 	{
 		SPELL_COMET_STORM           = 153595,
-        SPELL_ICE_NOVA              = 157997,
+		SPELL_ICE_NOVA              = 157997,
 		SPELL_DISSOLVE              = 255295,
-        SPELL_FROSTBOLT             = 284703,
+		SPELL_FROSTBOLT             = 284703,
 		SPELL_FROZEN_BEAM           = 391825,
 		SPELL_TELEPORT              = 400542,
 	};
 
 	InstanceScript* instance;
 
-    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
-    {
-        if (pathId == 1)
-        {
-            scheduler.Schedule(1s, [this](TaskContext context)
-            {
-                switch (context.GetRepeatCounter())
-                {
-                    case 0:
-                        me->CastSpell(me, SPELL_TELEPORT);
-                        context.Repeat(4800ms);
-                        break;
-                    case 1:
-                        DoCastSelf(SPELL_DISSOLVE, true);
-                        me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-                        me->SetImmuneToAll(true);
-                        break;
-                }
-            });
-        }
-        else if (pathId == 2)
-        {
-            me->SetVisible(false);
-        }
-    }
+	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+	{
+		if (pathId == 1)
+		{
+			scheduler.Schedule(1s, [this](TaskContext context)
+			{
+				switch (context.GetRepeatCounter())
+				{
+					case 0:
+						me->CastSpell(me, SPELL_TELEPORT);
+						context.Repeat(4800ms);
+						break;
+					case 1:
+						DoCastSelf(SPELL_DISSOLVE, true);
+						me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+						me->SetImmuneToAll(true);
+						break;
+				}
+			});
+		}
+		else if (pathId == 2)
+		{
+			me->SetVisible(false);
+		}
+	}
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
@@ -765,10 +765,10 @@ struct npc_kalecgos_theramore : public CustomAI
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-                    CastStop({ SPELL_FROZEN_BEAM });
+					CastStop({ SPELL_FROZEN_BEAM });
 					DoCast(target, SPELL_FROZEN_BEAM);
 				}
-                frozen_beam.Repeat(14s, 22s);
+				frozen_beam.Repeat(14s, 22s);
 			})
 			.Schedule(12s, 18s, [this](TaskContext comet_barrage)
 			{
@@ -797,37 +797,37 @@ struct npc_kalecgos_theramore : public CustomAI
 			});
 	}
 
-    void UpdateAI(uint32 diff) override
-    {
-        scheduler.Update(diff, [this]
-        {
-            if (UpdateVictim())
-            {
-                DoSpellAttackIfReady(SPELL_FROSTBOLT);
+	void UpdateAI(uint32 diff) override
+	{
+		scheduler.Update(diff, [this]
+		{
+			if (UpdateVictim())
+			{
+				DoSpellAttackIfReady(SPELL_FROSTBOLT);
 
-                if (Unit* target = me->GetVictim())
-                {
-                    if (!me->IsWithinLOSInMap(target))
-                    {
-                        SetCombatMove(true, GetDistance());
-                    }
-                    else
-                    {
-                        if (me->IsInRange(target, me->GetCombatReach(), GetDistance()))
-                        {
-                            me->SetCanMelee(false);
-                            SetCombatMove(false);
-                        }
-                        else
-                        {
-                            me->SetCanMelee(true);
-                            SetCombatMove(true, GetDistance());
-                        }
-                    }
-                }
-            }
-        });
-    }
+				if (Unit* target = me->GetVictim())
+				{
+					if (!me->IsWithinLOSInMap(target))
+					{
+						SetCombatMove(true, GetDistance());
+					}
+					else
+					{
+						if (me->IsInRange(target, me->GetCombatReach(), GetDistance()))
+						{
+							me->SetCanMelee(false);
+							SetCombatMove(false);
+						}
+						else
+						{
+							me->SetCanMelee(true);
+							SetCombatMove(true, GetDistance());
+						}
+					}
+				}
+			}
+		});
+	}
 };
 
 struct npc_ziradormi_theramore : public CustomAI
@@ -875,7 +875,7 @@ struct npc_kalecgos_dragon : public CustomAI
 {
     const float m_circleRadius = 95.0f;
 
-    npc_kalecgos_dragon(Creature* creature) : CustomAI(creature)
+    npc_kalecgos_dragon(Creature* creature) : CustomAI(creature), m_loopTime(0)
     {
         instance = me->GetInstanceScript();
     }
@@ -886,6 +886,15 @@ struct npc_kalecgos_dragon : public CustomAI
     };
 
     InstanceScript* instance;
+    uint64 m_loopTime;
+
+    void Reset() override
+    {
+        CustomAI::Reset();
+
+        float perimeter = 2.f * float(M_PI) * m_circleRadius;
+        m_loopTime = (perimeter / me->GetSpeed(MOVE_RUN)) * 1000.f;
+    }
 
     void SetData(uint32 id, uint32 /*value*/) override
     {
@@ -895,7 +904,7 @@ struct npc_kalecgos_dragon : public CustomAI
             {
                 scheduler.Schedule(1s, [this](TaskContext frost_breath)
                 {
-                    if (roll_chance_i(10))
+                    if (roll_chance_i(30))
                         TalkInCombat(SAY_KALECGOS_SPELL_01);
                     DoCastAOE(SPELL_FROST_BREATH);
                     frost_breath.Repeat(8s, 12s);
@@ -903,8 +912,22 @@ struct npc_kalecgos_dragon : public CustomAI
                 break;
             }
             case DATA_KALECGOS_CIRCLE_EVENT:
-                me->GetMotionMaster()->MovePath(KalecgosPath01, true, {}, {}, MovementWalkRunSpeedSelectionMode::Default, std::pair<Milliseconds, Milliseconds> { 0s, 0s }, {}, {}, {}, false, {});
+            {
+                scheduler.Schedule(1s, [this](TaskContext circle_path)
+                {
+                    me->GetMotionMaster()->MoveCirclePath
+                    (
+                        TheramorePoint01.GetPositionX(),
+                        TheramorePoint01.GetPositionY(),
+                        TheramorePoint01.GetPositionZ(),
+                        m_circleRadius,
+                        true,
+                        16
+                    );
+                    circle_path.Repeat(Milliseconds(m_loopTime));
+                });
                 break;
+            }
             case DATA_KALECGOS_CANCEL_EVENT:
             {
                 me->CastStop();
@@ -916,7 +939,6 @@ struct npc_kalecgos_dragon : public CustomAI
         }
     }
 };
-
 
 void AddSC_battle_for_theramore()
 {

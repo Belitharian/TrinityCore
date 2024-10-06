@@ -60,7 +60,7 @@ struct npc_theramore_citizen : public ScriptedAI
 		{
 			case 0:
 			{
-				#ifndef CUSTOM_DEBUG
+				#ifdef CUSTOM_DEBUG
 					for (uint8 i = 0; i < NUMBER_OF_CITIZENS; ++i)
 					{
 						KillRewarder::Reward(player, me, NPC_THERAMORE_CITIZEN_CREDIT);
@@ -227,7 +227,7 @@ struct npc_theramore_troop : public CustomAI
 		BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
 		if (phase == BFTPhases::Preparation || phase == BFTPhases::Preparation_Rhonin)
 		{
-			#ifndef CUSTOM_DEBUG
+			#ifdef CUSTOM_DEBUG
 				for (uint8 i = 0; i < NUMBER_OF_TROOPS; i++)
 				{
 					KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
@@ -440,10 +440,9 @@ struct npc_theramore_officier : public npc_theramore_troop
 		SPELL_DIVINE_SHIELD         = 642,
 		SPELL_HOLY_SHOCK            = 20473,
 		SPELL_LIGHT_HAMMER          = 114158,
-		SPELL_DIVINE_STORM          = 183897,
+		SPELL_DIVINE_STORM          = 444705,
 		SPELL_HEAL                  = 225638,
 		SPELL_EXARCH_BLADE          = 268742,
-		SPELL_CONSECRATED_GROUND    = 268918,
 		SPELL_AVENGING_WRATH        = 292266,
 		SPELL_CRUSADER_STRIKE       = 295670,
 		SPELL_HOLY_LIGHT            = 295698,
@@ -451,6 +450,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 		SPELL_LIGHT_OF_DAWN         = 295710,
 		SPELL_BLESSING_OF_FREEDOM   = 299256,
 		SPELL_REBUKE                = 405397,
+		SPELL_CONSECRATION          = 424429,
 	};
 
 	bool healthLow;
@@ -566,10 +566,10 @@ struct npc_theramore_officier : public npc_theramore_troop
 				DoCast(SPELL_EXARCH_BLADE);
 				exarch_blade.Repeat(30s);
 			})
-			.Schedule(3s, 15s, [this](TaskContext consecrated_ground)
+			.Schedule(3s, 15s, [this](TaskContext consecration)
 			{
-				DoCast(SPELL_CONSECRATED_GROUND);
-				consecrated_ground.Repeat(31s);
+				DoCast(SPELL_CONSECRATION);
+                consecration.Repeat(31s);
 			})
 			.Schedule(8s, 14s, [this](TaskContext divine_storm)
 			{
@@ -1624,7 +1624,7 @@ struct npc_wave_caller_gruhta : public CustomAI
 					CastStop(SPELL_HEALING_WATERS);
 					DoCast(target, SPELL_WATERNADO);
 				}
-				waternado.Repeat(8s, 15s);
+				waternado.Repeat(4s, 10s);
 			})
 			.Schedule(3s, 5s, GROUP_NORMAL, [this](TaskContext healing_waters)
 			{
@@ -2160,37 +2160,34 @@ struct at_waternado : AreaTriggerAI
 
 // Consecrated Ground
 // AreaTriggerID - 13272
-struct at_consecrated_ground : AreaTriggerAI
+struct at_consecration : AreaTriggerAI
 {
-	at_consecrated_ground(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
+    at_consecration(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
 	{
 	}
 
 	enum Spells
 	{
-		SPELL_CONSECRATED_GROUND = 268923
+		SPELL_CONSECRATION = 424430
 	};
 
 	void OnUnitEnter(Unit* /*unit*/) override
 	{
-		if (Unit* caster = at->GetCaster())
-		{
-			for (ObjectGuid unit : at->GetInsideUnits())
-			{
-				if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
-				{
-					if (caster->IsFriendlyTo(target))
-						continue;
-
-					target->CastSpell(target, SPELL_CONSECRATED_GROUND);
-				}
-			}
-		}
+        if (Unit* caster = at->GetCaster())
+        {
+            for (ObjectGuid unit : at->GetInsideUnits())
+            {
+                if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
+                {
+                    caster->CastSpell(target, SPELL_CONSECRATION, true);
+                }
+            }
+        }
 	}
 
 	void OnUnitExit(Unit* unit) override
 	{
-		unit->RemoveAurasDueToSpell(SPELL_CONSECRATED_GROUND);
+		unit->RemoveAurasDueToSpell(SPELL_CONSECRATION);
 	}
 
 	void OnRemove() override
@@ -2201,7 +2198,7 @@ struct at_consecrated_ground : AreaTriggerAI
 			{
 				if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
 				{
-					target->RemoveAurasDueToSpell(SPELL_CONSECRATED_GROUND);
+					target->RemoveAurasDueToSpell(SPELL_CONSECRATION);
 				}
 			}
 		}
@@ -2337,7 +2334,7 @@ void AddSC_npcs_battle_for_theramore()
 
 	RegisterAreaTriggerAI(at_blizzard_theramore);
 	RegisterAreaTriggerAI(at_waternado);
-	RegisterAreaTriggerAI(at_consecrated_ground);
+	RegisterAreaTriggerAI(at_consecration);
 	RegisterAreaTriggerAI(at_uncontrolled_energy);
 	RegisterAreaTriggerAI(at_arcane_rift);
 	RegisterAreaTriggerAI(at_scorched_earth);
