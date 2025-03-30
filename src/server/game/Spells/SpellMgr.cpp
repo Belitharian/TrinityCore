@@ -3890,12 +3890,6 @@ void SpellMgr::LoadSpellInfoCorrections()
         });
     });
 
-    // Gathering Storms
-    ApplySpellFix({ 198300 }, [](SpellInfo* spellInfo)
-    {
-        spellInfo->ProcCharges = 1; // override proc charges, has 0 (unlimited) in db2
-    });
-
     ApplySpellFix({
         15538, // Gout of Flame
         42490, // Energized!
@@ -5012,6 +5006,15 @@ void SpellMgr::LoadSpellInfoCorrections()
     ApplySpellFix({ 61882 }, [](SpellInfo* spellInfo)
     {
         spellInfo->NegativeEffects[EFFECT_2] = true;
+    });
+
+    // Sundering
+    ApplySpellFix({ 197214 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_2, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TargetB = SpellImplicitTargetInfo();
+        });
     });
 
     // Headless Horseman Climax - Return Head (Hallow End)
