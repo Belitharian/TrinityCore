@@ -26,11 +26,6 @@ struct npc_elandra_koreln : public CustomAI
 		SPELL_BLINK                 = 284877,
 	};
 
-	float GetDistance() override
-	{
-		return 25.0f;
-	}
-
 	void OnSpellCast(SpellInfo const* spellInfo) override
 	{
 		if (spellInfo->Id == SPELL_FROST_NOVA)

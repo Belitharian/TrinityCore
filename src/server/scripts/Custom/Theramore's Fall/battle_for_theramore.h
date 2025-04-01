@@ -163,8 +163,8 @@ enum BFTMisc
 	SPELL_CHANNEL_BLUE_MOVING           = 381450,
 	SPELL_STASIS                        = 398620,
 	SPELL_COSMETIC_LARGE_FIRE           = 414772,
-	SPELL_COSMETIC_EAT_SOUP             = 416237,
-	SPELL_COSMETIC_DRINK                = 303243,
+	SPELL_COSMETIC_EAT_SOUP             = 364139,
+	SPELL_COSMETIC_DRINK                = 162443,
 
 	// GameObjects
 	GOB_POWDER_BARREL                   = 294148,
@@ -173,9 +173,9 @@ enum BFTMisc
 	GOB_PORTAL_TO_STORMWIND             = 353823,
 	GOB_PORTAL_TO_DALARAN               = 323842,
 	GOB_PORTAL_TO_ORGRIMMAR             = 353822,
-	GOB_LAVISH_REFRESHMENT_TABLE        = 550006,
 	GOB_ENERGY_BARRIER                  = 369744,
 	GOB_ENERGY_BARRIER_TOWER            = 396264,
+	GOB_LAVISH_REFRESHMENT_TABLE        = 1550006,
 
 	// Criteria Trees
 	CRITERIA_TREE_FIND_JAINA            = 1000000,
@@ -380,20 +380,20 @@ struct Location
 
 struct GameObjectLocation
 {
-    Position const position;
-    QuaternionData const quaternion;
+	Position const position;
+	QuaternionData const quaternion;
 };
 
 GameObjectLocation const TowerBarriers[TOWER_BARRIERS_LOCATION] =
 {
-    { { -3775.72f, -4424.06f, 73.0f, 2.25690f }, {-0.0f, -0.0f, -0.9127f, -0.4084f}},
-    { { -3731.16f, -4424.06f, 73.0f, 0.73719f }, { -0.0f, -0.0f, -0.4084f, -0.9127f } },
-    { { -3775.72f, -4467.93f, 73.0f, 3.91021f }, { -0.0f, -0.0f, -0.9127f,  0.4084f } },
-    { { -3731.16f, -4467.93f, 73.0f, 5.44171f }, { -0.0f, -0.0f, -0.4084f,  0.9127f } },
-    { { -3753.52f, -4469.50f, 50.0f, 4.72598f }, { -0.0f, -0.0f, -0.7071f,  0.7071f } },
-    { { -3778.52f, -4444.50f, 50.0f, 3.93074f }, {  0.0f,  1.0f,  0.0000f,  0.0000f } },
-    { { -3753.52f, -4419.50f, 50.0f, 1.57061f }, { -0.0f, -0.0f, -0.7071f, -0.7071f } },
-    { { -3728.52f, -4444.50f, 50.0f, 6.28106f }, { -0.0f, -0.0f,  0.0000f,  0.7071f } },
+	{ { -3775.72f, -4424.06f, 73.0f, 2.25690f }, {-0.0f, -0.0f, -0.9127f, -0.4084f}},
+	{ { -3731.16f, -4424.06f, 73.0f, 0.73719f }, { -0.0f, -0.0f, -0.4084f, -0.9127f } },
+	{ { -3775.72f, -4467.93f, 73.0f, 3.91021f }, { -0.0f, -0.0f, -0.9127f,  0.4084f } },
+	{ { -3731.16f, -4467.93f, 73.0f, 5.44171f }, { -0.0f, -0.0f, -0.4084f,  0.9127f } },
+	{ { -3753.52f, -4469.50f, 50.0f, 4.72598f }, { -0.0f, -0.0f, -0.7071f,  0.7071f } },
+	{ { -3778.52f, -4444.50f, 50.0f, 3.93074f }, {  0.0f,  1.0f,  0.0000f,  0.0000f } },
+	{ { -3753.52f, -4419.50f, 50.0f, 1.57061f }, { -0.0f, -0.0f, -0.7071f, -0.7071f } },
+	{ { -3728.52f, -4444.50f, 50.0f, 6.28106f }, { -0.0f, -0.0f,  0.0000f,  0.7071f } },
 };
 
 Location const perithLocation[PERITH_LOCATION] =
@@ -421,7 +421,7 @@ Location const actorsRelocation[ACTORS_RELOCATION] =
 	{ DATA_HEDRIC_EVENCANE,      { 0.f, 0.f, 0.f, 0.f }, { -3661.38f, -4376.67f,  9.35f, 0.69f } },
 	{ DATA_RHONIN,               { 0.f, 0.f, 0.f, 0.f }, { -3677.44f, -4521.55f, 10.21f, 0.50f } },
 	{ DATA_THALEN_SONGWEAVER,    { 0.f, 0.f, 0.f, 0.f }, { -3652.05f, -4365.66f,  9.53f, 0.69f } },
-	{ DATA_KINNDY_SPARKSHINE,            { 0.f, 0.f, 0.f, 0.f }, { -3786.55f, -4276.78f,  7.99f, 1.56f } },
+	{ DATA_KINNDY_SPARKSHINE,    { 0.f, 0.f, 0.f, 0.f }, { -3786.55f, -4276.78f,  7.99f, 1.56f } },
 	{ DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3649.58f, -4369.21f,  9.57f, 0.69f } },
 	{ DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3779.07f, -4276.96f,  7.93f, 1.52f } },
 	{ DATA_KALECGOS,             { 0.f, 0.f, 0.f, 0.f }, { -3730.39f, -4550.39f, 27.11f, 0.54f } }
@@ -449,7 +449,7 @@ WaypointPath const TervoshPath01 =
 		{ 5, -3749.70f, -4440.37f, 30.54f, 0.46f }
 	},
 	WaypointMoveType::Walk,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const TervoshPath02 =
@@ -468,7 +468,7 @@ WaypointPath const TervoshPath02 =
 		{ 9, -3760.45f, -4442.08f, 35.21f, 2.08f }
 	},
 	WaypointMoveType::Walk,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const TervoshPath03 =
@@ -493,7 +493,7 @@ WaypointPath const TervoshPath03 =
 		{ 15, -3757.23f, -4449.74f, 30.55f, 4.07f }
 	},
 	WaypointMoveType::Walk,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const KinndyPath01 =
@@ -518,7 +518,7 @@ WaypointPath const KinndyPath01 =
 		{ 15, -3762.73f, -4450.42f, 37.99f, 4.62f }
 	},
 	WaypointMoveType::Walk,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const KinndyPath02 =
@@ -537,7 +537,7 @@ WaypointPath const KinndyPath02 =
 		{ 9, -3745.87f, -4443.12f, 30.55f, 3.83f }
 	},
 	WaypointMoveType::Walk,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const KalecPath01 =
@@ -563,7 +563,7 @@ WaypointPath const KalecPath01 =
 		{ 16, -3685.71f, -4390.25f, 10.67f, 0.45f }
 	},
 	WaypointMoveType::Walk,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const KalecPath02 =
@@ -577,7 +577,7 @@ WaypointPath const KalecPath02 =
 		{ 4, -3621.30f, -4459.18f, 13.62f, 4.72f }
 	},
 	WaypointMoveType::Run,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const KalecPath03 =
@@ -591,7 +591,7 @@ WaypointPath const KalecPath03 =
 		{ 4, -3615.43f, -4440.26f, 14.23f, 4.72f }
 	},
 	WaypointMoveType::Run,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const RhoninPath01 =
@@ -606,7 +606,7 @@ WaypointPath const RhoninPath01 =
 		{ 5, -3615.43f, -4440.26f, 14.23f, 4.72f }
 	},
 	WaypointMoveType::Run,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const AmaraPath01 =
@@ -622,7 +622,7 @@ WaypointPath const AmaraPath01 =
 		{ 6, -3615.43f, -4440.26f, 14.23f, 4.72f }
 	},
 	WaypointMoveType::Run,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const OfficerPath01 =
@@ -641,7 +641,7 @@ WaypointPath const OfficerPath01 =
 		{ 9, -3723.88f, -4415.31f, 26.56f, 0.76f }
 	},
 	WaypointMoveType::Walk,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const HedricPath01
@@ -657,7 +657,7 @@ WaypointPath const HedricPath01
 		{ 6, -3716.85f, -4541.81f, 25.82f, 3.60f }
 	},
 	WaypointMoveType::Run,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const JainaPath01 =
@@ -690,7 +690,7 @@ WaypointPath const JainaPath01 =
 		{ 23, -3619.56f, -4461.36f, 13.62f, 2.96f }
 	},
 	WaypointMoveType::Run,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const JainaPath02 =
@@ -705,7 +705,7 @@ WaypointPath const JainaPath02 =
 		{ 5, -3615.43f, -4440.26f, 14.23f, 4.72f }
 	},
 	WaypointMoveType::Run,
-	WaypointPathFlags::ExactSplinePath
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const KalecgosPath01 =

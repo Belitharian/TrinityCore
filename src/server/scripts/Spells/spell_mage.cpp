@@ -1586,7 +1586,7 @@ struct at_ring_of_fire : AreaTriggerAI
 
     enum Spells
     {
-        SPELL_RING_OF_FIRE_DAMAGE = 353084
+        SPELL_RING_OF_FIRE_DAMAGE = 363405
     };
 
     void OnUnitEnter(Unit* unit) override

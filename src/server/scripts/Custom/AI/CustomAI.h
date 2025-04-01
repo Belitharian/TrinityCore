@@ -59,7 +59,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         virtual void Initialize();
 
-        virtual float GetDistance() { return 40.f; };
+        virtual float GetDistance() { return 15.f; };
 
         virtual float GetDamageReductionToUnit() { return 0.08f; };
         virtual void DamageFromNPC(Unit* attacker, uint32& damage, DamageEffectType damageType);
@@ -98,6 +98,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         bool damageReduction;
         bool textOnCooldown;
 
+        uint32 FriendsInRange(float distance, uint8 pct);
         uint32 EnemiesInRange(float distance);
         uint32 EnemiesInFront(float distance);
 

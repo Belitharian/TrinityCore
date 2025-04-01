@@ -14,14 +14,6 @@
 #include "Custom/AI/CustomAI.h"
 #include "dalaran_purge.h"
 
-CircleBoundary const surdielCenter(Position(-1008.04f, 4515.24f), 19.0f);
-CircleBoundary const brasaelCenter(Position( -682.22f, 4441.74f), 19.0f);
-CircleBoundary const savorCenter(Position( -853.70f, 4457.10f), 19.0f);
-
-CreatureBoundary const surdielBoundaries    = { &surdielCenter };
-CreatureBoundary const brasaelBoundaries    = { &brasaelCenter };
-CreatureBoundary const savorBoundaries      = { &savorCenter };
-
 enum Atonement
 {
     SPELL_ATONEMENT                 = 292010,
@@ -426,11 +418,6 @@ struct npc_vereesa_windrunner_dalaran : public CustomAI
 		SPELL_MULTI_SHOOT           = 384868,
 		SPELL_SHOOT                 = 445949,
 	};
-
-	float GetDistance() override
-	{
-		return 30.0f;
-	}
 
 	void AttackStart(Unit* who) override
 	{
@@ -1594,11 +1581,6 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 		SPELL_ARCANE_HASTE      = 50182
 	};
 
-	float GetDistance() override
-	{
-		return 15.f;
-	}
-
 	void Reset() override
 	{
 		npc_sunreaver_unit::Reset();
@@ -1860,8 +1842,6 @@ struct npc_magister_brasael : public CustomAI
 
 		cauterized = false;
 		damagedBags = 0;
-
-        SetBoundary(&brasaelBoundaries);
     }
 
 	void Reset() override
@@ -2022,23 +2002,6 @@ struct npc_magister_brasael : public CustomAI
 					counterspell.Repeat();
 			});
 	}
-
-    bool CheckInRoom() override
-    {
-        if (Unit* victim = me->GetVictim())
-        {
-            if (IsInBoundary(victim) && IsInBoundary())
-                return true;
-        }
-        else
-        {
-            if (IsInBoundary())
-                return true;
-        }
-
-        EnterEvadeMode(EvadeReason::Boundary);
-        return false;
-    }
 
 	bool CanAIAttack(Unit const* who) const
 	{
@@ -2373,27 +2336,6 @@ struct npc_magister_surdiel : public CustomAI
             });
 	}
 
-    bool CheckInRoom() override
-    {
-        DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
-        if (phase >= DLPPhases::TheEscape)
-            return true;
-
-        if (Unit* victim = me->GetVictim())
-        {
-            if (IsInBoundary(victim) && IsInBoundary())
-                return true;
-        }
-        else
-        {
-            if (IsInBoundary())
-                return true;
-        }
-
-        EnterEvadeMode(EvadeReason::Boundary);
-        return false;
-    }
-
     void SummonElementals()
     {
         for (int i = 0; i < ELEMENTAL_COUNT; i++)
@@ -2423,20 +2365,19 @@ struct npc_magister_surdiel : public CustomAI
         Talk(SAY_BOMBS_ALERT);
 
         scheduler
-            .Schedule(2s, GROUP_COMBAT, [this](TaskContext counterAlert)
+            .Schedule(1s, GROUP_COMBAT, [this](TaskContext counterAlert)
             {
                 switch (counterAlert.GetRepeatCounter())
                 {
                     case 0:
                     case 1:
-                    case 2:
                         Talk(SAY_COUNTDOWN_BOMBS + countdown);
                         countdown++;
                         counterAlert.Repeat(1s);
                         break;
                 }
             })
-            .Schedule(5s, GROUP_COMBAT, [this](TaskContext /*context*/)
+            .Schedule(2s, GROUP_COMBAT, [this](TaskContext /*context*/)
             {
                 CastStop();
                 Talk(SAY_COUNTDOWN_BOMBS + countdown);
@@ -2578,8 +2519,6 @@ struct npc_high_arcanist_savor : public CustomAI
         CustomAI::Initialize();
 
         me->SetRegenerateHealth(false);
-
-        SetBoundary(&savorBoundaries);
     }
 
 	void Reset() override
@@ -2879,23 +2818,6 @@ struct npc_high_arcanist_savor : public CustomAI
 				DoCast(SPELL_LIVING_LEDGERS);
 			});
 	}
-
-    bool CheckInRoom() override
-    {
-        if (Unit* victim = me->GetVictim())
-        {
-            if (IsInBoundary(victim) && IsInBoundary())
-                return true;
-        }
-        else
-        {
-            if (IsInBoundary())
-                return true;
-        }
-
-        EnterEvadeMode(EvadeReason::Boundary);
-        return false;
-    }
 
 	/*
 	*       UTILS

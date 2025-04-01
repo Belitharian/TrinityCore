@@ -347,11 +347,6 @@ struct npc_amara_leeson : public CustomAI
 
 	InstanceScript* instance;
 
-	float GetDistance() override
-	{
-		return 15.f;
-	}
-
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		DoCastSelf(SPELL_BLAZING_BARRIER, true);
@@ -752,7 +747,7 @@ struct npc_kalecgos_theramore : public CustomAI
 				}
 			});
 		}
-		else if (pathId == 2)
+		else if (pathId == 3)
 		{
 			me->SetVisible(false);
 		}

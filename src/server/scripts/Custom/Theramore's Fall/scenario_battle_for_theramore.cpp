@@ -440,11 +440,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				{
 					if (Creature* kalecgos = GetKalec())
 					{
-                        kalecgos->NearTeleportTo(KalecPath02.Nodes[0].X, KalecPath02.Nodes[0].Y, KalecPath02.Nodes[0].Z, *KalecPath02.Nodes[0].Orientation);
+                        kalecgos->SetVisible(true);
                         kalecgos->GetMotionMaster()->Clear();
                         kalecgos->GetMotionMaster()->MoveIdle();
 						kalecgos->SetSpeedRate(MOVE_WALK, 0.85f);
 						kalecgos->SetSpeedRate(MOVE_RUN, 0.85f);
+                        kalecgos->NearTeleportTo(KalecPath02.Nodes[0].X, KalecPath02.Nodes[0].Y, KalecPath02.Nodes[0].Z, *KalecPath02.Nodes[0].Orientation);
 					}
 					if (Creature* rhonin = GetRhonin())
 					{
@@ -463,7 +464,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							creature->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::WaitForAmara_JoinJaina);
-					events.ScheduleEvent(142, 500ms);
+					events.ScheduleEvent(142, 1s);
 					break;
 				}
 				// Step 11 : Wait for Archmage Leeson returns - Wait for Archmage Leeson returns
@@ -1467,13 +1468,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 				// Part I
 				case 142:
-					if (Creature* kalecgos = GetKalec())
-					{
-						kalecgos->SetVisible(true);
-						kalecgos->SetSpeedRate(MOVE_RUN, 0.85f);
-						kalecgos->GetMotionMaster()->MovePath(KalecPath02, false);
-					}
-					Next(5s);
+                    GetKalec()->GetMotionMaster()->MovePath(KalecPath02, false);
+					Next(6s);
 					break;
 				case 143:
 					SetTarget(GetKalec());
@@ -1877,15 +1873,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				creature->NearTeleportTo(UnitLocation[i]);
 				creature->SetHomePosition(UnitLocation[i]);
 				creature->SetSheath(SHEATH_STATE_UNARMED);
-				creature->SetStandState(UNIT_STAND_STATE_STAND);
+				creature->SetStandState(UNIT_STAND_STATE_SIT);
 				creature->SetEmoteState(EMOTE_STATE_NONE);
 				creature->RemoveAllAuras();
 				creature->Dismount();
-
-                if (roll_chance_i(60))
-                {
-                    creature->AddAura(RAND(SPELL_COSMETIC_EAT_SOUP, SPELL_COSMETIC_DRINK), creature);
-                }
+                creature->AddAura(RAND(SPELL_COSMETIC_EAT_SOUP, SPELL_COSMETIC_DRINK), creature);
 			}
 
 			for (uint8 i = 0; i < ARCHMAGES_RELOCATION; i++)

@@ -222,6 +222,14 @@ struct npc_theramore_troop : public CustomAI
 	uint32 soundEmote;
 	bool emoteReceived;
 
+    void SetData(uint32 id, uint32 value) override
+    {
+        if (id == NPC_THERAMORE_TROOPS_CREDIT)
+        {
+            emoteReceived = value ? true : false;
+        }
+    }
+
 	void ReceiveEmote(Player* player, uint32 emoteId) override
 	{
 		BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
@@ -258,8 +266,8 @@ struct npc_theramore_troop : public CustomAI
 									case 1:
 										troop->PlayDirectSound(soundEmote, player);
 										troop->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
+                                        troop->AI()->SetData(NPC_THERAMORE_TROOPS_CREDIT, 1);
 										KillRewarder::Reward(player, troop, NPC_THERAMORE_TROOPS_CREDIT);
-										emoteReceived = true;
 										context.Repeat(3s);
 										break;
 									case 2:
@@ -450,7 +458,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 		SPELL_LIGHT_OF_DAWN         = 295710,
 		SPELL_BLESSING_OF_FREEDOM   = 299256,
 		SPELL_REBUKE                = 405397,
-		SPELL_CONSECRATION          = 424429,
+		SPELL_CONSECRATION          = 461741,
 	};
 
 	bool healthLow;
@@ -656,11 +664,6 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 		SPELL_ARCANE_EXPLOSION  = 414381,
 	};
 
-	float GetDistance() override
-	{
-		return 35.f;
-	}
-
 	void Reset() override
 	{
 		npc_theramore_troop::Reset();
@@ -727,15 +730,16 @@ struct npc_theramore_faithful : public npc_theramore_troop
 
 	enum Spells
 	{
-		SPELL_SMITE                 = 332705,
+		SPELL_PSYCHIC_SCREAM        = 65543,
+		SPELL_PAIN_SUPPRESSION      = 69910,
 		SPELL_HALO                  = 120517,
-		SPELL_FLASH_HEAL            = 314655,
-		SPELL_RENEW                 = 294342,
 		SPELL_PRAYER_OF_HEALING     = 266969,
 		SPELL_POWER_WORD_FORTITUDE  = 267528,
+		SPELL_RENEW                 = 294342,
+		SPELL_FLASH_HEAL            = 314655,
 		SPELL_POWER_WORD_SHIELD     = 318158,
-		SPELL_PAIN_SUPPRESSION      = 69910,
-		SPELL_PSYCHIC_SCREAM        = 65543,
+		SPELL_SMITE                 = 332705,
+        SPELL_DIVINE_WORD_SANTUARY  = 372784,
 	};
 
 	bool ascension;
@@ -767,11 +771,6 @@ struct npc_theramore_faithful : public npc_theramore_troop
 					ascension = false;
 				});
 		}
-	}
-
-	float GetDistance() override
-	{
-		return 20.f;
 	}
 
 	void Reset() override
@@ -825,19 +824,35 @@ struct npc_theramore_faithful : public npc_theramore_troop
 					DoCast(target, SPELL_RENEW);
 				renew.Repeat(10s, 15s);
 			})
-			.Schedule(12s, 14s, [this](TaskContext prayer_of_healing)
+			.Schedule(12s, 14s, [this](TaskContext mass_healing)
 			{
 				CastStop({ SPELL_RENEW, SPELL_FLASH_HEAL, SPELL_PRAYER_OF_HEALING });
-				DoCastAOE(SPELL_PRAYER_OF_HEALING);
-				prayer_of_healing.Repeat(14s);
+
+                if (roll_chance_i(60))
+                {
+                    DoCastAOE(SPELL_PRAYER_OF_HEALING);
+                    mass_healing.Repeat(14s);
+                }
+                else
+                {
+                    if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
+                    {
+                        DoCast(SPELL_DIVINE_WORD_SANTUARY);
+                        mass_healing.Repeat(25s, 45s);
+                    }
+                    else
+                    {
+                        mass_healing.Repeat(1s);
+                    }
+                }
 			})
-			.Schedule(1s, 3s, [this](TaskContext halo)
+			.Schedule(1s, 5s, [this](TaskContext halo)
 			{
 				CastStop(SPELL_HALO);
                 DoCastAOE(SPELL_HALO);
 				halo.Repeat(14s, 25s);
 			})
-			.Schedule(1s, 3s, [this](TaskContext psychic_scream)
+			.Schedule(3s, 8s, [this](TaskContext psychic_scream)
 			{
 				if (EnemiesInRange(10.f) >= 2)
 				{
@@ -868,11 +883,6 @@ struct npc_theramore_marksman : public npc_theramore_troop
 		SPELL_SHOOT                 = 22907,
 		SPELL_MULTI_SHOOT           = 38310,
 	};
-
-	float GetDistance() override
-	{
-		return 30.0f;
-	}
 
 	void AttackStart(Unit* who) override
 	{
@@ -1459,11 +1469,6 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 		SPELL_SUMMON_WILD_IMPS  = 138685,
 		SPELL_CORRUPTION        = 251406,
 	};
-
-	float GetDistance() override
-	{
-		return 18.f;
-	}
 
 	void JustSummoned(Creature* summon) override
 	{
@@ -2159,7 +2164,7 @@ struct at_waternado : AreaTriggerAI
 };
 
 // Consecrated Ground
-// AreaTriggerID - 13272
+// AreaTriggerID - 34355
 struct at_consecration : AreaTriggerAI
 {
     at_consecration(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
@@ -2168,7 +2173,7 @@ struct at_consecration : AreaTriggerAI
 
 	enum Spells
 	{
-		SPELL_CONSECRATION = 424430
+		SPELL_CONSECRATION = 461742
 	};
 
 	void OnUnitEnter(Unit* /*unit*/) override
@@ -2203,6 +2208,50 @@ struct at_consecration : AreaTriggerAI
 			}
 		}
 	}
+};
+
+// Divine Word: Sanctuary - 372784
+// AreaTriggerID - 35546
+struct at_divine_word_sanctuary : AreaTriggerAI
+{
+    static constexpr Milliseconds TICK_PERIOD = Milliseconds(1000);
+
+    at_divine_word_sanctuary(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger), _tickTimer(TICK_PERIOD)
+    {
+    }
+
+    enum Spells
+    {
+        SPELL_DIVINE_WORD_SANCTUARY_HEAL = 372787
+    };
+
+    void OnUpdate(uint32 diff) override
+    {
+        _tickTimer -= Milliseconds(diff);
+
+        if (_tickTimer > 0s)
+            return;
+
+        // Récupération du lanceur du sort
+        if (Unit* caster = at->GetCaster())
+        {
+            for (const ObjectGuid& unitGuid : at->GetInsideUnits())
+            {
+                if (Unit* target = ObjectAccessor::GetUnit(*caster, unitGuid))
+                {
+                    if (caster->IsFriendlyTo(target))
+                    {
+                        caster->CastSpell(target, SPELL_DIVINE_WORD_SANCTUARY_HEAL);
+                    }
+                }
+            }
+        }
+
+        _tickTimer += TICK_PERIOD;
+    }
+
+    private:
+    Milliseconds _tickTimer;
 };
 
 // Uncontrolled Energy
@@ -2335,6 +2384,7 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterAreaTriggerAI(at_blizzard_theramore);
 	RegisterAreaTriggerAI(at_waternado);
 	RegisterAreaTriggerAI(at_consecration);
+	RegisterAreaTriggerAI(at_divine_word_sanctuary);
 	RegisterAreaTriggerAI(at_uncontrolled_energy);
 	RegisterAreaTriggerAI(at_arcane_rift);
 	RegisterAreaTriggerAI(at_scorched_earth);

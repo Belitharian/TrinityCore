@@ -295,6 +295,15 @@ void CustomAI::SetCombatMove(bool on, float distance, bool stopMoving, bool forc
     }
 }
 
+uint32 CustomAI::FriendsInRange(float range, uint8 pct)
+{
+    std::list<Unit*> list;
+    Trinity::FriendlyBelowHpPctInRange u_check(me, range, pct);
+    Trinity::UnitListSearcher<Trinity::FriendlyBelowHpPctInRange> searcher(me, list, u_check);
+    Cell::VisitAllObjects(me, searcher, range);
+    return list.size();
+}
+
 uint32 CustomAI::EnemiesInRange(float distance)
 {
 	uint32 count = 0;

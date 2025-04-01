@@ -198,9 +198,9 @@ enum DLPMisc
     GOB_SPECTRAL_BARRIER                = 345361,
 	GOB_PORTAL_TO_STORMWIND             = 353823,
 	GOB_ICE_WALL_COLLISION              = 368620,
-	GOB_PORTAL_TO_PRISON                = 550001,
-	GOB_PORTAL_TO_SEWERS                = 550002,
-    GOB_PORTAL_TO_LIBRARY               = 550003,
+	GOB_PORTAL_TO_PRISON                = 1550001,
+	GOB_PORTAL_TO_SEWERS                = 1550002,
+    GOB_PORTAL_TO_LIBRARY               = 1550003,
 
 	// Criteria Trees
 	CRITERIA_TREE_DALARAN               = 1000047,  // Purple Citadel
