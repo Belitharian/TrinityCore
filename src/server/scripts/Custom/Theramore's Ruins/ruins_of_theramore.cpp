@@ -6,36 +6,27 @@
 
 struct npc_jaina_ruins : public CustomAI
 {
-	npc_jaina_ruins(Creature* creature) : CustomAI(creature),
-		hasBlinked(false), hasEscaped(false), distance(10.f)
-	{
-        instance = me->GetInstanceScript();
-    }
-
 	enum Misc
 	{
-		// NPCs
-		NPC_MIRROR_IMAGE        = 500020,
-
-		// Display Ids
-		DISPLAYID_INVISIBLE     = 41199,
-		DISPLAYID_JAINA         = 80015,
+		NPC_MIRROR_IMAGE    = 500020,
+		DISPLAYID_INVISIBLE = 41199,
+		DISPLAYID_JAINA     = 80015,
 	};
 
 	enum Spells
 	{
-		SPELL_ETERNAL_SILENCE   = 42201,
-        SPELL_EVOCATION         = 243070,
-		SPELL_FROSTBOLT         = 284703,
-		SPELL_RING_OF_ICE       = 285459,
-        SPELL_GRASP_OF_FROST    = 287626,
-		SPELL_ICEBOUND_ESCAPE   = 289077,
-		SPELL_IMMUNE            = 299144,
-		SPELL_COMET_BARRAGE     = 354938,
-		SPELL_FRIGID_SHARD      = 354933,
-		SPELL_BLINK             = 357601,
-        SPELL_ARCANE_SURGE      = 365350,
-		SPELL_FROZEN_SHIELD     = 396780,
+		SPELL_ETERNAL_SILENCE = 42201,
+		SPELL_EVOCATION       = 243070,
+		SPELL_FROSTBOLT       = 284703,
+		SPELL_RING_OF_ICE     = 285459,
+		SPELL_GRASP_OF_FROST  = 287626,
+		SPELL_ICEBOUND_ESCAPE = 289077,
+		SPELL_IMMUNE          = 299144,
+		SPELL_COMET_BARRAGE   = 354938,
+		SPELL_FRIGID_SHARD    = 354933,
+		SPELL_BLINK           = 357601,
+		SPELL_ARCANE_SURGE    = 365350,
+		SPELL_FROZEN_SHIELD   = 396780,
 	};
 
 	enum Groups
@@ -47,16 +38,21 @@ struct npc_jaina_ruins : public CustomAI
 	InstanceScript* instance;
 	Position beforeBlink;
 	GuidVector images;
-	bool hasBlinked;
-	bool hasEscaped;
-	float distance;
+	bool hasBlinked = false;
+	bool hasEscaped = false;
+	float distance = 10.f;
+
+	npc_jaina_ruins(Creature* creature) : CustomAI(creature)
+	{
+		instance = me->GetInstanceScript();
+	}
 
 	void SetData(uint32 /*id*/, uint32 value) override
 	{
 		distance = (float)value;
 	}
 
-	void SpellHit(WorldObject* /*caster*/, SpellInfo const* /*spellInfo*/) override { }
+	void SpellHit(WorldObject*, SpellInfo const*) override { }
 
 	void AttackStart(Unit* who) override
 	{
@@ -74,47 +70,32 @@ struct npc_jaina_ruins : public CustomAI
 	void Reset() override
 	{
 		Initialize();
-
 		summons.DespawnAll();
-
 		images.clear();
-
 		scheduler.CancelGroup(GROUP_COMBAT);
-
 		hasBlinked = false;
 		hasEscaped = false;
-
-        me->SetUninteractible(false);
-        me->RemoveUnitFlag2(UNIT_FLAG2_UNTARGETABLE_BY_CLIENT);
-        me->SetDisplayId(DISPLAYID_JAINA);
-        me->RemoveAurasDueToSpell(SPELL_ETERNAL_SILENCE);
-        me->RemoveAurasDueToSpell(SPELL_IMMUNE);
+		SetJainaVisibleState();
 	}
 
 	void EnterEvadeMode(EvadeReason why) override
 	{
 		CustomAI::EnterEvadeMode(why);
-
 		summons.DespawnAll();
 		summons.clear();
-
 		scheduler.CancelGroup(GROUP_COMBAT);
-
-		me->SetDisplayId(DISPLAYID_JAINA);
-		me->RemoveUnitFlag2(UNIT_FLAG2_UNTARGETABLE_BY_CLIENT);
+		SetJainaVisibleState();
 	}
 
 	void JustSummoned(Creature* summon) override
 	{
-		if (summon->GetEntry() != NPC_MIRROR_IMAGE)
-			return;
-
-		summons.Summon(summon);
+		if (summon->GetEntry() == NPC_MIRROR_IMAGE)
+			summons.Summon(summon);
 	}
 
-	void SummonedCreatureDespawn(Creature* /*summon*/) override { }
+	void SummonedCreatureDespawn(Creature*) override { }
 
-	void SummonedCreatureDies(Creature* summon, Unit* /*killer*/) override
+	void SummonedCreatureDies(Creature* summon, Unit*) override
 	{
 		if (summon->GetEntry() != NPC_MIRROR_IMAGE)
 			return;
@@ -125,16 +106,10 @@ struct npc_jaina_ruins : public CustomAI
 		if (summons.empty())
 		{
 			me->ResumeMovement();
-            me->LoadEquipment(2);
-            me->SetUninteractible(false);
-            me->RemoveUnitFlag2(UNIT_FLAG2_UNTARGETABLE_BY_CLIENT);
-			me->SetDisplayId(DISPLAYID_JAINA);
-			me->RemoveAurasDueToSpell(SPELL_ETERNAL_SILENCE);
-			me->RemoveAurasDueToSpell(SPELL_IMMUNE);
-
+			me->LoadEquipment(2);
+			SetJainaVisibleState();
 			CastStop();
 			DoCastSelf(SPELL_FROZEN_SHIELD);
-
 			if (Unit* target = me->GetVictim())
 				JustEngagedWith(target);
 		}
@@ -144,77 +119,46 @@ struct npc_jaina_ruins : public CustomAI
 	{
 		switch (spell->Id)
 		{
-			case SPELL_SUMMON_WATER_ELEMENTALS:
-			{
-				for (uint8 i = 0; i < ELEMENTALS_SIZE; ++i)
-				{
-					if (Creature* elemental = me->GetMap()->SummonCreature(NPC_WATER_ELEMENTAL, ElementalsPoint[i].spawn))
-						elemental->CastSpell(elemental, SPELL_WATER_BOSS_ENTRANCE);
-				}
-				break;
-			}
 			case SPELL_RING_OF_ICE:
-			{
-                if (hasEscaped)
-                {
-                    hasBlinked = false;
-                    break;
-                }
-                if (!hasBlinked)
-                {
-                    break;
-                }
-				scheduler.Schedule(1s, [this](TaskContext /*blink*/)
+				if (hasEscaped || !hasBlinked)
+					break;
+				scheduler.Schedule(1s, [this](TaskContext)
 				{
 					CastStop(SPELL_ICEBOUND_ESCAPE);
 					me->CastSpell(beforeBlink, SPELL_BLINK, true);
 					hasBlinked = false;
 				});
 				break;
-			}
 			case SPELL_ICEBOUND_ESCAPE:
-			{
 				me->PauseMovement();
-                me->LoadEquipment(0, true);
-                me->SetUninteractible(true);
+				me->LoadEquipment(0, true);
+				me->SetUninteractible(true);
 				me->SetUnitFlag2(UNIT_FLAG2_UNTARGETABLE_BY_CLIENT);
 				me->SetDisplayId(DISPLAYID_INVISIBLE);
 				break;
-			}
 		}
 	}
 
-	void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+	void DamageTaken(Unit*, uint32& damage, DamageEffectType, SpellInfo const*) override
 	{
-		if (ShouldTakeDamage())
+		if (hasEscaped || !me->HealthBelowPctDamaged(30, damage))
 			return;
 
-		if ((!me->HasAura(SPELL_IMMUNE) || !me->HasAura(SPELL_FROZEN_SHIELD)))
-		{
-			if (hasEscaped)
-				return;
-
-			SummonImages();
-
-			scheduler.CancelGroup(GROUP_COMBAT);
-
-            me->AddAura(SPELL_ETERNAL_SILENCE, me);
-            me->AddAura(SPELL_IMMUNE, me);
-
-			CastStop();
-			DoCast(SPELL_ICEBOUND_ESCAPE);
-
-			hasEscaped = true;
-		}
+		SummonImages();
+		scheduler.CancelGroup(GROUP_COMBAT);
+		me->AddAura(SPELL_ETERNAL_SILENCE, me);
+		me->AddAura(SPELL_IMMUNE, me);
+		CastStop();
+		DoCast(SPELL_ICEBOUND_ESCAPE);
+		hasEscaped = true;
 	}
 
 	void JustEngagedWith(Unit* who) override
 	{
-        #ifndef CUSTOM_DEBUG
-        RFTPhases phase = (RFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-        if (phase != RFTPhases::Standards_Valided)
-            return;
-        #endif
+		#ifndef CUSTOM_DEBUG
+		if ((RFTPhases)instance->GetData(DATA_SCENARIO_PHASE) != RFTPhases::Standards_Valided)
+			return;
+		#endif
 
 		DoCast(who, SPELL_FROSTBOLT);
 
@@ -230,34 +174,32 @@ struct npc_jaina_ruins : public CustomAI
 					DoCast(target, SPELL_FRIGID_SHARD);
 				frigid_shard.Repeat(14s, 18s);
 			})
-            .Schedule(24s, GROUP_COMBAT, [this](TaskContext grasp_of_frost)
-            {
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                {
-                    CastStop({ SPELL_ICEBOUND_ESCAPE, SPELL_RING_OF_ICE, SPELL_FRIGID_SHARD });
-                    DoCast(target, SPELL_GRASP_OF_FROST);
-                }
-                grasp_of_frost.Repeat(18s, 32s);
-            })
-            .Schedule(12s, GROUP_COMBAT, [this](TaskContext arcane_surge)
-            {
-                CastStop({ SPELL_ICEBOUND_ESCAPE, SPELL_RING_OF_ICE });
-
-                me->GetSpellHistory()->ResetCooldown(SPELL_ARCANE_SURGE);
-                me->GetSpellHistory()->ResetCooldown(SPELL_EVOCATION);
-
-                if (me->GetPowerPct(POWER_MANA) <= 20.0f)
-                {
-                    DoCastSelf(SPELL_EVOCATION);
-                    arcane_surge.Repeat(6s);
-                }
-                else
-                {
-                    CastSpellExtraArgs args(SPELLVALUE_BASE_POINT0, 85000);
-                    DoCastVictim(SPELL_ARCANE_SURGE, args);
-                    arcane_surge.Repeat(45s, 1min);
-                }
-            })
+			.Schedule(24s, GROUP_COMBAT, [this](TaskContext grasp_of_frost)
+			{
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+				{
+					StopAllEscapeAndShard();
+					DoCast(target, SPELL_GRASP_OF_FROST);
+				}
+				grasp_of_frost.Repeat(18s, 32s);
+			})
+			.Schedule(12s, GROUP_COMBAT, [this](TaskContext arcane_surge)
+			{
+				StopEscapeSpells();
+				me->GetSpellHistory()->ResetCooldown(SPELL_ARCANE_SURGE);
+				me->GetSpellHistory()->ResetCooldown(SPELL_EVOCATION);
+				if (me->GetPowerPct(POWER_MANA) <= 20.0f)
+				{
+					DoCastSelf(SPELL_EVOCATION);
+					arcane_surge.Repeat(6s);
+				}
+				else
+				{
+					CastSpellExtraArgs args(SPELLVALUE_BASE_POINT0, 85000);
+					DoCastVictim(SPELL_ARCANE_SURGE, args);
+					arcane_surge.Repeat(45s, 1min);
+				}
+			})
 			.Schedule(14s, GROUP_COMBAT, [this](TaskContext comet_barrage)
 			{
 				DoCastAOE(SPELL_COMET_BARRAGE);
@@ -267,40 +209,32 @@ struct npc_jaina_ruins : public CustomAI
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 				{
-					if (me->IsWithinDist(target, 10.f))
+					if (IsTargetTooClose(target))
 					{
-                        CastStop({ SPELL_ICEBOUND_ESCAPE, SPELL_RING_OF_ICE });
+						StopEscapeSpells();
 						DoCastAOE(SPELL_RING_OF_ICE);
 					}
 					else
 					{
 						beforeBlink = me->GetPosition();
-
-                        Position dest = me->GetRandomPoint(target->GetPosition(), 6.0f);
-
-                        CastStop({ SPELL_ICEBOUND_ESCAPE, SPELL_RING_OF_ICE });
+						StopEscapeSpells();
+						Position dest = me->GetRandomPoint(target->GetPosition(), 6.0f);
 						me->CastSpell(dest, SPELL_BLINK, true);
-
-						scheduler.Schedule(1s, [this](TaskContext /*ring_of_ice*/)
+						scheduler.Schedule(1s, [this](TaskContext)
 						{
 							me->CastStop();
 							DoCastAOE(SPELL_RING_OF_ICE);
 						});
-
 						hasBlinked = true;
 					}
 				}
-
 				blink.Repeat(1min);
 			});
 	}
 
-	bool CanAIAttack(Unit const* /*who*/) const override
-	{
-		return true;
-	}
+	bool CanAIAttack(Unit const*) const override { return true; }
 
-	void MovementInform(uint32 /*type*/, uint32 id) override
+	void MovementInform(uint32, uint32 id) override
 	{
 		switch (id)
 		{
@@ -326,12 +260,11 @@ struct npc_jaina_ruins : public CustomAI
 				break;
 			case MOVEMENT_INFO_POINT_02:
 				me->HandleEmoteCommand(EMOTE_ONESHOT_CASTSTRONG);
-				scheduler.Schedule(1s, [this](TaskContext /*context*/)
+				scheduler.Schedule(1s, [this](TaskContext)
 				{
 					if (Creature* warlord = instance->GetCreature(DATA_ROKNAH_WARLORD))
 					{
 						warlord->KillSelf();
-
 						instance->TriggerGameEvent(EVENT_WARLORD_ROKNAH_SLAIN);
 					}
 				});
@@ -345,22 +278,15 @@ struct npc_jaina_ruins : public CustomAI
 	void MoveInLineOfSight(Unit* who) override
 	{
 		ScriptedAI::MoveInLineOfSight(who);
-
-		if (me->IsEngaged())
+		if (me->IsEngaged() || who->GetTypeId() != TYPEID_PLAYER)
 			return;
-
-		if (who->GetTypeId() != TYPEID_PLAYER)
-			return;
-
 		if (Player* player = who->ToPlayer())
 		{
 			if (player->IsGameMaster())
 				return;
-
 			if (player->IsFriendlyTo(me) && player->IsWithinDist(me, distance))
 			{
-				RFTPhases phase = (RFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-				switch (phase)
+				switch ((RFTPhases)instance->GetData(DATA_SCENARIO_PHASE))
 				{
 					case RFTPhases::FindJaina_Isle:
 						instance->TriggerGameEvent(EVENT_FIND_JAINA_01);
@@ -377,17 +303,14 @@ struct npc_jaina_ruins : public CustomAI
 
 	void UpdateAI(uint32 diff) override
 	{
-        scheduler.Update(diff, [this]
-        {
-            UpdateVictim();
-        });
+		scheduler.Update(diff, [this] { UpdateVictim(); });
 	}
 
 	void SummonImages()
 	{
 		for (uint8 i = 0; i < 3; i++)
 		{
-			const Position pos = me->GetRandomPoint(me->GetPosition(), 8.f);
+			Position pos = me->GetRandomPoint(me->GetPosition(), 8.f);
 			if (Creature* image = me->SummonCreature(NPC_MIRROR_IMAGE, pos, TEMPSUMMON_DEAD_DESPAWN, 1s))
 			{
 				image->SetFaction(me->GetFaction());
@@ -397,12 +320,37 @@ struct npc_jaina_ruins : public CustomAI
 					{
 						image->AI()->AttackStart(victim);
 						image->SetFacingToObject(victim);
-						victim->GetThreatManager().AddThreat(image, INFINITY);
 						image->GetThreatManager().AddThreat(victim, INFINITY);
+						victim->GetThreatManager().AddThreat(image, INFINITY);
 					}
 				}
 			}
 		}
+	}
+
+	// Helpers
+	void SetJainaVisibleState()
+	{
+		me->SetUninteractible(false);
+		me->RemoveUnitFlag2(UNIT_FLAG2_UNTARGETABLE_BY_CLIENT);
+		me->SetDisplayId(DISPLAYID_JAINA);
+		me->RemoveAurasDueToSpell(SPELL_ETERNAL_SILENCE);
+		me->RemoveAurasDueToSpell(SPELL_IMMUNE);
+	}
+
+	void StopEscapeSpells()
+	{
+		CastStop({ SPELL_ICEBOUND_ESCAPE, SPELL_RING_OF_ICE });
+	}
+
+	void StopAllEscapeAndShard()
+	{
+		CastStop({ SPELL_ICEBOUND_ESCAPE, SPELL_RING_OF_ICE, SPELL_FRIGID_SHARD });
+	}
+
+	bool IsTargetTooClose(Unit* target) const
+	{
+		return me->IsWithinDist(target, 10.f);
 	}
 };
 

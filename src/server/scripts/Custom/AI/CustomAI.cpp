@@ -338,11 +338,6 @@ bool CustomAI::HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic)
 	return spellInfo->GetAllEffectsMechanicMask() & (UI64LIT(1) << mechanic);
 }
 
-bool CustomAI::ShouldTakeDamage()
-{
-    return me->GetHealthPct() > me->GetSparringHealthPct();
-}
-
 void CustomAI::TalkInCombat(uint8 textId, uint64 cooldown)
 {
     if (!textOnCooldown)

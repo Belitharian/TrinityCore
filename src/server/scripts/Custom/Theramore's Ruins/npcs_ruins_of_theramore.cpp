@@ -161,8 +161,7 @@ struct npc_jaina_image : public CustomAI
 
 struct npc_roknah_warlord : public CustomAI
 {
-	npc_roknah_warlord(Creature* creature) : CustomAI(creature, AI_Type::Melee),
-		sendEvent(false)
+	npc_roknah_warlord(Creature* creature) : CustomAI(creature, AI_Type::Melee), isAlmostDead(false)
 	{
 		instance = creature->GetInstanceScript();
 	}
@@ -177,42 +176,37 @@ struct npc_roknah_warlord : public CustomAI
 	};
 
 	InstanceScript* instance;
-	bool sendEvent;
-
-	void JustDied(Unit* killer) override
-	{
-		CustomAI::JustDied(killer);
-
-		instance->TriggerGameEvent(EVENT_WARLORD_ROKNAH_SLAIN);
-	}
+	bool isAlmostDead;
 
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-		if (ShouldTakeDamage())
-			return;
+        if (me->HealthBelowPctDamaged(20, damage))
+        {
+            damage = 0;
 
-		if (!sendEvent)
-		{
-			sendEvent = true;
+            if (isAlmostDead)
+                return;
 
-			me->SetHomePosition(me->GetPosition());
-			me->SetRegenerateHealth(false);
-			me->AI()->EnterEvadeMode();
-			me->SetImmuneToAll(true);
+            isAlmostDead = true;
 
-			scheduler.Schedule(2s, [this](TaskContext /*context*/)
-			{
-				me->SetStandState(UNIT_STAND_STATE_KNEEL);
-			});
+            me->SetHomePosition(me->GetPosition());
+            me->SetReactState(REACT_PASSIVE);
+            me->SetRegenerateHealth(false);
+            me->SetImmuneToAll(true);
+            me->RemoveAllAttackers();
 
-			if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
-			{
-				jaina->RemoveAllAuras();
-				instance->SetData(EVENT_WARLORD_ROKNAH_SLAIN, 0U);
-			}
-		}
+            scheduler.Schedule(2s, [this](TaskContext /*context*/)
+            {
+                me->SetStandState(UNIT_STAND_STATE_KNEEL);
+            });
 
-		damage = 0;
+            if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
+            {
+                jaina->RemoveAllAuras();
+            }
+
+            instance->SetData(EVENT_WARLORD_ROKNAH_SLAIN, 0U);
+        }
 	}
 
 	void JustEngagedWith(Unit* /*who*/) override

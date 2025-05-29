@@ -345,9 +345,8 @@ struct npc_thader_windermere : public CustomAI
 
 struct npc_hedric_evencane : public CustomAI
 {
-	npc_hedric_evencane(Creature* creature) : CustomAI(creature, true, AI_Type::Melee),
-		banding(false)
-	{
+	npc_hedric_evencane(Creature* creature) : CustomAI(creature, true, AI_Type::Melee)
+    {
 	}
 
 	enum Spells
@@ -357,42 +356,8 @@ struct npc_hedric_evencane : public CustomAI
 		SPELL_MORTAL_CLEAVE         = 177147,
 		SPELL_WHIRLWIND             = 277637,
 		SPELL_HEW                   = 319957,
-		SPELL_BANDAGE               = 333552,
 		SPELL_VICIOUS_WOUND         = 334960
 	};
-
-	bool banding;
-
-	void OnChannelFinished(SpellInfo const* spell) override
-	{
-		if (spell->Id == SPELL_BANDAGE)
-			banding = false;
-	}
-
-	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* /*spellInfo = nullptr*/) override
-	{
-        if (!attacker || damageType == HEAL)
-            return;
-
-        if (attacker->GetTypeId() == TYPEID_UNIT && attacker->ToCreature())
-        {
-            damage *= 0.08f;
-        }
-
-		if (ShouldTakeDamage())
-			return;
-
-		if (banding)
-			return;
-
-		banding = true;
-
-		CastStop();
-
-		DoCast(me, SPELL_BANDAGE,
-				CastSpellExtraArgs(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD)
-				.AddSpellBP0(30));
-	}
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{

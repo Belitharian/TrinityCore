@@ -9,7 +9,7 @@
 
 //#define CUSTOM_DEBUG
 
-#define ELEMENTALS_SIZE                 2
+constexpr auto ELEMENTALS_SIZE = 2;
 
 enum RFTCreatures
 {

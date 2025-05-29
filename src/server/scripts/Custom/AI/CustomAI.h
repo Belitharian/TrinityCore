@@ -103,7 +103,6 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         uint32 EnemiesInFront(float distance);
 
         bool HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic);
-        bool ShouldTakeDamage();
 };
 
 #endif // CUSTOM_CUSTOMAI_H

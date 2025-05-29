@@ -631,24 +631,24 @@ struct npc_tari_cogg : public CustomAI
 			evocating = false;
 	}
 
-	void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-		if (!ShouldTakeDamage())
-		{
-			if (evocating)
-				return;
+        if (me->HealthBelowPctDamaged(20, damage))
+        {
+            if (evocating)
+                return;
 
-			evocating = true;
+            evocating = true;
 
-			// On interrompt tous les sorts
-			CastStop();
+            // On interrompt tous les sorts
+            CastStop();
 
-			// On lance Evocation
-			DoCast(me, SPELL_EVOCATION,
-					CastSpellExtraArgs(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD)
-					.AddSpellBP0(10)
-					.AddSpellMod(SPELLVALUE_BASE_POINT1, 20));
-		}
+            // On lance Evocation
+            DoCast(me, SPELL_EVOCATION,
+                CastSpellExtraArgs(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD)
+                .AddSpellBP0(10)
+                .AddSpellMod(SPELLVALUE_BASE_POINT1, 20));
+        }
 	}
 
 	void JustEngagedWith(Unit* /*who*/) override
