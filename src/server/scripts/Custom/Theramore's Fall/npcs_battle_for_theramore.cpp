@@ -942,22 +942,6 @@ struct npc_theramore_horde : public CustomAI
 			KillRewarder::Reward(player, me, killCredit);
 	}
 
-    void DamageFromNPC(Unit* attacker, uint32& damage, DamageEffectType damageType) override
-    {
-        if (!attacker || damageType == HEAL)
-            return;
-
-        // Change reduction for Jaina in Theramore Ruins
-        if (attacker->GetEntry() == 64727)
-        {
-            damage *= 0.8f;
-        }
-        else if (attacker->GetTypeId() == TYPEID_UNIT && attacker->ToCreature())
-        {
-            damage *= 0.08f;
-        }
-    }
-
 	bool CanAIAttack(Unit const* who) const override
 	{
 		if (who->GetEntry() == NPC_KALECGOS_DRAGON)
@@ -1893,8 +1877,6 @@ struct npc_healing_tide_totem : public TotemAI
 // Light of Dawn - 295712
 class spell_theramore_light_of_dawn : public SpellScript
 {
-	PrepareSpellScript(spell_theramore_light_of_dawn);
-
 	enum Spells
 	{
 		SPELL_LIGHT_OF_DAWN = 295712
@@ -1918,8 +1900,6 @@ class spell_theramore_light_of_dawn : public SpellScript
 // 	Bucket Lands - 42339
 class spell_theramore_throw_bucket : public SpellScript
 {
-	PrepareSpellScript(spell_theramore_throw_bucket);
-
 	void HandleDummy(SpellEffIndex effIndex)
 	{
 		Unit* caster = GetCaster();
@@ -2005,8 +1985,6 @@ class PowderKegEvent : public BasicEvent
 // Powder Keg - 205238
 class spell_powder_keg : public SpellScript
 {
-	PrepareSpellScript(spell_theramore_throw_bucket);
-
     enum Spells
     {
         SPELL_BIG_FIRE_EXPLOSION    = 183880,
@@ -2062,6 +2040,40 @@ class spell_powder_keg : public SpellScript
 	{
 		OnEffectHit += SpellEffectFn(spell_powder_keg::HandleDummy, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
 	}
+};
+
+// Titan Force Shield - 1216608
+class spell_titan_force_shield : public AuraScript
+{
+public:
+    spell_titan_force_shield()
+    {
+        maxHealth = 0;
+        absorbedAmount = 0;
+    }
+
+    bool Load() override
+    {
+        maxHealth = GetCaster()->GetMaxHealth();
+        absorbedAmount = 0;
+        return true;
+    }
+
+    void CalculateAmount(AuraEffect const* /*auraEffect*/, int32& amount, bool& canBeRecalculated) const
+    {
+        canBeRecalculated = false;
+        amount = CalculatePct(maxHealth, absorbPct);
+    }
+
+    void Register() override
+    {
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_titan_force_shield::CalculateAmount, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB);
+    }
+
+private:
+    int32 absorbPct = 30;
+    int32 maxHealth;
+    uint32 absorbedAmount;
 };
 
 // Blizzard - 284968
@@ -2345,6 +2357,7 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterSpellScript(spell_theramore_light_of_dawn);
 	RegisterSpellScript(spell_theramore_throw_bucket);
 	RegisterSpellScript(spell_powder_keg);
+    RegisterSpellScript(spell_titan_force_shield);
 
 	RegisterAreaTriggerAI(at_blizzard_theramore);
 	RegisterAreaTriggerAI(at_waternado);

@@ -54,7 +54,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 	struct scenario_dalaran_purge_InstanceScript : public InstanceScript
 	{
 		scenario_dalaran_purge_InstanceScript(InstanceMap* map) : InstanceScript(map),
-			eventId(1), phase(DLPPhases::FindJaina01), index(0)
+			eventId(1), index(0), phase(DLPPhases::FindJaina01)
 		{
 			SetHeaders(DataHeader);
 			LoadObjectData(creatureData, gameobjectData);

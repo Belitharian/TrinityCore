@@ -298,8 +298,6 @@ class spell_ruins_frigid_shards : public AuraScript
 // Comet Barrage - 354938
 class spell_ruins_comet_barrage : public SpellScript
 {
-	PrepareSpellScript(spell_ruins_comet_barrage);
-
 	void HandleDamages(SpellEffIndex effIndex)
 	{
 		Unit* caster = GetCaster();

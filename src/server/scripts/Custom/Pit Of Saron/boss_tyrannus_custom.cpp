@@ -84,10 +84,10 @@ struct boss_tyrannus_custom : public BossAI
 
         while (uint32 eventId = events.ExecuteEvent())
         {
-            switch (eventId)
-            {
-                
-            }
+            //switch (eventId)
+            //{
+            //    
+            //}
 
             if (me->HasUnitState(UNIT_STATE_CASTING))
                 return;

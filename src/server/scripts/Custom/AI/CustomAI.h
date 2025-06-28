@@ -61,9 +61,6 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         virtual float GetDistance() { return 15.f; };
 
-        virtual float GetDamageReductionToUnit() { return 0.08f; };
-        virtual void DamageFromNPC(Unit* attacker, uint32& damage, DamageEffectType damageType);
-
         void JustSummoned(Creature* /*summon*/) override;
         void SummonedCreatureDespawn(Creature* /*summon*/) override;
         void SummonedCreatureDies(Creature* /*summon*/, Unit* /*killer*/) override;
@@ -71,7 +68,6 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void SpellHit(WorldObject* /*caster*/, SpellInfo const* /*spellInfo*/) override;
 
         void EnterEvadeMode(EvadeReason why = EvadeReason::Other) override;
-        void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override;
 
         void Reset() override;
         void AttackStart(Unit* /*who*/) override;
@@ -91,8 +87,8 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
     protected:
         TaskScheduler scheduler;
-        SummonList summons;
         AI_Type type;
+        SummonList summons;
         uint8 interruptCounter;
         bool canCombatMove;
         bool damageReduction;

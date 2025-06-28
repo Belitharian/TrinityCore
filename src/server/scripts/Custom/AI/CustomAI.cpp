@@ -106,14 +106,6 @@ void CustomAI::EnterEvadeMode(EvadeReason why)
 	ScriptedAI::EnterEvadeMode(why);
 }
 
-void CustomAI::DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* /*spellInfo = nullptr*/)
-{
-    if (damageReduction)
-    {
-        DamageFromNPC(attacker, damage, damageType);
-    }
-}
-
 void CustomAI::Reset()
 {
 	Initialize();
@@ -320,17 +312,6 @@ uint32 CustomAI::EnemiesInFront(float distance)
 		if (me->isInFrontInMap(ref->GetVictim(), distance))
 			++count;
 	return count;
-}
-
-void CustomAI::DamageFromNPC(Unit* attacker, uint32& damage, DamageEffectType damageType)
-{
-    if (!attacker || damageType == HEAL)
-        return;
-
-    if (attacker->GetTypeId() == TYPEID_UNIT && attacker->ToCreature())
-    {
-        damage *= GetDamageReductionToUnit();
-    }
 }
 
 bool CustomAI::HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic)

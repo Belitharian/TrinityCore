@@ -167,7 +167,7 @@ struct npc_aethas_sunreaver_purge : public CustomAI
 
 struct npc_magister_rommath_purge : public CustomAI
 {
-	npc_magister_rommath_purge(Creature* creature) : CustomAI(creature), evocating(false), eventId(0)
+	npc_magister_rommath_purge(Creature* creature) : CustomAI(creature), eventId(0), evocating(false)
 	{
 		Initialize();
 	}

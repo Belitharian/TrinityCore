@@ -639,16 +639,11 @@ struct npc_mage_commander_zuros : public CustomAI
 
     InstanceScript* instance;
     EventMap events;
-    Creature* surdiel;
     Creature* cleric;
+    Creature* surdiel;
     std::list<Creature*> allies, sunreavers;
 
     const Position surdielPoint01   = { -1021.14f, 4520.91f, 739.49f, 5.91f };
-
-    float GetDamageReductionToUnit() override
-    {
-        return 0.01f;
-    };
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
@@ -806,24 +801,11 @@ struct npc_narasi_snowdawn : public CustomAI
 
     const SpellInfo* blastInfo;
 
-    float GetDamageReductionToUnit() override
+    void Reset() override
     {
-        return 0.01f;
-    };
+        CustomAI::Reset();
 
-    void DamageFromNPC(Unit* attacker, uint32& damage, DamageEffectType damageType) override
-    {
-        if (!attacker || damageType == HEAL)
-            return;
-
-        if (attacker->GetTypeId() == TYPEID_PLAYER)
-        {
-            damage = 0;
-        }
-        else if (attacker->GetTypeId() == TYPEID_UNIT && attacker->ToCreature())
-        {
-            damage *= GetDamageReductionToUnit();
-        }
+        me->SetImmuneToPC(true, false);
     }
 
 	void JustEngagedWith(Unit* /*who*/) override
@@ -1059,13 +1041,18 @@ struct npc_archmage_landalock : public NullCreatureAI
 					Next(500ms);
 					break;
 				case 5:
-					if (Creature* icewall = me->FindNearestCreature(NPC_ICEWALL, 15.f))
-						icewall->KillSelf();
+                    if (Creature* icewall = me->FindNearestCreature(NPC_ICEWALL, 15.f))
+                    {
+                        icewall->KillSelf();
+                        icewallGUID = icewall->GetGUID();
+                    }
 					if (GameObject* collider = me->FindNearestGameObject(GOB_ICE_WALL_COLLISION, 15.f))
 						collider->Delete();
 					Next(2s);
 					break;
 				case 6:
+                    if (Creature* icewall = ObjectAccessor::GetCreature(*me, icewallGUID))
+                        icewall->SetVisible(false);
 					if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
 						me->SetFacingToObject(player);
 					Next(2s);
@@ -1406,7 +1393,9 @@ struct npc_sunreaver_unit : public CustomAI
 
 struct npc_sunreaver_pyromancer : public npc_sunreaver_unit
 {
-	npc_sunreaver_pyromancer(Creature* creature) : npc_sunreaver_unit(creature)
+    static constexpr uint8 FIRESPELL_MAX_SPHERES = 3;
+
+    npc_sunreaver_pyromancer(Creature* creature) : npc_sunreaver_unit(creature)
 	{
 		Initialize();
 	}
@@ -1414,10 +1403,22 @@ struct npc_sunreaver_pyromancer : public npc_sunreaver_unit
 	enum Spells
 	{
 		SPELL_MOLTEN_ARMOR          = 79849,
-		SPELL_FIREBALL              = 79854,
-		SPELL_FLAMESTRIKE           = 330347,
-		SPELL_RINF_OF_FIRE          = 353082
+        SPELL_PYROBLAST             = 244402,
+        SPELL_PHOENIX_FLAMES        = 257541,
+        SPELL_SCORCH                = 296457,
+        SPELL_FLAMESTRIKE           = 330347,
+		SPELL_FIREBALL              = 338914,
+        SPELL_FIRESPELL_SPHERE      = 448604
 	};
+
+    uint32 FirespellSpheres[FIRESPELL_MAX_SPHERES] =
+    {
+        452321,
+        452323,
+        452326
+    };
+
+    uint8 firespellOrbsIndex = 0;
 
 	void Reset() override
 	{
@@ -1431,6 +1432,35 @@ struct npc_sunreaver_pyromancer : public npc_sunreaver_unit
 		});
 	}
 
+    void SpellHitTarget(WorldObject* /*object*/, SpellInfo const* spellInfo) override
+	{
+		switch (spellInfo->Id)
+		{
+            case SPELL_PYROBLAST:
+                {
+                    firespellOrbsIndex = 0;
+                    me->RemoveAurasDueToSpell(SPELL_FIRESPELL_SPHERE);
+                    for (uint8 i = 0; i < FIRESPELL_MAX_SPHERES; i++)
+                        me->RemoveAurasDueToSpell(FirespellSpheres[i]);
+                }
+                break;
+            case SPELL_SCORCH:
+            case SPELL_FIREBALL:
+                {
+                    if (firespellOrbsIndex >= FIRESPELL_MAX_SPHERES)
+                    {
+                        DoCastVictim(SPELL_PYROBLAST);
+                        break;
+                    }
+
+                    DoCastSelf(SPELL_FIRESPELL_SPHERE);
+                    DoCastSelf(FirespellSpheres[firespellOrbsIndex]);
+                    firespellOrbsIndex++;
+                }
+                break;
+        }
+	}
+
 	void JustEngagedWith(Unit* who) override
 	{
 		DoCast(who, SPELL_FIREBALL);
@@ -1441,20 +1471,17 @@ struct npc_sunreaver_pyromancer : public npc_sunreaver_unit
 				DoCastVictim(SPELL_FIREBALL);
 				fireball.Repeat(2s);
 			})
+            .Schedule(5s, [this](TaskContext random_spells)
+			{
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    DoCast(target, RAND(SPELL_PHOENIX_FLAMES, SPELL_SCORCH));
+                random_spells.Repeat(8s, 14s);
+			})
 			.Schedule(3s, 8s, [this](TaskContext flamestrike)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 					DoCast(target, SPELL_FLAMESTRIKE);
 				flamestrike.Repeat(14s, 22s);
-			})
-			.Schedule(14s, 25s, [this](TaskContext rinf_of_fire)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-				{
-					CastStop(SPELL_FLAMESTRIKE);
-					DoCast(target, SPELL_RINF_OF_FIRE);
-				}
-				rinf_of_fire.Repeat(20s, 25s);
 			});
 	}
 };
@@ -1568,18 +1595,28 @@ struct npc_sunreaver_aegis : public npc_sunreaver_unit
 
 struct npc_sunreaver_summoner : public npc_sunreaver_unit
 {
-	npc_sunreaver_summoner(Creature* creature) : npc_sunreaver_unit(creature)
+	npc_sunreaver_summoner(Creature* creature) : npc_sunreaver_unit(creature), healDone(false)
 	{
 	}
 
 	enum Spells
 	{
-		SPELL_ARCANE_BLAST      = 270543,
-		SPELL_ARCANE_EXPLOSION  = 277012,
-		SPELL_ARCANE_MISSILES   = 191293,
-		SPELL_MAGE_ARMOR        = 183079,
-		SPELL_ARCANE_HASTE      = 50182
+		SPELL_ARCANE_HASTE          = 50182,
+		SPELL_MAGE_ARMOR            = 183079,
+		SPELL_ARCANE_MISSILES       = 191293,
+        SPELL_ARCANE_BLITZ          = 197797,
+        SPELL_ARCANE_RECONSTITUTION = 226206,
+		SPELL_ARCANE_BLAST          = 270543,
+		SPELL_ARCANE_EXPLOSION      = 277012,
+        SPELL_ARCANE_SUMMONS        = 390233,
 	};
+
+    enum Misc
+    {
+        NPC_ARCANE_ELEMENTAL    = 196992
+    };
+
+    bool healDone;
 
 	void Reset() override
 	{
@@ -1591,6 +1628,35 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 		});
 	}
 
+    void EnterEvadeMode(EvadeReason why) override
+    {
+        CustomAI::EnterEvadeMode(why);
+        summons.DespawnAll();
+    }
+
+    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    {
+        if (!healDone && HealthBelowPct(40))
+        {
+            CastStop();
+            DoCastSelf(SPELL_ARCANE_RECONSTITUTION);
+            healDone = true;
+        }
+    }
+
+    void JustSummoned(Creature* summon) override
+    {
+        summons.Summon(summon);
+        switch (summon->GetEntry())
+        {
+            case NPC_ARCANE_ELEMENTAL:
+                summon->Attack(me->EnsureVictim(), false);
+                break;
+            default:
+                break;
+        }
+    }
+
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		DoCast(SPELL_ARCANE_HASTE);
@@ -1601,11 +1667,16 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 				DoCastVictim(SPELL_ARCANE_BLAST);
 				arcane_blast.Repeat(2300ms);
 			})
+            .Schedule(2s, [this](TaskContext arcane_blitz)
+            {
+                if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
+                    DoCast(victim, SPELL_ARCANE_BLITZ);
+            })
 			.Schedule(5s, 8s, [this](TaskContext arcane_explosion)
 			{
 				if (EnemiesInRange(10.f) >= 2)
 				{
-					CastStop();
+                    CastStop({ SPELL_ARCANE_SUMMONS, SPELL_ARCANE_RECONSTITUTION });
 					DoCast(SPELL_ARCANE_EXPLOSION);
 					arcane_explosion.Repeat(10s, 14s);
 				}
@@ -1614,8 +1685,11 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 			})
 			.Schedule(4s, 8s, [this](TaskContext arcane_missiles)
 			{
-				if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
-					DoCast(victim, SPELL_ARCANE_MISSILES);
+                if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
+                {
+                    CastStop({ SPELL_ARCANE_RECONSTITUTION, SPELL_ARCANE_SUMMONS, SPELL_ARCANE_BLITZ });
+                    DoCast(victim, SPELL_ARCANE_MISSILES);
+                }
 				arcane_missiles.Repeat(8s, 12s);
 			})
 			.Schedule(1s, [this](TaskContext arcane_haste)
@@ -1623,6 +1697,48 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 				if (!me->HasAura(SPELL_ARCANE_HASTE))
 					DoCast(SPELL_ARCANE_HASTE);
 				arcane_haste.Repeat(2s);
+			})
+            .Schedule(14s, [this](TaskContext arcane_summons)
+            {
+                CastStop(SPELL_ARCANE_RECONSTITUTION);
+                DoCastSelf(SPELL_ARCANE_SUMMONS);
+            });
+	}
+};
+
+struct npc_arcane_elemental : public CustomAI
+{
+    npc_arcane_elemental(Creature* creature) : CustomAI(creature, AI_Type::Stay)
+	{
+	}
+
+	enum Spells
+	{
+		SPELL_ARCANE_SALVO          = 378850,
+		SPELL_ARCANE_DETONATION     = 388288,
+	};
+
+    void JustDied(Unit* killer) override
+    {
+        CustomAI::JustDied(killer);
+
+        if (Creature* trigger = me->SummonCreature(WORLD_TRIGGER, me->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 10s))
+        {
+            trigger->SetFaction(me->GetFaction());
+            trigger->SetReactState(REACT_PASSIVE);
+            trigger->CastSpell(trigger, SPELL_ARCANE_DETONATION);
+        }
+    }
+
+	void JustEngagedWith(Unit* /*who*/) override
+	{
+        DoCastVictim(SPELL_ARCANE_SALVO);
+
+		scheduler
+			.Schedule(3200ms, [this](TaskContext mortal_cleave)
+			{
+				DoCastVictim(SPELL_ARCANE_SALVO);
+				mortal_cleave.Repeat(3200ms);
 			});
 	}
 };
@@ -1663,6 +1779,7 @@ struct npc_sunreaver_captain : public CustomAI
 		{
 			me->AddAura(SPELL_RECENTLY_BANDAGED, me);
 
+            CastStop();
 			DoCast(SPELL_BANDAGE);
 		}
 	}
@@ -1734,13 +1851,12 @@ struct npc_sunreaver_captain : public CustomAI
 					{
 						host->SetEmoteState(EMOTE_STATE_COWER);
 						host->SetHomePosition(dest);
-						host->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, dest);
 						host->SetFacingToObject(me);
-					})
-					.Schedule(30s, [host, this](TaskContext /*context*/)
-					{
-						host->DisappearAndDie();
-					});
+                        host->DespawnOrUnsummon(30s);
+
+                        float angle = me->GetAbsoluteAngle(host);
+                        host->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, dest, true, angle);
+                    });
 			}
 		}
 	}
@@ -1761,7 +1877,6 @@ struct npc_magister_brasael : public CustomAI
 		// Spells
 		SPELL_SURVIVOR_BAG          = 138208,
 		SPELL_GOLDEN_MOSS           = 148559,
-		SPELL_RING_OF_FIRE          = 353103,
 		// Talks
 		SAY_BRASAEL_01              = 0
 	};
@@ -1816,7 +1931,6 @@ struct npc_magister_brasael : public CustomAI
 								break;
 							default:
 								DoCast(SPELL_GOLDEN_MOSS);
-								DoCast(SPELL_RING_OF_FIRE);
 								ring_of_fire.Repeat(500ms, 800ms);
 								break;
 						}
@@ -2015,8 +2129,10 @@ struct npc_magister_surdiel : public CustomAI
 	static constexpr int TELEPORT_COUNT = 2;
 	static constexpr int HEALTH_PERCENT_COUNT = 3;
 
-	npc_magister_surdiel(Creature* creature) : CustomAI(creature, true, AI_Type::Stay), combatFinal(false),
-        healthPercentIndex(0), elementals(creature), countdown(0), fireballInfo(nullptr), canSummon(false)
+	npc_magister_surdiel(Creature* creature) : CustomAI(creature, true, AI_Type::Stay),
+        fireballInfo(nullptr), elementals(creature),
+        healthPercentIndex(0), countdown(0),
+        combatFinal(false), canSummon(false)
 	{
 		instance = me->GetInstanceScript();
 	}
@@ -2054,15 +2170,15 @@ struct npc_magister_surdiel : public CustomAI
 	};
 
     const SpellInfo* fireballInfo;
+    SummonList elementals;
+    uint8 healthPercentIndex;
+    uint32 countdown;
+    bool combatFinal;
+    bool canSummon;
 
 	InstanceScript* instance;
 	Position barrierPoint01;
 	ObjectGuid rommathGUID;
-    SummonList elementals;
-    uint32 countdown;
-    uint8 healthPercentIndex;
-    bool combatFinal;
-    bool canSummon;
 
 	const Position portalPoint01    = { -1011.90f, 4530.87f, 739.49f, 4.92f };
 	const Position rommathPoint01   = { -1013.63f, 4526.73f, 739.49f, 5.16f };
@@ -2102,11 +2218,6 @@ struct npc_magister_surdiel : public CustomAI
 
         ScriptedAI::Reset();
     }
-
-    float GetDamageReductionToUnit() override
-    {
-        return 0.01f;
-    };
 
 	void JustAppeared() override
 	{
@@ -2221,10 +2332,8 @@ struct npc_magister_surdiel : public CustomAI
 		}
 	}
 
-	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* /*spellInfo = nullptr*/) override
+	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-        DamageFromNPC(attacker, damage, damageType);
-
         DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
         if (phase >= DLPPhases::TheEscape)
             return;
@@ -2422,8 +2531,8 @@ struct npc_high_arcanist_savor : public CustomAI
 	static constexpr float SAVOR_SPAWN_COUNT = 2.0f;
 
 	npc_high_arcanist_savor(Creature* creature) : CustomAI(creature, AI_Type::Stay), phase(Phases::None),
-		clones(creature), lastSpeed(SPELL_SPEED_SLOW), timeCount(0), sunreaversCount(0), wavesCount(0),
-		sunreaversPortal(nullptr), arcaneBarrier(ObjectGuid::Empty)
+		clones(creature), sunreaversPortal(nullptr), arcaneBarrier(ObjectGuid::Empty), lastSpeed(SPELL_SPEED_SLOW),
+        timeCount(0), sunreaversCount(0), wavesCount(0)
 	{
 		instance = me->GetInstanceScript();
 	}
@@ -2503,11 +2612,12 @@ struct npc_high_arcanist_savor : public CustomAI
 	};
 
 	InstanceScript* instance;
+
 	Phases phase;
 	SummonList clones;
-    ObjectGuid arcaneBarrier;
 	GameObject* sunreaversPortal;
-	uint32 lastSpeed;
+    ObjectGuid arcaneBarrier;
+    uint32 lastSpeed;
 	uint32 timeCount;
 	uint32 sunreaversCount;
 	uint32 wavesCount;
@@ -2517,20 +2627,13 @@ struct npc_high_arcanist_savor : public CustomAI
     void Initialize() override
     {
         CustomAI::Initialize();
-
-        me->SetRegenerateHealth(false);
+        InitVar();
     }
 
 	void Reset() override
 	{
 		CustomAI::Reset();
-
-        DoOnPlayers([this](Player* player)
-        {
-            player->RemoveAura(SPELL_ALT_POWER_BAR);
-        });
-
-        phase = Phases::None;
+        InitVar();
 	}
 
 	void EnterEvadeMode(EvadeReason why) override
@@ -2538,9 +2641,6 @@ struct npc_high_arcanist_savor : public CustomAI
 		CustomAI::EnterEvadeMode(why);
 		DoCastOnPlayers(SPELL_SPEED_NORMAL);
 		ClosePortal(sunreaversPortal);
-
-		me->SetFullHealth();
-		me->SetFullPower(me->GetPowerType());
 	}
 
 	void JustDied(Unit* killer) override
@@ -2584,149 +2684,170 @@ struct npc_high_arcanist_savor : public CustomAI
 		}
 	}
 
-	void DoAction(int32 action) override
-	{
-		switch (action)
-		{
-			case ACTION_ARCANE_ORB_DESPAWN:
-				phase = Phases::Time;
-				me->RemoveAurasDueToSpell(SPELL_IMMUNE);
-				scheduler.CancelGroup(GROUP_LIVING_LEDGERS);
-				scheduler.Schedule(2s, GROUP_TIME, [this](TaskContext spell_speed)
-				{
-					if (lastSpeed == SPELL_SPEED_FAST)
-					{
-						DoCastOnPlayers(SPELL_SPEED_SLOW);
-						lastSpeed = SPELL_SPEED_SLOW;
-					}
-					else
-					{
-						DoCastOnPlayers(SPELL_SPEED_FAST);
-						lastSpeed = SPELL_SPEED_FAST;
-					}
-					spell_speed.Repeat(15s);
-				});
-				break;
-			case ACTION_HORDE_PORTAL_SPAWN:
-				SummonSunreavers();
-				scheduler.Schedule(1s, GROUP_PORTAL, [this](TaskContext check_hordes)
-				{
-					if (phase == Phases::Final)
-						return;
+    void DoAction(int32 action) override
+    {
+        switch (action)
+        {
+            case ACTION_ARCANE_ORB_DESPAWN:
+            {
+                // Reprise de la phase Time
+                phase = Phases::Time;
+                me->RemoveAurasDueToSpell(SPELL_IMMUNE);
 
-					if (sunreaversCount >= SAVOR_SPAWN_COUNT)
-					{
-						if (wavesCount >= SAVOR_MAX_WAVES)
-						{
-							phase = Phases::Final;
+                scheduler.CancelGroup(GROUP_LIVING_LEDGERS);
 
-							scheduler.CancelGroup(GROUP_PORTAL);
-							scheduler.CancelGroup(GROUP_ALWAYS);
+                // Alterne entre vitesse rapide/lente toutes les 15s
+                scheduler.Schedule(2s, GROUP_TIME, [this](TaskContext spell_speed)
+                {
+                    if (lastSpeed == SPELL_SPEED_FAST)
+                    {
+                        DoCastOnPlayers(SPELL_SPEED_SLOW);
+                        lastSpeed = SPELL_SPEED_SLOW;
+                    }
+                    else
+                    {
+                        DoCastOnPlayers(SPELL_SPEED_FAST);
+                        lastSpeed = SPELL_SPEED_FAST;
+                    }
 
-							me->AI()->Talk(SAY_SAVOR_BIG_BANG);
-							me->RemoveAurasDueToSpell(SPELL_IMMUNE);
-							me->RemoveAurasDueToSpell(SPELL_ARCANE_FX);
-							me->RemoveAurasDueToSpell(SPELL_PORTAL_CHANNELING_03);
-							me->RemoveAurasDueToSpell(SPELL_LEVITATE);
-							me->SetReactState(REACT_AGGRESSIVE);
+                    spell_speed.Repeat(15s);
+                });
 
-							ClosePortal(sunreaversPortal);
+                break;
+            }
+            case ACTION_HORDE_PORTAL_SPAWN:
+            {
+                // Première vague de Sunreavers
+                SummonSunreavers();
 
+                // Vérifie l'état de l'invocation chaque seconde
+                scheduler.Schedule(1s, GROUP_PORTAL, [this](TaskContext check_hordes)
+                {
+                    if (phase == Phases::Final)
+                        return;
+
+                    if (sunreaversCount >= SAVOR_SPAWN_COUNT)
+                    {
+                        if (wavesCount >= SAVOR_MAX_WAVES)
+                        {
+                            // Passage à la phase finale
+                            phase = Phases::Final;
+
+                            scheduler.CancelGroup(GROUP_PORTAL);
+                            scheduler.CancelGroup(GROUP_ALWAYS);
+
+                            me->AI()->Talk(SAY_SAVOR_BIG_BANG);
+
+                            me->RemoveAurasDueToSpell(SPELL_IMMUNE);
+                            me->RemoveAurasDueToSpell(SPELL_ARCANE_FX);
+                            me->RemoveAurasDueToSpell(SPELL_PORTAL_CHANNELING_03);
+                            me->RemoveAurasDueToSpell(SPELL_LEVITATE);
+
+                            me->SetReactState(REACT_AGGRESSIVE);
+
+                            // Ferme le portail
+                            ClosePortal(sunreaversPortal);
+
+                            // Active l'effet de zone via la barrière
                             if (Creature* barrier = ObjectAccessor::GetCreature(*me, arcaneBarrier))
                             {
                                 barrier->RemoveAllAuras();
                                 barrier->CastSpell(barrier, SPELL_AREA_ZONE_FX);
                             }
 
-							CastStop();
-							DoCast(SPELL_BIG_BANG);
+                            CastStop();
+                            DoCast(SPELL_BIG_BANG);
 
-							DoCastOnPlayers(SPELL_SPEED_FAST);
-						}
-						else
-						{
-							SummonSunreavers();
-						}
-					}
-					check_hordes.Repeat(1s);
-				});
-				break;
-			default:
-				break;
-		}
-	}
+                            DoCastOnPlayers(SPELL_SPEED_FAST);
+                        }
+                        else
+                        {
+                            // Nouvelle vague
+                            SummonSunreavers();
+                        }
+                    }
 
-	void JustReachedHome() override
-	{
-		if (phase == Phases::Portal)
-		{
-			DoCast(me, SPELL_PORTAL_CHANNELING_03, true);
-			DoCast(me, SPELL_ARCANE_FX, true);
+                    check_hordes.Repeat(1s);
+                });
 
-            if (Creature* barrier = me->SummonCreature(WORLD_TRIGGER, me->GetPosition()))
-            {
-                barrier->CastSpell(barrier, SPELL_ARCANE_BARRIER);
-                barrier->SetObjectScale(0.7f);
-                arcaneBarrier = barrier->GetGUID();
+                break;
             }
-		}
-	}
+            default:
+                break;
+        }
+    }
 
-	void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
-	{
-		if (phase != Phases::Time)
-			return;
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    {
+        if (phase != Phases::Time)
+            return;
 
-		// Only in Time phase
+        // Phase: Time
+        if (me->HealthBelowPctDamaged(30, damage))
+        {
+            timeCount++;
 
-		if (HealthBelowPct(30))
-		{
-			timeCount++;
-			if (phase != Phases::Final && timeCount >= 3)
-			{
-				phase = Phases::Portal;
+            // Si 3 déclenchements ou plus, passage à la phase Portal
+            if (phase != Phases::Final && timeCount >= 3)
+            {
+                phase = Phases::Portal;
 
-				DoOnPlayers([this](Player* player)
-				{
+                DoCastOnPlayers(SPELL_SPEED_NORMAL);
+
+                DoOnPlayers([this](Player* player)
+                {
                     player->RemoveAura(SPELL_ALT_POWER_BAR);
-					player->CastStop();
-				});
+                    player->CastStop();
+                });
 
-				scheduler.CancelGroup(GROUP_TIME);
-				scheduler.CancelGroup(GROUP_ALWAYS);
+                scheduler.CancelGroup(GROUP_TIME);
+                scheduler.CancelGroup(GROUP_ALWAYS);
 
-				summons.DespawnAll();
+                summons.DespawnAll();
+                me->SetReactState(REACT_PASSIVE);
 
-				me->SetReactState(REACT_PASSIVE);
-				me->GetMotionMaster()->MoveTargetedHome();
+                DoCast(me, SPELL_IMMUNE, true);
+                DoCast(me, SPELL_PORTAL_CHANNELING_03, true);
+                DoCast(me, SPELL_ARCANE_FX, true);
 
-				DoCastOnPlayers(SPELL_SPEED_NORMAL);
+                // Invoque la barrière arcanique
+                if (Creature* barrier = me->SummonCreature(WORLD_TRIGGER, me->GetPosition()))
+                {
+                    barrier->CastSpell(barrier, SPELL_ARCANE_BARRIER);
+                    barrier->SetObjectScale(0.7f);
+                    arcaneBarrier = barrier->GetGUID();
+                }
 
-				DoCast(me, SPELL_IMMUNE, true);
+                // Invoque le portail vers Lune-d'Argent
+                sunreaversPortal = me->SummonGameObject(
+                    GOB_PORTAL_TO_SILVERMOON,
+                    portalPoint01,
+                    QuaternionData::fromEulerAnglesZYX(portalPoint01.GetOrientation(), 0.0f, 0.0f),
+                    0s
+                );
 
-				sunreaversPortal = me->SummonGameObject(GOB_PORTAL_TO_SILVERMOON, portalPoint01, QuaternionData::fromEulerAnglesZYX(portalPoint01.GetOrientation(), 0.0f, 0.0f), 0s);
-
-				DoAction(ACTION_HORDE_PORTAL_SPAWN);
-			}
-			else
-			{
-				scheduler.Schedule(5ms, GROUP_TIME, [this](TaskContext rewind_time)
-				{
-					switch (rewind_time.GetRepeatCounter())
-					{
-						case 0:
-							me->SetFullHealth();
-							RewindTime(true);
-							rewind_time.Repeat(4s);
-							break;
-						case 1:
-							RewindTime(false);
-							break;
-					}
-				});
-			}
-		}
-	}
+                DoAction(ACTION_HORDE_PORTAL_SPAWN);
+            }
+            else
+            {
+                // Rewind du temps (2 fois)
+                scheduler.Schedule(5ms, GROUP_TIME, [this](TaskContext rewind_time)
+                {
+                    switch (rewind_time.GetRepeatCounter())
+                    {
+                        case 0:
+                            me->SetFullHealth();
+                            RewindTime(true);
+                            rewind_time.Repeat(4s);
+                            break;
+                        case 1:
+                            RewindTime(false);
+                            break;
+                        }
+                });
+            }
+        }
+    }
 
 	void MoveInLineOfSight(Unit* who) override
 	{
@@ -2990,6 +3111,21 @@ struct npc_high_arcanist_savor : public CustomAI
 		});
 	}
 
+    void InitVar()
+    {
+        DoOnPlayers([this](Player* player)
+        {
+            player->RemoveAura(SPELL_ALT_POWER_BAR);
+        });
+
+        phase = Phases::None;
+        arcaneBarrier = ObjectGuid::Empty;
+        lastSpeed = SPELL_SPEED_SLOW;
+        timeCount = 0;
+        sunreaversCount = 0;
+        wavesCount = 0;
+    }
+
 	#pragma endregion
 };
 
@@ -3037,8 +3173,8 @@ struct npc_arcane_barrier : public NullCreatureAI
 
 	TaskScheduler scheduler;
 	InstanceScript* instance;
-	ObjectGuid mageGUID;
     ObjectGuid triggerGUID;
+	ObjectGuid mageGUID;
 	ObjectGuid colliderGUID;
 
 	void JustDied(Unit* /*killer*/) override
@@ -3573,8 +3709,6 @@ struct go_portal_savor : public GameObjectAI
 // Teleport - 135176
 class spell_purge_teleport : public SpellScript
 {
-	PrepareSpellScript(spell_purge_teleport);
-
 	void HandleTeleport(SpellEffIndex effIndex)
 	{
 		PreventHitDefaultEffect(effIndex);
@@ -3598,8 +3732,6 @@ class spell_purge_teleport : public SpellScript
 // Glacial Spike - 338488
 class spell_purge_glacial_spike : public SpellScript
 {
-	PrepareSpellScript(spell_purge_glacial_spike);
-
 	enum Misc
 	{
 		SPELL_GLACIAL_WRATH             = 346525
@@ -3623,8 +3755,6 @@ class spell_purge_glacial_spike : public SpellScript
 // Glacial Spike - 346469
 class spell_purge_glacial_spike_summon : public SpellScript
 {
-	PrepareSpellScript(spell_purge_glacial_spike_summon);
-
 	void HandleSummon(SpellEffIndex /*effIndex*/)
 	{
         Unit* caster = GetCaster();
@@ -3652,8 +3782,6 @@ class spell_purge_glacial_spike_summon : public SpellScript
 // Speed: Fast - 207013
 class spell_speed : public AuraScript
 {
-	PrepareAuraScript(spell_speed);
-
 	void OnRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
 	{
 		if (Unit* target = GetTarget())
@@ -3719,8 +3847,6 @@ class spell_living_ledgers : public SpellScript
 {
 	static constexpr uint32 HEALTH_PERCENT = 10;
 
-	PrepareSpellScript(spell_living_ledgers);
-
     enum NPCs
     {
         NPC_LIVING_LEDGERS = 112906
@@ -3765,8 +3891,6 @@ class spell_living_ledgers : public SpellScript
 // Big Band - 222761
 class spell_big_bang : public SpellScript
 {
-	PrepareSpellScript(spell_big_bang);
-
 	void FilterTargets(std::list<WorldObject*>& targets)
 	{
 		Unit* caster = GetCaster();
@@ -3948,8 +4072,6 @@ class spell_atonement_aura_stormwind_cleric : public AuraScript
 // Delphuric Beam - 423771
 class spell_delphuric_beam : public SpellScript
 {
-    PrepareSpellScript(spell_delphuric_beam);
-
     enum Misc
     {
         SPELL_DELPHURIC_BEAM_DAMAGE = 423634
@@ -4001,6 +4123,7 @@ void AddSC_npcs_dalaran_purge()
 	RegisterDalaranAI(npc_sunreaver_aegis);
 	RegisterDalaranAI(npc_sunreaver_captain);
 	RegisterDalaranAI(npc_sunreaver_summoner);
+	RegisterDalaranAI(npc_arcane_elemental);
 	RegisterDalaranAI(npc_magister_brasael);
 	RegisterDalaranAI(npc_magister_surdiel);
 	RegisterDalaranAI(npc_high_arcanist_savor);

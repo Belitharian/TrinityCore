@@ -66,11 +66,6 @@ struct npc_jaina_theramore : public CustomAI
 		}
 	}
 
-	float GetDamageReductionToUnit() override
-	{
-		return 1.0f;
-	};
-
 	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{
 		if (target->GetEntry() == NPC_THERAMORE_FIRE_CREDIT
@@ -258,11 +253,6 @@ struct npc_archmage_tervosh : public CustomAI
 				break;
 		}
 	}
-
-	float GetDamageReductionToUnit() override
-	{
-		return 1.0f;
-	};
 
 	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{

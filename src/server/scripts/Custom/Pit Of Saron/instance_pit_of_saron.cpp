@@ -44,7 +44,7 @@ class instance_pit_of_saron_custom : public InstanceMapScript
 		struct instance_pit_of_saron_InstanceScript : public InstanceScript
 		{
 			instance_pit_of_saron_InstanceScript(InstanceMap* map) : InstanceScript(map),
-                eventId(1), phase(Phases::None), skeletonIndex(0), actorsIndex(0)
+                phase(Phases::None), eventId(1), skeletonIndex(0), actorsIndex(0)
 			{
 				SetHeaders(DataHeader);
 				LoadObjectData(creatureData, gameobjectData);
