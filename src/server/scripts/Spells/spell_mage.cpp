@@ -1548,8 +1548,6 @@ class spell_mage_water_elemental_freeze : public SpellScript
 // 352278 Ice Wall
 class spell_ice_wall : public SpellScript
 {
-    PrepareSpellScript(spell_ice_wall);
-
     void HandleSummon(SpellEffIndex effIndex)
     {
         PreventHitDefaultEffect(effIndex);
@@ -1607,8 +1605,6 @@ struct at_ring_of_fire : AreaTriggerAI
 // Meteor - 153561
 class spell_mage_meteor : public SpellScript
 {
-    PrepareSpellScript(spell_mage_meteor);
-
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
         return ValidateSpellInfo({ SPELL_MAGE_METEOR_DAMAGE });
@@ -1633,8 +1629,6 @@ class spell_mage_meteor : public SpellScript
 // Meteor Damage - 153564
 class spell_mage_meteor_damage : public SpellScript
 {
-    PrepareSpellScript(spell_mage_meteor_damage);
-
     int32 _targets;
 
     void HandleHit(SpellEffIndex /*effIndex*/)
