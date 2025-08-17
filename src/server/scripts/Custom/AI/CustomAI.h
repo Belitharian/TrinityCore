@@ -78,7 +78,6 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void CastStop();
         void CastStop(uint32 exception);
         void CastStop(const std::vector<uint32>& exceptions);
-        void SetCombatMove(bool on, float distance = 0.0f, bool stopMoving = false, bool force = false);
 
         void TalkInCombat(uint8 textId, uint64 cooldown = 10);
 
@@ -100,5 +99,67 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         bool HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic);
 };
+
+inline Position const GetRandomPosition(Position center, float dist)
+{
+    float alpha = 2 * float(M_PI) * float(rand_norm());
+    float r = dist * sqrtf(float(rand_norm()));
+    float x = r * cosf(alpha) + center.GetPositionX();
+    float y = r * sinf(alpha) + center.GetPositionY();
+
+    Position result = { x, y, center.GetPositionZ(), 0.f };
+
+    float o = result.GetAbsoluteAngle(center);
+    result.SetOrientation(o);
+
+    return result;
+}
+
+inline Position const GetRandomPosition(Unit* target, float dist, bool fill = true)
+{
+    // Get center position
+    Position center = target->GetPosition();
+
+    // Random angle
+    float alpha = 2 * float(M_PI) * float(rand_norm());
+
+    // Random radius
+    float r = fill
+        ? dist * sqrtf(float(rand_norm()))
+        : dist;
+
+    // Move to first collision
+    target->MovePositionToFirstCollision(center, r, alpha);
+
+    // Get orientation angle
+    float o = center.GetAbsoluteAngle(target);
+
+    // Set final position
+    return { center.m_positionX, center.m_positionY, center.m_positionZ, o };
+}
+
+inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
+{
+    // Get center position
+    const Position center = target->GetPosition();
+
+    // Get X and Y position around the center with radius
+    float x = radius * cosf(angle) + center.GetPositionX();
+    float y = radius * sinf(angle) + center.GetPositionY();
+
+    // Get height map Z position
+    float z = center.GetPositionZ();
+
+    Trinity::NormalizeMapCoord(x);
+    Trinity::NormalizeMapCoord(y);
+    target->UpdateGroundPositionZ(x, y, z);
+
+    // Get orientation angle
+    const Position position = { x, y, z };
+    float o = position.GetAbsoluteAngle(center);
+
+    // Set final position
+    return { x, y, z, o };
+}
 
 #endif // CUSTOM_CUSTOMAI_H

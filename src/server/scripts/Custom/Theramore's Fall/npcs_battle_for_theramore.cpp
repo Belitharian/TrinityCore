@@ -171,12 +171,12 @@ struct npc_wounded_theramore_troop : public ScriptedAI
 
 		if (Player* player = caster->ToPlayer())
 		{
-            #ifdef CUSTOM_DEBUG
-                for (uint8 i = 0; i < NUMBER_OF_WOUNDED; i++)
-                    KillRewarder::Reward(player, me, NPC_THERAMORE_WOUNDED_TROOP);
-            #else
-			    KillRewarder::Reward(player, me, NPC_THERAMORE_WOUNDED_TROOP);
-            #endif
+			#ifdef CUSTOM_DEBUG
+				for (uint8 i = 0; i < NUMBER_OF_WOUNDED; i++)
+					KillRewarder::Reward(player, me, NPC_THERAMORE_WOUNDED_TROOP);
+			#else
+				KillRewarder::Reward(player, me, NPC_THERAMORE_WOUNDED_TROOP);
+			#endif
 		}
 
 		me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
@@ -222,13 +222,18 @@ struct npc_theramore_troop : public CustomAI
 	uint32 soundEmote;
 	bool emoteReceived;
 
-    void SetData(uint32 id, uint32 value) override
-    {
-        if (id == NPC_THERAMORE_TROOPS_CREDIT)
-        {
-            emoteReceived = value ? true : false;
-        }
-    }
+	void JustEngagedWith(Unit* /*who*/) override
+	{
+		me->CallAssistance();
+	}
+
+	void SetData(uint32 id, uint32 value) override
+	{
+		if (id == NPC_THERAMORE_TROOPS_CREDIT)
+		{
+			emoteReceived = value ? true : false;
+		}
+	}
 
 	void ReceiveEmote(Player* player, uint32 emoteId) override
 	{
@@ -266,7 +271,7 @@ struct npc_theramore_troop : public CustomAI
 									case 1:
 										troop->PlayDirectSound(soundEmote, player);
 										troop->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
-                                        troop->AI()->SetData(NPC_THERAMORE_TROOPS_CREDIT, 1);
+										troop->AI()->SetData(NPC_THERAMORE_TROOPS_CREDIT, 1);
 										KillRewarder::Reward(player, troop, NPC_THERAMORE_TROOPS_CREDIT);
 										context.Repeat(3s);
 										break;
@@ -325,7 +330,7 @@ struct npc_thader_windermere : public CustomAI
 							break;
 						case 1:
 							if (Creature* kinndy = instance->GetCreature(DATA_KINNDY_SPARKSHINE))
-                                kinndy->CastSpell(kinndy, SPELL_PORTAL_CHANNELING_01);
+								kinndy->CastSpell(kinndy, SPELL_PORTAL_CHANNELING_01);
 							context.Repeat(1800ms);
 							break;
 						case 2:
@@ -346,7 +351,7 @@ struct npc_thader_windermere : public CustomAI
 struct npc_hedric_evencane : public CustomAI
 {
 	npc_hedric_evencane(Creature* creature) : CustomAI(creature, true, AI_Type::Melee)
-    {
+	{
 	}
 
 	enum Spells
@@ -423,7 +428,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 		SPELL_LIGHT_OF_DAWN         = 295710,
 		SPELL_BLESSING_OF_FREEDOM   = 299256,
 		SPELL_REBUKE                = 405397,
-		SPELL_CONSECRATION          = 461741,
+		SPELL_CONSECRATION          = 424429,
 	};
 
 	bool healthLow;
@@ -468,8 +473,10 @@ struct npc_theramore_officier : public npc_theramore_troop
 		}
 	}
 
-	void JustEngagedWith(Unit* /*who*/) override
+	void JustEngagedWith(Unit* who) override
 	{
+		npc_theramore_troop::JustEngagedWith(who);
+
 		if (roll_chance_i(50))
 			DoCastSelf(SPELL_AVENGING_WRATH);
 
@@ -542,7 +549,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			.Schedule(3s, 15s, [this](TaskContext consecration)
 			{
 				DoCast(SPELL_CONSECRATION);
-                consecration.Repeat(31s);
+				consecration.Repeat(31s);
 			})
 			.Schedule(8s, 14s, [this](TaskContext divine_storm)
 			{
@@ -584,8 +591,10 @@ struct npc_theramore_footman : public npc_theramore_troop
 		SPELL_HAMMER_STUN           = 36138
 	};
 
-	void JustEngagedWith(Unit* /*who*/) override
+	void JustEngagedWith(Unit* who) override
 	{
+		npc_theramore_troop::JustEngagedWith(who);
+
 		scheduler
 			.Schedule(5ms, [this](TaskContext hammer_stun)
 			{
@@ -617,17 +626,22 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 {
 	npc_theramore_arcanist(Creature* creature) : npc_theramore_troop(creature, AI_Type::Distance)
 	{
+		castSpellArcaneTempo.SetTriggerFlags(TRIGGERED_FULL_MASK & ~(TRIGGERED_IGNORE_POWER_COST | TRIGGERED_IGNORE_REAGENT_COST));
+		castSpellArcaneTempo.AddSpellBP0(2U);
 	}
 
 	enum Spells
 	{
-		SPELL_ARCANE_HASTE      = 50182,
-		SPELL_ARCANE_BLAST      = 169825,
 		SPELL_MAGE_ARMOR        = 183079,
+		SPELL_ARCANE_BLAST      = 291336,
 		SPELL_ARCANE_MISSILES   = 314734,
-        SPELL_MASS_POLYMORPH    = 383121,
+		SPELL_MASS_POLYMORPH    = 383121,
+		SPELL_ARCANE_TEMPO      = 383997,
 		SPELL_ARCANE_EXPLOSION  = 414381,
+		SPELL_ARCANE_SPLINTER   = 443763
 	};
+
+	CastSpellExtraArgs castSpellArcaneTempo;
 
 	void Reset() override
 	{
@@ -639,9 +653,48 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 		});
 	}
 
-	void JustEngagedWith(Unit* /*who*/) override
+	void SpellHitTarget(WorldObject* /*object*/, SpellInfo const* spellInfo) override
 	{
-		DoCast(SPELL_ARCANE_HASTE);
+		// Ne réagit qu'au sort Arcane Blast
+		if (spellInfo->Id != SPELL_ARCANE_BLAST)
+			return;
+
+		// Vérifie si le buff Arcane Tempo est actif
+		if (Aura* aura = me->GetAura(SPELL_ARCANE_TEMPO))
+		{
+			// Si moins de 5 stacks, on applique à nouveau le buff
+			if (aura->GetStackAmount() < 5)
+				me->CastSpell(me, SPELL_ARCANE_TEMPO, castSpellArcaneTempo);
+		}
+		else
+		{
+			// Buff non présent, on le lance
+			me->CastSpell(me, SPELL_ARCANE_TEMPO, castSpellArcaneTempo);
+		}
+
+		// Nombre de projectiles à lancer aléatoirement entre 1 et 8
+		const uint8 splinters = irand(1, 5);
+
+		// Planifie une rafale de projectiles espacés
+		scheduler.Schedule(1ms, [this, splinters](TaskContext context)
+		{
+			const uint8 index = context.GetRepeatCounter();
+
+			if (index >= splinters)
+				return;
+
+			// Cible aléatoire et lancement du sort
+			if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
+				DoCast(victim, SPELL_ARCANE_SPLINTER, false);
+
+			// Replanifie avec un délai aléatoire entre 380ms et 560ms
+			context.Repeat(380ms, 560ms);
+		});
+	}
+
+	void JustEngagedWith(Unit* who) override
+	{
+		npc_theramore_troop::JustEngagedWith(who);
 
 		scheduler
 			.Schedule(1ms, [this](TaskContext arcane_blast)
@@ -655,33 +708,27 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 				{
 					CastStop();
 					DoCastSelf(SPELL_MASS_POLYMORPH);
-                    mass_polymorph.Repeat(2min);
+					mass_polymorph.Repeat(2min);
 				}
 				else
-                    mass_polymorph.Repeat(1s);
+					mass_polymorph.Repeat(1s);
 			})
-            .Schedule(8s, 10s, [this](TaskContext arcane_explosion)
-            {
-                if (EnemiesInRange(10.f) >= 2)
-                {
-                    CastStop();
-                    DoCastSelf(SPELL_ARCANE_EXPLOSION);
-                    arcane_explosion.Repeat(2min);
-                }
-                else
-                    arcane_explosion.Repeat(1s);
-            })
+			.Schedule(8s, 10s, [this](TaskContext arcane_explosion)
+			{
+				if (EnemiesInRange(10.f) >= 2)
+				{
+					CastStop();
+					DoCastSelf(SPELL_ARCANE_EXPLOSION);
+					arcane_explosion.Repeat(2min);
+				}
+				else
+					arcane_explosion.Repeat(1s);
+			})
 			.Schedule(4s, 8s, [this](TaskContext arcane_missiles)
 			{
 				if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
 					DoCast(victim, SPELL_ARCANE_MISSILES);
 				arcane_missiles.Repeat(8s, 12s);
-			})
-			.Schedule(1s, [this](TaskContext arcane_haste)
-			{
-				if (!me->HasAura(SPELL_ARCANE_HASTE))
-					DoCastSelf(SPELL_ARCANE_HASTE);
-				arcane_haste.Repeat(2s);
 			});
 	}
 };
@@ -704,7 +751,7 @@ struct npc_theramore_faithful : public npc_theramore_troop
 		SPELL_FLASH_HEAL            = 314655,
 		SPELL_POWER_WORD_SHIELD     = 318158,
 		SPELL_SMITE                 = 332705,
-        SPELL_DIVINE_WORD_SANTUARY  = 372784,
+		SPELL_DIVINE_WORD_SANTUARY  = 372784,
 	};
 
 	bool ascension;
@@ -758,8 +805,10 @@ struct npc_theramore_faithful : public npc_theramore_troop
 		});
 	}
 
-	void JustEngagedWith(Unit* /*who*/) override
+	void JustEngagedWith(Unit* who) override
 	{
+		npc_theramore_troop::JustEngagedWith(who);
+
 		StartCombatRoutine();
 	}
 
@@ -793,35 +842,35 @@ struct npc_theramore_faithful : public npc_theramore_troop
 			{
 				CastStop({ SPELL_RENEW, SPELL_FLASH_HEAL, SPELL_PRAYER_OF_HEALING });
 
-                if (roll_chance_i(60))
-                {
-                    DoCastAOE(SPELL_PRAYER_OF_HEALING);
-                    mass_healing.Repeat(14s);
-                }
-                else
-                {
-                    if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
-                    {
-                        DoCast(SPELL_DIVINE_WORD_SANTUARY);
-                        mass_healing.Repeat(25s, 45s);
-                    }
-                    else
-                    {
-                        mass_healing.Repeat(1s);
-                    }
-                }
+				if (roll_chance_i(60))
+				{
+					DoCastAOE(SPELL_PRAYER_OF_HEALING);
+					mass_healing.Repeat(14s);
+				}
+				else
+				{
+					if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
+					{
+						DoCast(SPELL_DIVINE_WORD_SANTUARY);
+						mass_healing.Repeat(25s, 45s);
+					}
+					else
+					{
+						mass_healing.Repeat(1s);
+					}
+				}
 			})
 			.Schedule(1s, 5s, [this](TaskContext halo)
 			{
 				CastStop(SPELL_HALO);
-                DoCastAOE(SPELL_HALO);
+				DoCastAOE(SPELL_HALO);
 				halo.Repeat(14s, 25s);
 			})
 			.Schedule(3s, 8s, [this](TaskContext psychic_scream)
 			{
 				if (EnemiesInRange(10.f) >= 2)
 				{
-                    DoCastAOE(SPELL_PSYCHIC_SCREAM);
+					DoCastAOE(SPELL_PSYCHIC_SCREAM);
 					psychic_scream.Repeat(10s, 25s);
 				}
 				else
@@ -849,48 +898,9 @@ struct npc_theramore_marksman : public npc_theramore_troop
 		SPELL_MULTI_SHOOT           = 38310,
 	};
 
-	void AttackStart(Unit* who) override
-	{
-		if (!who)
-			return;
-
-		if (who && me->Attack(who, true))
-		{
-			me->GetMotionMaster()->Clear(MOTION_PRIORITY_NORMAL);
-			me->PauseMovement();
-			me->SetCanMelee(false);
-			me->SetSheath(SHEATH_STATE_RANGED);
-		}
-	}
-
-	void MoveInLineOfSight(Unit* who) override
-	{
-		CustomAI::MoveInLineOfSight(who);
-
-		if (!me->IsEngaged())
-			return;
-
-		if (me->IsInRange(who, 0.0f, me->GetCombatReach()))
-		{
-			if (me->CanMelee())
-				return;
-
-			me->SetCanMelee(true);
-			me->SetSheath(SHEATH_STATE_MELEE);
-		}
-		else
-		{
-			SetCombatMove(false, GetDistance());
-			me->SetCanMelee(false);
-			me->SetSheath(SHEATH_STATE_RANGED);
-		}
-	}
-
 	void JustEngagedWith(Unit* who) override
 	{
-		SetCombatMove(false, GetDistance());
-		me->SetCanMelee(false);
-		me->SetSheath(SHEATH_STATE_RANGED);
+		npc_theramore_troop::JustEngagedWith(who);
 
 		DoCast(who, SPELL_SHOOT);
 
@@ -985,14 +995,14 @@ struct npc_roknah_hag : public npc_theramore_horde
 
 	enum Spells
 	{
+		SPELL_FROSTBOLT         = 116,
 		SPELL_BLINK             = 295236,
 		SPELL_CONE_OF_COLD      = 292294,
 		SPELL_EBONBOLT          = 284752,
 		SPELL_FLURRY            = 284858,
 		SPELL_FROST_NOVA        = 284879,
-		SPELL_FROSTBOLT         = 284703,
 		SPELL_GLACIAL_SPIKE     = 284840,
-		SPELL_ICE_BLOCK         = 290049,
+		SPELL_ICE_BLOCK         = 278960,
 		SPELL_ICE_BARRIER       = 198094,
 		SPELL_ICICLES           = 205473,
 		SPELL_MASS_ICE_BARRIER  = 382561,
@@ -1190,63 +1200,122 @@ struct npc_roknah_hag : public npc_theramore_horde
 
 struct npc_roknah_grunt : public npc_theramore_horde
 {
-	npc_roknah_grunt(Creature* creature) : npc_theramore_horde(creature, AI_Type::Melee)
+	npc_roknah_grunt(Creature* creature) : npc_theramore_horde(creature, AI_Type::Melee),
+		commandingShout(false), slayerStrikeCount(0)
 	{
 	}
 
 	enum Spells
 	{
-		SPELL_EXECUTE               = 283424,
-		SPELL_MORTAL_STRIKE         = 283410,
-		SPELL_OVERPOWER             = 283426,
-		SPELL_REND                  = 283419,
-		SPELL_SLAM                  = 299995,
-		SPELL_HAMMER_STUN           = 36138
+		SPELL_CHARGE            = 100,
+		SPELL_MORTAL_STRIKE     = 32736,
+		SPELL_HEROIC_STRIKE     = 57846,
+		SPELL_BATTLE_SHOUT      = 81219,
+		SPELL_COMMANDING_SHOUT  = 82061,
+		SPELL_EXECUTE           = 260798,
+		SPELL_SUDDEN_DEATH      = 280776,
+		SPELL_SLAYER_STRIKE     = 445579,
+		SPELL_PLUMMEL           = 457982,
+		SPELL_DEEP_WOUNDS       = 458010,
+		SPELL_SLAM              = 458028,
+		SPELL_WHIRLWIND         = 1217875,
 	};
+
+	bool commandingShout;
+	uint8 slayerStrikeCount;
+
+	void Reset() override
+	{
+		npc_theramore_horde::Reset();
+
+		commandingShout = false;
+		slayerStrikeCount = 0;
+	}
+
+	void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo*/) override
+	{
+		if (!commandingShout && HealthBelowPct(50))
+		{
+			DoCast(SPELL_COMMANDING_SHOUT);
+
+			commandingShout = true;
+			scheduler.Schedule(3min, [this](TaskContext /*context*/)
+			{
+				commandingShout = false;
+			});
+		}
+	}
 
 	void JustEngagedWith(Unit* who) override
 	{
 		npc_theramore_horde::JustEngagedWith(who);
 
-		if (!me->HasAura(SPELL_OVERPOWER) && roll_chance_i(60))
-			DoCastSelf(SPELL_OVERPOWER);
+		DoCast(SPELL_BATTLE_SHOUT);
 
 		scheduler
-			.Schedule(15s, 35s, [this](TaskContext hammer_stun)
+			.Schedule(1ms, [this](TaskContext charge)
 			{
-				if (Unit* target = DoSelectCastingUnit(SPELL_HAMMER_STUN, 1.5f))
+				Unit* victim = me->GetVictim();
+				if (victim && victim->IsWithinDist(me, 25.0f, false))
 				{
 					CastStop();
-					DoCast(target, SPELL_HAMMER_STUN);
-					hammer_stun.Repeat(25s, 40s);
+					DoCast(victim, SPELL_CHARGE);
+					charge.Repeat(1min);
 				}
 				else
 				{
-					hammer_stun.Repeat(1s);
+					charge.Repeat(5s, 10s);
 				}
 			})
-			.Schedule(5s, 8s, [this](TaskContext execute)
+			.Schedule(2s, [this](TaskContext plummel)
 			{
-				DoCastVictim(SPELL_EXECUTE);
-				execute.Repeat(15s, 28s);
+				if (Unit* target = DoSelectCastingUnit(SPELL_PLUMMEL, 5.0f))
+				{
+					DoCast(target, SPELL_PLUMMEL);
+					plummel.Repeat(25s, 40s);
+				}
+				else
+				{
+					plummel.Repeat(1s);
+				}
 			})
-			.Schedule(2s, 5s, [this](TaskContext mortal_strike)
+			.Schedule(3s, 5s, [this](TaskContext slam)
 			{
-				CastStop();
-				DoCastVictim(SPELL_MORTAL_STRIKE);
-				mortal_strike.Repeat(8s, 10s);
+				DoCastVictim(SPELL_SLAM);
+				slam.Repeat(15s, 28s);
 			})
-			.Schedule(14s, 22s, [this](TaskContext rend)
+			.Schedule(8s, 24s, [this](TaskContext whirlwind)
+			{
+				DoCastSelf(SPELL_WHIRLWIND);
+				whirlwind.Repeat(8s, 12s);
+			})
+			.Schedule(10s, 21s, [this](TaskContext slayer_strike)
+			{
+				if (slayerStrikeCount < 3)
+				{
+					DoCastVictim(SPELL_SLAYER_STRIKE);
+					DoCastSelf(SPELL_SUDDEN_DEATH);
+					slayerStrikeCount++;
+					slayer_strike.Repeat(8s, 12s);
+				}
+				else
+				{
+					DoCastVictim(SPELL_EXECUTE);
+					slayerStrikeCount = 0;
+					slayer_strike.Repeat(3s, 5s);
+				}
+			})
+			.Schedule(5s, 15s, [this](TaskContext strikes)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-					DoCast(target, SPELL_REND);
-				rend.Repeat(8s, 10s);
+					DoCast(target, RAND(SPELL_MORTAL_STRIKE, SPELL_HEROIC_STRIKE));
+				strikes.Repeat(8s, 25s);
 			})
-			.Schedule(32s, 38s, [this](TaskContext rend_slam)
+			.Schedule(14s, 22s, [this](TaskContext deep_wounds)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-					DoCast(target, RAND(SPELL_REND, SPELL_SLAM));
-				rend_slam.Repeat(2s, 8s);
+					DoCast(target, SPELL_DEEP_WOUNDS);
+				deep_wounds.Repeat(24s, 32s);
 			});
 	}
 };
@@ -1307,13 +1376,13 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 			})
 			.Schedule(5s, 8s, [this](TaskContext frost_shock)
 			{
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_FROST_SHOCK))
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_FROST_SHOCK))
 					DoCast(target, SPELL_FROST_SHOCK);
 				frost_shock.Repeat(8s, 10s);
 			})
 			.Schedule(5s, 8s, [this](TaskContext flame_shock)
 			{
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_FLAME_SHOCK))
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_FLAME_SHOCK))
 					DoCast(target, SPELL_FLAME_SHOCK);
 				flame_shock.Repeat(5s, 8s);
 			})
@@ -1415,29 +1484,25 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 		SPELL_INCINERATE        = 295438,
 		SPELL_MORTAL_COIL       = 295459,
 		SPELL_SUMMON_FELHUNTER  = 285232,
-		SPELL_SUMMON_WILD_IMPS  = 138685,
 		SPELL_CORRUPTION        = 251406,
 	};
 
-	void JustSummoned(Creature* summon) override
+	void Reset() override
 	{
-		CustomAI::JustSummoned(summon);
+		npc_theramore_horde::Reset();
 
-		if (summon->GetEntry() == NPC_WILD_IMP)
+		if (roll_chance_i(60))
 		{
-			if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-			{
-				summon->Attack(target, true);
-			}
+			CastSpellExtraArgs args;
+			args.SetTriggerFlags(TRIGGERED_CAST_DIRECTLY);
+
+			DoCastSelf(SPELL_SUMMON_FELHUNTER, args);
 		}
 	}
 
 	void JustEngagedWith(Unit* who) override
 	{
 		npc_theramore_horde::JustEngagedWith(who);
-
-		if (roll_chance_i(60))
-			DoCastSelf(RAND(SPELL_SUMMON_FELHUNTER, SPELL_SUMMON_WILD_IMPS));
 
 		scheduler
 			.Schedule(5s, 8s, [this](TaskContext drain_life)
@@ -1457,35 +1522,41 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 			.Schedule(2s, 6s, [this](TaskContext conflagrate)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+				{
+					CastStop({ SPELL_DRAIN_LIFE, SPELL_IMMOLATE, SPELL_INCINERATE });
 					DoCast(target, SPELL_CONFLAGRATE);
+				}
 				conflagrate.Repeat(1s, 3s);
 			})
 			.Schedule(3s, 5s, [this](TaskContext chaos_bolt)
 			{
-                CastStop(SPELL_DRAIN_LIFE);
+				CastStop({ SPELL_DRAIN_LIFE, SPELL_IMMOLATE, SPELL_INCINERATE });
 				DoCastVictim(SPELL_CHAOS_BOLT);
 				chaos_bolt.Repeat(5s, 8s);
 			})
 			.Schedule(1ms, [this](TaskContext immolate)
 			{
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_IMMOLATE))
-                {
-                    CastStop(SPELL_DRAIN_LIFE);
-                    DoCast(target, SPELL_IMMOLATE);
-                }
-				immolate.Repeat(2s, 5s);
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_IMMOLATE))
+				{
+					CastStop({ SPELL_CHAOS_BOLT, SPELL_INCINERATE });
+					DoCast(target, SPELL_IMMOLATE);
+				}
+				immolate.Repeat(5s, 8s);
 			})
 			.Schedule(1ms, [this](TaskContext corruption)
 			{
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_CORRUPTION))
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_CORRUPTION))
+				{
+					CastStop();
 					DoCast(target, SPELL_CORRUPTION);
+				}
 				corruption.Repeat(2s, 5s);
 			})
 			.Schedule(1ms, [this](TaskContext incinerate)
 			{
-                CastStop({ SPELL_DRAIN_LIFE, SPELL_CHAOS_BOLT });
-                DoCastVictim(SPELL_INCINERATE);
-				incinerate.Repeat(2s);
+				CastStop(SPELL_DRAIN_LIFE);
+				DoCastVictim(SPELL_INCINERATE);
+				incinerate.Repeat(2300ms);
 			})
 			.Schedule(12s, 14s, [this](TaskContext mortal_coil)
 			{
@@ -1506,31 +1577,75 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 
 struct npc_wave_caller_gruhta : public CustomAI
 {
-    npc_wave_caller_gruhta(Creature* creature) : CustomAI(creature, true, AI_Type::Hybrid)
+	const uint8 MAX_ELEMENTAL_PROTECTION = 10;
+
+	npc_wave_caller_gruhta(Creature* creature) : CustomAI(creature, true, AI_Type::Hybrid),
+		stormkeeperStacks(0), phases(PHASE_NORMAL)
 	{
 		instance = creature->GetInstanceScript();
+
+		// Information des sorts
+		infoLightningBolt = sSpellMgr->AssertSpellInfo(SPELL_LIGHTNING_BOLT, DIFFICULTY_NONE);
+		infoChainLightning = sSpellMgr->AssertSpellInfo(SPELL_CHAIN_LIGHTNING, DIFFICULTY_NONE);
+
+		tempestPos01 = creature->GetHomePosition();
 	}
 
 	enum Spells
 	{
-		SPELL_WATERNADO         = 249992,
-		SPELL_WATER_SPOUT       = 271287,
-		SPELL_WATERLOGGED_1     = 296693,
-		SPELL_WATERLOGGED_2     = 298107,
-		SPELL_WATERLOGGED_3     = 299152,
-		SPELL_ENCHANTED_WATERS  = 298347,
-		SPELL_WATER_BOLT        = 355225,
-		SPELL_HEALING_WATERS    = 389312,
-		SPELL_WATER_BARRIER     = 391793
+		SPELL_FLAME_SHOCK           = 420277,
+		SPELL_TEMPEST               = 452201,
+		SPELL_ELEMENTAL_BLAST       = 117014,
+		SPELL_STORMKEEPER           = 191634,
+		SPELL_LIGHTNING_BOLT        = 430109,
+		SPELL_CHAIN_LIGHTNING       = 1228260, 
+		SPELL_CALL_LIGHTNING        = 157348,
+		SPELL_GHOST_WOLF            = 361620,
+		SPELL_PRIMORDIAL_STORM      = 1218090,
+		SPELL_UNLIMITED_POWER       = 272737,
+		SPELL_FOCUS_ELEMENT         = 167205,
+		SPELL_TEMPEST_CHANNELING    = 212079,
+		SPELL_ELEMENTAL_PROTECTION  = 371756,
+		SPELL_LIGHTNING_STORM       = 447930
 	};
 
 	enum Misc
 	{
-		GROUP_NORMAL            = 1,
-		GROUP_HEAL,
+		GROUP_NORMAL                = 1,
+		GROUP_STORMKEEPER,
+		GROUP_TEMPEST
+	};
+
+	enum Phases
+	{
+		PHASE_NORMAL,
+		PHASE_TEMPEST
 	};
 
 	InstanceScript* instance;
+	uint32 stormkeeperStacks;
+	Phases phases;
+	Position tempestPos01;
+
+	const Position tempestPos02 = { -3922.5f, -4848.2866f, 0.001533f, 0.78f };
+
+	const SpellInfo* infoLightningBolt;
+	const SpellInfo* infoChainLightning;
+
+	float GetDistance() override
+	{
+		return 30.f;
+	}
+
+	void Reset() override
+	{
+		CustomAI::Reset();
+
+		stormkeeperStacks = 0;
+
+		me->SetRegenerateHealth(true);
+		me->SetWaterWalking(true);
+	}
 
 	void JustDied(Unit* killer) override
 	{
@@ -1540,67 +1655,148 @@ struct npc_wave_caller_gruhta : public CustomAI
 			barrier->Delete();
 	}
 
-	void SpellHitTarget(WorldObject* object, SpellInfo const* spellInfo) override
+	void MovementInform(uint32 type, uint32 id) override
 	{
-		Unit* target = object->ToUnit();
-		if (target && roll_chance_i(30)
-            && (spellInfo->Id == SPELL_WATER_BOLT || spellInfo->Id == SPELL_WATER_SPOUT))
+		if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
 		{
-            target->AddAura(RAND(SPELL_WATERLOGGED_1, SPELL_WATERLOGGED_2, SPELL_WATERLOGGED_3), target);
+			switch (id)
+			{
+				case MOVEMENT_INFO_POINT_01:
+					me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_02, tempestPos02, false, tempestPos02.GetOrientation());
+					break;
+				case MOVEMENT_INFO_POINT_02:
+				{
+					me->RemoveAurasDueToSpell(SPELL_GHOST_WOLF);
+					me->SetHomePosition(tempestPos02);
+					DoCastSelf(SPELL_TEMPEST_CHANNELING);
+					scheduler.Schedule(1s, GROUP_TEMPEST, [this](TaskContext lightning_storm)
+					{
+						CastSpellExtraArgs args;
+						args.SetTriggerFlags(TRIGGERED_IGNORE_CAST_IN_PROGRESS);
+
+						for (uint8 i = 0; i < 8; i++)
+						{
+							Position randomPos = GetRandomPosition(tempestPos02, 100.0f);
+							me->CastSpell(randomPos, SPELL_LIGHTNING_STORM, args);
+						}
+
+						lightning_storm.Repeat(80ms, 100ms);
+					});
+					break;
+					}
+				default:
+					break;
+			}
 		}
 	}
 
-	void SpellHit(WorldObject* object, SpellInfo const* spellInfo) override
+	void OnSpellCast(SpellInfo const* spell) override
 	{
-		CustomAI::SpellHit(object, spellInfo);
+		switch (spell->Id)
+		{
+			case SPELL_ELEMENTAL_BLAST:
+			{
+				CastSpellExtraArgs args;
+				args.AddSpellBP0(10);
 
-        Unit* caster = object->ToUnit();
-        if (caster && spellInfo->Id == SPELL_WATER_BARRIER)
-        {
-            scheduler.Schedule(1s, GROUP_HEAL, [this](TaskContext /*context*/)
-            {
-                CastStop();
-                DoCastSelf(SPELL_HEALING_WATERS);
-            });
-        }
+				DoCastSelf(SPELL_FOCUS_ELEMENT, args);
+				break;
+			}
+			case SPELL_STORMKEEPER:
+			{
+				scheduler.DelayGroup(GROUP_NORMAL, 4s);
+				scheduler.Schedule(1s, GROUP_STORMKEEPER, [this](TaskContext bolt)
+				{
+					if (bolt.GetRepeatCounter() >= 2)
+					{
+						me->RemoveAurasDueToSpell(SPELL_STORMKEEPER);
+						bolt.CancelGroup(GROUP_STORMKEEPER);
+						return;
+					}
+
+					CastSpellExtraArgs args;
+					args.SetTriggerFlags(TRIGGERED_CAST_DIRECTLY | TRIGGERED_IGNORE_CAST_IN_PROGRESS);
+
+					DoCastVictim(SPELL_LIGHTNING_BOLT, args);
+					bolt.Repeat(1s);
+				});
+				break;
+			}
+		}
 	}
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
-		DoCastSelf(SPELL_ENCHANTED_WATERS, true);
-		DoCastVictim(SPELL_WATERNADO, CastSpellExtraArgs(TRIGGERED_CAST_DIRECTLY));
-
 		scheduler
-			.Schedule(7s, GROUP_NORMAL, [this](TaskContext waternado)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-				{
-					CastStop(SPELL_HEALING_WATERS);
-					DoCast(target, SPELL_WATERNADO);
-				}
-				waternado.Repeat(4s, 10s);
-			})
-			.Schedule(3s, 5s, GROUP_NORMAL, [this](TaskContext healing_waters)
+			.Schedule(1ms, GROUP_NORMAL, [this](TaskContext context)
 			{
 				if (me->HealthBelowPct(40.f))
 				{
-					scheduler.DelayGroup(GROUP_NORMAL, 6s);
-					CastStop(SPELL_HEALING_WATERS);
-					DoCastSelf(SPELL_WATER_BARRIER);
-					healing_waters.Repeat(30s);
+					context.CancelGroup(GROUP_NORMAL);
+
+					me->SetReactState(REACT_PASSIVE);
+					me->RemoveAllAuras();
+
+					CastStop();
+
+					DoCastSelf(SPELL_GHOST_WOLF, true);
+
+					for (uint8 i = 0; i < MAX_ELEMENTAL_PROTECTION; i++)
+					{
+						me->AddAura(SPELL_ELEMENTAL_PROTECTION, me);
+					}
+
+					me->GetMotionMaster()->Clear();
+					me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, tempestPos01, true, tempestPos01.GetOrientation());
 				}
 				else
-					healing_waters.Repeat(3s);
+					context.Repeat(1s);
 			})
-			.Schedule(11s, 15s, GROUP_NORMAL, [this](TaskContext water_spout)
+			.Schedule(2s, GROUP_NORMAL, [this](TaskContext flame_shock)
 			{
-				DoCastVictim(SPELL_WATER_SPOUT);
-				water_spout.Repeat(8s, 10s);
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, GetDistance(), false, true, -SPELL_FLAME_SHOCK))
+				{
+					CastStop();
+					DoCast(target, SPELL_FLAME_SHOCK);
+				}
+				flame_shock.Repeat(18s);
 			})
-			.Schedule(1s, 2s, GROUP_NORMAL, [this](TaskContext water_bolt)
+			.Schedule(3s, GROUP_NORMAL, [this](TaskContext elemental_blast)
 			{
-				DoCastVictim(SPELL_WATER_BOLT);
-				water_bolt.Repeat(2s);
+				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+				{
+					CastStop(SPELL_TEMPEST);
+					DoCast(target, SPELL_ELEMENTAL_BLAST);
+				}
+				elemental_blast.Repeat(12s);
+			})
+			.Schedule(6s, GROUP_NORMAL, [this](TaskContext stormkeeper)
+			{
+				CastStop();
+				DoCastSelf(SPELL_STORMKEEPER);
+				stormkeeper.Repeat(78s);
+			})
+			.Schedule(8s, GROUP_NORMAL, [this](TaskContext tempest)
+			{
+				CastStop(SPELL_STORMKEEPER);
+				DoCastVictim(SPELL_TEMPEST);
+				tempest.Repeat(20s);
+			})
+			.Schedule(9s, GROUP_NORMAL, [this](TaskContext lightning_bolt)
+			{
+				DoCastVictim(SPELL_LIGHTNING_BOLT);
+				lightning_bolt.Repeat(Milliseconds(infoLightningBolt->CalcCastTime()) + 300ms);
+			})
+			.Schedule(12s, GROUP_NORMAL, [this](TaskContext call_lightning)
+			{
+				DoCastVictim(SPELL_CALL_LIGHTNING);
+				call_lightning.Repeat(20s);
+			})
+			.Schedule(14s, GROUP_NORMAL, [this](TaskContext chain_lightning)
+			{
+				CastStop({ SPELL_LIGHTNING_BOLT, SPELL_TEMPEST, SPELL_CALL_LIGHTNING, SPELL_ELEMENTAL_BLAST });
+				DoCastVictim(SPELL_CHAIN_LIGHTNING);
+				chain_lightning.Repeat(Milliseconds(infoChainLightning->CalcCastTime()) + 300ms, 6s);
 			});
 	}
 };
@@ -1648,9 +1844,9 @@ struct npc_faithful_training : public npc_theramore_faithful
 		creature->SetHealth(creature->GetMaxHealth());
 		creature->SetTarget(ObjectGuid::Empty);
 
-        float angle = creature->GetAbsoluteAngle(LookAtPos);
-        creature->SetOrientation(angle);
-        creature->SetFacingToPoint(LookAtPos);
+		float angle = creature->GetAbsoluteAngle(LookAtPos);
+		creature->SetOrientation(angle);
+		creature->SetFacingToPoint(LookAtPos);
 	}
 
 	void Reset() override
@@ -1692,15 +1888,15 @@ struct npc_faithful_training : public npc_theramore_faithful
 					soldierA->SetReactState(REACT_AGGRESSIVE);
 					soldierB->SetReactState(REACT_AGGRESSIVE);
 
-                    float angle = me->GetAbsoluteAngle(LookAtPos);
-                    me->SetOrientation(angle);
-                    me->SetFacingToPoint(LookAtPos);
-                    me->SetReactState(REACT_AGGRESSIVE);
+					float angle = me->GetAbsoluteAngle(LookAtPos);
+					me->SetOrientation(angle);
+					me->SetFacingToPoint(LookAtPos);
+					me->SetReactState(REACT_AGGRESSIVE);
 
 					scheduler.CancelGroup(COSMETIC_GROUP);
 				}
-                else
-				    check_phase.Repeat(2s);
+				else
+					check_phase.Repeat(2s);
 			})
 			.Schedule(5s, 8s, COSMETIC_GROUP, [this](TaskContext heal)
 			{
@@ -1758,12 +1954,12 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 				BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
 				if (phase >= BFTPhases::Preparation)
 				{
-                    float angle = me->GetAbsoluteAngle(LookAtPos);
-                    me->SetOrientation(angle);
+					float angle = me->GetAbsoluteAngle(LookAtPos);
+					me->SetOrientation(angle);
 
-                    me->SetFacingToPoint(LookAtPos);
+					me->SetFacingToPoint(LookAtPos);
 
-                    scheduler.CancelGroup(COSMETIC_GROUP);
+					scheduler.CancelGroup(COSMETIC_GROUP);
 				}
 
 				check_phase.Repeat(2s);
@@ -1953,7 +2149,7 @@ class PowderKegEvent : public BasicEvent
 	PowderKegEvent(Creature* owner, std::vector<Creature*> triggers) : owner(owner), triggers(triggers)
 	{
 		counter = 0;
-        maxCount = triggers.size();
+		maxCount = triggers.size();
 	}
 
 	bool Execute(uint64 timer, uint32 /*updateTime*/) override
@@ -1963,7 +2159,7 @@ class PowderKegEvent : public BasicEvent
 
 		if (Creature* temp = triggers[counter])
 		{
-            temp->RemoveAllAuras();
+			temp->RemoveAllAuras();
 			temp->CastSpell(temp, SPELL_LARGE_EXPLOSION);
 			temp->AddAura(SPELL_LARGE_FIRE, temp);
 		}
@@ -1985,10 +2181,10 @@ class PowderKegEvent : public BasicEvent
 // Powder Keg - 205238
 class spell_powder_keg : public SpellScript
 {
-    enum Spells
-    {
-        SPELL_BIG_FIRE_EXPLOSION    = 183880,
-    };
+	enum Spells
+	{
+		SPELL_BIG_FIRE_EXPLOSION    = 183880,
+	};
 
 	void HandleDummy(SpellEffIndex /*effIndex*/)
 	{
@@ -2006,9 +2202,9 @@ class spell_powder_keg : public SpellScript
 					// The Sea Wolf destroyed event
 					instance->TriggerGameEvent(EVENT_DESTROY_SEA_WOLF);
 
-                    // Delete Powder Barrel targeted
-                    if (GameObject* powder = instance->GetGameObject(DATA_POWDER_BARREL))
-                        powder->Delete();
+					// Delete Powder Barrel targeted
+					if (GameObject* powder = instance->GetGameObject(DATA_POWDER_BARREL))
+						powder->Delete();
 
 					// If the boat is destroyed and Captan Drok is alive, he dies
 					if (Creature* drok = instance->GetCreature(DATA_CAPTAIN_DROK))
@@ -2046,34 +2242,34 @@ class spell_powder_keg : public SpellScript
 class spell_titan_force_shield : public AuraScript
 {
 public:
-    spell_titan_force_shield()
-    {
-        maxHealth = 0;
-        absorbedAmount = 0;
-    }
+	spell_titan_force_shield()
+	{
+		maxHealth = 0;
+		absorbedAmount = 0;
+	}
 
-    bool Load() override
-    {
-        maxHealth = GetCaster()->GetMaxHealth();
-        absorbedAmount = 0;
-        return true;
-    }
+	bool Load() override
+	{
+		maxHealth = GetCaster()->GetMaxHealth();
+		absorbedAmount = 0;
+		return true;
+	}
 
-    void CalculateAmount(AuraEffect const* /*auraEffect*/, int32& amount, bool& canBeRecalculated) const
-    {
-        canBeRecalculated = false;
-        amount = CalculatePct(maxHealth, absorbPct);
-    }
+	void CalculateAmount(AuraEffect const* /*auraEffect*/, int32& amount, bool& canBeRecalculated) const
+	{
+		canBeRecalculated = false;
+		amount = CalculatePct(maxHealth, absorbPct);
+	}
 
-    void Register() override
-    {
-        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_titan_force_shield::CalculateAmount, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB);
-    }
+	void Register() override
+	{
+		DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_titan_force_shield::CalculateAmount, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB);
+	}
 
 private:
-    int32 absorbPct = 30;
-    int32 maxHealth;
-    uint32 absorbedAmount;
+	const int32 absorbPct = 50;
+	int32 maxHealth;
+	uint32 absorbedAmount;
 };
 
 // Blizzard - 284968
@@ -2119,32 +2315,11 @@ struct at_blizzard_theramore : AreaTriggerAI
 	Milliseconds _tickTimer;
 };
 
-// Waternado
-// AreaTriggerID - 12065
-struct at_waternado : AreaTriggerAI
-{
-	at_waternado(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
-	{
-	}
-
-	enum Spells
-	{
-		SPELL_WATERNADO = 389745
-	};
-
-	void OnUnitEnter(Unit* unit) override
-	{
-		if (Unit* caster = at->GetCaster())
-			if (caster->IsHostileTo(unit))
-				caster->CastSpell(unit, SPELL_WATERNADO);
-	}
-};
-
 // Consecrated Ground
 // AreaTriggerID - 34355
 struct at_consecration : AreaTriggerAI
 {
-    at_consecration(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
+	at_consecration(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
 	{
 	}
 
@@ -2155,16 +2330,16 @@ struct at_consecration : AreaTriggerAI
 
 	void OnUnitEnter(Unit* /*unit*/) override
 	{
-        if (Unit* caster = at->GetCaster())
-        {
-            for (ObjectGuid unit : at->GetInsideUnits())
-            {
-                if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
-                {
-                    caster->CastSpell(target, SPELL_CONSECRATION, true);
-                }
-            }
-        }
+		if (Unit* caster = at->GetCaster())
+		{
+			for (ObjectGuid unit : at->GetInsideUnits())
+			{
+				if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
+				{
+					caster->CastSpell(target, SPELL_CONSECRATION, true);
+				}
+			}
+		}
 	}
 
 	void OnUnitExit(Unit* unit) override
@@ -2191,44 +2366,44 @@ struct at_consecration : AreaTriggerAI
 // AreaTriggerID - 35546
 struct at_divine_word_sanctuary : AreaTriggerAI
 {
-    static constexpr Milliseconds TICK_PERIOD = Milliseconds(1000);
+	static constexpr Milliseconds TICK_PERIOD = Milliseconds(1000);
 
-    at_divine_word_sanctuary(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger), _tickTimer(TICK_PERIOD)
-    {
-    }
+	at_divine_word_sanctuary(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger), _tickTimer(TICK_PERIOD)
+	{
+	}
 
-    enum Spells
-    {
-        SPELL_DIVINE_WORD_SANCTUARY_HEAL = 372787
-    };
+	enum Spells
+	{
+		SPELL_DIVINE_WORD_SANCTUARY_HEAL = 372787
+	};
 
-    void OnUpdate(uint32 diff) override
-    {
-        _tickTimer -= Milliseconds(diff);
+	void OnUpdate(uint32 diff) override
+	{
+		_tickTimer -= Milliseconds(diff);
 
-        if (_tickTimer > 0s)
-            return;
+		if (_tickTimer > 0s)
+			return;
 
-        // Récupération du lanceur du sort
-        if (Unit* caster = at->GetCaster())
-        {
-            for (const ObjectGuid& unitGuid : at->GetInsideUnits())
-            {
-                if (Unit* target = ObjectAccessor::GetUnit(*caster, unitGuid))
-                {
-                    if (caster->IsFriendlyTo(target))
-                    {
-                        caster->CastSpell(target, SPELL_DIVINE_WORD_SANCTUARY_HEAL);
-                    }
-                }
-            }
-        }
+		// Récupération du lanceur du sort
+		if (Unit* caster = at->GetCaster())
+		{
+			for (const ObjectGuid& unitGuid : at->GetInsideUnits())
+			{
+				if (Unit* target = ObjectAccessor::GetUnit(*caster, unitGuid))
+				{
+					if (caster->IsFriendlyTo(target))
+					{
+						caster->CastSpell(target, SPELL_DIVINE_WORD_SANCTUARY_HEAL);
+					}
+				}
+			}
+		}
 
-        _tickTimer += TICK_PERIOD;
-    }
+		_tickTimer += TICK_PERIOD;
+	}
 
-    private:
-    Milliseconds _tickTimer;
+	private:
+	Milliseconds _tickTimer;
 };
 
 // Uncontrolled Energy
@@ -2344,7 +2519,7 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterTheramoreAI(npc_wounded_theramore_troop);
 	RegisterTheramoreAI(npc_faithful_training);
 	RegisterTheramoreAI(npc_arcanist_training);
-    RegisterTheramoreAI(npc_wave_caller_gruhta);
+	RegisterTheramoreAI(npc_wave_caller_gruhta);
 
 	// Utilisables dans les Ruines de Theramore
 	RegisterCreatureAI(npc_roknah_hag);
@@ -2357,10 +2532,9 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterSpellScript(spell_theramore_light_of_dawn);
 	RegisterSpellScript(spell_theramore_throw_bucket);
 	RegisterSpellScript(spell_powder_keg);
-    RegisterSpellScript(spell_titan_force_shield);
+	RegisterSpellScript(spell_titan_force_shield);
 
 	RegisterAreaTriggerAI(at_blizzard_theramore);
-	RegisterAreaTriggerAI(at_waternado);
 	RegisterAreaTriggerAI(at_consecration);
 	RegisterAreaTriggerAI(at_divine_word_sanctuary);
 	RegisterAreaTriggerAI(at_uncontrolled_energy);

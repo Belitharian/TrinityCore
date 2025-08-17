@@ -55,6 +55,22 @@ const ObjectData gameobjectData[] =
 	{ 0,                        0                           }   // END
 };
 
+class HordeBombardierThrowBomb : public BasicEvent
+{
+    public:
+        HordeBombardierThrowBomb(Unit* caster) : _caster(caster) { }
+
+        bool Execute(uint64 execTime, uint32 /*diff*/) override
+        {
+            _caster->CastSpell(_caster, SPELL_THROW_BOMB, TRIGGERED_FULL_MASK);
+            _caster->m_Events.AddEvent(this, Milliseconds(execTime) + Seconds(urand(8, 10)));
+            return false;
+        }
+
+    private:
+        Unit* _caster;
+};
+
 class scenario_battle_for_theramore : public InstanceMapScript
 {
 	public:
@@ -293,6 +309,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						if (Creature* troop = instance->GetCreature(guid))
 						{
+                            troop->RemoveAllAuras();
+
 							switch (troop->GetCreatureTemplate()->unit_class)
 							{
 								case UNIT_CLASS_PALADIN:
@@ -368,10 +386,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					}
 					if (Creature* drok = GetDrok())
 					{
+						drok->setActive(true);
 						drok->SetVisible(true);
 					}
 					if (Creature* gruhta = GetGruhta())
 					{
+						gruhta->setActive(true);
 						gruhta->SetVisible(true);
 					}
 					for (uint8 i = 0; i < tanks.size() - 1; i++)
@@ -534,8 +554,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case NPC_ADMIRAL_AUBREY:
 				case NPC_CAPTAIN_DROK:
-				case NPC_WAVE_CALLER_GRUHTA:
+				//case NPC_WAVE_CALLER_GRUHTA:
                 case NPC_KALECGOS_DRAGON:
+					creature->setActive(false);
 					creature->SetVisible(false);
 					break;
 			}
@@ -969,7 +990,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				#pragma region A_LITTLE_HELP
 
 				case 71:
-					EnsurePlayerHaveShaker();
+                    EnsurePlayerHaveShaker();
+                    HordeMembersInvoker(DATA_DECORATION_DUMMIES, true);
 					if (Creature* hedric = GetHedric())
 					{
 						hedric->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
@@ -1101,6 +1123,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					EnsureBarrierHaveDamage();
 					if (Creature* kalecgos = GetKalecgos())
 					{
+                        kalecgos->setActive(true);
                         kalecgos->SetVisible(true);
                         kalecgos->SetSpeed(MOVE_RUN, 25.f);
                         kalecgos->AI()->SetData(DATA_KALECGOS_CIRCLE_EVENT, 0U);
@@ -1763,7 +1786,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			});
 		}
 
-		void HordeMembersInvoker(uint32 waveId)
+		void HordeMembersInvoker(uint32 waveId, bool dummies = false)
 		{
 			std::list<TempSummon*> members;
 
@@ -1772,8 +1795,44 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			instance->SummonCreatureGroup(waveId, &members);
 			for (TempSummon* horde : members)
 			{
+                horde->SetRegenerateHealth(false);
+
 				if (Unit* target = SelectNearestHostileInRange(horde))
 					horde->AI()->AttackStart(target);
+
+                if (dummies)
+                {
+                    horde->SetImmuneToAll(true);
+
+                    switch (horde->GetCreatureTemplate()->unit_class)
+                    {
+                        case UNIT_CLASS_PALADIN:
+                            horde->SetEmoteState(EMOTE_STATE_READY2H);
+                            break;
+                        case UNIT_CLASS_MAGE:
+                            horde->SetEmoteState(RAND(EMOTE_STATE_READY1H, EMOTE_STATE_READY2HL));
+                            break;
+                        case UNIT_CLASS_ROGUE:
+                            break;
+                        default:
+                            horde->SetEmoteState(EMOTE_STATE_READY1H);
+                            break;
+                    }
+
+                    switch (horde->GetEntry())
+                    {
+                        // Horde Bombardier
+                        case 149639:
+                            horde->SetWalk(false);
+                            horde->SetCanFly(true);
+                            horde->SetDisableGravity(true);
+                            horde->GetMotionMaster()->MoveRandom(20.0f);
+                            horde->SetSpeedRate(MOVE_RUN, 2.f);
+                            horde->SetSpeedRate(MOVE_FLIGHT, 2.f);
+                            horde->m_Events.AddEvent(new HordeBombardierThrowBomb(horde), Seconds(urand(2, 8)));
+                            break;
+                    }
+                }
 
 				hordeMembers.push_back(horde->GetGUID());
 			}
@@ -2069,33 +2128,6 @@ class scene_theramore_explosion : public SceneScript
 		float y = r * sinf(alpha) + Center.GetPositionY();
 		return { MAP_THERAMORE_RUINS, { x, y, Center.GetPositionZ(), Center.GetOrientation() }};
 	}
-};
-
-class NearestHostileUnitInRange
-{
-	public:
-		explicit NearestHostileUnitInRange(Creature const* creature) : me(creature) { }
-
-		bool operator()(Unit* u) const
-		{
-			if (!u->IsHostileTo(me))
-				return false;
-
-			if (!u->IsWithinDist(me, MAX_VISIBILITY_DISTANCE))
-				return false;
-
-			if (!me->IsValidAttackTarget(u))
-				return false;
-
-			if (!u->IsWithinLOSInMap(me))
-				return false;
-
-			return true;
-		}
-
-	private:
-		Creature const* me;
-		NearestHostileUnitInRange(NearestHostileUnitInRange const&) = delete;
 };
 
 void AddSC_scenario_battle_for_theramore()

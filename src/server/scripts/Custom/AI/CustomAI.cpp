@@ -55,12 +55,6 @@ void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
     if (caster->GetGUID() != me->GetGUID()
         && (spellInfo->HasEffect(SPELL_EFFECT_INTERRUPT_CAST) || spellInfo->HasEffect(SPELL_EFFECT_KNOCK_BACK)))
     {
-        if (type != AI_Type::Stay)
-        {
-            me->SetCanMelee(true);
-            SetCombatMove(true, 0.0f, false, true);
-        }
-
         interruptCounter++;
         if (interruptCounter >= 3)
         {
@@ -75,17 +69,6 @@ void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
                 me->ApplySpellImmune(0, IMMUNITY_STATE, SPELL_EFFECT_KNOCK_BACK, false);
 
                 interruptCounter = 0;
-            });
-        }
-
-        if (type == AI_Type::Distance)
-        {
-            int32 duration = spellInfo->GetDuration() / IN_MILLISECONDS;
-            scheduler.Schedule(Seconds(duration), [this](TaskContext /*context*/)
-            {
-                me->SetCanMelee(false);
-
-                SetCombatMove(false, GetDistance());
             });
         }
     }
@@ -111,10 +94,17 @@ void CustomAI::Reset()
 	Initialize();
 
     me->RemoveAllAreaTriggers();
-    me->RemoveAllDynObjects();
 
 	summons.DespawnAll();
 	scheduler.CancelAll();
+
+    switch (type)
+    {
+        case AI_Type::Distance:
+        case AI_Type::Stay:
+            me->SetSheath(SHEATH_STATE_UNARMED);
+            break;
+    }
 
 	ScriptedAI::Reset();
 }
@@ -126,7 +116,6 @@ void CustomAI::AttackStart(Unit* who)
 
     if (type == AI_Type::Stay && me->Attack(who, false))
     {
-        me->SetCanMelee(false);
         me->SetSheath(SHEATH_STATE_UNARMED);
         SetCombatMovement(false);
         return;
@@ -134,27 +123,16 @@ void CustomAI::AttackStart(Unit* who)
 
     if (me->Attack(who, true))
     {
-        if (me->GetWaypointPathId() != 0)
-        {
-            me->GetMotionMaster()->Clear(MOTION_PRIORITY_NORMAL);
-        }
-
-        me->PauseMovement();
-
         switch (type)
         {
             case AI_Type::Distance:
-                me->SetCanMelee(true);
-                me->SetSheath(SHEATH_STATE_UNARMED);
+                me->GetMotionMaster()->MoveChase(who, GetDistance());
                 break;
             case AI_Type::Melee:
             case AI_Type::Hybrid:
-                me->SetCanMelee(true);
                 me->GetMotionMaster()->MoveChase(who);
                 break;
             default:
-                me->SetCanMelee(false);
-                me->SetSheath(SHEATH_STATE_UNARMED);
                 break;
         }
     }
@@ -165,7 +143,6 @@ void CustomAI::JustDied(Unit* killer)
 	summons.DespawnAll();
 	scheduler.CancelAll();
 
-    me->RemoveAllDynObjects();
     me->RemoveAllAreaTriggers();
 
 	ScriptedAI::JustDied(killer);
@@ -173,35 +150,8 @@ void CustomAI::JustDied(Unit* killer)
 
 void CustomAI::UpdateAI(uint32 diff)
 {
+    UpdateVictim();
     scheduler.Update(diff);
-
-    if (!UpdateVictim())
-        return;
-
-    if (type != AI_Type::Hybrid
-        && type != AI_Type::Distance)
-    {
-        return;
-    }
-
-    if (Unit* target = me->GetVictim())
-    {
-        if (target->IsWithinDist(me, GetDistance(), false))
-        {
-            if (me->IsWithinLOSInMap(target))
-            {
-                SetCombatMove(false);
-            }
-            else
-            {
-                SetCombatMove(true, GetDistance());
-            }
-        }
-        else
-        {
-            SetCombatMove(true, GetDistance());
-        }
-    }
 }
 
 bool CustomAI::CanAIAttack(Unit const* who) const
@@ -247,45 +197,6 @@ void CustomAI::CastStop(uint32 exception)
 	}
 }
 
-void CustomAI::SetCombatMove(bool on, float distance, bool stopMoving, bool force)
-{
-    me->SetCanMelee(on);
-
-    if (distance)
-        distance = me->GetCombatReach();
-
-    if (me->IsEngaged())
-    {
-        if (force)
-        {
-            me->ResumeMovement();
-
-            me->GetMotionMaster()->Clear();
-            me->GetMotionMaster()->Remove(CHASE_MOTION_TYPE);
-            me->GetMotionMaster()->MoveChase(me->GetVictim(), distance);
-        }
-        else
-        {
-            if (canCombatMove == on)
-                return;
-
-            canCombatMove = on;
-
-            me->GetMotionMaster()->Clear();
-            me->GetMotionMaster()->Remove(CHASE_MOTION_TYPE);
-
-            if (on)
-            {
-                me->GetMotionMaster()->MoveChase(me->GetVictim(), distance);
-            }
-            else
-            {
-                if (stopMoving)
-                    me->StopMoving();
-            }
-        }
-    }
-}
 
 uint32 CustomAI::FriendsInRange(float range, uint8 pct)
 {

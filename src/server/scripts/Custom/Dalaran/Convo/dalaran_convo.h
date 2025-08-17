@@ -147,65 +147,6 @@ const Position AnduinPath02[ACTORS_PATH_02] =
     { -816.97f, 4498.86f, 601.50f, 0.98f },
 };
 
-inline Position const GetRandomPosition(Position center, float dist)
-{
-	float alpha = 2 * float(M_PI) * float(rand_norm());
-	float r = dist * sqrtf(float(rand_norm()));
-	float x = r * cosf(alpha) + center.GetPositionX();
-	float y = r * sinf(alpha) + center.GetPositionY();
-	return { x, y, center.GetPositionZ(), 0.f };
-}
-
-inline Position const GetRandomPosition(Unit* target, float dist, bool fill = true)
-{
-	// Get center position
-	const Position center = target->GetPosition();
-
-	// Random angle
-	float alpha = 2 * float(M_PI) * float(rand_norm());
-
-	// Random radius
-	float r = fill
-		? dist * sqrtf(float(rand_norm()))
-		: dist;
-
-	// Get X and Y position around the center with radius
-	float x = r * cosf(alpha) + center.GetPositionX();
-	float y = r * sinf(alpha) + center.GetPositionY();
-
-	// Get height map Z position
-	float z = center.GetPositionZ();
-	target->UpdateGroundPositionZ(x, y, z);
-
-	// Get orientation angle
-	const Position position = { x, y, z };
-	float o = position.GetAbsoluteAngle(center);
-
-	// Set final position
-	return { x, y, z, o };
-}
-
-inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
-{
-	// Get center position
-	const Position center = target->GetPosition();
-
-	// Get X and Y position around the center with radius
-	float x = radius * cosf(angle) + center. GetPositionX();
-	float y = radius * sinf(angle) + center.GetPositionY();
-
-	// Get height map Z position
-	float z = center.GetPositionZ();
-	target->UpdateGroundPositionZ(x, y, z);
-
-	// Get orientation angle
-	const Position position = { x, y, z };
-	float o = position.GetAbsoluteAngle(center);
-
-	// Set final position
-	return { x, y, z, o };
-}
-
 template <class AI>
 class ConvoCreatureScript : public CreatureScript
 {

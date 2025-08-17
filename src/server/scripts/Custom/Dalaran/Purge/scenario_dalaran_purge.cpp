@@ -742,7 +742,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					{
 						if (GameObject* portal = GetGameObject(DATA_PORTAL_TO_PRISON))
 						{
-							if (rommath->IsWithinDist(portal, 35.0f))
+							if (rommath->IsVisible() && rommath->IsWithinDist(portal, 35.0f))
 							{
                                 events.CancelEvent(27);
 

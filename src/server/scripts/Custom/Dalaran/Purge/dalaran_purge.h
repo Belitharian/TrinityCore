@@ -4,6 +4,7 @@
 #include "CreatureAIImpl.h"
 #include "PhasingHandler.h"
 #include "Position.h"
+#include "Custom/AI/CustomAI.h"
 
 #define DLPScriptName "scenario_dalaran_purge"
 #define DataHeader "DLP"
@@ -243,59 +244,6 @@ enum class DLPPhases : uint32
 	InTheHandsOfTheChief,
 };
 
-inline Position const GetRandomPosition(Position center, float dist)
-{
-	float alpha = 2 * float(M_PI) * float(rand_norm());
-	float r = dist * sqrtf(float(rand_norm()));
-	float x = r * cosf(alpha) + center.GetPositionX();
-	float y = r * sinf(alpha) + center.GetPositionY();
-
-    Position result = { x, y, center.GetPositionZ(), 0.f };
-
-    float o = result.GetAbsoluteAngle(center);
-    result.SetOrientation(o);
-
-    return result;
-}
-
-inline Position const GetRandomPosition(Unit* target, float dist, bool fill = true)
-{
-	// Get center position
-	Position center = target->GetPosition();
-
-	// Random angle
-	float alpha = 2 * float(M_PI) * float(rand_norm());
-
-	// Random radius
-	float r = fill
-		? dist * sqrtf(float(rand_norm()))
-		: dist;
-
-    // Move to first collision
-    target->MovePositionToFirstCollision(center, r, alpha);
-
-    // Get orientation angle
-    float o = center.GetAbsoluteAngle(target);
-
-    // Set final position
-    return { center.m_positionX, center.m_positionY, center.m_positionZ, o };
-}
-
-inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float dist)
-{
-	// Get center position
-	Position center = target->GetPosition();
-
-    // Move to first collision
-    target->MovePositionToFirstCollision(center, dist, angle);
-
-    // Set orientation
-    float o = center.GetAbsoluteAngle(target);
-
-	// Set final position
-    return { center.m_positionX, center.m_positionY, center.m_positionZ, o };
-}
-
 inline void ClosePortal(GameObject*& portal)
 {
 	if (!portal)
@@ -328,7 +276,7 @@ inline void TeleportPlayersAround(Creature* me, float dist = 15.0f)
 			if (player->IsWithinDist2d(me, dist))
 				return;
 
-			const Position dest = GetRandomPosition(me, dist);
+			const Position dest = GetRandomPosition(me, dist, false);
 			player->NearTeleportTo(dest);
 		});
 	}

@@ -45,6 +45,7 @@ struct npc_guardian_mage_dalaran : public CustomAI
 		SPELL_BLINK                 = 284877,
 		SPELL_BLIZZARD              = 396400,
 		SPELL_FREEZE_OVER           = 378886,
+        SPELL_FROST_SPLINTER        = 443722,
 	};
 
 	float GetDistance() override
@@ -63,6 +64,33 @@ struct npc_guardian_mage_dalaran : public CustomAI
 			});
 		}
 	}
+
+    void SpellHitTarget(WorldObject* object, SpellInfo const* spellInfo) override
+    {
+        if (spellInfo->GetSchoolMask() == SPELL_SCHOOL_MASK_FROST)
+        {
+            Unit* victim = object->ToUnit();
+            if (victim && victim->GetGUID() != me->GetGUID())
+            {
+                if (roll_chance_i(30))
+                    DoCast(victim, SPELL_FROSTBITE);
+
+                const uint8 splinters = irand(3, 8);
+
+                scheduler.Schedule(1ms, [this, splinters](TaskContext context)
+                {
+                    const uint8 index = context.GetRepeatCounter();
+
+                    if (index >= splinters)
+                        return;
+
+                    DoCastVictim(SPELL_FROST_SPLINTER, false);
+
+                    context.Repeat(380ms, 560ms);
+                });
+            }
+        }
+    }
 
 	void JustEngagedWith(Unit* who) override
 	{
@@ -125,17 +153,6 @@ struct npc_guardian_mage_dalaran : public CustomAI
 				DoCastVictim(SPELL_BLIZZARD);
 				blizzard.Repeat(20s, 35s);
 			});
-	}
-
-	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
-	{
-		if (spellInfo->GetSchoolMask() == SPELL_SCHOOL_MASK_FROST
-			&& roll_chance_i(30))
-		{
-			Unit* victim = target->ToUnit();
-			if (victim && victim->GetGUID() != me->GetGUID())
-				DoCast(victim, SPELL_FROSTBITE);
-		}
 	}
 };
 
@@ -419,49 +436,8 @@ struct npc_vereesa_windrunner_dalaran : public CustomAI
 		SPELL_SHOOT                 = 445949,
 	};
 
-	void AttackStart(Unit* who) override
-	{
-		if (!who)
-			return;
-
-		if (who && me->Attack(who, true))
-		{
-			me->GetMotionMaster()->Clear(MOTION_PRIORITY_NORMAL);
-			me->PauseMovement();
-			me->SetCanMelee(false);
-			me->SetSheath(SHEATH_STATE_RANGED);
-		}
-	}
-
-	void MoveInLineOfSight(Unit* who) override
-	{
-		CustomAI::MoveInLineOfSight(who);
-
-		if (!me->IsEngaged())
-			return;
-
-		if (me->IsInRange(who, 0.0f, me->GetCombatReach()))
-		{
-			if (me->CanMelee())
-				return;
-
-			me->SetCanMelee(true);
-			me->SetSheath(SHEATH_STATE_MELEE);
-		}
-		else
-		{
-			SetCombatMove(false, GetDistance());
-			me->SetCanMelee(false);
-			me->SetSheath(SHEATH_STATE_RANGED);
-		}
-	}
-
 	void JustEngagedWith(Unit* who) override
 	{
-		SetCombatMove(false, GetDistance());
-		me->SetCanMelee(false);
-		me->SetSheath(SHEATH_STATE_RANGED);
-
 		DoCast(who, SPELL_SHOOT);
 
 		scheduler
@@ -1609,6 +1585,7 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 		SPELL_ARCANE_BLAST          = 270543,
 		SPELL_ARCANE_EXPLOSION      = 277012,
         SPELL_ARCANE_SUMMONS        = 390233,
+        SPELL_TITAN_FORCE_SHIELD    = 1216608
 	};
 
     enum Misc
@@ -1638,6 +1615,8 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
     {
         if (!healDone && HealthBelowPct(40))
         {
+            me->AddAura(SPELL_TITAN_FORCE_SHIELD, me);
+
             CastStop();
             DoCastSelf(SPELL_ARCANE_RECONSTITUTION);
             healDone = true;
@@ -1966,14 +1945,6 @@ struct npc_magister_brasael : public CustomAI
 			me->AddAura(SPELL_SURVIVOR_BAG, me);
 	}
 
-	void JustDied(Unit* killer) override
-	{
-		CustomAI::JustDied(killer);
-
-		me->RemoveAllDynObjects();
-		me->RemoveAllAreaTriggers();
-	}
-
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
 		// L'aura de [Sac de survivant] est obligatoire pour appliquer la technique Cautérisation
@@ -2212,7 +2183,6 @@ struct npc_magister_surdiel : public CustomAI
         Initialize();
 
         me->RemoveAllAreaTriggers();
-        me->RemoveAllDynObjects();
 
         scheduler.CancelGroup(GROUP_COMBAT);
 
@@ -2252,7 +2222,6 @@ struct npc_magister_surdiel : public CustomAI
 	void EnterEvadeMode(EvadeReason why) override
 	{
         me->RemoveAllAreaTriggers();
-        me->RemoveAllDynObjects();
 
         scheduler.CancelGroup(GROUP_COMBAT);
 
@@ -2350,7 +2319,6 @@ struct npc_magister_surdiel : public CustomAI
 
                 scheduler.CancelGroup(GROUP_COMBAT);
 
-                me->RemoveAllDynObjects();
 				me->RemoveAllAreaTriggers();
 				me->SetReactState(REACT_PASSIVE);
 				me->SetSpeedRate(MOVE_RUN, 0.8f);

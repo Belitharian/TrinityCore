@@ -781,38 +781,6 @@ struct npc_kalecgos_theramore : public CustomAI
 				ice_nova.Repeat(1s);
 			});
 	}
-
-	void UpdateAI(uint32 diff) override
-	{
-		scheduler.Update(diff, [this]
-		{
-			if (UpdateVictim())
-			{
-				DoSpellAttackIfReady(SPELL_FROSTBOLT);
-
-				if (Unit* target = me->GetVictim())
-				{
-					if (!me->IsWithinLOSInMap(target))
-					{
-						SetCombatMove(true, GetDistance());
-					}
-					else
-					{
-						if (me->IsInRange(target, me->GetCombatReach(), GetDistance()))
-						{
-							me->SetCanMelee(false);
-							SetCombatMove(false);
-						}
-						else
-						{
-							me->SetCanMelee(true);
-							SetCombatMove(true, GetDistance());
-						}
-					}
-				}
-			}
-		});
-	}
 };
 
 struct npc_ziradormi_theramore : public CustomAI

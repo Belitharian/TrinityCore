@@ -184,13 +184,11 @@ struct npc_magister_rommath_purge : public CustomAI
 		SPELL_COMBUSTION            = 190319,
         SPELL_EVOCATION             = 211765,
 		SPELL_PHOENIX_FLAMES        = 257541,
-		SPELL_METEOR                = 153561,
+		SPELL_METEOR_STORM          = 179215,
 		SPELL_DRAGON_BREATH         = 255890,
 		SPELL_BLAZING_BARRIER       = 295238,
         SPELL_EMBER_BLAST           = 325877,
         SPELL_BLAZING_SURGE         = 329509,
-        SPELL_PHOENIX_FIRE          = 266964,
-        SPELL_PHOENIX_VISUAL        = 336658,
         SPELL_SCORCHING_DETONATION  = 401525,
 	};
 
@@ -223,35 +221,40 @@ struct npc_magister_rommath_purge : public CustomAI
     {
         if (pathId == PATH_ROMMATH_01)
         {
-            Map* map = me->GetMap();
-            if (!map)
-                return;
-
             me->AI()->Talk(SAY_INFILTRATE_ROMMATH_04);
 
             if (GameObject* passage = instance->GetGameObject(DATA_SECRET_PASSAGE))
                 passage->UseDoorOrButton(7200000);
 
-            for (uint8 i = 0; i < TRACKING_PATH_01; i++)
-            {
-                if (Creature* tracking = map->SummonCreature(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
-                {
-                    tracking->AddAura(SPELL_ARCANIC_TRACKING, tracking);
-                    tracks.push_back(tracking->GetGUID());
-                }
-            }
+            //for (uint8 i = 0; i < TRACKING_PATH_01; i++)
+            //{
+            //    if (Creature* tracking = map->SummonCreature(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
+            //    {
+            //        tracking->AddAura(SPELL_ARCANIC_TRACKING, tracking);
+            //        tracks.push_back(tracking->GetGUID());
+            //    }
+            //}
 
-            auto playerIt = map->GetPlayers().begin();
-            if (playerIt != map->GetPlayers().end() && playerIt->GetSource())
-            {
-                Player* player = playerIt->GetSource();
-                player->SetMinionGUID(me->GetGUID());
+            FollowPlayer();
+        }
+    }
 
-                me->SetOwnerGUID(player->GetGUID());
-                me->SetImmuneToAll(false);
-                me->GetMotionMaster()->Clear();
-                me->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, me->GetFollowAngle());
-            }
+    void FollowPlayer()
+    {
+        Map* map = me->GetMap();
+        if (!map)
+            return;
+
+        auto playerIt = map->GetPlayers().begin();
+        if (playerIt != map->GetPlayers().end() && playerIt->GetSource())
+        {
+            Player* player = playerIt->GetSource();
+            player->SetMinionGUID(me->GetGUID());
+
+            me->SetOwnerGUID(player->GetGUID());
+            me->SetImmuneToAll(false);
+            me->GetMotionMaster()->Clear();
+            me->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, me->GetFollowAngle());
         }
     }
 
@@ -368,14 +371,14 @@ struct npc_magister_rommath_purge : public CustomAI
 			})
 			.Schedule(30s, GROUP_COMBAT, [this](TaskContext combustion)
 			{
-				DoCastVictim(SPELL_COMBUSTION);
+                DoCast(SPELL_COMBUSTION);
                 combustion.Repeat(30s, 45s);
 			})
 			.Schedule(8s, 12s, GROUP_COMBAT, [this](TaskContext dragon_breath)
 			{
 				if (EnemiesInFront(6.f) >= 2)
 				{
-					CastStop();
+					CastStop(SPELL_EVOCATION);
 					DoCast(SPELL_DRAGON_BREATH);
 					dragon_breath.Repeat(32s);
 				}
@@ -386,7 +389,7 @@ struct npc_magister_rommath_purge : public CustomAI
 			{
 				if (EnemiesInFront(15.f) >= 2)
 				{
-                    CastStop(SPELL_EMBER_BLAST);
+                    CastStop({ SPELL_EMBER_BLAST, SPELL_EVOCATION });
 					DoCast(SPELL_BLAZING_SURGE);
                     blazing_surge.Repeat(1min);
 				}
@@ -397,7 +400,7 @@ struct npc_magister_rommath_purge : public CustomAI
             {
                 if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
                 {
-                    CastStop(SPELL_BLAZING_SURGE);
+                    CastStop({ SPELL_BLAZING_SURGE, SPELL_EVOCATION });
                     DoCast(target, SPELL_EMBER_BLAST);
                 }
                 ember_blast.Repeat(15s, 40s);
@@ -406,7 +409,7 @@ struct npc_magister_rommath_purge : public CustomAI
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-                    CastStop({ SPELL_BLAZING_SURGE, SPELL_EMBER_BLAST });
+                    CastStop({ SPELL_BLAZING_SURGE, SPELL_EMBER_BLAST, SPELL_EVOCATION });
 					DoCast(target, SPELL_PHOENIX_FLAMES);
 				}
 				phoenix_flames.Repeat(3s, 8s);
@@ -415,62 +418,14 @@ struct npc_magister_rommath_purge : public CustomAI
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::MinThreat, 0))
 				{
-					CastStop();
-					DoCast(target, SPELL_METEOR);
+					CastStop(SPELL_EVOCATION);
+					DoCast(target, SPELL_METEOR_STORM);
 					meteor.Repeat(15s, 18s);
 				}
 				else
 					meteor.Repeat(15s);
 			});
 };
-
-    void UpdateAI(uint32 diff) override
-    {
-        CustomAI::UpdateAI(diff);
-
-        events.Update(diff);
-
-        if (me->IsEngaged())
-            return;
-
-        Player* player = me->GetCharmerOrOwnerPlayerOrPlayerItself();
-        if (!player)
-            return;
-
-        while (eventId = events.ExecuteEvent())
-        {
-            switch (eventId)
-            {
-                case 1:
-                {
-                    if (player->isDead())
-                    {
-                        events.ScheduleEvent(2, 1s);
-                    }
-                    else
-                    {
-                        events.RescheduleEvent(1, 1s);
-                    }
-                    break;
-                }
-                case 2:
-                    CastStop();
-                    DoCastSelf(SPELL_FIRE_CHANNELING);
-                    events.ScheduleEvent(3, 2s);
-                    break;
-                case 3:
-                    player->AddAura(SPELL_PHOENIX_FIRE, player);
-                    events.ScheduleEvent(4, 2800ms);
-                    break;
-                case 4:
-                    player->CastSpell(player, SPELL_PHOENIX_VISUAL);
-                    player->ResurrectPlayer(100.0f);
-                    player->RemoveAurasDueToSpell(SPELL_PHOENIX_FIRE);
-                    events.ScheduleEvent(1, 5s);
-                    break;
-            }
-        }
-    }
 
     bool CanAIAttack(Unit const* who) const override
     {
@@ -482,9 +437,61 @@ struct npc_magister_rommath_purge : public CustomAI
     }
 };
 
+enum Spells
+{
+    SPELL_METEOR_STORM_VISUAL   = 215555
+};
+
+class MeteorStormEvent : public BasicEvent
+{
+public:
+    MeteorStormEvent(Unit* caster, ObjectGuid originalCastId, Position const& dest) : _caster(caster), _originalCastId(originalCastId), _dest(dest), _count(0) { }
+
+    bool Execute(uint64 time, uint32 /*diff*/) override
+    {
+        Position destPosition = { _dest.GetPositionX() + frand(-8.0f, 8.0f), _dest.GetPositionY() + frand(-8.0f, 8.0f), _dest.GetPositionZ() };
+        _caster->CastSpell(destPosition, SPELL_METEOR_STORM_VISUAL,
+            CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS).SetOriginalCastId(_originalCastId));
+        ++_count;
+
+        if (_count >= 12)
+            return true;
+
+        _caster->m_Events.AddEvent(this, Milliseconds(time) + randtime(100ms, 275ms));
+        return false;
+    }
+
+private:
+    Unit* _caster;
+    ObjectGuid _originalCastId;
+    Position _dest;
+    uint8 _count;
+};
+
+// 179215 - Meteor Storm (launch)
+class spell_meteor_storm : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_METEOR_STORM_VISUAL });
+    }
+
+    void EffectHit(SpellEffIndex /*effIndex*/)
+    {
+        GetCaster()->m_Events.AddEventAtOffset(new MeteorStormEvent(GetCaster(), GetSpell()->m_castId, *GetHitDest()), randtime(100ms, 275ms));
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_meteor_storm::EffectHit, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
 void AddSC_dalaran_purge()
 {
 	RegisterDalaranAI(npc_jaina_dalaran_purge);
 	RegisterDalaranAI(npc_aethas_sunreaver_purge);
 	RegisterDalaranAI(npc_magister_rommath_purge);
+
+    RegisterSpellScript(spell_meteor_storm);
 }

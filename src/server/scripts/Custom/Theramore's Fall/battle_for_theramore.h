@@ -97,6 +97,7 @@ enum BFTData
 	DATA_WAVE_DOCKS,
 	DATA_WAVE_WEST,
 	DATA_WAVE_BOAT,
+	DATA_DECORATION_DUMMIES,
 };
 
 enum BFTCreatures
@@ -165,6 +166,7 @@ enum BFTMisc
 	SPELL_COSMETIC_LARGE_FIRE           = 414772,
 	SPELL_COSMETIC_EAT_SOUP             = 364139,
 	SPELL_COSMETIC_DRINK                = 162443,
+    SPELL_THROW_BOMB                    = 414422,
 
 	// GameObjects
 	GOB_POWDER_BARREL                   = 294148,
@@ -795,30 +797,6 @@ Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f };
 Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };
 Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f };
 Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f };
-
-inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
-{
-	// Get center position
-	const Position center = target->GetPosition();
-
-	// Get X and Y position around the center with radius
-	float x = radius * cosf(angle) + center.GetPositionX();
-	float y = radius * sinf(angle) + center.GetPositionY();
-
-	// Get height map Z position
-	float z = center.GetPositionZ();
-
-	Trinity::NormalizeMapCoord(x);
-	Trinity::NormalizeMapCoord(y);
-	target->UpdateGroundPositionZ(x, y, z);
-
-	// Get orientation angle
-	const Position position = { x, y, z };
-	float o = position.GetAbsoluteAngle(center);
-
-	// Set final position
-	return { x, y, z, o };
-}
 
 template <class AI>
 class TheramoreCreatureScript : public CreatureScript

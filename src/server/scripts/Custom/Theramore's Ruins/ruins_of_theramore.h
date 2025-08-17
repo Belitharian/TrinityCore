@@ -204,39 +204,6 @@ const Position KalecgosPoint01  = { -3044.71f, -4328.60f, 7.38f, 0.64f };
 const Position KalecgosPoint02  = { -3013.10f, -4336.91f,   6.77f, 4.82f };
 const Position DummyPoint01     = { -3698.69f, -4467.94f, -20.87f, 3.55f };
 
-inline Position GetRandomPosition(Position center, float dist)
-{
-	float alpha = 2 * float(M_PI) * float(rand_norm());
-	float r = dist * sqrtf(float(rand_norm()));
-	float x = r * cosf(alpha) + center.GetPositionX();
-	float y = r * sinf(alpha) + center.GetPositionY();
-	return { x, y, center.GetPositionZ(), 0.f };
-}
-
-inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
-{
-    // Get center position
-    const Position center = target->GetPosition();
-
-    // Get X and Y position around the center with radius
-    float x = radius * cosf(angle) + center.GetPositionX();
-    float y = radius * sinf(angle) + center.GetPositionY();
-
-    // Get height map Z position
-    float z = center.GetPositionZ();
-
-    Trinity::NormalizeMapCoord(x);
-    Trinity::NormalizeMapCoord(y);
-    target->UpdateGroundPositionZ(x, y, z);
-
-    // Get orientation angle
-    const Position position = { x, y, z };
-    float o = position.GetAbsoluteAngle(center);
-
-    // Set final position
-    return { x, y, z, o };
-}
-
 template <class AI>
 class RuinsCreatureScript : public CreatureScript
 {
