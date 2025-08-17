@@ -28,6 +28,7 @@
 #include "GossipDef.h"
 #include "Group.h"
 #include "Log.h"
+#include "Memory.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
@@ -80,8 +81,8 @@ void WorldSession::HandleQuestgiverHelloOpcode(WorldPackets::Quest::QuestGiverHe
     if (creature->AI()->OnGossipHello(_player))
         return;
 
-    _player->PrepareGossipMenu(creature, _player->GetGossipMenuForSource(creature), true);
-    _player->SendPreparedGossip(creature);
+    _player->PrepareQuestMenu(creature->GetGUID());
+    _player->SendPreparedQuest(creature);
 }
 
 void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPackets::Quest::QuestGiverAcceptQuest& packet)
@@ -94,118 +95,103 @@ void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPackets::Quest::QuestG
     else
         object = ObjectAccessor::FindPlayer(packet.QuestGiverGUID);
 
-    auto CLOSE_GOSSIP_CLEAR_SHARING_INFO = ([this]()
+    auto CLOSE_GOSSIP_CLEAR_SHARING_INFO = Trinity::make_unique_ptr_with_deleter(_player, [](Player* player)
     {
-        _player->PlayerTalkClass->SendCloseGossip();
-        _player->ClearQuestSharingInfo();
+        player->PlayerTalkClass->SendCloseGossip();
+        player->ClearQuestSharingInfo();
     });
 
     // no or incorrect quest giver
     if (!object)
-    {
-        CLOSE_GOSSIP_CLEAR_SHARING_INFO();
         return;
-    }
 
     if (Player* playerQuestObject = object->ToPlayer())
     {
         if ((_player->GetPlayerSharingQuest().IsEmpty() && _player->GetPlayerSharingQuest() != packet.QuestGiverGUID) || !playerQuestObject->CanShareQuest(packet.QuestID))
-        {
-            CLOSE_GOSSIP_CLEAR_SHARING_INFO();
             return;
-        }
+
         if (!_player->IsInSameRaidWith(playerQuestObject))
-        {
-            CLOSE_GOSSIP_CLEAR_SHARING_INFO();
             return;
-        }
     }
     else
     {
         if (!object->hasQuest(packet.QuestID))
-        {
-            CLOSE_GOSSIP_CLEAR_SHARING_INFO();
             return;
-        }
     }
 
     // some kind of WPE protection
     if (!_player->CanInteractWithQuestGiver(object))
-    {
-        CLOSE_GOSSIP_CLEAR_SHARING_INFO();
         return;
+
+    Quest const* quest = sObjectMgr->GetQuestTemplate(packet.QuestID);
+    if (!quest)
+        return;
+
+    // prevent cheating
+    if (!GetPlayer()->CanTakeQuest(quest, true))
+        return;
+
+    if (!_player->GetPlayerSharingQuest().IsEmpty())
+    {
+        Player* player = ObjectAccessor::FindPlayer(_player->GetPlayerSharingQuest());
+        if (player)
+        {
+            player->SendPushToPartyResponse(_player, QuestPushReason::Accepted);
+            _player->ClearQuestSharingInfo();
+        }
     }
 
-    if (Quest const* quest = sObjectMgr->GetQuestTemplate(packet.QuestID))
+    if (!_player->CanAddQuest(quest, true))
+        return;
+
+    (void)CLOSE_GOSSIP_CLEAR_SHARING_INFO.release();
+
+    _player->AddQuestAndCheckCompletion(quest, object);
+
+    if (quest->IsPushedToPartyOnAccept())
     {
-        // prevent cheating
-        if (!GetPlayer()->CanTakeQuest(quest, true))
+        if (Group* group = _player->GetGroup())
         {
-            CLOSE_GOSSIP_CLEAR_SHARING_INFO();
-            return;
-        }
-
-        if (!_player->GetPlayerSharingQuest().IsEmpty())
-        {
-            Player* player = ObjectAccessor::FindPlayer(_player->GetPlayerSharingQuest());
-            if (player)
+            for (GroupReference const& itr : group->GetMembers())
             {
-                player->SendPushToPartyResponse(_player, QuestPushReason::Accepted);
-                _player->ClearQuestSharingInfo();
-            }
-        }
+                Player* player = itr.GetSource();
 
-        if (_player->CanAddQuest(quest, true))
-        {
-            _player->AddQuestAndCheckCompletion(quest, object);
+                if (player == _player || !player->IsInMap(_player))     // not self and in same map
+                    continue;
 
-            if (quest->IsPushedToPartyOnAccept())
-            {
-                if (Group* group = _player->GetGroup())
+                if (player->CanTakeQuest(quest, true))
                 {
-                    for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
-                    {
-                        Player* player = itr->GetSource();
+                    player->SetQuestSharingInfo(_player->GetGUID(), quest->GetQuestId());
 
-                        if (!player || player == _player || !player->IsInMap(_player))     // not self and in same map
-                            continue;
+                    // need confirmation that any gossip window will close
+                    player->PlayerTalkClass->SendCloseGossip();
 
-                        if (player->CanTakeQuest(quest, true))
-                        {
-                            player->SetQuestSharingInfo(_player->GetGUID(), quest->GetQuestId());
-
-                            // need confirmation that any gossip window will close
-                            player->PlayerTalkClass->SendCloseGossip();
-
-                            _player->SendQuestConfirmAccept(quest, player);
-                        }
-                    }
+                    _player->SendQuestConfirmAccept(quest, player);
                 }
             }
-
-            if (quest->HasFlag(QUEST_FLAGS_LAUNCH_GOSSIP_ACCEPT) && !quest->HasFlagEx(QUEST_FLAGS_EX_SUPPRESS_GOSSIP_ACCEPT))
-            {
-                auto launchGossip = [&](WorldObject* worldObject)
-                {
-                    _player->PlayerTalkClass->ClearMenus();
-                    _player->PrepareGossipMenu(worldObject, _player->GetGossipMenuForSource(worldObject), true);
-                    _player->SendPreparedGossip(worldObject);
-                    _player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest = true;
-                };
-
-                if (Creature* creature = object->ToCreature())
-                    launchGossip(creature);
-                else if (GameObject* go = object->ToGameObject())
-                    launchGossip(go);
-            }
-            else
-                _player->PlayerTalkClass->SendCloseGossip();
-
-            return;
         }
     }
 
-    CLOSE_GOSSIP_CLEAR_SHARING_INFO();
+    if (quest->HasFlag(QUEST_FLAGS_LAUNCH_GOSSIP_ACCEPT) && !quest->HasFlagEx(QUEST_FLAGS_EX_SUPPRESS_GOSSIP_ACCEPT))
+    {
+        auto launchGossip = [&](WorldObject* worldObject)
+        {
+            _player->PlayerTalkClass->ClearMenus();
+            _player->PrepareGossipMenu(worldObject, _player->GetGossipMenuForSource(worldObject), true);
+            _player->SendPreparedGossip(worldObject);
+            _player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest = true;
+        };
+
+        if (Creature* creature = object->ToCreature())
+            launchGossip(creature);
+        else if (GameObject* go = object->ToGameObject())
+            launchGossip(go);
+    }
+    // do not close gossip if quest accept script started a new interaction
+    else if (!_player->PlayerTalkClass->GetInteractionData().IsInteractingWith(object->GetGUID(), PlayerInteractionType::QuestGiver))
+        _player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest = true;
+    else
+        _player->PlayerTalkClass->SendCloseGossip();
 }
 
 void WorldSession::HandleQuestgiverQueryQuestOpcode(WorldPackets::Quest::QuestGiverQueryQuest& packet)
@@ -430,6 +416,8 @@ void WorldSession::HandleQuestLogRemoveQuest(WorldPackets::Quest::QuestLogRemove
             Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
             QuestStatus oldStatus = _player->GetQuestStatus(questId);
 
+            _player->RemoveActiveQuest(questId);
+
             if (quest)
             {
                 if (quest->HasFlagEx(QUEST_FLAGS_EX_NO_ABANDON_ONCE_BEGUN))
@@ -448,10 +436,8 @@ void WorldSession::HandleQuestLogRemoveQuest(WorldPackets::Quest::QuestLogRemove
             }
 
             _player->SendForceSpawnTrackingUpdate(questId);
-            _player->SetQuestSlot(packet.Entry, 0);
             _player->TakeQuestSourceItem(questId, true); // remove quest src item from player
             _player->AbandonQuest(questId); // remove all quest items player received before abandoning quest. Note, this does not remove normal drop items that happen to be quest requirements.
-            _player->RemoveActiveQuest(questId);
             _player->DespawnPersonalSummonsForQuest(questId);
 
             TC_LOG_INFO("network", "Player {} abandoned quest {}", _player->GetGUID().ToString(), questId);
@@ -609,11 +595,11 @@ void WorldSession::HandlePushQuestToParty(WorldPackets::Quest::PushQuestToParty&
         return;
     }
 
-    for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
+    for (GroupReference const& itr : group->GetMembers())
     {
-        Player* receiver = itr->GetSource();
+        Player* receiver = itr.GetSource();
 
-        if (!receiver || receiver == sender)
+        if (receiver == sender)
             continue;
 
         if (!receiver->GetPlayerSharingQuest().IsEmpty())
