@@ -332,7 +332,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					{
 						Talk(kalecgos, SAY_AFTER_BATTLE_KALECGOS_13);
 						kalecgos->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-                        if (instance->GetPlayers().isEmpty())
+                        if (instance->GetPlayers().empty())
                             return;
 						if (Player* player = instance->GetPlayers().begin()->GetSource())
 							kalecgos->SetFacingToObject(player);

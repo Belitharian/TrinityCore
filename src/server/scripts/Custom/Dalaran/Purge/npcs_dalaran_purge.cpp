@@ -369,7 +369,7 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 			if (Map* map = me->GetMap())
 			{
                 Map::PlayerList const& players = map->GetPlayers();
-				if (!players.isEmpty())
+				if (!players.empty())
 				{
                     if (Player* first = players.begin()->GetSource())
                     {
@@ -2275,7 +2275,7 @@ struct npc_magister_surdiel : public CustomAI
 					scheduler.Schedule(1s, GROUP_OUTRO, [rommath, this](TaskContext /*context*/)
 					{
 						Map* map = me->GetMap();
-						if (map && map->GetPlayers().getSize() > 0)
+						if (map && map->GetPlayers().size() > 0)
 						{
 							if (Player* player = map->GetPlayers().begin()->GetSource())
 								KillRewarder::Reward(player, me);
@@ -2933,7 +2933,7 @@ struct npc_high_arcanist_savor : public CustomAI
 		if (!map)
 			return nullptr;
 
-		return map->GetPlayers().getSize() <= 0 ? nullptr : map->GetPlayers().begin()->GetSource();
+		return map->GetPlayers().size() <= 0 ? nullptr : map->GetPlayers().begin()->GetSource();
 	}
 
 	void SummonPlayerClones()
@@ -3885,7 +3885,7 @@ class spell_atonement_stormwind_cleric : public AuraScript
         return ValidateSpellInfo({ SPELL_PRIEST_ATONEMENT_HEAL }) && ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } });
     }
 
-    static bool CheckProc(ProcEventInfo const& eventInfo)
+    bool CheckProc(ProcEventInfo& eventInfo)
     {
         return eventInfo.GetDamageInfo() != nullptr;
     }
