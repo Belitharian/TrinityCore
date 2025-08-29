@@ -1582,10 +1582,10 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 		SPELL_ARCANE_MISSILES       = 191293,
         SPELL_ARCANE_BLITZ          = 197797,
         SPELL_ARCANE_RECONSTITUTION = 226206,
-		SPELL_ARCANE_BLAST          = 270543,
 		SPELL_ARCANE_EXPLOSION      = 277012,
         SPELL_ARCANE_SUMMONS        = 390233,
-        SPELL_TITAN_FORCE_SHIELD    = 1216608
+        SPELL_TITAN_FORCE_SHIELD    = 1216608,
+		SPELL_ARCANE_BLAST          = 1222815
 	};
 
     enum Misc
