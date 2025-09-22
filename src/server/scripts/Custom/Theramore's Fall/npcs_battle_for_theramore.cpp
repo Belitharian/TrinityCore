@@ -1933,11 +1933,12 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 		COSMETIC_GROUP,
 
 		// Spells
-		SPELL_ARCANE_PROJECTILES        = 5143,
 		SPELL_SUPERNOVA                 = 157980,
 		SPELL_EVOCATION                 = 243070,
 		SPELL_ARCANE_BLAST              = 291316,
 		SPELL_ARCANE_BARRAGE            = 291318,
+		SPELL_ARCANE_PROJECTILES        = 303311,
+		SPELL_ARCANE_SURGE              = 365350,
 	};
 
 	void Reset() override
@@ -1997,15 +1998,19 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 					if (!me->HasUnitState(UNIT_STATE_CASTING))
 					{
 						uint32 spellId = SPELL_ARCANE_BLAST;
-						if (roll_chance_i(30))
+						if (roll_chance_i(10))
 						{
 							spellId = SPELL_ARCANE_PROJECTILES;
 						}
-						else if (roll_chance_i(20))
+                        else if (roll_chance_i(20))
+                        {
+                            spellId = SPELL_ARCANE_SURGE;
+                        }
+						else if (roll_chance_i(30))
 						{
 							spellId = SPELL_ARCANE_BARRAGE;
 						}
-						else if (roll_chance_i(10))
+						else if (roll_chance_i(15))
 						{
 							spellId = SPELL_SUPERNOVA;
 						}
@@ -2136,6 +2141,169 @@ class spell_theramore_throw_bucket : public SpellScript
 	}
 };
 
+// YellAtCitizensEvent - BasicEvent
+class YellAtCitizensEvent : public BasicEvent
+{
+    enum Event
+    {
+        // NPC
+        NPC_THERAMORE_CRIER = 500025,
+        NPC_THERAMORE_CITIZEN_CREDIT = 500005,
+
+        // Spells
+        SPELL_CRIER_HOLDING_BELL_SCROLL = 246022,
+        SPELL_AFRAID = 123263,
+    };
+
+public:
+    YellAtCitizensEvent(Player* owner, Creature* stalker, std::vector<Creature*> citizens)
+        : stage(0), index(0), owner(owner), townCrier(nullptr), stalker(stalker), citizens(citizens)
+    {
+    }
+
+    bool Execute(uint64 timer, uint32 /*updateTime*/) override
+    {
+        switch (stage)
+        {
+            case 0:
+                Initialize();
+                Next(timer, 1s);
+                return false;
+
+            case 1:
+            {
+                if (!townCrier) // sécurité
+                    return true;
+
+                townCrier->AI()->Talk(0);
+                for (Creature* citizen : citizens)
+                {
+                    citizen->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                    citizen->SetEmoteState(EMOTE_STATE_NONE);
+                    citizen->SetFacingToObject(townCrier);
+
+                    if (CreatureAddon const* creatureAddon = citizen->GetCreatureAddon())
+                    {
+                        if (!creatureAddon->auras.empty())
+                        {
+                            for (auto aura : creatureAddon->auras)
+                                citizen->RemoveAurasDueToSpell(aura);
+                        }
+                    }
+                }
+                Next(timer, 2s);
+                return false;
+            }
+
+            case 2:
+            {
+                if (Creature* citizen = citizens[index])
+                {
+                    if (citizen->HasAura(SPELL_AFRAID))
+                    {
+                        citizen->HandleEmoteCommand(RAND(EMOTE_ONESHOT_WAVE, EMOTE_ONESHOT_NO));
+                        citizen->AI()->Talk(2);
+                    }
+                    else if (!citizen->GetWaypointPathId())
+                    {
+                        citizen->HandleEmoteCommand(RAND(EMOTE_STATE_CRY, EMOTE_STATE_COWER));
+                        citizen->AI()->Talk(1);
+
+                        KillRewarder::Reward(owner, citizen, NPC_THERAMORE_CITIZEN_CREDIT);
+                    }
+                    else
+                    {
+                        citizen->SetWalk(false);
+                        citizen->ResumeMovement();
+                        citizen->DespawnOrUnsummon(10s);
+
+                        if (roll_chance_i(20))
+                            citizen->AI()->Talk(0);
+
+                        KillRewarder::Reward(owner, citizen, NPC_THERAMORE_CITIZEN_CREDIT);
+                    }
+
+                    citizen->AddAura(SPELL_AFRAID, citizen);
+                }
+
+                index++;
+
+                if (index >= citizens.size())
+                    return true;
+
+                owner->m_Events.AddEvent(this, Milliseconds(timer) + Milliseconds(urand(480, 650)));
+                return false;
+            }
+
+            default:
+                break;
+        }
+
+        return true;
+    }
+
+    void Initialize()
+    {
+        townCrier = owner->SummonCreature(
+            NPC_THERAMORE_CRIER,
+            GetRandomPosition(stalker->GetPosition(), 2.0f),
+            TEMPSUMMON_TIMED_DESPAWN, 15s);
+
+        if (townCrier)
+        {
+            townCrier->HandleEmoteCommand(EMOTE_ONESHOT_WACRIERTALK);
+            townCrier->AddAura(SPELL_CRIER_HOLDING_BELL_SCROLL, townCrier);
+        }
+    }
+
+    void Next(uint64 timer, Milliseconds delay)
+    {
+        ++stage;
+        owner->m_Events.AddEvent(this, Milliseconds(timer) + delay);
+    }
+
+private:
+    uint8 stage;
+    size_t index;
+    Player* owner;
+    Creature* townCrier;
+    Creature* stalker;
+    std::vector<Creature*> citizens;
+};
+
+// 	Yell - 427586
+class spell_yell_at_citizens : public SpellScript
+{
+	void HandleDummy(SpellEffIndex effIndex)
+	{
+        // Cast en Player*
+        Player* player = GetCaster()->ToPlayer();
+        if (!player)
+            return;
+
+        // Recherche du centre du AreaTrigger
+        Creature* stalker = player->FindNearestCreature(NPC_INVISIBLE_STALKER, 30.0f);
+        if (!stalker)
+            return;
+
+		float radius = GetSpellInfo()->GetEffect(effIndex).MiscValue;
+
+        std::vector<Creature*> citizens;
+        stalker->GetCreatureListWithEntryInGrid(citizens, NPC_THERAMORE_CITIZEN_FEMALE, radius);
+        stalker->GetCreatureListWithEntryInGrid(citizens, NPC_THERAMORE_CITIZEN_MALE, radius);
+
+        if (citizens.empty())
+            return;
+
+        stalker->m_Events.AddEvent(new YellAtCitizensEvent(player, stalker, citizens), stalker->m_Events.CalculateTime(2s));
+	}
+
+	void Register() override
+	{
+		OnEffectHitTarget += SpellEffectFn(spell_yell_at_citizens::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+	}
+};
+
 // Powder Keg - BasicEvent
 class PowderKegEvent : public BasicEvent
 {
@@ -2238,90 +2406,53 @@ class spell_powder_keg : public SpellScript
 	}
 };
 
-// Titan Force Shield - 1216608
-class spell_titan_force_shield : public AuraScript
-{
-public:
-	spell_titan_force_shield()
-	{
-		maxHealth = 0;
-		absorbedAmount = 0;
-	}
-
-	bool Load() override
-	{
-		maxHealth = GetCaster()->GetMaxHealth();
-		absorbedAmount = 0;
-		return true;
-	}
-
-	void CalculateAmount(AuraEffect const* /*auraEffect*/, int32& amount, bool& canBeRecalculated) const
-	{
-		canBeRecalculated = false;
-		amount = CalculatePct(maxHealth, absorbPct);
-	}
-
-	void Register() override
-	{
-		DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_titan_force_shield::CalculateAmount, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB);
-	}
-
-private:
-	const int32 absorbPct = 50;
-	int32 maxHealth;
-	uint32 absorbedAmount;
-};
-
 // Blizzard - 284968
 // AreaTriggerID - 15411
 struct at_blizzard_theramore : AreaTriggerAI
 {
-	static constexpr Milliseconds TICK_PERIOD = Milliseconds(1000);
-
-	at_blizzard_theramore(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger), _tickTimer(TICK_PERIOD)
-	{
-	}
+    using AreaTriggerAI::AreaTriggerAI;
 
 	enum Spells
 	{
-		SPELL_BLIZZARD_DAMAGE   = 335953
+		SPELL_BLIZZARD_DAMAGE = 335953
 	};
 
-	void OnUpdate(uint32 diff) override
-	{
-		_tickTimer -= Milliseconds(diff);
+    void OnCreate(Spell const* /*creatingSpell*/) override
+    {
+        _scheduler.Schedule(1s, [this](TaskContext task)
+        {
+            if (Unit* caster = at->GetCaster())
+            {
+                for (ObjectGuid unit : at->GetInsideUnits())
+                {
+                    if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
+                    {
+                        if (!caster->IsHostileTo(target))
+                            continue;
 
-		while (_tickTimer <= 0s)
-		{
-			if (Unit* caster = at->GetCaster())
-			{
-				for (ObjectGuid unit : at->GetInsideUnits())
-				{
-					if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
-					{
-						if (!caster->IsHostileTo(target))
-							continue;
+                        caster->CastSpell(target, SPELL_BLIZZARD_DAMAGE, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
+                    }
+                }
+            }
 
-						caster->CastSpell(target, SPELL_BLIZZARD_DAMAGE);
-					}
-				}
-			}
+            task.Repeat(1s);
+        });
+    }
 
-			_tickTimer += TICK_PERIOD;
-		}
-	}
+    void OnUpdate(uint32 diff) override
+    {
+        _scheduler.Update(diff);
+    }
 
-	private:
-	Milliseconds _tickTimer;
+private:
+    TaskScheduler _scheduler;
 };
 
 // Consecrated Ground
 // AreaTriggerID - 34355
 struct at_consecration : AreaTriggerAI
 {
-	at_consecration(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
-	{
-	}
+    using AreaTriggerAI::AreaTriggerAI;
 
 	enum Spells
 	{
@@ -2366,53 +2497,50 @@ struct at_consecration : AreaTriggerAI
 // AreaTriggerID - 35546
 struct at_divine_word_sanctuary : AreaTriggerAI
 {
-	static constexpr Milliseconds TICK_PERIOD = Milliseconds(1000);
+    using AreaTriggerAI::AreaTriggerAI;
 
-	at_divine_word_sanctuary(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger), _tickTimer(TICK_PERIOD)
-	{
-	}
-
-	enum Spells
+    enum Spells
 	{
 		SPELL_DIVINE_WORD_SANCTUARY_HEAL = 372787
 	};
 
-	void OnUpdate(uint32 diff) override
-	{
-		_tickTimer -= Milliseconds(diff);
+    void OnCreate(Spell const* /*creatingSpell*/) override
+    {
+        _scheduler.Schedule(1s, [this](TaskContext task)
+        {
+            // Récupération du lanceur du sort
+            if (Unit* caster = at->GetCaster())
+            {
+                for (const ObjectGuid& unitGuid : at->GetInsideUnits())
+                {
+                    if (Unit* target = ObjectAccessor::GetUnit(*caster, unitGuid))
+                    {
+                        if (caster->IsHostileTo(target))
+                            continue;
 
-		if (_tickTimer > 0s)
-			return;
+                        caster->CastSpell(target, SPELL_DIVINE_WORD_SANCTUARY_HEAL);
+                    }
+                }
+            }
 
-		// Récupération du lanceur du sort
-		if (Unit* caster = at->GetCaster())
-		{
-			for (const ObjectGuid& unitGuid : at->GetInsideUnits())
-			{
-				if (Unit* target = ObjectAccessor::GetUnit(*caster, unitGuid))
-				{
-					if (caster->IsFriendlyTo(target))
-					{
-						caster->CastSpell(target, SPELL_DIVINE_WORD_SANCTUARY_HEAL);
-					}
-				}
-			}
-		}
+            task.Repeat(1s);
+        });
+    }
 
-		_tickTimer += TICK_PERIOD;
-	}
+    void OnUpdate(uint32 diff) override
+    {
+        _scheduler.Update(diff);
+    }
 
-	private:
-	Milliseconds _tickTimer;
+private:
+    TaskScheduler _scheduler;
 };
 
 // Uncontrolled Energy
 // AreaTriggerID - 26658
 struct at_uncontrolled_energy : AreaTriggerAI
 {
-	at_uncontrolled_energy(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
-	{
-	}
+    using AreaTriggerAI::AreaTriggerAI;
 
 	enum Spells
 	{
@@ -2423,65 +2551,20 @@ struct at_uncontrolled_energy : AreaTriggerAI
 	{
 		if (Unit* caster = at->GetCaster())
 		{
-			if (!caster->IsHostileTo(unit))
+			if (caster->IsFriendlyTo(unit))
 				return;
 
 			caster->CastSpell(at->GetPosition(), SPELL_ARCANE_RIFT_EXPLOSION, true);
-			at->Remove();
+            at->SetDuration(0);
 		}
 	}
-};
-
-// Aracane Rift - 388902
-// AreaTriggerID - 26656
-struct at_arcane_rift : AreaTriggerAI
-{
-	static constexpr Milliseconds TICK_PERIOD = Milliseconds(1000);
-
-	at_arcane_rift(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger), _tickTimer(TICK_PERIOD)
-	{
-	}
-
-	enum Spells
-	{
-		SPELL_ARCANE_RIFT_EXPLOSION = 388996
-	};
-
-	void OnUpdate(uint32 diff) override
-	{
-		_tickTimer -= Milliseconds(diff);
-
-		while (_tickTimer <= 0s)
-		{
-			if (Unit* caster = at->GetCaster())
-			{
-				for (ObjectGuid unit : at->GetInsideUnits())
-				{
-					if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
-					{
-						if (!caster->IsHostileTo(target))
-							continue;
-
-						caster->CastSpell(target->GetPosition(), SPELL_ARCANE_RIFT_EXPLOSION, true);
-					}
-				}
-			}
-
-			_tickTimer += TICK_PERIOD;
-		}
-	}
-
-	private:
-	Milliseconds _tickTimer;
 };
 
 // Scorched Earth - 373139
 // AreaTriggerID - 25183
 struct at_scorched_earth : AreaTriggerAI
 {
-	at_scorched_earth(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
-	{
-	}
+    using AreaTriggerAI::AreaTriggerAI;
 
 	enum Spells
 	{
@@ -2492,10 +2575,10 @@ struct at_scorched_earth : AreaTriggerAI
 	{
 		if (Unit* caster = at->GetCaster())
 		{
-			if (caster->IsHostileTo(unit))
-			{
-				unit->AddAura(SPELL_SCORCHED_EARTH, unit);
-			}
+            if (caster->IsFriendlyTo(unit))
+                return;
+
+            unit->AddAura(SPELL_SCORCHED_EARTH, unit);
 		}
 	}
 
@@ -2503,6 +2586,48 @@ struct at_scorched_earth : AreaTriggerAI
 	{
 		unit->RemoveAurasDueToSpell(SPELL_SCORCHED_EARTH);
 	}
+};
+
+// AreaTriggerID - 25183
+struct areatrigger_theramore_citizens : AreaTriggerAI
+{
+    using AreaTriggerAI::AreaTriggerAI;
+
+    enum Spells
+    {
+        SPELL_YELL = 427587
+    };
+
+    void OnInitialize() override
+    {
+        instance = at->GetInstanceScript();
+    }
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        Player* player = unit->ToPlayer();
+        if (!player)
+            return;
+
+        if (player->IsGameMaster())
+        {
+            player->AddAura(SPELL_YELL, player);
+        }
+        else
+        {
+            BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+            if (phase == BFTPhases::Evacuation)
+                player->AddAura(SPELL_YELL, player);
+        }
+    }
+
+    void OnUnitExit(Unit* unit) override
+    {
+        unit->RemoveAurasDueToSpell(SPELL_YELL);
+    }
+
+private:
+    InstanceScript* instance;
 };
 
 void AddSC_npcs_battle_for_theramore()
@@ -2532,12 +2657,14 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterSpellScript(spell_theramore_light_of_dawn);
 	RegisterSpellScript(spell_theramore_throw_bucket);
 	RegisterSpellScript(spell_powder_keg);
-	RegisterSpellScript(spell_titan_force_shield);
 
 	RegisterAreaTriggerAI(at_blizzard_theramore);
 	RegisterAreaTriggerAI(at_consecration);
 	RegisterAreaTriggerAI(at_divine_word_sanctuary);
 	RegisterAreaTriggerAI(at_uncontrolled_energy);
-	RegisterAreaTriggerAI(at_arcane_rift);
 	RegisterAreaTriggerAI(at_scorched_earth);
+
+    // Custom AT
+    RegisterSpellScript(spell_yell_at_citizens);
+	RegisterAreaTriggerAI(areatrigger_theramore_citizens);
 }

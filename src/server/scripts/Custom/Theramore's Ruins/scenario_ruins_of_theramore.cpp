@@ -153,7 +153,6 @@ class scenario_ruins_of_theramore : public InstanceMapScript
                     for (TempSummon* horde : hordes)
                     {
                         horde->SetTempSummonType(TEMPSUMMON_TIMED_OR_DEAD_DESPAWN);
-
                         hordeChecker.push_back(horde->GetGUID());
                     }
                     if (Creature* jaina = GetJaina())
@@ -211,6 +210,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					creature->SetUninteractible(true);
 					creature->AddAura(SPELL_SHIMMERDUST, creature);
 					creature->AddAura(SPELL_COSMETIC_PURPLE_VERTEX_STATE, creature);
+					creature->AddAura(SPELL_ARCANE_DEBUFF_VISUAL, creature);
 					break;
 				default:
 					break;
@@ -360,8 +360,11 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case 20:
 					if (Player* player = instance->GetPlayers().begin()->GetSource())
 						GetJaina()->SetFacingToObject(player);
-					if (Creature* kinndy = GetCreature(DATA_KINNDY_SPARKSHINE))
-						kinndy->AddAura(SPELL_COSMETIC_ARCANE_DISSOLVE, kinndy);
+                    if (Creature* kinndy = GetCreature(DATA_KINNDY_SPARKSHINE))
+                    {
+                        kinndy->AddAura(SPELL_COSMETIC_ARCANE_DISSOLVE, kinndy);
+                        kinndy->CastSpell(kinndy, SPELL_DISSOLVE_ARCANE_VISUAL);
+                    }
 					Next(2s);
 					break;
 				case 21:
@@ -409,7 +412,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						{
 							dummy->RemoveAllAuras();
 							dummy->SetObjectScale(5.0f);
-							dummy->AddAura(SPELL_COSMETIC_ARCANE_ENERGY_1, dummy);
+							dummy->AddAura(SPELL_COSMETIC_ARCANE_ENERGY, dummy);
 						}
 					}
 					Next(2s);

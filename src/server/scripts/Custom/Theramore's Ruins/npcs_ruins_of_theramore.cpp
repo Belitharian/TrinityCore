@@ -72,93 +72,6 @@ struct npc_water_elementals_theramore : public CustomAI
 	}
 };
 
-struct npc_jaina_image : public CustomAI
-{
-	npc_jaina_image(Creature* creature) : CustomAI(creature, AI_Type::Distance)
-	{
-	}
-
-	enum Spells
-	{
-		SPELL_ARCANE_PROJECTILES    = 5143,
-		SPELL_EVOCATION             = 243070,
-		SPELL_SUPERNOVA             = 157980,
-		SPELL_ARCANE_BLAST          = 291316,
-		SPELL_ARCANE_BARRAGE        = 291318,
-		SPELL_MIRROR_IMAGE_FX       = 370617,
-	};
-
-	void Reset()
-	{
-		me->AddAura(SPELL_MIRROR_IMAGE_FX, me);
-	}
-
-	void JustEngagedWith(Unit* who) override
-	{
-		DoCast(who, SPELL_ARCANE_BLAST);
-
-		scheduler
-			.Schedule(5ms, [this](TaskContext context)
-			{
-				if (me->GetPowerPct(POWER_MANA) <= 20)
-				{
-					if (Spell* spell = me->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
-					{
-						if (spell->getState() != SPELL_STATE_FINISHED && spell->IsChannelActive())
-						{
-							context.Repeat(2s);
-						}
-					}
-					else
-					{
-						const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
-						Milliseconds ms = Milliseconds(info->CalcDuration());
-						CastSpellExtraArgs args(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD);
-
-						me->CastSpell(me, SPELL_EVOCATION, args);
-						me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
-
-						context.Repeat(ms + 800ms);
-					}
-				}
-				else
-				{
-					Milliseconds ms = 50ms;
-					if (!me->HasUnitState(UNIT_STATE_CASTING))
-					{
-						uint32 spellId = SPELL_ARCANE_BLAST;
-						if (roll_chance_i(30))
-						{
-							spellId = SPELL_ARCANE_PROJECTILES;
-						}
-						else if (roll_chance_i(20))
-						{
-							spellId = SPELL_ARCANE_BARRAGE;
-						}
-						else if (roll_chance_i(10))
-						{
-							spellId = SPELL_SUPERNOVA;
-						}
-
-						const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
-						ms = Milliseconds(info->CalcCastTime());
-
-						if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-						{
-							me->CastSpell(target, spellId);
-							me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
-						}
-
-						if (info->IsChanneled())
-							ms = Milliseconds(info->CalcDuration(me));
-					}
-
-					context.Repeat(ms + 500ms);
-				}
-			});
-	}
-};
-
 struct npc_roknah_warlord : public CustomAI
 {
 	npc_roknah_warlord(Creature* creature) : CustomAI(creature, AI_Type::Melee), isAlmostDead(false)
@@ -319,7 +232,6 @@ void AddSC_npcs_ruins_of_theramore()
 {
 	// Utilisable en dehors de l'instance
 	RegisterCreatureAI(npc_water_elementals_theramore);
-	RegisterCreatureAI(npc_jaina_image);
 
 	RegisterRuinsAI(npc_roknah_warlord);
 

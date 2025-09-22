@@ -81,8 +81,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 	struct scenario_battle_for_theramore_InstanceScript : public InstanceScript
 	{
 		scenario_battle_for_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map),
-			phase(BFTPhases::FindJaina), eventId(1), archmagesIndex(0), waves(0), woundedTroops(0),
-			wavesInvoker(WAVE_01)
+			phase(BFTPhases::FindJaina), wavesInvoker(WAVE_01), eventId(1), woundedTroops(0), archmagesIndex(0),
+            waves(0)
 		{
 			SetHeaders(DataHeader);
 			LoadObjectData(creatureData, gameobjectData);
@@ -137,6 +137,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			SPELL_SCORCHED_EARTH        = 373139,
 			SPELL_ARCANIC_CELL          = 398947,
 			SPELL_READING_BOOK_STANDING = 397765,
+            SPELL_AREA_TRIGGER_VISUAL   = 473554,
 		};
 
 		uint32 Waves[HORDE_WAVES_COUNT] =
@@ -214,17 +215,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				// Step 4 : The Unknow Tauren
 				case CRITERIA_TREE_UNKNOW_TAUREN:
 				{
-					for (ObjectGuid guid : citizens)
-					{
-						if (Creature* citizen = instance->GetCreature(guid))
-						{
-							if (Creature* faithful = citizen->FindNearestCreature(NPC_THERAMORE_FAITHFUL, 10.f))
-								continue;
-                            if (citizen->GetEntry() == NPC_THERAMORE_CITIZEN_FEMALE || citizen->GetEntry() == NPC_THERAMORE_CITIZEN_MALE)
-                                citizen->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-						}
-					}
-					if (Creature* kinndy = GetKinndy())
+                    if (Creature* kinndy = GetKinndy())
 					{
 						kinndy->SetVisible(true);
 						kinndy->GetMotionMaster()->MovePath(KinndyPath02, false);
@@ -233,6 +224,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						tervosh->SetVisible(true);
 						tervosh->GetMotionMaster()->MovePath(TervoshPath03, false);
+
+                        std::list<Creature*> stalkers;
+                        tervosh->GetCreatureListWithEntryInGrid(stalkers, NPC_INVISIBLE_STALKER);
+
+                        for (Creature* stalker : stalkers)
+                            stalker->AddAura(SPELL_AREA_TRIGGER_VISUAL, stalker);
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Evacuation);
 					break;
@@ -242,15 +239,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				{
 					if (Creature* jaina = GetJaina())
 					{
-						for (ObjectGuid guid : citizens)
-						{
-							if (Creature* citizen = instance->GetCreature(guid))
-								citizen->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-						}
-
 						jaina->NearTeleportTo(JainaPoint02);
 						jaina->SetHomePosition(JainaPoint02);
 						jaina->AI()->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
+
+                        std::list<Creature*> stalkers;
+                        jaina->GetCreatureListWithEntryInGrid(stalkers, NPC_INVISIBLE_STALKER);
+
+                        for (Creature* stalker : stalkers)
+                            stalker->RemoveAurasDueToSpell(SPELL_AREA_TRIGGER_VISUAL);
 					}
 					if (Creature* tervosh = GetTervosh())
 					{
@@ -300,10 +297,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					for (ObjectGuid guid : citizens)
 					{
 						if (Creature* citizen = instance->GetCreature(guid))
-						{
-							citizen->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 							citizen->SetVisible(false);
-						}
 					}
 					for (ObjectGuid guid : troops)
 					{
@@ -523,14 +517,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case NPC_THERAMORE_CITIZEN_FEMALE:
 				case NPC_THERAMORE_CITIZEN_MALE:
 				case NPC_TRAINING_DUMMY:
-					creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
+                    creature->PauseMovement();
+                    creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
 					creature->RemoveUnitFlag(UNIT_FLAG_PVP_ENABLING);
-                    creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
                     citizens.push_back(creature->GetGUID());
 					break;
 				case NPC_BISHOP_DELAVEY:
 					creature->SetImmuneToNPC(true);
-					creature->CastSpell(creature, SPELL_READING_BOOK_STANDING);
 					citizens.push_back(creature->GetGUID());
 					break;
 				case NPC_ALLIANCE_PEASANT:

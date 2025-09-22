@@ -1584,8 +1584,8 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
         SPELL_ARCANE_RECONSTITUTION = 226206,
 		SPELL_ARCANE_EXPLOSION      = 277012,
         SPELL_ARCANE_SUMMONS        = 390233,
-        SPELL_TITAN_FORCE_SHIELD    = 1216608,
-		SPELL_ARCANE_BLAST          = 1222815
+		SPELL_ARCANE_BLAST          = 1222815,
+        SPELL_TITAN_FORCE_SHIELD    = 1223453,
 	};
 
     enum Misc
@@ -1615,10 +1615,9 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
     {
         if (!healDone && HealthBelowPct(40))
         {
-            me->AddAura(SPELL_TITAN_FORCE_SHIELD, me);
-
             CastStop();
             DoCastSelf(SPELL_ARCANE_RECONSTITUTION);
+            DoCastSelf(SPELL_TITAN_FORCE_SHIELD, true);
             healDone = true;
         }
     }
@@ -3449,56 +3448,53 @@ struct npc_glacial_spike : public NullCreatureAI
 // AreaTriggerID - 12833
 struct at_arcane_barrier : AreaTriggerAI
 {
-	static constexpr Milliseconds TICK_PERIOD = Milliseconds(1000);
+    using AreaTriggerAI::AreaTriggerAI;
 
-	at_arcane_barrier(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger), _tickTimer(TICK_PERIOD)
-	{
-	}
+    enum Spells
+    {
+        SPELL_ARCANE_BARRIER_DAMAGE = 264848
+    };
 
-	enum Spells
-	{
-		SPELL_ARCANE_BARRIER_DAMAGE         = 264848
-	};
+    void OnCreate(Spell const* /*creatingSpell*/) override
+    {
+        _scheduler.Schedule(1s, [this](TaskContext task)
+        {
+            if (Unit* caster = at->GetCaster())
+            {
+                for (ObjectGuid unit : at->GetInsideUnits())
+                {
+                    if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
+                    {
+                        if (!caster->IsHostileTo(target))
+                            continue;
 
-	void OnUpdate(uint32 diff) override
-	{
-		_tickTimer -= Milliseconds(diff);
+                        caster->CastSpell(target, SPELL_ARCANE_BARRIER_DAMAGE, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
+                    }
+                }
+            }
 
-		while (_tickTimer <= 0s)
-		{
-			if (Unit* caster = at->GetCaster())
-			{
-				for (ObjectGuid unit : at->GetInsideUnits())
-				{
-					if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
-					{
-						if (!caster->IsHostileTo(target))
-							continue;
+            task.Repeat(1s);
+        });
+    }
 
-						target->CastSpell(target, SPELL_ARCANE_BARRIER_DAMAGE);
-					}
-				}
-			}
+    void OnUpdate(uint32 diff) override
+    {
+        _scheduler.Update(diff);
+    }
 
-			_tickTimer += TICK_PERIOD;
-		}
-	}
-
-	private:
-	Milliseconds _tickTimer;
+private:
+    TaskScheduler _scheduler;
 };
 
 // Arcane Barrier - 271187
 // AreaTriggerID - 13455
 struct at_arcane_protection : AreaTriggerAI
 {
-	at_arcane_protection(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
-	{
-	}
+    using AreaTriggerAI::AreaTriggerAI;
 
 	enum Spells
 	{
-		SPELL_ARCANE_BARRIER_DAMAGE         = 264848
+		SPELL_ARCANE_BARRIER_DAMAGE = 264848
 	};
 
 	void OnUnitEnter(Unit* unit) override
@@ -3521,9 +3517,7 @@ struct at_arcane_protection : AreaTriggerAI
 // AreaTriggerID - 13417
 struct at_fire_bomb : AreaTriggerAI
 {
-	at_fire_bomb(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
-	{
-	}
+    using AreaTriggerAI::AreaTriggerAI;
 
 	enum Spells
 	{
@@ -3542,7 +3536,7 @@ struct at_fire_bomb : AreaTriggerAI
                 return;
 
 			caster->CastSpell(unit, SPELL_FIRE_BOMB_STUN, CastSpellExtraArgs(TRIGGERED_CAST_DIRECTLY | TRIGGERED_FULL_MASK));
-			at->Remove();
+			at->SetDuration(0);
 		}
 	}
 };
@@ -3552,9 +3546,7 @@ struct at_fire_bomb : AreaTriggerAI
 // AreaTriggerID - 29665
 struct at_rain_of_fire : AreaTriggerAI
 {
-	at_rain_of_fire(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
-	{
-	}
+    using AreaTriggerAI::AreaTriggerAI;
 
 	enum Spells
 	{
@@ -3589,9 +3581,7 @@ struct at_rain_of_fire : AreaTriggerAI
 // AreaTriggerID - 27361
 struct at_frigid_blizzard_dalaran : AreaTriggerAI
 {
-    at_frigid_blizzard_dalaran(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
-	{
-	}
+    using AreaTriggerAI::AreaTriggerAI;
 
 	enum Spells
 	{
@@ -3624,9 +3614,7 @@ struct at_frigid_blizzard_dalaran : AreaTriggerAI
 // 5234 - Cleansing Force
 struct at_cleansing_force : AreaTriggerAI
 {
-    at_cleansing_force(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger)
-    {
-    }
+    using AreaTriggerAI::AreaTriggerAI;
 
     void OnUnitEnter(Unit* unit) override
     {
@@ -4069,6 +4057,40 @@ class spell_delphuric_beam : public SpellScript
     }
 };
 
+// Etheral Guard - 1223453
+class spell_etheral_guard : public AuraScript
+{
+public:
+    spell_etheral_guard()
+	{
+		maxHealth = 0;
+		absorbedAmount = 0;
+	}
+
+	bool Load() override
+	{
+		maxHealth = GetCaster()->GetMaxHealth();
+		absorbedAmount = 0;
+		return true;
+	}
+
+	void CalculateAmount(AuraEffect const* /*auraEffect*/, int32& amount, bool& canBeRecalculated) const
+	{
+		canBeRecalculated = false;
+		amount = CalculatePct(maxHealth, absorbPct);
+	}
+
+	void Register() override
+	{
+		DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_etheral_guard::CalculateAmount, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB);
+	}
+
+private:
+	const int32 absorbPct = 50;
+	int32 maxHealth;
+	uint32 absorbedAmount;
+};
+
 void AddSC_npcs_dalaran_purge()
 {
 	// Neutral
@@ -4122,6 +4144,7 @@ void AddSC_npcs_dalaran_purge()
     RegisterSpellScript(spell_atonement_effect_stormwind_cleric);
     RegisterSpellScript(spell_atonement_aura_stormwind_cleric);
     RegisterSpellScript(spell_delphuric_beam);
+    RegisterSpellScript(spell_etheral_guard);
 
 	// Gameobjects
 	RegisterGameObjectAI(go_portal_savor);
