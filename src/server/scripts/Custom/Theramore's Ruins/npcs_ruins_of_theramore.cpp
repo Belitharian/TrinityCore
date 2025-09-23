@@ -189,8 +189,6 @@ struct go_theramore_banner : public GameObjectAI
 // Frigid Shards - 354933
 class spell_ruins_frigid_shards : public AuraScript
 {
-	PrepareAuraScript(spell_ruins_frigid_shards);
-
 	void OnPeriodic(AuraEffect const* aurEff)
 	{
 		Unit* target = GetTarget();
@@ -228,6 +226,47 @@ class spell_ruins_comet_barrage : public SpellScript
 	}
 };
 
+// Arcane Chaos - 406854
+class spell_arcane_chaos : public AuraScript
+{
+    const float maxRange = 20.0f;
+
+    enum Spells
+    {
+        SPELL_ARCANE_CHAOS_MISSILE = 406859,
+    };
+
+	void OnPeriodic(AuraEffect const* /*aurEff*/)
+	{
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        std::list<Unit*> targets;
+
+        // Check hostile unit
+        Trinity::AnyUnfriendlyUnitInObjectRangeCheck uCheck(caster, caster, maxRange);
+        Trinity::UnitListSearcher<Trinity::AnyUnfriendlyUnitInObjectRangeCheck> searcher(caster, targets, uCheck);
+        Cell::VisitAllObjects(caster, searcher, maxRange);
+
+        targets.remove_if([](Unit* unit)
+        {
+            return unit->isDead() || unit->HasUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);;
+        });
+
+        for (Unit* victim : targets)
+            caster->CastSpell(victim, SPELL_ARCANE_CHAOS_MISSILE, true);
+	}
+
+	void Register() override
+	{
+		OnEffectPeriodic += AuraEffectPeriodicFn(spell_arcane_chaos::OnPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
+	}
+
+private:
+    std::list<Unit*> targets;
+};
+
 void AddSC_npcs_ruins_of_theramore()
 {
 	// Utilisable en dehors de l'instance
@@ -239,4 +278,5 @@ void AddSC_npcs_ruins_of_theramore()
 
 	RegisterSpellScript(spell_ruins_comet_barrage);
 	RegisterSpellScript(spell_ruins_frigid_shards);
+	RegisterSpellScript(spell_arcane_chaos);
 }

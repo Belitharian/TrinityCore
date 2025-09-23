@@ -8,19 +8,15 @@ struct npc_jaina_ruins : public CustomAI
 {
 	enum Spells
 	{
-		SPELL_EVOCATION       = 243070,
-		SPELL_FROSTBOLT       = 284703,
-		SPELL_RING_OF_ICE     = 285459,
+		SPELL_FROSTBOLT       = 427863,
 		SPELL_GRASP_OF_FROST  = 287626,
 		SPELL_COMET_BARRAGE   = 354938,
-		SPELL_FRIGID_SHARD    = 354933,
 		SPELL_BLINK           = 357601,
-		SPELL_ARCANE_SURGE    = 365350,
-		SPELL_FROZEN_SHIELD   = 396780,
+		SPELL_FROZEN_SHIELD   = 372749,
+        SPELL_ARCANE_CHAOS    = 406854
 	};
 
 	InstanceScript* instance;
-	Position beforeBlink;
 	bool hasBlinked = false;
 	bool hasShielded = false;
 	float distance = 10.f;
@@ -52,6 +48,9 @@ struct npc_jaina_ruins : public CustomAI
 
 	void Reset() override
 	{
+        for (uint8 i = MECHANIC_NONE; i < MAX_MECHANIC; i++)
+            me->ApplySpellImmune(0, IMMUNITY_MECHANIC, i, true);
+
 		Initialize();
 		hasBlinked = false;
 	}
@@ -67,28 +66,21 @@ struct npc_jaina_ruins : public CustomAI
                         elemental->CastSpell(elemental, SPELL_WATER_BOSS_ENTRANCE);
                 }
                 break;
-			case SPELL_RING_OF_ICE:
-				if (!hasBlinked)
-					break;
-				scheduler.Schedule(1s, [this](TaskContext)
-				{
-					CastStop();
-					me->CastSpell(beforeBlink, SPELL_BLINK, true);
-					hasBlinked = false;
-				});
-				break;
 		}
 	}
 
-    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
         if (hasShielded)
 			return;
 
-        if (me->HealthBelowPctDamaged(50, damage))
+        if (HealthBelowPct(50))
         {
             CastStop();
-            DoCastSelf(SPELL_FROZEN_SHIELD);
+
+            for (uint8 i = 0; i < 3; i++)
+                DoCastSelf(SPELL_FROZEN_SHIELD);
+
             hasShielded = true;
         }
 	}
@@ -108,50 +100,34 @@ struct npc_jaina_ruins : public CustomAI
 				DoCastVictim(SPELL_FROSTBOLT);
 				frostbolt.Repeat(2800ms);
 			})
-			.Schedule(8s, [this](TaskContext frigid_shard)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
-					DoCast(target, SPELL_FRIGID_SHARD);
-				frigid_shard.Repeat(14s, 18s);
-			})
-			.Schedule(24s, [this](TaskContext grasp_of_frost)
+			.Schedule(8s, [this](TaskContext grasp_of_frost)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-                    CastStop({ SPELL_RING_OF_ICE, SPELL_FRIGID_SHARD });
+                    CastStop(SPELL_ARCANE_CHAOS);
 					DoCast(target, SPELL_GRASP_OF_FROST);
 				}
 				grasp_of_frost.Repeat(18s, 32s);
 			})
-			.Schedule(14s, [this](TaskContext comet_barrage)
+			.Schedule(15s, [this](TaskContext comet_barrage)
 			{
 				DoCastAOE(SPELL_COMET_BARRAGE);
 				comet_barrage.Repeat(12s, 14s);
 			})
-			.Schedule(50s, [this](TaskContext blink)
+            .Schedule(30s, [this](TaskContext arcane_chaos)
+            {
+                CastStop(SPELL_COMET_BARRAGE);
+                DoCast(SPELL_ARCANE_CHAOS);
+                arcane_chaos.Repeat(45s, 60s);
+            })
+			.Schedule(12s, [this](TaskContext blink)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 				{
-					if (me->IsWithinDist(target, 10.f))
-					{
-                        CastStop({ SPELL_RING_OF_ICE });
-						DoCastAOE(SPELL_RING_OF_ICE);
-					}
-					else
-					{
-						beforeBlink = me->GetPosition();
-                        CastStop({ SPELL_RING_OF_ICE });
-						Position dest = me->GetRandomPoint(target->GetPosition(), 6.0f);
-						me->CastSpell(dest, SPELL_BLINK, true);
-						scheduler.Schedule(1s, [this](TaskContext)
-						{
-							CastStop();
-							DoCastAOE(SPELL_RING_OF_ICE);
-						});
-						hasBlinked = true;
-					}
+                    Position dest = me->GetRandomPoint(target->GetPosition(), 6.0f);
+                    me->CastSpell(dest, SPELL_BLINK, true);
 				}
-				blink.Repeat(1min);
+				blink.Repeat(30s, 45s);
 			});
 	}
 
