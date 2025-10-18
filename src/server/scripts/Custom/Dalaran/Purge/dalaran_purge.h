@@ -12,7 +12,7 @@
 #define TRACKING_PATH_01                9
 #define SPECTRAL_BARRIER_COUNT          8
 
-//#define CUSTOM_DEBUG
+#define CUSTOM_DEBUG
 
 enum DLPCreatures
 {
@@ -120,6 +120,7 @@ enum DLPSpells
 {
 	SPELL_TELEPORT_VISUAL               = 7077,
 	SPELL_TELEPORT_VISUAL_ONLY		    = 51347,
+    SPELL_FLASHBACK_EFFECT              = 70649,
 	SPELL_COSMETIC_YELLOW_ARROW         = 92230,
 	SPELL_WATERFALL                     = 125563,
 	SPELL_FROSTBOLT                     = 427863,
@@ -142,9 +143,6 @@ enum DLPSpells
 	SPELL_ATTACHED                      = 262121,
 	SPELL_ARCANE_BARRIER                = 264849,
 	SPELL_TELEPORT_TARGET               = 268294,
-    SPELL_FLASHBACK_EFFECT              = 279486,
-	SPELL_PORTAL_CHANNELING_01          = 286636,
-	SPELL_PORTAL_CHANNELING_02          = 287432,
 	SPELL_PORTAL_CHANNELING_03          = 288451,
 	SPELL_HOLD_BAG                      = 288787,
 	SPELL_FADING_TO_BLACK               = 296001,

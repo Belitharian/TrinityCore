@@ -128,6 +128,19 @@ PersistentWorldVariable const World::NextDailyQuestResetTimeVarId{ "NextDailyQue
 PersistentWorldVariable const World::NextOldCalendarEventDeletionTimeVarId{ "NextOldCalendarEventDeletionTime" };
 PersistentWorldVariable const World::NextGuildWeeklyResetTimeVarId{ "NextGuildWeeklyResetTime" };
 
+static void SanitizeSpellVisualFlags()
+{
+    for (uint32 id = 0; id < sSpellVisualStore.GetNumRows(); ++id)
+    {
+        if (auto entry = const_cast<SpellVisualEntry*>(sSpellVisualStore.LookupEntry(id)))
+        {
+            entry->Flags &= ~0x1800;
+        }
+    }
+
+    TC_LOG_INFO("server.loading", "SpellVisual: cleared 0x1800 flags (post-hotfix).");
+}
+
 /// World constructor
 World::World()
 {
@@ -2079,6 +2092,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading phase names...");
     sObjectMgr->LoadPhaseNames();
+
+    TC_LOG_INFO("server.loading", "Sanitize Spell Visual Flags...");
+    SanitizeSpellVisualFlags();
 
     uint32 startupDuration = GetMSTimeDiffToNow(startupBegin);
 

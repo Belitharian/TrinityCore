@@ -60,10 +60,10 @@ class HordeBombardierThrowBomb : public BasicEvent
     public:
         HordeBombardierThrowBomb(Unit* caster) : _caster(caster) { }
 
-        bool Execute(uint64 execTime, uint32 /*diff*/) override
+        bool Execute(uint64 /*execTime*/, uint32 /*diff*/) override
         {
             _caster->CastSpell(_caster, SPELL_THROW_BOMB, TRIGGERED_FULL_MASK);
-            _caster->m_Events.AddEvent(this, Milliseconds(execTime) + Seconds(urand(8, 10)));
+            _caster->m_Events.AddEvent(this, _caster->m_Events.CalculateTime(Seconds(urand(8, 10))));
             return false;
         }
 
@@ -594,7 +594,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						tervosh->SetEmoteState(EMOTE_STAND_STATE_NONE);
 						tervosh->GetMotionMaster()->MovePath(TervoshPath01, false);
 					}
-					Next(5s);
+					Next(4s);
 					break;
 				case 2:
 					if (Creature* kinndy = GetKinndy())
@@ -605,13 +605,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					#ifdef CUSTOM_DEBUG
 						events.ScheduleEvent(20, 2s);
 					#else
-						Next(6s);
+						Next(5s);
 					#endif
 					break;
 				case 3:
 					Talk(GetKinndy(), SAY_REUNION_2);
 					SetTarget(GetKinndy());
-					Next(11s);
+					Next(13s);
 					break;
 				case 4:
 					Talk(GetJaina(), SAY_REUNION_3);
@@ -846,7 +846,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					Talk(GetPerith(), SAY_WARN_14);
 					GetPerith()->SetTarget(GetJaina()->GetGUID());
 					SetTarget(GetPerith());
-					Next(5s);
+					Next(10s);
 					break;
 				case 44:
 					Talk(GetJaina(), SAY_WARN_15);
@@ -854,7 +854,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 45:
 					Talk(GetPerith(), SAY_WARN_16);
-					Next(10s);
+					Next(11s);
 					break;
 				case 46:
 					Talk(GetPerith(), SAY_WARN_17);
@@ -862,11 +862,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 47:
 					Talk(GetPerith(), SAY_WARN_18);
-					Next(10s);
+					Next(11s);
 					break;
 				case 48:
 					Talk(GetJaina(), SAY_WARN_19);
-					Next(5s);
+					Next(8s);
 					break;
 				case 49:
 					Talk(GetPerith(), SAY_WARN_20);
@@ -874,27 +874,27 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 50:
 					Talk(GetJaina(), SAY_WARN_21);
-					Next(2s);
+					Next(1s);
 					break;
 				case 51:
 					Talk(GetPerith(), SAY_WARN_22);
-					Next(12s);
+					Next(15s);
 					break;
 				case 52:
 					Talk(GetPerith(), SAY_WARN_23);
-					Next(8s);
+					Next(9s);
 					break;
 				case 53:
 					Talk(GetJaina(), SAY_WARN_24);
-					Next(10s);
+					Next(14s);
 					break;
 				case 54:
 					Talk(GetPerith(), SAY_WARN_25);
-					Next(11s);
+					Next(16s);
 					break;
 				case 55:
 					Talk(GetJaina(), SAY_WARN_26);
-					Next(3s);
+					Next(5s);
 					break;
 				case 56:
 					if (Creature* jaina = GetJaina())
@@ -922,7 +922,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 59:
 					Talk(GetJaina(), SAY_WARN_28);
-					Next(3s);
+					Next(5s);
 					break;
 				case 60:
 					Talk(GetPerith(), SAY_WARN_29);
@@ -930,11 +930,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 61:
 					Talk(GetPerith(), SAY_WARN_30);
-					Next(8s);
+					Next(10s);
 					break;
 				case 62:
 					Talk(GetJaina(), SAY_WARN_31);
-					Next(5s);
+					Next(4s);
 					break;
 				case 63:
 					Talk(GetPerith(), SAY_WARN_32);
@@ -942,11 +942,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 64:
 					Talk(GetJaina(), SAY_WARN_33);
-					Next(5s);
+					Next(4s);
 					break;
 				case 65:
 					Talk(GetPerith(), SAY_WARN_34);
-					Next(4s);
+					Next(3s);
 					break;
 				case 66:
 					ClearTarget();
@@ -962,7 +962,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					Talk(GetJaina(), SAY_WARN_35);
 					GetJaina()->SetFacingToObject(GetPained());
 					GetPained()->SetFacingToObject(GetJaina());
-					Next(5s);
+					Next(7s);
 					break;
 				case 68:
 					Talk(GetPained(), SAY_WARN_36);
@@ -1822,7 +1822,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                             horde->GetMotionMaster()->MoveRandom(20.0f);
                             horde->SetSpeedRate(MOVE_RUN, 2.f);
                             horde->SetSpeedRate(MOVE_FLIGHT, 2.f);
-                            horde->m_Events.AddEvent(new HordeBombardierThrowBomb(horde), Seconds(urand(2, 8)));
+                            horde->m_Events.AddEvent(new HordeBombardierThrowBomb(horde), horde->m_Events.CalculateTime(Seconds(urand(2, 8))));
                             break;
                     }
                 }
