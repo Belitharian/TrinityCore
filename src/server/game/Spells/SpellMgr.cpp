@@ -2618,9 +2618,10 @@ void SpellMgr::LoadSpellInfoStore()
     {
         SpellVisualVector& visuals = loadData[{ visual->SpellID, Difficulty(visual->DifficultyID) }].Visuals;
 
-        auto where = std::ranges::lower_bound(visuals, visual->CasterPlayerConditionID, std::ranges::greater(), &SpellXSpellVisualEntry::CasterPlayerConditionID);
+        auto where = std::ranges::lower_bound(visuals, std::make_pair(visual->Priority, visual->CasterPlayerConditionID), std::ranges::greater(),
+            [](SpellXSpellVisualEntry const* other) { return std::make_pair(other->Priority, other->CasterPlayerConditionID); });
 
-        // sorted with unconditional visuals being last
+        // sorted with unconditional visuals being last at each priority level
         visuals.insert(where, visual);
     }
 
@@ -5460,6 +5461,24 @@ void SpellMgr::LoadSpellInfoTargetCaps()
     ApplySpellFix({ 199667, 44949, 199852, 199851 }, [](SpellInfo* spellInfo)
     {
         spellInfo->_LoadSqrtTargetLimit(5, 0, 190411, EFFECT_2, {}, {});
+    });
+
+    // Elysian Decree (Kyrian)
+    ApplySpellFix({ 307046 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->_LoadSqrtTargetLimit(5, 0, 306830, EFFECT_0, {}, {});
+    });
+
+    // Sigil of Spite
+    ApplySpellFix({ 389860 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->_LoadSqrtTargetLimit(5, 0, 390163, EFFECT_0, {}, {});
+    });
+
+    // Burning Vehemence
+    ApplySpellFix({ 400370 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->_LoadSqrtTargetLimit(5, 0, {}, EFFECT_1, {}, {});
     });
 
     TC_LOG_INFO("server.loading", ">> Loaded SpellInfo target caps in {} ms", GetMSTimeDiffToNow(oldMSTime));

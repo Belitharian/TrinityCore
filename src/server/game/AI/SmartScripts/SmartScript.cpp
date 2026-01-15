@@ -1198,7 +1198,7 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
                 y = pos.GetPositionY() + (std::sin(o - (M_PI / 2))*e.target.x) + (std::sin(o)*e.target.y);
                 z = pos.GetPositionZ() + e.target.z;
 
-                Optional<Scripting::v2::ActionResultSetter<MovementStopReason>> scriptResult;
+                Scripting::v2::ActionResultSetter<MovementStopReason> scriptResult;
                 if (waitEvent)
                     scriptResult = Scripting::v2::ActionResult<MovementStopReason>::GetResultSetter({ waitEvent, &waitEvent->Results.emplace_back() });
 
@@ -1424,7 +1424,7 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
             }
 
             std::shared_ptr<Scripting::v2::ActionResult<MovementStopReason>> waitEvent = CreateTimedActionListWaitEventFor<MovementStopReason>(e);
-            Optional<Scripting::v2::ActionResultSetter<MovementStopReason>> scriptResult;
+            Scripting::v2::ActionResultSetter<MovementStopReason> scriptResult;
             if (waitEvent)
                 scriptResult = Scripting::v2::ActionResult<MovementStopReason>::GetResultSetter(waitEvent);
 
@@ -1499,7 +1499,7 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
                 target = Trinity::Containers::SelectRandomContainerElement(targets);
 
             std::shared_ptr<Scripting::v2::ActionResult<MovementStopReason>> waitEvent = CreateTimedActionListWaitEventFor<MovementStopReason>(e);
-            Optional<Scripting::v2::ActionResultSetter<MovementStopReason>> scriptResult;
+            Scripting::v2::ActionResultSetter<MovementStopReason> scriptResult;
             if (waitEvent)
                 scriptResult = Scripting::v2::ActionResult<MovementStopReason>::GetResultSetter(waitEvent);
 
@@ -1807,13 +1807,13 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
             {
                 if (Player* playerTarget = target->ToPlayer())
                 {
-                    Optional<Scripting::v2::ActionResultSetter<MovementStopReason>> scriptResult;
+                    Scripting::v2::ActionResultSetter<MovementStopReason> scriptResult;
                     if (waitEvent)
                         scriptResult = Scripting::v2::ActionResult<MovementStopReason>::GetResultSetter({ waitEvent, &waitEvent->Results.emplace_back() });
 
                     if (!playerTarget->ActivateTaxiPathTo(e.action.taxi.id, 0, {}, scriptResult))
                         if (scriptResult)
-                            scriptResult->SetResult(MovementStopReason::Interrupted);
+                            scriptResult.SetResult(MovementStopReason::Interrupted);
                 }
             }
             if (waitEvent && !waitEvent->Results.empty())
@@ -1919,19 +1919,14 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
                 break;
 
             std::shared_ptr<Scripting::v2::ActionResult<MovementStopReason>> waitEvent = CreateTimedActionListWaitEventFor<MovementStopReason>(e);
-            Optional<Scripting::v2::ActionResultSetter<MovementStopReason>> actionResultSetter;
+            Scripting::v2::ActionResultSetter<MovementStopReason> actionResultSetter;
             if (waitEvent)
                 actionResultSetter = Scripting::v2::ActionResult<MovementStopReason>::GetResultSetter(waitEvent);
 
-            if (e.action.jump.Gravity || e.action.jump.UseDefaultGravity)
-            {
-                float gravity = e.action.jump.UseDefaultGravity ? Movement::gravity : e.action.jump.Gravity;
-                me->GetMotionMaster()->MoveJumpWithGravity(pos, float(e.action.jump.SpeedXY), gravity, e.action.jump.PointId,
-                    {}, false, nullptr, nullptr, std::move(actionResultSetter));
-            }
-            else
-                me->GetMotionMaster()->MoveJump(pos, float(e.action.jump.SpeedXY), float(e.action.jump.SpeedZ), e.action.jump.PointId,
-                    {}, false, nullptr, nullptr, std::move(actionResultSetter));
+            me->GetMotionMaster()->MoveJump(e.action.jump.PointId, pos, float(e.action.jump.SpeedXY),
+                e.action.jump.minHeight ? Optional<float>(e.action.jump.minHeight) : std::nullopt,
+                e.action.jump.maxHeight ? Optional<float>(e.action.jump.maxHeight) : std::nullopt,
+                {}, false, false, {}, nullptr, nullptr, std::move(actionResultSetter));
 
             mTimedActionWaitEvent = std::move(waitEvent);
             break;
@@ -2143,7 +2138,7 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
 
                         if (closest.first != 0)
                         {
-                            Optional<Scripting::v2::ActionResultSetter<MovementStopReason>> actionResultSetter;
+                            Scripting::v2::ActionResultSetter<MovementStopReason> actionResultSetter;
                             if (waitEvent)
                                 actionResultSetter = Scripting::v2::ActionResult<MovementStopReason>::GetResultSetter({ waitEvent, &waitEvent->Results.emplace_back() });
 
@@ -2676,6 +2671,26 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
                     unitTarget->ExitVehicle();
                 }
             }
+            break;
+        }
+        case SMART_ACTION_FALL:
+        {
+            std::shared_ptr<MultiActionResult<MovementStopReason>> waitEvent = CreateTimedActionListWaitEventFor<void, MultiActionResult<MovementStopReason>>(e, targets.size());
+
+            for (WorldObject* target : targets)
+            {
+                if (Unit* unitTarget = target->ToUnit())
+                {
+                    Scripting::v2::ActionResultSetter<MovementStopReason> actionResultSetter;
+                    if (waitEvent)
+                        actionResultSetter = Scripting::v2::ActionResult<MovementStopReason>::GetResultSetter({ waitEvent, &waitEvent->Results.emplace_back() });
+
+                    unitTarget->GetMotionMaster()->MoveFall(e.action.fall.pointId, std::move(actionResultSetter));
+                }
+            }
+
+            if (waitEvent && !waitEvent->Results.empty())
+                mTimedActionWaitEvent = std::move(waitEvent);
             break;
         }
         default:

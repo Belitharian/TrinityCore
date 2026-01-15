@@ -421,7 +421,7 @@ typedef std::unordered_map<uint32, HeirloomEntry const*> HeirloomItemsContainer;
 typedef std::unordered_map<uint32 /*glyphPropertiesId*/, std::vector<uint32>> GlyphBindableSpellsContainer;
 typedef std::unordered_map<uint32 /*glyphPropertiesId*/, std::vector<ChrSpecialization>> GlyphRequiredSpecsContainer;
 typedef std::unordered_map<uint32 /*itemId*/, ItemChildEquipmentEntry const*> ItemChildEquipmentContainer;
-typedef std::array<ItemClassEntry const*, 20> ItemClassByOldEnumContainer;
+typedef std::array<ItemClassEntry const*, 21> ItemClassByOldEnumContainer;
 typedef std::unordered_map<uint32, std::vector<ItemLimitCategoryConditionEntry const*>> ItemLimitCategoryConditionContainer;
 typedef std::unordered_map<uint32 /*itemId | appearanceMod << 24*/, ItemModifiedAppearanceEntry const*> ItemModifiedAppearanceByItemContainer;
 typedef std::unordered_map<uint32, std::vector<ItemSetSpellEntry const*>> ItemSetSpellContainer;
@@ -1031,6 +1031,12 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sWorldStateExpressionStore);
 
     // error checks
+
+    // Check loaded DB2 files proper version
+    for (uint32 criticalItemId : { ITEM_ACCOUNT_BANK_TAB_BAG, ITEM_CHARACTER_BANK_TAB_BAG })
+        if (!sItemSparseStore.LookupEntry(criticalItemId))
+            loadErrors.emplace_back(Trinity::StringFormat("Missing required item {} from ItemSparse.db2 (or its hotfix table)", criticalItemId));
+
     if (!loadErrors.empty())
     {
         sLog->SetSynchronous(); // server will shut down after this, so set sync logging to prevent messages from getting lost
@@ -1038,22 +1044,6 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
         for (std::string const& error : loadErrors)
             TC_LOG_FATAL("misc", "{}", error);
 
-        return 0;
-    }
-
-    // Check loaded DB2 files proper version
-    if (!sAreaTableStore.LookupEntry(16579) ||               // last area added in 11.2.0 (62213)
-        !sCharTitlesStore.LookupEntry(937) ||                // last char title added in 11.2.0 (62213)
-        !sFlightCapabilityStore.LookupEntry(1) ||            // default flight capability (required)
-        !sGemPropertiesStore.LookupEntry(4287) ||            // last gem property added in 11.2.0 (62213)
-        !sItemStore.LookupEntry(252009) ||                   // last item added in 11.2.0 (62213)
-        !sItemSparseStore.LookupEntry(ITEM_ACCOUNT_BANK_TAB_BAG) ||
-        !sItemSparseStore.LookupEntry(ITEM_CHARACTER_BANK_TAB_BAG) ||
-        !sItemExtendedCostStore.LookupEntry(10637) ||        // last item extended cost added in 11.2.0 (62213)
-        !sMapStore.LookupEntry(2951) ||                      // last map added in 11.2.0 (62213)
-        !sSpellNameStore.LookupEntry(1254022))               // last spell added in 11.2.0 (62213)
-    {
-        TC_LOG_FATAL("misc", "You have _outdated_ DB2 files. Please extract correct versions from current using client.");
         return 0;
     }
 
@@ -2198,17 +2188,26 @@ ChrSpecializationEntry const* DB2Manager::GetDefaultChrSpecializationForClass(ui
     return GetChrSpecializationByIndex(class_, INITIAL_SPECIALIZATION_INDEX);
 }
 
-uint32 DB2Manager::GetRedirectedContentTuningId(uint32 contentTuningId, uint32 redirectFlag) const
+uint32 DB2Manager::GetRedirectedContentTuningId(uint32 contentTuningId, std::span<uint32 const> redirectFlag) const
 {
     if (std::vector<ConditionalContentTuningEntry const*> const* conditionalContentTunings = Trinity::Containers::MapGetValuePtr(_conditionalContentTuning, contentTuningId))
+    {
         for (ConditionalContentTuningEntry const* conditionalContentTuning : *conditionalContentTunings)
-            if (conditionalContentTuning->RedirectFlag & redirectFlag)
+        {
+            uint32 block = conditionalContentTuning->RedirectEnum / 32;
+            uint32 flag = conditionalContentTuning->RedirectEnum % 32;
+            if (block >= redirectFlag.size())
+                continue;
+
+            if (flag & redirectFlag[block])
                 return conditionalContentTuning->RedirectContentTuningID;
+        }
+    }
 
     return contentTuningId;
 }
 
-Optional<ContentTuningLevels> DB2Manager::GetContentTuningData(uint32 contentTuningId, uint32 redirectFlag, bool forItem /*= false*/) const
+Optional<ContentTuningLevels> DB2Manager::GetContentTuningData(uint32 contentTuningId, std::span<uint32 const> redirectFlag, bool forItem /*= false*/) const
 {
     ContentTuningEntry const* contentTuning = sContentTuningStore.LookupEntry(GetRedirectedContentTuningId(contentTuningId, redirectFlag));
     if (!contentTuning)
