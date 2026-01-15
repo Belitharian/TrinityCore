@@ -3653,7 +3653,7 @@ struct at_rain_of_fire : AreaTriggerAI
 		}
 	}
 
-	void OnUnitExit(Unit* unit)
+    void OnUnitExit(Unit* unit, AreaTriggerExitReason /*reason*/) override
 	{
 		if (unit->HasAura(SPELL_RAIN_OF_FIRE_DAMAGE))
 		{
@@ -3688,7 +3688,7 @@ struct at_frigid_blizzard_dalaran : AreaTriggerAI
 		}
 	}
 
-	void OnUnitExit(Unit* unit)
+    void OnUnitExit(Unit* unit, AreaTriggerExitReason /*reason*/) override
 	{
 		if (unit->HasAura(SPELL_FRIGID_BLIZZARD_DAMAGE))
 		{
@@ -3710,7 +3710,7 @@ struct at_cleansing_force : AreaTriggerAI
         unit->ApplyMovementForce(at->GetGUID(), at->GetPosition(), 5.0f, MovementForceType::Gravity);
     }
 
-    void OnUnitExit(Unit* unit) override
+    void OnUnitExit(Unit* unit, AreaTriggerExitReason /*reason*/) override
     {
         if (!unit->IsPlayer())
             return;

@@ -2473,7 +2473,7 @@ struct at_consecration : AreaTriggerAI
 		}
 	}
 
-	void OnUnitExit(Unit* unit) override
+	void OnUnitExit(Unit* unit, AreaTriggerExitReason /*reason*/) override
 	{
 		unit->RemoveAurasDueToSpell(SPELL_CONSECRATION);
 	}
@@ -2582,7 +2582,7 @@ struct at_scorched_earth : AreaTriggerAI
 		}
 	}
 
-	void OnUnitExit(Unit* unit) override
+	void OnUnitExit(Unit* unit, AreaTriggerExitReason /*reason*/) override
 	{
 		unit->RemoveAurasDueToSpell(SPELL_SCORCHED_EARTH);
 	}
@@ -2621,7 +2621,7 @@ struct areatrigger_theramore_citizens : AreaTriggerAI
         }
     }
 
-    void OnUnitExit(Unit* unit) override
+    void OnUnitExit(Unit* unit, AreaTriggerExitReason /*reason*/) override
     {
         unit->RemoveAurasDueToSpell(SPELL_YELL);
     }

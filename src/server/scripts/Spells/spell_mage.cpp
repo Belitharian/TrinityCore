@@ -2091,6 +2091,63 @@ public:
     explicit spell_mage_wildfire_crit(AuraType auraType, SpellEffIndex effIndex) : _auraType(auraType), _effIndex(effIndex) { }
 };
 
+// 352278 Ice Wall
+class spell_ice_wall : public SpellScript
+{
+    void HandleSummon(SpellEffIndex effIndex)
+    {
+        PreventHitDefaultEffect(effIndex);
+        Unit* caster = GetCaster();
+        uint32 entry = uint32(GetEffectInfo().MiscValue);
+        SummonPropertiesEntry const* properties = sSummonPropertiesStore.LookupEntry(uint32(GetEffectInfo().MiscValueB));
+        uint32 duration = uint32(GetSpellInfo()->GetDuration());
+        uint32 healthPct = GetSpellInfo()->GetEffect(EFFECT_3).BasePoints;
+
+        WorldLocation* pos = GetHitDest();
+        if (Creature* summon = caster->GetMap()->SummonCreature(entry, pos->GetPosition(), properties, Milliseconds(duration), caster, GetSpellInfo()->Id))
+        {
+            uint32 maxHealth = caster->CountPctFromMaxHealth(healthPct);
+            summon->SetMaxHealth(maxHealth);
+            summon->SetFullHealth();
+            summon->SetFaction(caster->GetFaction());
+
+            UnitState cannotMove = UnitState(UNIT_STATE_ROOT | UNIT_STATE_CANNOT_TURN);
+            summon->SetControlled(true, cannotMove);
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_ice_wall::HandleSummon, EFFECT_0, SPELL_EFFECT_SUMMON);
+    }
+};
+
+// Ring of Fire - 353082
+// AreaTriggerID - 22981
+struct at_ring_of_fire : AreaTriggerAI
+{
+    at_ring_of_fire(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger) { }
+
+    enum Spells
+    {
+        SPELL_RING_OF_FIRE_DAMAGE = 363405
+    };
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        if (Unit* caster = at->GetCaster())
+        {
+            if (!caster->IsHostileTo(unit))
+                return;
+
+            if (unit->HasAura(SPELL_RING_OF_FIRE_DAMAGE))
+                return;
+
+            caster->CastSpell(unit, SPELL_RING_OF_FIRE_DAMAGE, true);
+        }
+    }
+};
+
 void AddSC_mage_spell_scripts()
 {
     RegisterSpellScript(spell_mage_alter_time_aura);
@@ -2160,4 +2217,6 @@ void AddSC_mage_spell_scripts()
     RegisterSpellScript(spell_mage_water_elemental_freeze);
     RegisterSpellScriptWithArgs(spell_mage_wildfire_crit, "spell_mage_wildfire_area_crit", SPELL_AURA_MOD_CRIT_PCT, EFFECT_3);
     RegisterSpellScriptWithArgs(spell_mage_wildfire_crit, "spell_mage_wildfire_caster_crit", SPELL_AURA_ADD_PCT_MODIFIER, EFFECT_2);
+    RegisterSpellScript(spell_ice_wall);
+    RegisterAreaTriggerAI(at_ring_of_fire);
 }

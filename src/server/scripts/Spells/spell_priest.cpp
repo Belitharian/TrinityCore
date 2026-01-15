@@ -3686,7 +3686,7 @@ struct at_pri_power_word_barrier : AreaTriggerAI
         }
     }
 
-    void OnUnitExit(Unit* unit) override
+    void OnUnitExit(Unit* unit, AreaTriggerExitReason /*reason*/) override
     {
         unit->RemoveAurasDueToSpell(SPELL_POWER_WORD_BARRIER_BUFF);
     }
