@@ -50,7 +50,7 @@ struct DungeonEncounterEntry;
 struct InstanceSpawnGroupInfo;
 enum class CriteriaType : int16;
 enum class CriteriaStartEvent : uint8;
-enum Difficulty : uint8;
+enum Difficulty : int16;
 
 enum EncounterFrameType
 {
