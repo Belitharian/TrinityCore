@@ -5,7 +5,7 @@
 #include "Position.h"
 #include "Totem.h"
 #include "TotemAI.h"
-#include "Custom/AI/CustomAI.h"
+#include "Custom/CustomAI/CustomAI.h"
 
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader "BFT"

@@ -11,7 +11,7 @@
 #include "SpellMgr.h"
 #include "SpellScript.h"
 #include "TemporarySummon.h"
-#include "Custom/AI/CustomAI.h"
+#include "Custom/CustomAI/CustomAI.h"
 #include "ruins_of_theramore.h"
 
 struct npc_water_elementals_theramore : public CustomAI

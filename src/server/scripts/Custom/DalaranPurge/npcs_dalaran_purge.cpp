@@ -11,7 +11,7 @@
 #include "ScriptMgr.h"
 #include "TemporarySummon.h"
 #include "SpellAuraEffects.h"
-#include "Custom/AI/CustomAI.h"
+#include "Custom/CustomAI/CustomAI.h"
 #include "dalaran_purge.h"
 
 enum Atonement

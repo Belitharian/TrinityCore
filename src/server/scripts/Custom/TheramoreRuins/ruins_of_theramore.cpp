@@ -1,7 +1,7 @@
 #include "InstanceScript.h"
 #include "TemporarySummon.h"
 #include "MotionMaster.h"
-#include "Custom/AI/CustomAI.h"
+#include "Custom/CustomAI/CustomAI.h"
 #include "ruins_of_theramore.h"
 
 struct npc_jaina_ruins : public CustomAI

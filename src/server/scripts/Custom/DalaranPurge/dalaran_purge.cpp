@@ -1,4 +1,4 @@
-#include "Custom/AI/CustomAI.h"
+#include "Custom/CustomAI/CustomAI.h"
 #include "GameObject.h"
 #include "Group.h"
 #include "GroupMgr.h"

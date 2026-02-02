@@ -1,4 +1,4 @@
-#include "Custom/AI/CustomAI.h"
+#include "Custom/CustomAI/CustomAI.h"
 #include "AreaTriggerAI.h"
 #include "MotionMaster.h"
 #include "Object.h"

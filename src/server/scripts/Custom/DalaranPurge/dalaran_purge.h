@@ -4,7 +4,7 @@
 #include "CreatureAIImpl.h"
 #include "PhasingHandler.h"
 #include "Position.h"
-#include "Custom/AI/CustomAI.h"
+#include "Custom/CustomAI/CustomAI.h"
 
 #define DLPScriptName "scenario_dalaran_purge"
 #define DataHeader "DLP"
