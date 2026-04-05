@@ -298,6 +298,18 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_BROADCAST_TEXT_DURATION, "SELECT MAX(ID) + 1 FROM broadcast_text_duration", CONNECTION_SYNCH);
 
+    // Campaign.db2
+    PrepareStatement(HOTFIX_SEL_CAMPAIGN, "SELECT ID, Title, Description, UiTextureKitID, RewardQuestID, Prerequisite, Stalled, Completed, "
+        "OnlyStallIf, UiQuestDetailsThemeID, Flags, DisplayPriority, SortAsNormalQuest, UseMinimalHeader FROM campaign WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_CAMPAIGN, "SELECT MAX(ID) + 1 FROM campaign", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_CAMPAIGN, "SELECT ID, Title_lang, Description_lang FROM campaign_locale WHERE (`VerifiedBuild` > 0) = ?"
+        " AND locale = ?", CONNECTION_SYNCH);
+
+    // CampaignXQuestLine.db2
+    PrepareStatement(HOTFIX_SEL_CAMPAIGN_X_QUEST_LINE, "SELECT ID, CampaignID, QuestLineID, OrderIndex FROM campaign_x_quest_line"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_CAMPAIGN_X_QUEST_LINE, "SELECT MAX(ID) + 1 FROM campaign_x_quest_line", CONNECTION_SYNCH);
+
     // CfgCategories.db2
     PrepareStatement(HOTFIX_SEL_CFG_CATEGORIES, "SELECT ID, Name, LocaleMask, CreateCharsetMask, ExistingCharsetMask, Flags, `Order`"
         " FROM cfg_categories WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
@@ -1850,6 +1862,11 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         "TraitCondAccountElementID FROM trait_cond WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRAIT_COND, "SELECT MAX(ID) + 1 FROM trait_cond", CONNECTION_SYNCH);
 
+    // TraitCondAccountElement.db2
+    PrepareStatement(HOTFIX_SEL_TRAIT_COND_ACCOUNT_ELEMENT, "SELECT ElementValueInt, ID, PlayerDataElementAccountID, Comparison, Unused1110, "
+        "PlayerDataElementCharacterID FROM trait_cond_account_element WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRAIT_COND_ACCOUNT_ELEMENT, "SELECT MAX(ID) + 1 FROM trait_cond_account_element", CONNECTION_SYNCH);
+
     // TraitCost.db2
     PrepareStatement(HOTFIX_SEL_TRAIT_COST, "SELECT InternalName, ID, Amount, TraitCurrencyID, CurveID FROM trait_cost WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRAIT_COST, "SELECT MAX(ID) + 1 FROM trait_cost", CONNECTION_SYNCH);
@@ -1950,9 +1967,10 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRAIT_SYSTEM, "SELECT MAX(ID) + 1 FROM trait_system", CONNECTION_SYNCH);
 
     // TraitTree.db2
-    PrepareStatement(HOTFIX_SEL_TRAIT_TREE, "SELECT ID, TraitSystemID, Unused1000_1, FirstTraitNodeID, PlayerConditionID, Flags, Unused1000_2, "
-        "Unused1000_3 FROM trait_tree WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_TRAIT_TREE, "SELECT TitleText, ID, TraitSystemID, BaseNodeGroup, FirstTraitNodeID, PlayerConditionID, Flags, MinZoom, "
+        "MaxZoom, UiTextureKitID FROM trait_tree WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRAIT_TREE, "SELECT MAX(ID) + 1 FROM trait_tree", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_TRAIT_TREE, "SELECT ID, TitleText_lang FROM trait_tree_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
     // TraitTreeLoadout.db2
     PrepareStatement(HOTFIX_SEL_TRAIT_TREE_LOADOUT, "SELECT ID, TraitTreeID, ChrSpecializationID FROM trait_tree_loadout"
@@ -1979,6 +1997,26 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRANSMOG_ILLUSION, "SELECT MAX(ID) + 1 FROM transmog_illusion", CONNECTION_SYNCH);
 
+    // TransmogOutfitEntry.db2
+    PrepareStatement(HOTFIX_SEL_TRANSMOG_OUTFIT_ENTRY, "SELECT Cost, Name, ID, OrderIndex, Source, Flags, SetType, OverrideCostModifier"
+        " FROM transmog_outfit_entry WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRANSMOG_OUTFIT_ENTRY, "SELECT MAX(ID) + 1 FROM transmog_outfit_entry", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_TRANSMOG_OUTFIT_ENTRY, "SELECT ID, Name_lang FROM transmog_outfit_entry_locale WHERE (`VerifiedBuild` > 0) = ?"
+        " AND locale = ?", CONNECTION_SYNCH);
+
+    // TransmogOutfitSlotInfo.db2
+    PrepareStatement(HOTFIX_SEL_TRANSMOG_OUTFIT_SLOT_INFO, "SELECT InventorySlotName, ID, TransmogOutfitSlotEnum, InventorySlotEnum, Flags, "
+        "Unused1200, TransmogCollectionType, SecondarySlotID, InventorySlotID, UnassignedAtlasID, UnassignedDisplayAtlasID, ItemCostMultiplier, "
+        "IllusionCostMultiplier FROM transmog_outfit_slot_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRANSMOG_OUTFIT_SLOT_INFO, "SELECT MAX(ID) + 1 FROM transmog_outfit_slot_info", CONNECTION_SYNCH);
+
+    // TransmogOutfitSlotOption.db2
+    PrepareStatement(HOTFIX_SEL_TRANSMOG_OUTFIT_SLOT_OPTION, "SELECT ID, Name, OptionEnum, TransmogOutfitSlotInfoID, Flags, SecondaryOptionID, "
+        "ItemCostMultiplier, IllusionCostMultiplier FROM transmog_outfit_slot_option WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRANSMOG_OUTFIT_SLOT_OPTION, "SELECT MAX(ID) + 1 FROM transmog_outfit_slot_option", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_TRANSMOG_OUTFIT_SLOT_OPTION, "SELECT ID, Name_lang FROM transmog_outfit_slot_option_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
     // TransmogSet.db2
     PrepareStatement(HOTFIX_SEL_TRANSMOG_SET, "SELECT Name, ID, ClassMask, TrackingQuestID, Flags, TransmogSetGroupID, ItemNameDescriptionID, "
         "ParentTransmogSetID, Unknown810, ExpansionID, PatchID, UiOrder, PlayerConditionID FROM transmog_set WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
@@ -1995,6 +2033,25 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PrepareStatement(HOTFIX_SEL_TRANSMOG_SET_ITEM, "SELECT ID, TransmogSetID, ItemModifiedAppearanceID, Flags FROM transmog_set_item"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRANSMOG_SET_ITEM, "SELECT MAX(ID) + 1 FROM transmog_set_item", CONNECTION_SYNCH);
+
+    // TransmogSituation.db2
+    PrepareStatement(HOTFIX_SEL_TRANSMOG_SITUATION, "SELECT Name, ID, SituationEnum, Flags, TransmogSituationGroupID, OrderIndex"
+        " FROM transmog_situation WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRANSMOG_SITUATION, "SELECT MAX(ID) + 1 FROM transmog_situation", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_TRANSMOG_SITUATION, "SELECT ID, Name_lang FROM transmog_situation_locale WHERE (`VerifiedBuild` > 0) = ?"
+        " AND locale = ?", CONNECTION_SYNCH);
+
+    // TransmogSituationGroup.db2
+    PrepareStatement(HOTFIX_SEL_TRANSMOG_SITUATION_GROUP, "SELECT ID, TransmogSituationTriggerID, OrderIndex, Flags FROM transmog_situation_group"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRANSMOG_SITUATION_GROUP, "SELECT MAX(ID) + 1 FROM transmog_situation_group", CONNECTION_SYNCH);
+
+    // TransmogSituationTrigger.db2
+    PrepareStatement(HOTFIX_SEL_TRANSMOG_SITUATION_TRIGGER, "SELECT Name, Description, ID, TriggerEnum, Flags FROM transmog_situation_trigger"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_TRANSMOG_SITUATION_TRIGGER, "SELECT MAX(ID) + 1 FROM transmog_situation_trigger", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_TRANSMOG_SITUATION_TRIGGER, "SELECT ID, Name_lang, Description_lang FROM transmog_situation_trigger_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
     // TransportAnimation.db2
     PrepareStatement(HOTFIX_SEL_TRANSPORT_ANIMATION, "SELECT ID, PosX, PosY, PosZ, SequenceID, TimeIndex, TransportID FROM transport_animation"
