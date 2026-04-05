@@ -108,44 +108,44 @@ struct npc_aethas_sunreaver_purge : public CustomAI
 	{
 		switch (id)
 		{
-            case MOVEMENT_INFO_POINT_03:
-                DoCast(SPELL_TELEPORT_VISUAL_ONLY);
-                me->SetVisible(false);
-                break;
+			case MOVEMENT_INFO_POINT_03:
+				DoCast(SPELL_TELEPORT_VISUAL_ONLY);
+				me->SetVisible(false);
+				break;
 			default:
 				break;
 		}
 	}
 
-    void MoveInLineOfSight(Unit* who) override
-    {
-        ScriptedAI::MoveInLineOfSight(who);
+	void MoveInLineOfSight(Unit* who) override
+	{
+		ScriptedAI::MoveInLineOfSight(who);
 
-        if (me->IsEngaged())
-            return;
+		if (me->IsEngaged())
+			return;
 
-        if (who->GetTypeId() != TYPEID_PLAYER)
-            return;
+		if (who->GetTypeId() != TYPEID_PLAYER)
+			return;
 
-        if (Player* player = who->ToPlayer())
-        {
-            if (player->IsGameMaster())
-                return;
+		if (Player* player = who->ToPlayer())
+		{
+			if (player->IsGameMaster())
+				return;
 
-            if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 15.f))
-            {
-                DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
-                switch (phase)
-                {
-                    case DLPPhases::TheEscape_Escort:
-                        instance->SetData(EVENT_FREE_AETHAS_SUNREAVER, 0U);
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
-    }
+			if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 15.f))
+			{
+				DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
+				switch (phase)
+				{
+					case DLPPhases::TheEscape_Escort:
+						instance->SetData(EVENT_FREE_AETHAS_SUNREAVER, 0U);
+						break;
+					default:
+						break;
+				}
+			}
+		}
+	}
 
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* spellInfo) override
 	{
@@ -172,24 +172,24 @@ struct npc_magister_rommath_purge : public CustomAI
 		Initialize();
 	}
 
-    enum Groups
-    {
-        GROUP_COMBAT                = 1,
-    };
+	enum Groups
+	{
+		GROUP_COMBAT                = 1,
+	};
 
 	enum Spells
 	{
-        SPELL_FIRE_CHANNELING       = 45461,
+		SPELL_FIRE_CHANNELING       = 45461,
 		SPELL_FIREBALL              = 79854,
 		SPELL_COMBUSTION            = 190319,
-        SPELL_EVOCATION             = 211765,
+		SPELL_EVOCATION             = 211765,
 		SPELL_PHOENIX_FLAMES        = 257541,
 		SPELL_METEOR_STORM          = 179215,
 		SPELL_DRAGON_BREATH         = 255890,
 		SPELL_BLAZING_BARRIER       = 295238,
-        SPELL_EMBER_BLAST           = 325877,
-        SPELL_BLAZING_SURGE         = 329509,
-        SPELL_SCORCHING_DETONATION  = 401525,
+		SPELL_EMBER_BLAST           = 325877,
+		SPELL_BLAZING_SURGE         = 329509,
+		SPELL_SCORCHING_DETONATION  = 401525,
 	};
 
 	void Initialize()
@@ -198,96 +198,96 @@ struct npc_magister_rommath_purge : public CustomAI
 	}
 
 	InstanceScript* instance;
-    EventMap events;
-    uint32 eventId;
-    bool evocating;
-    GuidVector tracks;
+	EventMap events;
+	uint32 eventId;
+	bool evocating;
+	GuidVector tracks;
 
-    void Reset() override
-    {
-        scheduler.CancelGroup(GROUP_COMBAT);
+	void Reset() override
+	{
+		scheduler.CancelGroup(GROUP_COMBAT);
 
-        events.Reset();
+		events.Reset();
 
-        if (Player* player = me->GetCharmerOrOwnerPlayerOrPlayerItself())
-        {
-            events.ScheduleEvent(1, 5s);
-        }
+		if (Player* player = me->GetCharmerOrOwnerPlayerOrPlayerItself())
+		{
+			events.ScheduleEvent(1, 5s);
+		}
 
-        Initialize();
-    }
+		Initialize();
+	}
 
-    void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
-    {
-        if (pathId == PATH_ROMMATH_01)
-        {
-            me->AI()->Talk(SAY_INFILTRATE_ROMMATH_04);
+	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+	{
+		if (pathId == PATH_ROMMATH_01)
+		{
+			me->AI()->Talk(SAY_INFILTRATE_ROMMATH_04);
 
-            if (GameObject* passage = instance->GetGameObject(DATA_SECRET_PASSAGE))
-                passage->UseDoorOrButton(7200000);
+			if (GameObject* passage = instance->GetGameObject(DATA_SECRET_PASSAGE))
+				passage->UseDoorOrButton(7200000);
 
-            //for (uint8 i = 0; i < TRACKING_PATH_01; i++)
-            //{
-            //    if (Creature* tracking = map->SummonCreature(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
-            //    {
-            //        tracking->AddAura(SPELL_ARCANIC_TRACKING, tracking);
-            //        tracks.push_back(tracking->GetGUID());
-            //    }
-            //}
+			//for (uint8 i = 0; i < TRACKING_PATH_01; i++)
+			//{
+			//    if (Creature* tracking = map->SummonCreature(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
+			//    {
+			//        tracking->AddAura(SPELL_ARCANIC_TRACKING, tracking);
+			//        tracks.push_back(tracking->GetGUID());
+			//    }
+			//}
 
-            FollowPlayer();
-        }
-    }
+			FollowPlayer();
+		}
+	}
 
-    void FollowPlayer()
-    {
-        Map* map = me->GetMap();
-        if (!map)
-            return;
+	void FollowPlayer()
+	{
+		Map* map = me->GetMap();
+		if (!map)
+			return;
 
-        auto playerIt = map->GetPlayers().begin();
-        if (playerIt != map->GetPlayers().end() && playerIt->GetSource())
-        {
-            Player* player = playerIt->GetSource();
-            player->SetMinionGUID(me->GetGUID());
+		auto playerIt = map->GetPlayers().begin();
+		if (playerIt != map->GetPlayers().end() && playerIt->GetSource())
+		{
+			Player* player = playerIt->GetSource();
+			player->SetMinionGUID(me->GetGUID());
 
-            me->SetOwnerGUID(player->GetGUID());
-            me->SetImmuneToAll(false);
-            me->GetMotionMaster()->Clear();
-            me->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, me->GetFollowAngle());
-        }
-    }
+			me->SetOwnerGUID(player->GetGUID());
+			me->SetImmuneToAll(false);
+			me->GetMotionMaster()->Clear();
+			me->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, me->GetFollowAngle());
+		}
+	}
 
 	void MovementInform(uint32 /*type*/, uint32 id) override
 	{
 		switch (id)
 		{
-            case MOVEMENT_INFO_POINT_02:
-                if (GameObject* portal = instance->GetGameObject(DATA_PORTAL_TO_PRISON))
-                    portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
-                me->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
-                break;
-            case MOVEMENT_INFO_POINT_03:
-                for (ObjectGuid guid : tracks)
-                {
-                    if (Creature* tracking = ObjectAccessor::GetCreature(*me, guid))
-                        tracking->DespawnOrUnsummon();
-                }
-                DoCast(SPELL_TELEPORT_VISUAL_ONLY);
-                me->SetVisible(false);
-                scheduler.Schedule(5s, [this](TaskContext /*context*/)
-                {
-                    instance->TriggerGameEvent(EVENT_FREE_AETHAS_SUNREAVER);
-                });
-                break;
-            default:
+			case MOVEMENT_INFO_POINT_02:
+				if (GameObject* portal = instance->GetGameObject(DATA_PORTAL_TO_PRISON))
+					portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
+				me->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
+				break;
+			case MOVEMENT_INFO_POINT_03:
+				for (ObjectGuid guid : tracks)
+				{
+					if (Creature* tracking = ObjectAccessor::GetCreature(*me, guid))
+						tracking->DespawnOrUnsummon();
+				}
+				DoCast(SPELL_TELEPORT_VISUAL_ONLY);
+				me->SetVisible(false);
+				scheduler.Schedule(5s, [this](TaskContext /*context*/)
+				{
+					instance->TriggerGameEvent(EVENT_FREE_AETHAS_SUNREAVER);
+				});
+				break;
+			default:
 				break;
 		}
 	}
 
 	void MoveInLineOfSight(Unit* who) override
 	{
-        ScriptedAI::MoveInLineOfSight(who);
+		ScriptedAI::MoveInLineOfSight(who);
 
 		if (me->IsEngaged())
 			return;
@@ -316,46 +316,46 @@ struct npc_magister_rommath_purge : public CustomAI
 		}
 	}
 
-    void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
-    {
-        if (Unit* victim = target->ToUnit())
-        {
-            if (spellInfo->HasOnlyDamageEffects() && roll_chance_i(60))
-            {
-                DoCast(victim, SPELL_SCORCHING_DETONATION, true);
-            }
-        }
-    }
-
-    void OnChannelFinished(SpellInfo const* spell) override
-    {
-        if (spell->Id == SPELL_EVOCATION)
-            evocating = false;
-    }
-
-    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{
-        if (me->HealthBelowPctDamaged(10, damage))
-        {
-            // On supprime les dégâts actuels
-            damage = 0;
+		if (Unit* victim = target->ToUnit())
+		{
+			if (spellInfo->HasOnlyDamageEffects() && roll_chance_i(60))
+			{
+				DoCast(victim, SPELL_SCORCHING_DETONATION, true);
+			}
+		}
+	}
 
-            if (evocating)
-                return;
+	void OnChannelFinished(SpellInfo const* spell) override
+	{
+		if (spell->Id == SPELL_EVOCATION)
+			evocating = false;
+	}
 
-            evocating = true;
+	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+	{
+		if (me->HealthBelowPctDamaged(10, damage))
+		{
+			// On supprime les dégâts actuels
+			damage = 0;
 
-            // On interrompt tous les sorts
-            CastStop();
+			if (evocating)
+				return;
 
-            scheduler.DelayGroup(GROUP_COMBAT, 10s);
+			evocating = true;
 
-            // On lance Evocation
-            DoCast(me, SPELL_EVOCATION,
-                   CastSpellExtraArgs(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD)
-                   .AddSpellBP0(30)
-                   .AddSpellMod(SPELLVALUE_BASE_POINT1, 30));
-        }
+			// On interrompt tous les sorts
+			CastStop();
+
+			scheduler.DelayGroup(GROUP_COMBAT, 10s);
+
+			// On lance Evocation
+			DoCast(me, SPELL_EVOCATION,
+				   CastSpellExtraArgs(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD)
+				   .AddSpellBP0(30)
+				   .AddSpellMod(SPELLVALUE_BASE_POINT1, 30));
+		}
 	}
 
 	void JustEngagedWith(Unit* /*who*/) override
@@ -364,15 +364,15 @@ struct npc_magister_rommath_purge : public CustomAI
 		DoCast(SPELL_COMBUSTION);
 
 		scheduler
-            .Schedule(1s, GROUP_COMBAT, [this](TaskContext fireball)
+			.Schedule(1s, GROUP_COMBAT, [this](TaskContext fireball)
 			{
 				DoCastVictim(SPELL_FIREBALL);
 				fireball.Repeat(1800ms);
 			})
 			.Schedule(30s, GROUP_COMBAT, [this](TaskContext combustion)
 			{
-                DoCast(SPELL_COMBUSTION);
-                combustion.Repeat(30s, 45s);
+				DoCast(SPELL_COMBUSTION);
+				combustion.Repeat(30s, 45s);
 			})
 			.Schedule(8s, 12s, GROUP_COMBAT, [this](TaskContext dragon_breath)
 			{
@@ -385,31 +385,31 @@ struct npc_magister_rommath_purge : public CustomAI
 				else
 					dragon_breath.Repeat();
 			})
-            .Schedule(20s, GROUP_COMBAT, [this](TaskContext blazing_surge)
+			.Schedule(20s, GROUP_COMBAT, [this](TaskContext blazing_surge)
 			{
 				if (EnemiesInFront(15.f) >= 2)
 				{
-                    CastStop({ SPELL_EMBER_BLAST, SPELL_EVOCATION });
+					CastStop({ SPELL_EMBER_BLAST, SPELL_EVOCATION });
 					DoCast(SPELL_BLAZING_SURGE);
-                    blazing_surge.Repeat(1min);
+					blazing_surge.Repeat(1min);
 				}
 				else
-                    blazing_surge.Repeat();
+					blazing_surge.Repeat();
 			})
-            .Schedule(8s, GROUP_COMBAT, [this](TaskContext ember_blast)
-            {
-                if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
-                {
-                    CastStop({ SPELL_BLAZING_SURGE, SPELL_EVOCATION });
-                    DoCast(target, SPELL_EMBER_BLAST);
-                }
-                ember_blast.Repeat(15s, 40s);
-            })
+			.Schedule(8s, GROUP_COMBAT, [this](TaskContext ember_blast)
+			{
+				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
+				{
+					CastStop({ SPELL_BLAZING_SURGE, SPELL_EVOCATION });
+					DoCast(target, SPELL_EMBER_BLAST);
+				}
+				ember_blast.Repeat(15s, 40s);
+			})
 			.Schedule(3s, GROUP_COMBAT, [this](TaskContext phoenix_flames)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-                    CastStop({ SPELL_BLAZING_SURGE, SPELL_EMBER_BLAST, SPELL_EVOCATION });
+					CastStop({ SPELL_BLAZING_SURGE, SPELL_EMBER_BLAST, SPELL_EVOCATION });
 					DoCast(target, SPELL_PHOENIX_FLAMES);
 				}
 				phoenix_flames.Repeat(3s, 8s);
@@ -427,64 +427,64 @@ struct npc_magister_rommath_purge : public CustomAI
 			});
 };
 
-    bool CanAIAttack(Unit const* who) const override
-    {
-        return who->IsAlive() && me->IsValidAttackTarget(who)
-            && ScriptedAI::CanAIAttack(who)
-            && who->GetEntry() != NPC_NARASI_SNOWDAWN
-            && who->GetEntry() != NPC_JAINA_PROUDMOORE_PATROL
-            && who->GetEntry() != NPC_VEREESA_WINDRUNNER;
-    }
+	bool CanAIAttack(Unit const* who) const override
+	{
+		return who->IsAlive() && me->IsValidAttackTarget(who)
+			&& ScriptedAI::CanAIAttack(who)
+			&& who->GetEntry() != NPC_NARASI_SNOWDAWN
+			&& who->GetEntry() != NPC_JAINA_PROUDMOORE_PATROL
+			&& who->GetEntry() != NPC_VEREESA_WINDRUNNER;
+	}
 };
 
 enum Spells
 {
-    SPELL_METEOR_STORM_VISUAL   = 215555
+	SPELL_METEOR_STORM_VISUAL   = 215555
 };
 
 class MeteorStormEvent : public BasicEvent
 {
 public:
-    MeteorStormEvent(Unit* caster, ObjectGuid originalCastId, Position const& dest) : _caster(caster), _originalCastId(originalCastId), _dest(dest), _count(0) { }
+	MeteorStormEvent(Unit* caster, ObjectGuid originalCastId, Position const& dest) : _caster(caster), _originalCastId(originalCastId), _dest(dest), _count(0) { }
 
-    bool Execute(uint64 time, uint32 /*diff*/) override
-    {
-        Position destPosition = { _dest.GetPositionX() + frand(-8.0f, 8.0f), _dest.GetPositionY() + frand(-8.0f, 8.0f), _dest.GetPositionZ() };
-        _caster->CastSpell(destPosition, SPELL_METEOR_STORM_VISUAL,
-            CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS).SetOriginalCastId(_originalCastId));
-        ++_count;
+	bool Execute(uint64 time, uint32 /*diff*/) override
+	{
+		Position destPosition = { _dest.GetPositionX() + frand(-8.0f, 8.0f), _dest.GetPositionY() + frand(-8.0f, 8.0f), _dest.GetPositionZ() };
+		_caster->CastSpell(destPosition, SPELL_METEOR_STORM_VISUAL,
+			CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS).SetOriginalCastId(_originalCastId));
+		++_count;
 
-        if (_count >= 12)
-            return true;
+		if (_count >= 12)
+			return true;
 
-        _caster->m_Events.AddEvent(this, Milliseconds(time) + randtime(100ms, 275ms));
-        return false;
-    }
+		_caster->m_Events.AddEvent(this, Milliseconds(time) + randtime(100ms, 275ms));
+		return false;
+	}
 
 private:
-    Unit* _caster;
-    ObjectGuid _originalCastId;
-    Position _dest;
-    uint8 _count;
+	Unit* _caster;
+	ObjectGuid _originalCastId;
+	Position _dest;
+	uint8 _count;
 };
 
 // 179215 - Meteor Storm (launch)
 class spell_meteor_storm : public SpellScript
 {
-    bool Validate(SpellInfo const* /*spellInfo*/) override
-    {
-        return ValidateSpellInfo({ SPELL_METEOR_STORM_VISUAL });
-    }
+	bool Validate(SpellInfo const* /*spellInfo*/) override
+	{
+		return ValidateSpellInfo({ SPELL_METEOR_STORM_VISUAL });
+	}
 
-    void EffectHit(SpellEffIndex /*effIndex*/)
-    {
-        GetCaster()->m_Events.AddEventAtOffset(new MeteorStormEvent(GetCaster(), GetSpell()->m_castId, *GetHitDest()), randtime(100ms, 275ms));
-    }
+	void EffectHit(SpellEffIndex /*effIndex*/)
+	{
+		GetCaster()->m_Events.AddEventAtOffset(new MeteorStormEvent(GetCaster(), GetSpell()->m_castId, *GetHitDest()), randtime(100ms, 275ms));
+	}
 
-    void Register() override
-    {
-        OnEffectHit += SpellEffectFn(spell_meteor_storm::EffectHit, EFFECT_0, SPELL_EFFECT_DUMMY);
-    }
+	void Register() override
+	{
+		OnEffectHit += SpellEffectFn(spell_meteor_storm::EffectHit, EFFECT_0, SPELL_EFFECT_DUMMY);
+	}
 };
 
 void AddSC_dalaran_purge()
@@ -493,5 +493,5 @@ void AddSC_dalaran_purge()
 	RegisterDalaranAI(npc_aethas_sunreaver_purge);
 	RegisterDalaranAI(npc_magister_rommath_purge);
 
-    RegisterSpellScript(spell_meteor_storm);
+	RegisterSpellScript(spell_meteor_storm);
 }

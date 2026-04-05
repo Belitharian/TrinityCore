@@ -52,7 +52,7 @@ public:
             return 0;
         }
 
-        void SetData(uint32 dataId, uint32 value) override
+        void SetData(uint32 dataId, uint32 /*value*/) override
         {
             switch (dataId)
             {

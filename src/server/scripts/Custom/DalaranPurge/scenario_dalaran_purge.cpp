@@ -357,11 +357,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 						surdiel->SetHomePosition(SurdielPos01);
 					}
 
-					instance->DoOnPlayers([this](Player* player)
-					{
-						player->CastSpell(player, SPELL_FADING_TO_BLACK, true);
-					});
-
 					events.ScheduleEvent(21, 1s);
 					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape_Events);
 					break;
@@ -412,7 +407,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 						player->RemoveAurasDueToSpell(SPELL_HORDE_ILLUSION);
 						player->RemoveAurasDueToSpell(SPELL_FACTION_OVERRIDE);
 						player->RemoveAurasDueToSpell(SPELL_FLASHBACK_EFFECT);
-						player->RemoveAurasDueToSpell(SPELL_FOR_THE_HORDE);
 					});
 
 					break;
@@ -608,7 +602,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					Next(760ms);
 					break;
 				case 9:
-					GetJaina()->CastSpell(GetJaina(), SPELL_ARCANE_BOMBARDMENT);
+					GetJaina()->CastSpell(GetJaina(), SPELL_ARCANE_NOVA, CastSpellExtraArgs(TRIGGERED_CAST_DIRECTLY));
 					Next(630ms);
 					break;
 				case 10:
@@ -696,8 +690,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					{
 						player->NearTeleportTo(SewersPos01);
 						player->CastSpell(player, SPELL_FLASHBACK_EFFECT, true);
-                        for (uint8 i = 0; i < 20; i++)
-                            player->CastSpell(player, SPELL_FOR_THE_HORDE);
+						player->CastSpell(player, SPELL_FADING_TO_BLACK, true);
 					});
 					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
 						surdiel->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, SurdielPos02, true, SurdielPos02.GetOrientation());

@@ -39,8 +39,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 	struct scenario_ruins_of_theramore_InstanceScript : public InstanceScript
 	{
-        scenario_ruins_of_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map),
-            eventId(1), hordeCounter(0), phase(RFTPhases::FindJaina_Isle), irisDummy(ObjectGuid::Empty)
+		scenario_ruins_of_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map),
+			eventId(1), hordeCounter(0), phase(RFTPhases::FindJaina_Isle), irisDummy(ObjectGuid::Empty)
 		{
 			SetHeaders(DataHeader);
 			LoadObjectData(creatureData, gameobjectData);
@@ -55,11 +55,11 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 		void OnPlayerEnter(Player* player) override
 		{
-            RFTPhases phase = (RFTPhases)GetData(DATA_SCENARIO_PHASE);
-            if (phase >= RFTPhases::FindJaina_Isle_Valided)
-                player->AddAura(SPELL_SKYBOX_EFFECT_RUINS, player);
-            else
-			    player->AddAura(SPELL_SKYBOX_EFFECT_ENTRANCE, player);
+			RFTPhases phase = (RFTPhases)GetData(DATA_SCENARIO_PHASE);
+			if (phase >= RFTPhases::FindJaina_Isle_Valided)
+				player->AddAura(SPELL_SKYBOX_EFFECT_RUINS, player);
+			else
+				player->AddAura(SPELL_SKYBOX_EFFECT_ENTRANCE, player);
 		}
 
 		void OnPlayerLeave(Player* player) override
@@ -86,18 +86,18 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					events.ScheduleEvent(25, 1s);
 					break;
 				case EVENT_WARLORD_ROKNAH_SLAIN:
-                    if (Creature* jaina = GetJaina())
-                    {
-                        jaina->CastSpell(jaina, SPELL_EXPLOSIVE_BRAND, true);
+					if (Creature* jaina = GetJaina())
+					{
+						jaina->CastSpell(jaina, SPELL_EXPLOSIVE_BRAND, true);
 
-                        for (Creature* horde : hordes)
-                        {
-                            if (horde && horde->IsAlive() && horde->GetEntry() != NPC_ROKNAH_WARLORD)
-                                horde->CastSpell(horde, SPELL_EXPLOSIVE_BRAND_DAMAGE);
-                        }
+						for (Creature* horde : hordes)
+						{
+							if (horde && horde->IsAlive() && horde->GetEntry() != NPC_ROKNAH_WARLORD)
+								horde->CastSpell(horde, SPELL_EXPLOSIVE_BRAND_DAMAGE);
+						}
 
-                        events.ScheduleEvent(39, 800ms);
-                    }
+						events.ScheduleEvent(39, 800ms);
+					}
 					break;
 			}
 		}
@@ -140,32 +140,32 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					break;
 				// Return to Theramore
 				case CRITERIA_TREE_FIND_JAINA_02:
-                    if (Creature* jaina = GetJaina())
-                        SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, jaina);
+					if (Creature* jaina = GetJaina())
+						SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, jaina);
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::Standards);
 					break;
 				// Cleaning
 				case CRITERIA_TREE_CLEANING:
-                {
-                    std::list<TempSummon*> hordes;
-                    instance->SummonCreatureGroup(0, &hordes);
-                    hordeCounter = (uint32)hordes.size();
-                    for (TempSummon* horde : hordes)
-                    {
-                        horde->SetTempSummonType(TEMPSUMMON_TIMED_OR_DEAD_DESPAWN);
-                        hordeChecker.push_back(horde->GetGUID());
-                    }
-                    if (Creature* jaina = GetJaina())
-                    {
-                        Talk(jaina, SAY_IRIS_PROTECTION_JAINA_03);
-                        jaina->RemoveAurasDueToSpell(SPELL_ALUNETH_DRINKS);
-                        jaina->SetHomePosition(JainaPoint04);
-                        jaina->NearTeleportTo(JainaPoint04);
-                    }
-                    SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::Standards_Valided);
-                    events.ScheduleEvent(44, 2s);
-                    break;
-                }
+				{
+					std::list<TempSummon*> hordes;
+					instance->SummonCreatureGroup(0, &hordes);
+					hordeCounter = (uint32)hordes.size();
+					for (TempSummon* horde : hordes)
+					{
+						horde->SetTempSummonType(TEMPSUMMON_TIMED_OR_DEAD_DESPAWN);
+						hordeChecker.push_back(horde->GetGUID());
+					}
+					if (Creature* jaina = GetJaina())
+					{
+						Talk(jaina, SAY_IRIS_PROTECTION_JAINA_03);
+						jaina->RemoveAurasDueToSpell(SPELL_ALUNETH_DRINKS);
+						jaina->SetHomePosition(JainaPoint04);
+						jaina->NearTeleportTo(JainaPoint04);
+					}
+					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::Standards_Valided);
+					events.ScheduleEvent(44, 2s);
+					break;
+				}
 				// Back to sender
 				case CRITERIA_TREE_BACK_TO_SENDER:
 					SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::TheFinalAssault);
@@ -186,7 +186,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
 			creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
 			creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
-            creature->SetBoundingRadius(36.0f);
+			creature->SetBoundingRadius(36.0f);
 
 			switch (creature->GetEntry())
 			{
@@ -199,7 +199,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						creature->AddAura(RAND(SPELL_GLACIAL_SPIKE_COSMETIC, SPELL_BURNING), creature);
 					break;
 				case NPC_GENERAL_TIRAS_ALAN:
-                case NPC_ADMIRAL_AUBREY:
+				case NPC_ADMIRAL_AUBREY:
 				case NPC_HEDRIC_EVENCANE:
 				case NPC_THERAMORE_FAITHFUL:
 				case NPC_THERAMORE_ARCANIST:
@@ -332,15 +332,15 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					{
 						Talk(kalecgos, SAY_AFTER_BATTLE_KALECGOS_13);
 						kalecgos->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-                        if (instance->GetPlayers().empty())
-                            return;
+						if (instance->GetPlayers().empty())
+							return;
 						if (Player* player = instance->GetPlayers().begin()->GetSource())
 							kalecgos->SetFacingToObject(player);
 					}
 					Next(5s);
 					break;
 				case 18:
-                    ForceWeather(WEATHER_ARCANE_BUILD, true);
+					ForceWeather(WEATHER_ARCANE_BUILD, true);
 					TeleportPlayers(PlayerPoint01, 12.f);
 					DoRemoveAurasDueToSpellOnPlayers(SPELL_SKYBOX_EFFECT_ENTRANCE);
 					DoCastSpellOnPlayers(SPELL_SKYBOX_EFFECT_RUINS);
@@ -360,11 +360,11 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case 20:
 					if (Player* player = instance->GetPlayers().begin()->GetSource())
 						GetJaina()->SetFacingToObject(player);
-                    if (Creature* kinndy = GetCreature(DATA_KINNDY_SPARKSHINE))
-                    {
-                        kinndy->AddAura(SPELL_COSMETIC_ARCANE_DISSOLVE, kinndy);
-                        kinndy->CastSpell(kinndy, SPELL_DISSOLVE_ARCANE_VISUAL);
-                    }
+					if (Creature* kinndy = GetCreature(DATA_KINNDY_SPARKSHINE))
+					{
+						kinndy->AddAura(SPELL_COSMETIC_ARCANE_DISSOLVE, kinndy);
+						kinndy->CastSpell(kinndy, SPELL_DISSOLVE_ARCANE_VISUAL);
+					}
 					Next(2s);
 					break;
 				case 21:
@@ -457,8 +457,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					instance->SummonCreatureGroup(1, &hordes);
 					for (TempSummon* horde : hordes)
 					{
-                        horde->SetTempSummonType(TEMPSUMMON_TIMED_OR_DEAD_DESPAWN);
-                        horde->SetImmuneToAll(true);
+						horde->SetTempSummonType(TEMPSUMMON_TIMED_OR_DEAD_DESPAWN);
+						horde->SetImmuneToAll(true);
 						horde->CastSpell(horde, SPELL_THALYSSRA_SPAWNS);
 					}
 					Next(4s);
@@ -598,7 +598,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 						for (Creature* elemental : elementals)
 							elemental->DespawnOrUnsummon(1s);
 
-                        SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, jaina);
+						SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, jaina);
 
 						jaina->CastSpell(jaina, SPELL_COSMETIC_ARCANE_DISSOLVE);
 						jaina->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
@@ -635,7 +635,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 							jaina->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
 							jaina->SetReactState(REACT_PASSIVE);
-                            jaina->LoadEquipment(2);
+							jaina->LoadEquipment(2);
 
 							events.CancelEvent(44);
 
@@ -706,38 +706,38 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			creature->SetUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
 			creature->SetUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
 			creature->SetImmuneToAll(true);
-        }
+		}
 
-        void TeleportPlayers(const Position center, float distance)
-        {
-            float angle = (float)rand_norm() * static_cast<float>(2 * M_PI);
-            float new_dist = (float)rand_norm() + (float)rand_norm();
-            new_dist = distance * (new_dist > 1 ? new_dist - 2 : new_dist);
+		void TeleportPlayers(const Position center, float distance)
+		{
+			float angle = (float)rand_norm() * static_cast<float>(2 * M_PI);
+			float new_dist = (float)rand_norm() + (float)rand_norm();
+			new_dist = distance * (new_dist > 1 ? new_dist - 2 : new_dist);
 
-            float rand_x = center.m_positionX + new_dist * std::cos(angle);
-            float rand_y = center.m_positionY + new_dist * std::sin(angle);
+			float rand_x = center.m_positionX + new_dist * std::cos(angle);
+			float rand_y = center.m_positionY + new_dist * std::sin(angle);
 
-            Trinity::NormalizeMapCoord(rand_x);
-            Trinity::NormalizeMapCoord(rand_y);
+			Trinity::NormalizeMapCoord(rand_x);
+			Trinity::NormalizeMapCoord(rand_y);
 
-            instance->DoOnPlayers([center, rand_x, rand_y](Player* player)
-            {
-                float rand_z = center.m_positionZ;
-                player->UpdateGroundPositionZ(rand_x, rand_y, rand_z);
-                player->NearTeleportTo({ rand_x, rand_y, rand_z, center.GetOrientation() });
-            });
-        }
+			instance->DoOnPlayers([center, rand_x, rand_y](Player* player)
+			{
+				float rand_z = center.m_positionZ;
+				player->UpdateGroundPositionZ(rand_x, rand_y, rand_z);
+				player->NearTeleportTo({ rand_x, rand_y, rand_z, center.GetOrientation() });
+			});
+		}
 
-        void ForceWeather(uint32 weatherEntry, bool apply)
-        {
-            instance->DoOnPlayers([weatherEntry, apply](Player* player)
-            {
-                if (apply)
-                    player->SendDirectMessage(WorldPackets::Misc::Weather(WeatherState(weatherEntry), 1.0f).Write());
-                else
-                    player->GetMap()->SendZoneWeather(player->GetZoneId(), player);
-            });
-        }
+		void ForceWeather(uint32 weatherEntry, bool apply)
+		{
+			instance->DoOnPlayers([weatherEntry, apply](Player* player)
+			{
+				if (apply)
+					player->SendDirectMessage(WorldPackets::Misc::Weather(WeatherState(weatherEntry), 1.0f).Write());
+				else
+					player->GetMap()->SendZoneWeather(player->GetZoneId(), player);
+			});
+		}
 
 		#pragma endregion
 	};

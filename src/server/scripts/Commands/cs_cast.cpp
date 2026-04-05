@@ -257,7 +257,7 @@ public:
             }
 
             // Exécution dans le thread monde
-            bool Execute(uint64 execTime, uint32 /*diff*/) override
+            bool Execute(uint64 /*execTime*/, uint32 /*diff*/) override
             {
                 // Garde : caster encore valide et en vie
                 if (!m_player || !m_player->IsAlive())

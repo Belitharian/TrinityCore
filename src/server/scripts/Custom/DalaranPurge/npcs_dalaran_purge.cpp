@@ -56,7 +56,7 @@ struct npc_guardian_mage_dalaran : public CustomAI
 	{
 		if (spellInfo->Id == SPELL_FROST_NOVA)
 		{
-			scheduler.Schedule(1s, [this](TaskContext blink)
+			scheduler.Schedule(1s, [this](TaskContext /*blink*/)
 			{
 				CastStop();
 				DoCast(SPELL_BLINK);
@@ -212,7 +212,7 @@ struct npc_jaina_dalaran_patrol : public CustomAI
 	{
 		SPELL_COSMETIC_SNOW         = 83065,
 		SPELL_BLIZZARD              = 284968,
-		SPELL_FROSTBOLT             = 284703,
+		SPELL_FROSTBOLT             = 320008,
 		SPELL_FRIGID_SHARD          = 354933,
 		SPELL_TELEPORT              = 135176,
 		SPELL_GLACIAL_SPIKE         = 338488,
@@ -706,7 +706,7 @@ struct npc_mage_commander_zuros : public CustomAI
                 case 4:
                     if (Creature* dummy = DoSummon(NPC_INVISIBLE_STALKER, me->GetPosition(), 20s, TEMPSUMMON_TIMED_DESPAWN))
                         dummy->CastSpell(dummy, SPELL_ARCANE_DETONATION);
-                    events.ScheduleEvent(5, 1500ms);
+                    events.ScheduleEvent(5, 3300ms);
                     break;
                 case 5:
                     FeingDeath(me);
@@ -810,293 +810,380 @@ struct npc_narasi_snowdawn : public CustomAI
 
 struct npc_archmage_landalock : public NullCreatureAI
 {
-	const Position sorinPos = { -844.82f, 4471.00f, 735.87f, 5.50f };
+public:
+    enum Talks : uint8
+    {
+        SAY_LANDALOCK_01            = 0,
+        SAY_LANDALOCK_02,
+        SAY_LANDALOCK_03,
+        SAY_LANDALOCK_04,
+        SAY_LANDALOCK_05,
+    };
 
-	npc_archmage_landalock(Creature* creature) : NullCreatureAI(creature), eventId(0)
-	{
-		instance = creature->GetInstanceScript();
+    enum Events : uint32
+    {
+        // Séquence mur de glace
+        EVENT_WALL_TALK_01          = 1,
+        EVENT_WALL_TALK_02          = 2,
+        EVENT_WALL_FACE             = 3,
+        EVENT_WALL_BURST            = 4,
+        EVENT_WALL_KILL             = 5,
+        EVENT_WALL_TALK_03          = 6,
+        EVENT_WALL_MOVE             = 7,
+        // Séquence citoyens
+        EVENT_CITIZEN_FACE          = 9,
+        EVENT_CITIZEN_TALK          = 10,
+        EVENT_CITIZEN_SCATTER       = 11,
+        EVENT_CITIZEN_WAIT          = 12,
+        EVENT_CITIZEN_TELEPORT      = 13,
+    };
 
-		if (Creature* icewall = me->FindNearestCreature(NPC_ICEWALL, 15.f))
-		{
-			summon = icewall->GetPosition();
+    enum Misc : uint32
+    {
+        SPELL_ICE_BURST             = 283591,
+        GOSSIP_MENU_DEFAULT         = 65003,
+        NPC_ICEWALL                 = 178819,
+        RESPAWN_24H                 = 86400,
+    };
 
-			// 24H
-			uint32 delay = 86400;
-			icewall->SetRespawnDelay(delay);
-			icewall->SetRespawnTime(delay);
-		}
-	}
+    npc_archmage_landalock(Creature* creature) : NullCreatureAI(creature),
+        m_instance(creature->GetInstanceScript())
+    {
+    }
 
-	enum Talks
-	{
-		SAY_LANDALOCK_01,
-		SAY_LANDALOCK_02,
-		SAY_LANDALOCK_03,
-		SAY_LANDALOCK_04,
-		SAY_LANDALOCK_05,
-	};
+    void JustAppeared() override
+    {
+        // Récupère la position du mur de glace pour le summon ultérieur du trigger de sort,
+        // et désactive son respawn pour toute la durée de vie du script (24h).
+        if (Creature* icewall = me->FindNearestCreature(NPC_ICEWALL, 15.f))
+        {
+            m_summonPos = icewall->GetPosition();
+            icewall->SetRespawnDelay(RESPAWN_24H);
+            icewall->SetRespawnTime(RESPAWN_24H);
+        }
+    }
 
-	enum Misc
-	{
-		// Spells
-		SPELL_ICE_BURST             = 283591,
-		// Gossips
-		GOSSIP_MENU_DEFAULT         = 65003,
-		// NPCs
-		NPC_ICEWALL                 = 178819
-	};
+    void Reset() override
+    {
+        // Landalock est un PNJ de quête, il ne doit jamais entrer en combat.
+        me->SetImmuneToAll(true);
+    }
 
-	std::list<Creature*> citizens;
-	EventMap events;
-	InstanceScript* instance;
-	ObjectGuid stalkerGUID;
-	ObjectGuid playerGUID;
-	ObjectGuid icewallGUID;
-	Position summon;
-	uint32 eventId;
+    void SetGUID(ObjectGuid const& guid, int32 id) override
+    {
+        // Reçoit les GUIDs du joueur et du stalker depuis le script externe
+        // (typiquement l'InstanceScript ou un autre AI qui orchestre la séquence).
+        switch (id)
+        {
+        case GUID_PLAYER:
+            m_playerGUID = guid;
+            break;
+        case GUID_STALKER:
+            m_stalkerGUID = guid;
+            break;
+        }
+    }
 
-	void Reset() override
-	{
-		me->SetImmuneToAll(true);
-	}
+    void DoAction(int32 action) override
+    {
+        if (action != ACTION_DISPELL_BARRIER)
+            return;
 
-	void SetGUID(ObjectGuid const& guid, int32 id) override
-	{
-		switch (id)
-		{
-			case GUID_PLAYER:
-				playerGUID = guid;
-				break;
-			case GUID_STALKER:
-				stalkerGUID = guid;
-				break;
-		}
-	}
+        Creature* stalker = ObjectAccessor::GetCreature(*me, m_stalkerGUID);
+        if (!stalker)
+            return;
 
-	void DoAction(int32 action) override
-	{
-		if (action != ACTION_DISPELL_BARRIER)
-			return;
+        Player* player = ObjectAccessor::GetPlayer(*me, m_playerGUID);
+        if (!player)
+            return;
 
-		Creature* stalker = ObjectAccessor::GetCreature(*me, stalkerGUID);
-		if (!stalker)
-			return;
+        // Guard : évite une double exécution si DoAction est appelé plusieurs fois.
+        if (m_citizenPhaseActive)
+            return;
 
-		Player* player = ObjectAccessor::GetPlayer(*me, playerGUID);
-		if (!player)
-			return;
+        m_citizenPhaseActive = true;
+        m_citizens.clear();
+        GetCreatureListWithEntryInGrid(m_citizens, stalker, NPC_DALARAN_CITIZEN, 35.f);
 
-		me->RemoveAllAuras();
-		me->CastSpell(stalker->GetPosition(), SPELL_TELEPORT);
+        me->RemoveAllAuras();
+        me->CastSpell(stalker->GetPosition(), SPELL_TELEPORT);
 
-		citizens.clear();
+        if (!m_citizens.empty())
+        {
+            m_events.ScheduleEvent(EVENT_CITIZEN_FACE, 800ms);
+        }
+        else
+        {
+            // Aucun citoyen trouvé : on despawn proprement sans déclencher la séquence.
+            me->DespawnOrUnsummon(800ms);
+        }
+    }
 
-		GetCreatureListWithEntryInGrid(citizens, stalker, NPC_DALARAN_CITIZEN, 35.f);
-		if (!citizens.empty())
-		{
-			events.ScheduleEvent(9, 800ms);
-		}
-		else
-		{
-			me->RemoveAllAuras();
-			me->CastSpell(stalker->GetPosition(), SPELL_TELEPORT);
-			me->DespawnOrUnsummon(800ms);
-		}
-	}
+    void MovementInform(uint32 /*type*/, uint32 id) override
+    {
+        // Déclenché quand Landalock atteint la position de Sorin à la fin de la séquence mur.
+        if (id != MOVEMENT_INFO_POINT_01)
+            return;
 
-	void MovementInform(uint32 /*type*/, uint32 id) override
-	{
-		switch (id)
-		{
-			case MOVEMENT_INFO_POINT_01:
-				if (Creature* sorin = instance->GetCreature(DATA_SORIN_MAGEHAND))
-					me->SetFacingToObject(sorin);
-				me->AddAura(SPELL_CASTER_READY_01, me);
-				me->SetHomePosition(me->GetPosition());
-				break;
-		}
-	}
+        if (Creature* sorin = m_instance->GetCreature(DATA_SORIN_MAGEHAND))
+            me->SetFacingToObject(sorin);
 
-	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
-	{
-		if (spellInfo->Id != SPELL_TELEPORT_CASTER)
-			return;
+        me->AddAura(SPELL_CASTER_READY_01, me);
+        me->SetHomePosition(me->GetPosition());
+    }
 
-		me->DisappearAndDie();
+    void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
+    {
+        if (spellInfo->Id != SPELL_TELEPORT_CASTER)
+            return;
 
-		if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
-		{
-			#ifdef CUSTOM_DEBUG
-				Creature* citizen = citizens.front();
-				for (uint8 i = 0; i < 20; i++)
-					KillRewarder::Reward(player, citizen);
-			#else
-				for (Creature* citizen : citizens)
-				{
+        me->DisappearAndDie();
+    }
+
+    bool OnGossipHello(Player* player) override
+    {
+        // Affiche le menu gossip par défaut sans condition supplémentaire.
+        player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
+        player->SendPreparedGossip(me);
+        return true;
+    }
+
+    bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
+    {
+        ClearGossipMenuFor(player);
+
+        if (gossipListId == 0)
+        {
+            // Le joueur lance la séquence : on retire les flags passifs
+            // et on démarre la timeline du mur de glace.
+            m_playerGUID = player->GetGUID();
+            me->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+            me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+            me->RemoveAurasDueToSpell(SPELL_FROST_CANALISATION);
+            me->RemoveAurasDueToSpell(SPELL_CHAT_BUBBLE);
+            m_events.ScheduleEvent(EVENT_WALL_TALK_01, 2s);
+        }
+
+        CloseGossipMenuFor(player);
+        return true;
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        m_events.Update(diff);
+
+        while (uint32 eventId = m_events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                // -------------------------------------------------------
+                // Séquence : destruction du mur de glace
+                // -------------------------------------------------------
+
+            case EVENT_WALL_TALK_01:
+                // Landalock s'adresse au joueur et lui fait face.
+                Talk(SAY_LANDALOCK_01);
+                if (Player* player = ObjectAccessor::GetPlayer(*me, m_playerGUID))
+                {
+                    me->SetFacingToObject(player);
+                    KillRewarder::Reward(player, me);
+                }
+                m_events.ScheduleEvent(EVENT_WALL_TALK_02, 3s);
+                break;
+            case EVENT_WALL_TALK_02:
+                Talk(SAY_LANDALOCK_02);
+                m_events.ScheduleEvent(EVENT_WALL_FACE, 4s);
+                break;
+            case EVENT_WALL_FACE:
+                // Landalock se tourne vers le mur avant de lancer le sort.
+                me->SetFacingTo(5.55f);
+                m_events.ScheduleEvent(EVENT_WALL_BURST, 2s);
+                break;
+            case EVENT_WALL_BURST:
+                // Summon d'un trigger invisible à la position du mur
+                // qui sert de point d'impact pour SPELL_ICE_BURST.
+                if (Creature* trigger = me->SummonCreature(WORLD_TRIGGER, m_summonPos, TEMPSUMMON_TIMED_DESPAWN, 10s))
+                {
+                    me->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
+                    trigger->CastSpell(trigger, SPELL_ICE_BURST);
+                }
+                m_events.ScheduleEvent(EVENT_WALL_KILL, 500ms);
+                break;
+            case EVENT_WALL_KILL:
+                // Cache et tue le mur de glace, supprime le collider GameObject.
+                if (Creature* icewall = me->FindNearestCreature(NPC_ICEWALL, 15.f))
+                {
+                    m_icewallGUID = icewall->GetGUID();
+                    icewall->KillSelf();
+                }
+                if (GameObject* collider = me->FindNearestGameObject(GOB_ICE_WALL_COLLISION, 15.f))
+                    collider->Delete();
+                m_events.ScheduleEvent(EVENT_WALL_TALK_03, 2s);
+                break;
+            case EVENT_WALL_TALK_03:
+                if (Creature* icewall = ObjectAccessor::GetCreature(*me, m_icewallGUID))
+                    icewall->SetVisible(false);
+                // Landalock se retourne vers le joueur et annonce qu'il rejoint Sorin.
+                if (Player* player = ObjectAccessor::GetPlayer(*me, m_playerGUID))
+                    me->SetFacingToObject(player);
+                Talk(SAY_LANDALOCK_03);
+                me->SetWalk(true);
+                m_events.ScheduleEvent(EVENT_WALL_MOVE, 4s);
+                break;
+            case EVENT_WALL_MOVE:
+                // Déplacement vers Sorin Magehand — la suite est gérée dans MovementInform.
+                me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, SORIN_POS, true, SORIN_POS.GetOrientation());
+                break;
+
+                // -------------------------------------------------------
+                // Séquence : dispersion et téléportation des citoyens
+                // -------------------------------------------------------
+
+            case EVENT_CITIZEN_FACE:
+                // Landalock se tourne vers la barrière arcanique avant de parler.
+                if (Creature* barrier = GetClosestCreatureWithEntry(me, NPC_ARCANE_BARRIER, 15.f))
+                    me->SetFacingToObject(barrier);
+                m_events.ScheduleEvent(EVENT_CITIZEN_TALK, 1s);
+                break;
+            case EVENT_CITIZEN_TALK:
+                Talk(SAY_LANDALOCK_04);
+                m_events.ScheduleEvent(EVENT_CITIZEN_SCATTER, 2s);
+                break;
+            case EVENT_CITIZEN_SCATTER:
+            {
+                // Répartit les citoyens en cercle autour de Landalock.
+                // Chaque citoyen est envoyé à un angle régulier sur un rayon de 3.2f.
+                // Le respawn est désactivé pour éviter qu'ils réapparaissent pendant la séquence.
+                uint8 index = 0;
+                float const slice = 2.f * float(M_PI) / float(m_citizens.size());
+                for (Creature* citizen : m_citizens)
+                {
                     if (!citizen || citizen->isDead())
                         continue;
 
-					KillRewarder::Reward(player, citizen);
+                    constexpr uint32 NO_RESPAWN = std::numeric_limits<uint32>::max();
+                    citizen->SetRespawnDelay(NO_RESPAWN);
+                    citizen->SetRespawnTime(NO_RESPAWN);
 
-					citizen->CastSpell(citizen, SPELL_TELEPORT_TARGET);
-					citizen->DisappearAndDie();
-				}
-			#endif
-		}
-	}
+                    float const angle = slice * index++;
+                    Position const dest = GetRandomPositionAroundCircle(me, angle, 3.2f);
+                    citizen->SetHomePosition(dest);
+                    citizen->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, dest, true, dest.GetOrientation());
+                }
 
-	bool OnGossipHello(Player* player) override
-	{
-		player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
-		player->SendPreparedGossip(me);
-		return true;
-	}
+                // Démarre le chrono — le wait forcera le TP après 5s quoi qu'il arrive.
+                m_citizenWaitExpiry = GameTime::Now() + 5s;
+                m_events.ScheduleEvent(EVENT_CITIZEN_WAIT, 500ms);
+                break;
+            }
+            case EVENT_CITIZEN_WAIT:
+            {
+                // Attend que tous les citoyens soient arrivés à proximité de Landalock.
+                // Le check combine distance planaire (XY), visibilité et delta Z
+                // pour exclure les citoyens tombés sous la géométrie.
+                uint32 ready = 0;
+                uint32 expected = 0;
 
-	bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
-	{
-		ClearGossipMenuFor(player);
+                for (Creature* citizen : m_citizens)
+                {
+                    if (!citizen || citizen->isDead())
+                        continue;
 
-		switch (gossipListId)
-		{
-			case 0:
-				playerGUID = player->GetGUID();
-				me->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-				me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-				me->RemoveAurasDueToSpell(SPELL_FROST_CANALISATION);
-				me->RemoveAurasDueToSpell(SPELL_CHAT_BUBBLE);
-				events.ScheduleEvent(1, 2s);
-				break;
-		}
+                    expected++;
 
-		CloseGossipMenuFor(player);
-		return true;
-	}
+                    float const dx = citizen->GetPositionX() - me->GetPositionX();
+                    float const dy = citizen->GetPositionY() - me->GetPositionY();
+                    float const dist2D = std::sqrt(dx * dx + dy * dy);
+                    float const dz = std::abs(citizen->GetPositionZ() - me->GetPositionZ());
 
-	void UpdateAI(uint32 diff) override
-	{
-		events.Update(diff);
+                    // Un delta Z > 4.f signale une chute dans la géométrie :
+                    // le citoyen est ignoré pour le check d'arrivée.
+                    bool const isClose = dist2D <= 6.f;
+                    bool const isVisible = citizen->IsVisible();
+                    bool const notFallen = dz <= 4.f;
 
-		while (eventId = events.ExecuteEvent())
-		{
-			switch (eventId)
-			{
-				// Wall
-				#pragma region WALL
+                    if (isClose && isVisible && notFallen)
+                        ready++;
+                }
 
-				case 1:
-					me->AI()->Talk(SAY_LANDALOCK_01);
-					if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
-					{
-						me->SetFacingToObject(player);
-						KillRewarder::Reward(player, me);
-					}
-					Next(3s);
-					break;
-				case 2:
-					me->AI()->Talk(SAY_LANDALOCK_02);
-					Next(4s);
-					break;
-				case 3:
-					me->SetFacingTo(5.55f);
-					Next(2s);
-					break;
-				case 4:
-					if (Creature* icewall = me->SummonCreature(WORLD_TRIGGER, summon, TEMPSUMMON_TIMED_DESPAWN, 10s))
-					{
-						me->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
-						icewall->CastSpell(icewall, SPELL_ICE_BURST);
-					}
-					Next(500ms);
-					break;
-				case 5:
-                    if (Creature* icewall = me->FindNearestCreature(NPC_ICEWALL, 15.f))
+                bool const allReady = expected == 0 || ready >= expected;
+                // Fallback : si 5s sont écoulées on force le TP
+                // pour ne pas bloquer sur un citoyen coincé.
+                bool const timedOut = GameTime::Now() >= m_citizenWaitExpiry;
+
+                if (allReady || timedOut)
+                {
+                    if (timedOut && !allReady)
+                        TC_LOG_WARN("scripts", "npc_archmage_landalock: citizen wait timed out ({}/{} ready)", ready, expected);
+
+                    m_events.ScheduleEvent(EVENT_CITIZEN_TELEPORT, 500ms);
+                }
+                else
+                {
+                    m_events.ScheduleEvent(EVENT_CITIZEN_WAIT, 500ms);
+                }
+                break;
+            }
+            case EVENT_CITIZEN_TELEPORT:
+            {
+                // Landalock commence son cast, puis les citoyens partent en décalé
+                // pour donner l'impression que c'est lui qui les téléporte.
+                DoCast(SPELL_TELEPORT_CASTER);
+
+                Player* player = ObjectAccessor::GetPlayer(*me, m_playerGUID);
+
+                #ifdef CUSTOM_DEBUG
+                    // En debug : récompense accélérée sur un seul citizen pour tester rapidement.
+                    if (player && !m_citizens.empty())
                     {
-                        icewall->KillSelf();
-                        icewallGUID = icewall->GetGUID();
+                        Creature* citizen = m_citizens.front();
+                        for (uint8 i = 0; i < 20; i++)
+                            KillRewarder::Reward(player, citizen);
                     }
-					if (GameObject* collider = me->FindNearestGameObject(GOB_ICE_WALL_COLLISION, 15.f))
-						collider->Delete();
-					Next(2s);
-					break;
-				case 6:
-                    if (Creature* icewall = ObjectAccessor::GetCreature(*me, icewallGUID))
-                        icewall->SetVisible(false);
-					if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
-						me->SetFacingToObject(player);
-					Next(2s);
-					break;
-				case 7:
-					me->AI()->Talk(SAY_LANDALOCK_03);
-					me->SetWalk(true);
-					Next(4s);
-					break;
-				case 8:
-					me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, sorinPos, true, sorinPos.GetOrientation());
-					break;
-
-				#pragma endregion
-
-				// Citizen
-				#pragma region CITIZEN
-
-				case 9:
-					if (Creature* barrier = GetClosestCreatureWithEntry(me, NPC_ARCANE_BARRIER, 15.f))
-						me->SetFacingToObject(barrier);
-					Next(1s);
-					break;
-				case 10:
-					me->AI()->Talk(SAY_LANDALOCK_04);
-					Next(2s);
-					break;
-				case 11:
-				{
-					uint8 index = 0;
-					float slice = 2 * (float)M_PI / (float)citizens.size();
-					for (Creature* citizen : citizens)
-					{
+                #else
+                    // En prod : récompense + téléportation + despawn pour chaque citoyen valide,
+                    // avec un délai échelonné pour que les TP ne partent pas tous en même temps.
+                    uint32 delay = 500;
+                    for (Creature* citizen : m_citizens)
+                    {
                         if (!citizen || citizen->isDead())
                             continue;
 
-						constexpr uint32 delay = std::numeric_limits<uint32>::max();
-						citizen->SetRespawnDelay(delay);
-						citizen->SetRespawnTime(delay);
+                        citizen->m_Events.AddEventAtOffset([citizen, player]()
+                            {
+                                if (!citizen || citizen->isDead())
+                                    return;
 
-						float angle = slice * index;
-						const Position dest = GetRandomPositionAroundCircle(me, angle, 3.2f);
-						citizen->SetHomePosition(dest);
-						citizen->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, dest, true, dest.GetOrientation());
+                                if (player)
+                                    KillRewarder::Reward(player, citizen);
 
-						index++;
-					}
-					Next(1s);
-					break;
-				}
-				case 12:
-				{
-					std::list<Creature*> temp;
-					GetCreatureListWithEntryInGrid(temp, me, NPC_DALARAN_CITIZEN, 6.f);
-					if (temp.size() >= citizens.size())
-					{
-						Next(500ms);
-						break;
-					}
-					events.Repeat(2s);
-					break;
-				}
-				case 13:
-					DoCast(SPELL_TELEPORT_CASTER);
-					break;
+                                citizen->CastSpell(citizen, SPELL_TELEPORT_TARGET);
+                                citizen->DisappearAndDie();
+                            }, Milliseconds(delay));
 
-				#pragma endregion
-			}
-		}
-	}
+                        delay += urand(500, 800);
+                    }
+                #endif
+            break;
+            }
 
-	void Next(const Milliseconds& time)
-	{
-		eventId++;
-		events.ScheduleEvent(eventId, time);
-	}
+            default:
+                break;
+            }
+        }
+    }
+
+private:
+    static constexpr Position SORIN_POS = { -844.82f, 4471.00f, 735.87f, 5.50f };
+    InstanceScript* m_instance = nullptr;
+    EventMap m_events;
+    std::list<Creature*> m_citizens;
+    ObjectGuid m_playerGUID;
+    ObjectGuid m_stalkerGUID;
+    ObjectGuid m_icewallGUID;
+    Position m_summonPos;
+    TimePoint m_citizenWaitExpiry;
+    bool m_citizenPhaseActive = false;
 };
 
 struct npc_arcanist_rathaella : public CustomAI
@@ -1637,7 +1724,7 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 				DoCastVictim(SPELL_ARCANE_BLAST);
 				arcane_blast.Repeat(2300ms);
 			})
-            .Schedule(2s, [this](TaskContext arcane_blitz)
+            .Schedule(2s, [this](TaskContext /*arcane_blitz*/)
             {
                 if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
                     DoCast(victim, SPELL_ARCANE_BLITZ);
@@ -1668,7 +1755,7 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 					DoCast(SPELL_ARCANE_HASTE);
 				arcane_haste.Repeat(2s);
 			})
-            .Schedule(14s, [this](TaskContext arcane_summons)
+            .Schedule(14s, [this](TaskContext /*arcane_summons*/)
             {
                 CastStop(SPELL_ARCANE_RECONSTITUTION);
                 DoCastSelf(SPELL_ARCANE_SUMMONS);
@@ -1786,7 +1873,7 @@ struct npc_sunreaver_captain : public CustomAI
 					DoCast(target, SPELL_BATTER);
 				batter.Repeat(15s, 20s);
 			})
-			.Schedule(1min, [this](TaskContext rising_anger)
+			.Schedule(1min, [this](TaskContext /*rising_anger*/)
 			{
 				DoCast(SPELL_RISING_ANGER);
 			});
@@ -3193,154 +3280,163 @@ struct npc_magister_hathorel : public CustomAI
 
 struct npc_arcane_barrier : public NullCreatureAI
 {
-	npc_arcane_barrier(Creature* creature) : NullCreatureAI(creature),
-        triggerGUID(ObjectGuid::Empty), mageGUID(ObjectGuid::Empty), colliderGUID(ObjectGuid::Empty)
-	{
-		instance = creature->GetInstanceScript();
-	}
-
-	enum Misc
-	{
-		// GameObjects
-		GOB_COLLIDER                = 368679,
-
-		// Spells
-		SPELL_WAND_OF_DISPELLING    = 234966,
-		SPELL_FREED_EXPLOSION       = 225253,
-		SPELL_ARCANE_BARRIER_DAMAGE = 264848,
-		SPELL_ARCANE_BARRIER        = 271187
-	};
-
-	TaskScheduler scheduler;
-	InstanceScript* instance;
-    ObjectGuid triggerGUID;
-	ObjectGuid mageGUID;
-	ObjectGuid colliderGUID;
-
-	void JustDied(Unit* /*killer*/) override
-	{
-        Unit* owner = me->GetOwner();
-        if (!owner)
-            me->RemoveAllAuras();
-
-		if (GameObject* collider = ObjectAccessor::GetGameObject(*me, colliderGUID))
-			collider->Delete();
-	}
-
-	void JustAppeared() override
-	{
-		DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
-		if (phase > DLPPhases::TheEscape)
-			return;
-
-		mageGUID.Clear();
-
-		me->AddAura(SPELL_ARCANE_BARRIER, me);
-
-        if (Creature* stalker = GetClosestCreatureWithEntry(me, NPC_INVISIBLE_STALKER, 10.f))
+    public:
+        enum Misc : uint32
         {
-            triggerGUID = stalker->GetGUID();
+            // GameObjects
+            GOB_COLLIDER                    = 368679,
+
+            // Spells
+            SPELL_WAND_OF_DISPELLING        = 234966,
+            SPELL_FREED_EXPLOSION           = 225253,
+            SPELL_ARCANE_BARRIER_DAMAGE     = 264848,
+            SPELL_ARCANE_BARRIER            = 271187,
+        };
+
+        npc_arcane_barrier(Creature* creature) : NullCreatureAI(creature),
+            m_instance(creature->GetInstanceScript())
+        {
         }
 
-		if (GameObject* collider = me->SummonGameObject(GOB_COLLIDER, me->GetPosition(), QuaternionData::fromEulerAnglesZYX(me->GetOrientation(), 0.f, 0.f), 0s))
-		{
-			colliderGUID = collider->GetGUID();
-
-			collider->SetFlag(GO_FLAG_NOT_SELECTABLE);
-		}
-	}
-
-	void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
-	{
-		if (spellInfo->Id != SPELL_WAND_OF_DISPELLING)
-			return;
-
-		if (!mageGUID.IsEmpty())
-			return;
-
-		Player* player = caster->ToPlayer();
-		if (!player)
-			return;
-
-		// Pour la barrière de Surdiel et de Brasael l'event est selon la phase du scénario
-        if (Unit* owner = me->GetOwner())
+        void JustAppeared() override
         {
-            #ifdef CUSTOM_DEBUG
-            {
-                if (owner->GetEntry() == NPC_MAGISTER_BRASAEL || owner->GetEntry() == NPC_MAGISTER_SURDIEL)
-                {
-                    mageGUID = owner->GetGUID();
-
-                    if (Creature* creature = owner->ToCreature())
-                        creature->AI()->DoAction(ACTION_DISPELL_BARRIER);
-
-                    Dispell(player);
-                }
-            }
-            #else
-            {
-                DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
-                if (phase == DLPPhases::KillMagisters
-                    && (owner->GetEntry() == NPC_MAGISTER_BRASAEL || owner->GetEntry() == NPC_MAGISTER_SURDIEL))
-                {
-                    mageGUID = owner->GetGUID();
-
-                    if (Creature* creature = owner->ToCreature())
-                        creature->AI()->DoAction(ACTION_DISPELL_BARRIER);
-
-                    Dispell(player);
-                }
-            }
-            #endif
-		}
-		else
-		{
-            if (triggerGUID.IsEmpty())
+            // N'initialise la barrière que si le scénario est dans la phase appropriée.
+            DLPPhases const phase = static_cast<DLPPhases>(m_instance->GetData(DATA_SCENARIO_PHASE));
+            if (phase > DLPPhases::TheEscape)
                 return;
 
-			if (Creature* stalker = ObjectAccessor::GetCreature(*me, triggerGUID))
-			{
-				if (Creature* mage = me->SummonCreature(NPC_ARCHMAGE_LANDALOCK, stalker->GetPosition()))
-				{
-					mageGUID = mage->GetGUID();
+            m_dispelled = false;
 
-					// Set guids
-					mage->RemoveAllAuras();
-					mage->AI()->SetGUID(player->GetGUID(), GUID_PLAYER);
-					mage->AI()->SetGUID(stalker->GetGUID(), GUID_STALKER);
-					mage->AI()->DoAction(ACTION_DISPELL_BARRIER);
+            me->AddAura(SPELL_ARCANE_BARRIER, me);
 
-                    Dispell(nullptr);
-				}
-			}
-		}
-	}
+            // Récupère le stalker le plus proche qui servira de point d'invocation pour Landalock.
+            if (Creature* stalker = GetClosestCreatureWithEntry(me, NPC_INVISIBLE_STALKER, 10.f))
+                m_triggerGUID = stalker->GetGUID();
 
-	void Reset() override
-	{
-		mageGUID.Clear();
-	}
-
-	void UpdateAI(uint32 diff) override
-	{
-		scheduler.Update(diff);
-	}
-
-	void Dispell(Player* player)
-	{
-		if (GameObject* collider = ObjectAccessor::GetGameObject(*me, colliderGUID))
-			collider->Delete();
-
-        if (player)
-        {
-            DoCast(SPELL_FREED_EXPLOSION);
-            player->CastSpell(player, SPELL_ARCANE_BARRIER_DAMAGE);
+            // Invoque un collider physique aligné sur l'orientation de la barrière.
+            if (GameObject* collider = me->SummonGameObject(GOB_COLLIDER, me->GetPosition(), QuaternionData::fromEulerAnglesZYX(me->GetOrientation(), 0.f, 0.f), 0s))
+            {
+                m_colliderGUID = collider->GetGUID();
+                collider->SetFlag(GO_FLAG_NOT_SELECTABLE);
+            }
         }
 
-		me->setActive(false);
-		me->RemoveAllAuras();
-		me->DisappearAndDie();
-	}
+        void JustDied(Unit* /*killer*/) override
+        {
+            // Si la barrière n'a pas d'owner, on nettoie les auras manuellement.
+            // Avec owner, le nettoyage est délégué à sa mort.
+            if (!me->GetOwner())
+                me->RemoveAllAuras();
+
+            if (GameObject* collider = ObjectAccessor::GetGameObject(*me, m_colliderGUID))
+                collider->Delete();
+        }
+
+        void Reset() override
+        {
+            // Réinitialise le guard anti-double dispel.
+            m_dispelled = false;
+        }
+
+        void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
+        {
+            if (spellInfo->Id != SPELL_WAND_OF_DISPELLING)
+                return;
+
+            // Guard : une seule exécution par vie de la barrière.
+            if (m_dispelled)
+                return;
+
+            Player* player = caster->ToPlayer();
+            if (!player)
+                return;
+
+            if (Unit* owner = me->GetOwner())
+            {
+                HandleMagisterBarrier(owner, player);
+            }
+            else
+            {
+                HandleLandalockBarrier(player);
+            }
+        }
+
+    private:
+        // // Gère le dispel d'une barrière appartenant à un Magistre.
+        // // En debug, la phase est ignorée pour faciliter les tests.
+        void HandleMagisterBarrier(Unit* owner, Player* player)
+        {
+            bool const isMagister = owner->GetEntry() == NPC_MAGISTER_BRASAEL
+                || owner->GetEntry() == NPC_MAGISTER_SURDIEL;
+
+            if (!isMagister)
+                return;
+
+    #ifdef CUSTOM_DEBUG
+            bool const phaseOk = true;
+    #else
+            DLPPhases const phase = static_cast<DLPPhases>(m_instance->GetData(DATA_SCENARIO_PHASE));
+            bool const phaseOk = phase == DLPPhases::KillMagisters;
+    #endif
+
+            if (!phaseOk)
+                return;
+
+            m_dispelled = true;
+
+            if (Creature* mage = owner->ToCreature())
+                mage->AI()->DoAction(ACTION_DISPELL_BARRIER);
+
+            Dispell(player);
+        }
+
+        // // Gère le dispel de la barrière autonome : invoque Landalock depuis le stalker
+        // // et lui transmet les GUIDs nécessaires pour orchestrer la séquence.
+        void HandleLandalockBarrier(Player* player)
+        {
+            if (m_triggerGUID.IsEmpty())
+                return;
+
+            Creature* stalker = ObjectAccessor::GetCreature(*me, m_triggerGUID);
+            if (!stalker)
+                return;
+
+            Creature* mage = me->SummonCreature(NPC_ARCHMAGE_LANDALOCK, stalker->GetPosition());
+            if (!mage)
+                return;
+
+            m_dispelled = true;
+
+            mage->RemoveAllAuras();
+            mage->AI()->SetGUID(player->GetGUID(), GUID_PLAYER);
+            mage->AI()->SetGUID(stalker->GetGUID(), GUID_STALKER);
+            mage->AI()->DoAction(ACTION_DISPELL_BARRIER);
+
+            Dispell(nullptr);
+        }
+
+        // // Supprime le collider, applique les effets visuels et tue la barrière proprement.
+        // // player peut être nullptr si le dispel ne doit pas infliger de dégâts.
+        void Dispell(Player* player)
+        {
+            if (GameObject* collider = ObjectAccessor::GetGameObject(*me, m_colliderGUID))
+                collider->Delete();
+
+            if (player)
+            {
+                DoCast(SPELL_FREED_EXPLOSION);
+                player->CastSpell(player, SPELL_ARCANE_BARRIER_DAMAGE);
+            }
+
+            me->setActive(false);
+            me->RemoveAllAuras();
+            me->DisappearAndDie();
+        }
+
+        InstanceScript* m_instance = nullptr;
+        ObjectGuid m_triggerGUID;
+        ObjectGuid m_colliderGUID;
+        bool m_dispelled = false;
 };
 
 struct npc_book_of_arcane_monstrosities : public CustomAI
@@ -3514,7 +3610,7 @@ struct npc_glacial_spike : public NullCreatureAI
 		me->AddAura(SPELL_GLACIAL_SPIKE_COSMETIC, me);
 		me->DespawnOrUnsummon(10s);
 
-		scheduler.Schedule(5s, [this](TaskContext expire)
+		scheduler.Schedule(5s, [this](TaskContext /*expire*/)
 		{
 			DoCast(SPELL_FROZEN_DESTRUCTION);
 		});

@@ -3153,8 +3153,7 @@ void BonusData::AddBonus(uint32 type, std::array<int32, 4> const& values)
 
                     ItemLevelOffsetItemLevel = scalingConfig->ItemLevel;
                     ItemSquishEraID = scalingConfig->ItemSquishEraID;
-                    if (scalingConfig->Flags & 0x1)
-                        IgnoreSquish = true;
+                    IgnoreSquish = true;
 
                     if (values[1] < _state.RequiredLevelCurvePriority)
                     {
@@ -3180,8 +3179,7 @@ void BonusData::AddBonus(uint32 type, std::array<int32, 4> const& values)
 
                     ItemLevelOffsetItemLevel = 0;
                     ItemSquishEraID = scalingConfig->ItemSquishEraID;
-                    if (scalingConfig->Flags & 0x1)
-                        IgnoreSquish = true;
+                    IgnoreSquish = true;
                 }
             }
             break;

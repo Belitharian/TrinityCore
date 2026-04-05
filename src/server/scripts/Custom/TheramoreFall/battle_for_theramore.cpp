@@ -118,16 +118,6 @@ struct npc_jaina_theramore : public CustomAI
 			me->GetMotionMaster()->MoveIdle();
 			me->SetFacingTo(3.13f);
 
-			if (Creature* hedric = instance->GetCreature(DATA_HEDRIC_EVENCANE))
-			{
-				hedric->StopMoving();
-				hedric->SetSheath(SHEATH_STATE_UNARMED);
-				hedric->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
-				hedric->GetMotionMaster()->Clear();
-				hedric->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HedricPoint03, true, HedricPoint03.GetOrientation());
-				hedric->SetFacingTo(4.99f);
-			}
-
 			instance->TriggerGameEvent(EVENT_FIND_JAINA_04);
 		}
 		else if (pathId == 2)
@@ -623,22 +613,22 @@ struct npc_tari_cogg : public CustomAI
 
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-        if (me->HealthBelowPctDamaged(20, damage))
-        {
-            if (evocating)
-                return;
+		if (me->HealthBelowPctDamaged(20, damage))
+		{
+			if (evocating)
+				return;
 
-            evocating = true;
+			evocating = true;
 
-            // On interrompt tous les sorts
-            CastStop();
+			// On interrompt tous les sorts
+			CastStop();
 
-            // On lance Evocation
-            DoCast(me, SPELL_EVOCATION,
-                CastSpellExtraArgs(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD)
-                .AddSpellBP0(10)
-                .AddSpellMod(SPELLVALUE_BASE_POINT1, 20));
-        }
+			// On lance Evocation
+			DoCast(me, SPELL_EVOCATION,
+				CastSpellExtraArgs(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD)
+				.AddSpellBP0(10)
+				.AddSpellMod(SPELLVALUE_BASE_POINT1, 20));
+		}
 	}
 
 	void JustEngagedWith(Unit* /*who*/) override
@@ -826,71 +816,71 @@ struct npc_ziradormi_theramore : public CustomAI
 
 struct npc_kalecgos_dragon : public CustomAI
 {
-    const float m_circleRadius = 95.0f;
+	const float m_circleRadius = 95.0f;
 
-    npc_kalecgos_dragon(Creature* creature) : CustomAI(creature), m_loopTime(0)
-    {
-        instance = me->GetInstanceScript();
-    }
+	npc_kalecgos_dragon(Creature* creature) : CustomAI(creature), m_loopTime(0)
+	{
+		instance = me->GetInstanceScript();
+	}
 
-    enum Spells
-    {
-        SPELL_FROST_BREATH = 300548,
-    };
+	enum Spells
+	{
+		SPELL_FROST_BREATH = 300548,
+	};
 
-    InstanceScript* instance;
-    uint64 m_loopTime;
+	InstanceScript* instance;
+	uint64 m_loopTime;
 
-    void Reset() override
-    {
-        CustomAI::Reset();
+	void Reset() override
+	{
+		CustomAI::Reset();
 
-        float perimeter = 2.f * float(M_PI) * m_circleRadius;
-        m_loopTime = (perimeter / me->GetSpeed(MOVE_RUN)) * 1000.f;
-    }
+		float perimeter = 2.f * float(M_PI) * m_circleRadius;
+		m_loopTime = (perimeter / me->GetSpeed(MOVE_RUN)) * 1000.f;
+	}
 
-    void SetData(uint32 id, uint32 /*value*/) override
-    {
-        switch (id)
-        {
-            case DATA_KALECGOS_SPELL_EVENT:
-            {
-                scheduler.Schedule(1s, [this](TaskContext frost_breath)
-                {
-                    if (roll_chance_i(30))
-                        TalkInCombat(SAY_KALECGOS_SPELL_01);
-                    DoCastAOE(SPELL_FROST_BREATH);
-                    frost_breath.Repeat(8s, 12s);
-                });
-                break;
-            }
-            case DATA_KALECGOS_CIRCLE_EVENT:
-            {
-                scheduler.Schedule(1s, [this](TaskContext circle_path)
-                {
-                    me->GetMotionMaster()->MoveCirclePath
-                    (
-                        TheramorePoint01.GetPositionX(),
-                        TheramorePoint01.GetPositionY(),
-                        TheramorePoint01.GetPositionZ(),
-                        m_circleRadius,
-                        true,
-                        16
-                    );
-                    circle_path.Repeat(Milliseconds(m_loopTime));
-                });
-                break;
-            }
-            case DATA_KALECGOS_CANCEL_EVENT:
-            {
-                me->CastStop();
-                me->GetMotionMaster()->Clear();
-                me->GetMotionMaster()->MoveIdle();
-                scheduler.CancelAll();
-                break;
-            }
-        }
-    }
+	void SetData(uint32 id, uint32 /*value*/) override
+	{
+		switch (id)
+		{
+			case DATA_KALECGOS_SPELL_EVENT:
+			{
+				scheduler.Schedule(1s, [this](TaskContext frost_breath)
+				{
+					if (roll_chance_i(30))
+						TalkInCombat(SAY_KALECGOS_SPELL_01);
+					DoCastAOE(SPELL_FROST_BREATH);
+					frost_breath.Repeat(8s, 12s);
+				});
+				break;
+			}
+			case DATA_KALECGOS_CIRCLE_EVENT:
+			{
+				scheduler.Schedule(1s, [this](TaskContext circle_path)
+				{
+					me->GetMotionMaster()->MoveCirclePath
+					(
+						TheramorePoint01.GetPositionX(),
+						TheramorePoint01.GetPositionY(),
+						TheramorePoint01.GetPositionZ(),
+						m_circleRadius,
+						true,
+						16
+					);
+					circle_path.Repeat(Milliseconds(m_loopTime));
+				});
+				break;
+			}
+			case DATA_KALECGOS_CANCEL_EVENT:
+			{
+				me->CastStop();
+				me->GetMotionMaster()->Clear();
+				me->GetMotionMaster()->MoveIdle();
+				scheduler.CancelAll();
+				break;
+			}
+		}
+	}
 };
 
 void AddSC_battle_for_theramore()

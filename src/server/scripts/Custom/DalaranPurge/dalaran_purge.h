@@ -128,7 +128,6 @@ enum DLPSpells
 	SPELL_HORDE_ILLUSION                = 161013,
 	SPELL_CLOSE_PORTAL                  = 203542,
 	SPELL_RUNES_OF_SHIELDING        	= 217859,
-    SPELL_FOR_THE_HORDE                 = 224811,
     SPELL_TELEPORT_CASTER               = 238689,
 	SPELL_WAND_OF_DISPELLING            = 243043,
 	SPELL_FACTION_OVERRIDE              = 195838,
@@ -145,7 +144,6 @@ enum DLPSpells
 	SPELL_TELEPORT_TARGET               = 268294,
 	SPELL_PORTAL_CHANNELING_03          = 288451,
 	SPELL_HOLD_BAG                      = 288787,
-	SPELL_FADING_TO_BLACK               = 296001,
     SPELL_RAINY_WEATHER                 = 296026,
 	SPELL_WATER_CHANNELING              = 305033,
 	SPELL_CHILLING_BLAST                = 337053,
@@ -154,6 +152,8 @@ enum DLPSpells
 	SPELL_ARCANE_BOMBARDMENT            = 352556,
 	SPELL_TELEPORT                      = 357601,
 	SPELL_FROST_CANALISATION            = 369850,
+	SPELL_FADING_TO_BLACK               = 447184,
+	SPELL_ARCANE_NOVA                   = 1270012,
 };
 
 enum DLPMisc
@@ -330,7 +330,8 @@ WaypointPath const RathaellaPath01 =
         { 23, -762.82f, 4346.19f, 729.07f, 1.77f },
         { 24, -763.60f, 4349.63f, 729.59f, 1.80f }
     },
-    WaypointMoveType::Run
+    WaypointMoveType::Run,
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const RathaellaPath02 =
@@ -354,7 +355,8 @@ WaypointPath const RathaellaPath02 =
         { 14, -796.16f, 4468.52f, 735.01f, 2.03f },
         { 15, -813.66f, 4475.48f, 735.01f, 4.09f }
     },
-    WaypointMoveType::Run
+    WaypointMoveType::Run,
+    WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const RommathPath01 =
@@ -403,7 +405,8 @@ WaypointPath const RommathPath01 =
         { 39, -963.61f, 4427.41f, 735.73f, 2.03f },
         { 40, -965.41f, 4431.36f, 735.73f, 1.85f }
     },
-    WaypointMoveType::Run
+    WaypointMoveType::Run,
+    WaypointPathFlags::ExactSplinePath
 };
 
 const Position TrackingPath01[TRACKING_PATH_01] =

@@ -57,18 +57,18 @@ const ObjectData gameobjectData[] =
 
 class HordeBombardierThrowBomb : public BasicEvent
 {
-    public:
-        HordeBombardierThrowBomb(Unit* caster) : _caster(caster) { }
+	public:
+		HordeBombardierThrowBomb(Unit* caster) : _caster(caster) { }
 
-        bool Execute(uint64 /*execTime*/, uint32 /*diff*/) override
-        {
-            _caster->CastSpell(_caster, SPELL_THROW_BOMB, TRIGGERED_FULL_MASK);
-            _caster->m_Events.AddEvent(this, _caster->m_Events.CalculateTime(Seconds(urand(8, 10))));
-            return false;
-        }
+		bool Execute(uint64 /*execTime*/, uint32 /*diff*/) override
+		{
+			_caster->CastSpell(_caster, SPELL_THROW_BOMB, TRIGGERED_FULL_MASK);
+			_caster->m_Events.AddEvent(this, _caster->m_Events.CalculateTime(Seconds(urand(8, 10))));
+			return false;
+		}
 
-    private:
-        Unit* _caster;
+	private:
+		Unit* _caster;
 };
 
 class scenario_battle_for_theramore : public InstanceMapScript
@@ -82,7 +82,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 	{
 		scenario_battle_for_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map),
 			phase(BFTPhases::FindJaina), wavesInvoker(WAVE_01), eventId(1), woundedTroops(0), archmagesIndex(0),
-            waves(0)
+			waves(0)
 		{
 			SetHeaders(DataHeader);
 			LoadObjectData(creatureData, gameobjectData);
@@ -137,7 +137,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			SPELL_SCORCHED_EARTH        = 373139,
 			SPELL_ARCANIC_CELL          = 398947,
 			SPELL_READING_BOOK_STANDING = 397765,
-            SPELL_AREA_TRIGGER_VISUAL   = 473554,
+			SPELL_AREA_TRIGGER_VISUAL   = 473554,
 		};
 
 		uint32 Waves[HORDE_WAVES_COUNT] =
@@ -167,7 +167,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 		void OnPlayerEnter(Player* /*player*/) override
 		{
-            ForceWeather(WEATHER_STATE_THUNDERS, true);
+			ForceWeather(WEATHER_STATE_THUNDERS, true);
 		}
 
 		void SetData(uint32 dataId, uint32 value) override
@@ -215,7 +215,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				// Step 4 : The Unknow Tauren
 				case CRITERIA_TREE_UNKNOW_TAUREN:
 				{
-                    if (Creature* kinndy = GetKinndy())
+					if (Creature* kinndy = GetKinndy())
 					{
 						kinndy->SetVisible(true);
 						kinndy->GetMotionMaster()->MovePath(KinndyPath02, false);
@@ -225,11 +225,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						tervosh->SetVisible(true);
 						tervosh->GetMotionMaster()->MovePath(TervoshPath03, false);
 
-                        std::list<Creature*> stalkers;
-                        tervosh->GetCreatureListWithEntryInGrid(stalkers, NPC_INVISIBLE_STALKER);
+						std::list<Creature*> stalkers;
+						tervosh->GetCreatureListWithEntryInGrid(stalkers, NPC_INVISIBLE_STALKER);
 
-                        for (Creature* stalker : stalkers)
-                            stalker->AddAura(SPELL_AREA_TRIGGER_VISUAL, stalker);
+						for (Creature* stalker : stalkers)
+							stalker->AddAura(SPELL_AREA_TRIGGER_VISUAL, stalker);
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Evacuation);
 					break;
@@ -243,11 +243,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						jaina->SetHomePosition(JainaPoint02);
 						jaina->AI()->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
 
-                        std::list<Creature*> stalkers;
-                        jaina->GetCreatureListWithEntryInGrid(stalkers, NPC_INVISIBLE_STALKER);
+						std::list<Creature*> stalkers;
+						jaina->GetCreatureListWithEntryInGrid(stalkers, NPC_INVISIBLE_STALKER);
 
-                        for (Creature* stalker : stalkers)
-                            stalker->RemoveAurasDueToSpell(SPELL_AREA_TRIGGER_VISUAL);
+						for (Creature* stalker : stalkers)
+							stalker->RemoveAurasDueToSpell(SPELL_AREA_TRIGGER_VISUAL);
 					}
 					if (Creature* tervosh = GetTervosh())
 					{
@@ -303,7 +303,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						if (Creature* troop = instance->GetCreature(guid))
 						{
-                            troop->RemoveAllAuras();
+							troop->RemoveAllAuras();
 
 							switch (troop->GetCreatureTemplate()->unit_class)
 							{
@@ -313,9 +313,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 								case UNIT_CLASS_MAGE:
 									troop->SetEmoteState(RAND(EMOTE_STATE_READY1H, EMOTE_STATE_READY2HL));
 									break;
-                                case UNIT_CLASS_ROGUE:
-                                    break;
-                                default:
+								case UNIT_CLASS_ROGUE:
+									break;
+								default:
 									troop->SetEmoteState(EMOTE_STATE_READY1H);
 									break;
 							}
@@ -454,12 +454,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				{
 					if (Creature* kalecgos = GetKalec())
 					{
-                        kalecgos->SetVisible(true);
-                        kalecgos->GetMotionMaster()->Clear();
-                        kalecgos->GetMotionMaster()->MoveIdle();
+						kalecgos->SetVisible(true);
+						kalecgos->GetMotionMaster()->Clear();
+						kalecgos->GetMotionMaster()->MoveIdle();
 						kalecgos->SetSpeedRate(MOVE_WALK, 0.85f);
 						kalecgos->SetSpeedRate(MOVE_RUN, 0.85f);
-                        kalecgos->NearTeleportTo(KalecPath02.Nodes[0].X, KalecPath02.Nodes[0].Y, KalecPath02.Nodes[0].Z, *KalecPath02.Nodes[0].Orientation);
+						kalecgos->NearTeleportTo(KalecPath02.Nodes[0].X, KalecPath02.Nodes[0].Y, KalecPath02.Nodes[0].Z, *KalecPath02.Nodes[0].Orientation);
 					}
 					if (Creature* rhonin = GetRhonin())
 					{
@@ -467,10 +467,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						rhonin->SetSpeedRate(MOVE_WALK, 0.85f);
 						rhonin->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RhoninPoint01, true, RhoninPoint01.GetOrientation());
 
-                        for (uint8 i = 0; i < TOWER_BARRIERS_LOCATION; i++)
-                        {
-                            rhonin->SummonGameObject(GOB_ENERGY_BARRIER_TOWER, TowerBarriers[i].position, TowerBarriers[i].quaternion, 0s);
-                        }
+						for (uint8 i = 0; i < TOWER_BARRIERS_LOCATION; i++)
+						{
+							rhonin->SummonGameObject(GOB_ENERGY_BARRIER_TOWER, TowerBarriers[i].position, TowerBarriers[i].quaternion, 0s);
+						}
 					}
 					for (uint8 i = 0; i < EVENT_CREATURE_DATA_SIZE; i++)
 					{
@@ -517,10 +517,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case NPC_THERAMORE_CITIZEN_FEMALE:
 				case NPC_THERAMORE_CITIZEN_MALE:
 				case NPC_TRAINING_DUMMY:
-                    creature->PauseMovement();
-                    creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
+					creature->PauseMovement();
+					creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
 					creature->RemoveUnitFlag(UNIT_FLAG_PVP_ENABLING);
-                    citizens.push_back(creature->GetGUID());
+					citizens.push_back(creature->GetGUID());
 					break;
 				case NPC_BISHOP_DELAVEY:
 					creature->SetImmuneToNPC(true);
@@ -536,19 +536,19 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					creature->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
 					tanks.push_back(creature->GetGUID());
 					break;
-                case NPC_THERAMORE_MARKSMAN:
-                case NPC_THERAMORE_FOOTMAN:
+				case NPC_THERAMORE_MARKSMAN:
+				case NPC_THERAMORE_FOOTMAN:
 				case NPC_THERAMORE_ARCANIST:
 				case NPC_THERAMORE_FAITHFUL:
 				case NPC_THERAMORE_OFFICER:
-                    if (creature->GetWaypointPathId() || creature->IsFormationLeader() || creature->GetFormation())
-                        break;
+					if (creature->GetWaypointPathId() || creature->IsFormationLeader() || creature->GetFormation())
+						break;
 					troops.push_back(creature->GetGUID());
 					break;
 				case NPC_ADMIRAL_AUBREY:
 				case NPC_CAPTAIN_DROK:
 				//case NPC_WAVE_CALLER_GRUHTA:
-                case NPC_KALECGOS_DRAGON:
+				case NPC_KALECGOS_DRAGON:
 					creature->setActive(false);
 					creature->SetVisible(false);
 					break;
@@ -983,8 +983,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				#pragma region A_LITTLE_HELP
 
 				case 71:
-                    EnsurePlayerHaveShaker();
-                    HordeMembersInvoker(DATA_DECORATION_DUMMIES, true);
+					EnsurePlayerHaveShaker();
+					HordeMembersInvoker(DATA_DECORATION_DUMMIES, true);
 					if (Creature* hedric = GetHedric())
 					{
 						hedric->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
@@ -1017,7 +1017,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* hedric = GetHedric())
 					{
 						hedric->SetWalk(true);
-                        hedric->SetFacingTo(0.178294f, true);
+						hedric->SetFacingTo(0.178294f, true);
 						hedric->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HedricPoint02, true, HedricPoint02.GetOrientation());
 					}
 					Next(500ms);
@@ -1116,10 +1116,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					EnsureBarrierHaveDamage();
 					if (Creature* kalecgos = GetKalecgos())
 					{
-                        kalecgos->setActive(true);
-                        kalecgos->SetVisible(true);
-                        kalecgos->SetSpeed(MOVE_RUN, 25.f);
-                        kalecgos->AI()->SetData(DATA_KALECGOS_CIRCLE_EVENT, 0U);
+						kalecgos->setActive(true);
+						kalecgos->SetVisible(true);
+						kalecgos->SetSpeed(MOVE_RUN, 25.f);
+						kalecgos->AI()->SetData(DATA_KALECGOS_CIRCLE_EVENT, 0U);
 					}
 					for (uint8 i = 0; i < ACTORS_RELOCATION; i++)
 					{
@@ -1276,8 +1276,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					}
 					if (Creature* kalecgos = GetKalecgos())
 					{
-                        kalecgos->SetVisible(true);
-                        kalecgos->AI()->SetData(DATA_KALECGOS_SPELL_EVENT, 0U);
+						kalecgos->SetVisible(true);
+						kalecgos->AI()->SetData(DATA_KALECGOS_SPELL_EVENT, 0U);
 					}
 					GetJaina()->CastSpell(actorsRelocation[0].destination, SPELL_TELEPORT);
 					Next(2s);
@@ -1384,20 +1384,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 126:
 					ClearTarget();
-                    if (Creature* jaina = GetJaina())
-                    {
-                        jaina->GetMotionMaster()->MovePath(JainaPath01, false);
-                        jaina->SetHomePosition(JainaPoint06);
-                    }
+					if (Creature* jaina = GetJaina())
+					{
+						jaina->GetMotionMaster()->MovePath(JainaPath01, false);
+						jaina->SetHomePosition(JainaPoint06);
+					}
 					Next(1500ms);
 					break;
 				case 127:
-                    if (Creature* hedric = GetHedric())
-                    {
-                        hedric->GetMotionMaster()->MovePath(JainaPath01, false);
-                        hedric->SetHomePosition(JainaPoint06);
-                    }
-                    break;
+					if (Creature* hedric = GetHedric())
+						hedric->GetMotionMaster()->MovePath(JainaPath01, false);
+					break;
 
 				// PART II
 				case 128:
@@ -1484,7 +1481,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 				// Part I
 				case 142:
-                    GetKalec()->GetMotionMaster()->MovePath(KalecPath02, false);
+					GetKalec()->GetMotionMaster()->MovePath(KalecPath02, false);
 					Next(6s);
 					break;
 				case 143:
@@ -1788,44 +1785,44 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			instance->SummonCreatureGroup(waveId, &members);
 			for (TempSummon* horde : members)
 			{
-                horde->SetRegenerateHealth(false);
+				horde->SetRegenerateHealth(false);
 
 				if (Unit* target = SelectNearestHostileInRange(horde))
 					horde->AI()->AttackStart(target);
 
-                if (dummies)
-                {
-                    horde->SetImmuneToAll(true);
+				if (dummies)
+				{
+					horde->SetImmuneToAll(true);
 
-                    switch (horde->GetCreatureTemplate()->unit_class)
-                    {
-                        case UNIT_CLASS_PALADIN:
-                            horde->SetEmoteState(EMOTE_STATE_READY2H);
-                            break;
-                        case UNIT_CLASS_MAGE:
-                            horde->SetEmoteState(RAND(EMOTE_STATE_READY1H, EMOTE_STATE_READY2HL));
-                            break;
-                        case UNIT_CLASS_ROGUE:
-                            break;
-                        default:
-                            horde->SetEmoteState(EMOTE_STATE_READY1H);
-                            break;
-                    }
+					switch (horde->GetCreatureTemplate()->unit_class)
+					{
+						case UNIT_CLASS_PALADIN:
+							horde->SetEmoteState(EMOTE_STATE_READY2H);
+							break;
+						case UNIT_CLASS_MAGE:
+							horde->SetEmoteState(RAND(EMOTE_STATE_READY1H, EMOTE_STATE_READY2HL));
+							break;
+						case UNIT_CLASS_ROGUE:
+							break;
+						default:
+							horde->SetEmoteState(EMOTE_STATE_READY1H);
+							break;
+					}
 
-                    switch (horde->GetEntry())
-                    {
-                        // Horde Bombardier
-                        case 149639:
-                            horde->SetWalk(false);
-                            horde->SetCanFly(true);
-                            horde->SetDisableGravity(true);
-                            horde->GetMotionMaster()->MoveRandom(20.0f);
-                            horde->SetSpeedRate(MOVE_RUN, 2.f);
-                            horde->SetSpeedRate(MOVE_FLIGHT, 2.f);
-                            horde->m_Events.AddEvent(new HordeBombardierThrowBomb(horde), horde->m_Events.CalculateTime(Seconds(urand(2, 8))));
-                            break;
-                    }
-                }
+					switch (horde->GetEntry())
+					{
+						// Horde Bombardier
+						case 149639:
+							horde->SetWalk(false);
+							horde->SetCanFly(true);
+							horde->SetDisableGravity(true);
+							horde->GetMotionMaster()->MoveRandom(20.0f);
+							horde->SetSpeedRate(MOVE_RUN, 2.f);
+							horde->SetSpeedRate(MOVE_FLIGHT, 2.f);
+							horde->m_Events.AddEvent(new HordeBombardierThrowBomb(horde), horde->m_Events.CalculateTime(Seconds(urand(2, 8))));
+							break;
+					}
+				}
 
 				hordeMembers.push_back(horde->GetGUID());
 			}
@@ -1905,7 +1902,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			if (Creature* kalecgos = GetKalecgos())
 			{
 				SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, kalecgos);
-                kalecgos->AI()->SetData(DATA_KALECGOS_CANCEL_EVENT, 0U);
+				kalecgos->AI()->SetData(DATA_KALECGOS_CANCEL_EVENT, 0U);
 				kalecgos->SetVisible(false);
 			}
 
@@ -1929,7 +1926,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				creature->SetEmoteState(EMOTE_STATE_NONE);
 				creature->RemoveAllAuras();
 				creature->Dismount();
-                creature->AddAura(RAND(SPELL_COSMETIC_EAT_SOUP, SPELL_COSMETIC_DRINK), creature);
+				creature->AddAura(RAND(SPELL_COSMETIC_EAT_SOUP, SPELL_COSMETIC_DRINK), creature);
 			}
 
 			for (uint8 i = 0; i < ARCHMAGES_RELOCATION; i++)
@@ -2034,16 +2031,16 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			});
 		}
 
-        void ForceWeather(uint32 weatherEntry, bool apply)
-        {
-            instance->DoOnPlayers([weatherEntry, apply](Player* player)
-            {
-                if (apply)
-                    player->SendDirectMessage(WorldPackets::Misc::Weather(WeatherState(weatherEntry), 1.0f).Write());
-                else
-                    player->GetMap()->SendZoneWeather(player->GetZoneId(), player);
-            });
-        }
+		void ForceWeather(uint32 weatherEntry, bool apply)
+		{
+			instance->DoOnPlayers([weatherEntry, apply](Player* player)
+			{
+				if (apply)
+					player->SendDirectMessage(WorldPackets::Misc::Weather(WeatherState(weatherEntry), 1.0f).Write());
+				else
+					player->GetMap()->SendZoneWeather(player->GetZoneId(), player);
+			});
+		}
 
 		Unit* SelectNearestHostileInRange(Creature* creature) const
 		{
@@ -2071,7 +2068,7 @@ class scene_theramore_explosion : public SceneScript
 	enum Misc
 	{
 		MAP_THERAMORE_RUINS     = 5001,
-        NPC_BOMB_TARGET         = 65443,
+		NPC_BOMB_TARGET         = 65443,
 		SPELL_DROP_BOMBE        = 128438
 	};
 
@@ -2080,17 +2077,17 @@ class scene_theramore_explosion : public SceneScript
 
 	const float Distance = 8.f;
 
-    void OnSceneTriggerEvent(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/, std::string const& triggerName) override
-    {
-        if (triggerName == "DropBombServer")
-        {
-            if (Creature* bombModel = player->SummonCreature(WORLD_TRIGGER, BombPosition))
-            {
-                if (Creature* bombTarget = GetClosestCreatureWithEntry(player, NPC_BOMB_TARGET, SIZE_OF_GRIDS))
-                    bombModel->CastSpell(bombTarget, SPELL_DROP_BOMBE);
-            }
-        }
-    }
+	void OnSceneTriggerEvent(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/, std::string const& triggerName) override
+	{
+		if (triggerName == "DropBombServer")
+		{
+			if (Creature* bombModel = player->SummonCreature(WORLD_TRIGGER, BombPosition))
+			{
+				if (Creature* bombTarget = GetClosestCreatureWithEntry(player, NPC_BOMB_TARGET, SIZE_OF_GRIDS))
+					bombModel->CastSpell(bombTarget, SPELL_DROP_BOMBE);
+			}
+		}
+	}
 
 	void OnSceneStart(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/) override
 	{
