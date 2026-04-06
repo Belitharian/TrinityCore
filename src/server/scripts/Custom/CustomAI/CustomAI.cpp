@@ -98,44 +98,59 @@ void CustomAI::Reset()
 	summons.DespawnAll();
 	scheduler.CancelAll();
 
-	switch (type)
-	{
-		case AI_Type::Distance:
-		case AI_Type::Stay:
-			me->SetSheath(SHEATH_STATE_UNARMED);
-			break;
-	}
-
 	ScriptedAI::Reset();
 }
 
 void CustomAI::AttackStart(Unit* who)
 {
-	if (!who)
-		return;
+    if (!who)
+        return;
 
-	if (type == AI_Type::Stay && me->Attack(who, false))
-	{
-		me->SetSheath(SHEATH_STATE_UNARMED);
-		SetCombatMovement(false);
-		return;
-	}
-
-	if (me->Attack(who, true))
-	{
-		switch (type)
-		{
-			case AI_Type::Distance:
-				me->GetMotionMaster()->MoveChase(who, GetDistance());
-				break;
-			case AI_Type::Melee:
-			case AI_Type::Hybrid:
-				me->GetMotionMaster()->MoveChase(who);
-				break;
-			default:
-				break;
-		}
-	}
+    switch (type)
+    {
+        case AI_Type::Stay:
+        {
+            // Pas d'auto-attaque mêlée, pas de déplacement
+            if (me->Attack(who, false))
+            {
+                me->SetCanMelee(false, false);
+                me->SetSheath(SHEATH_STATE_UNARMED);
+                SetCombatMovement(false);
+            }
+            break;
+        }
+        case AI_Type::Distance:
+        {
+            // Pas d'auto-attaque mêlée, mais on suit à distance
+            if (me->Attack(who, false))
+            {
+                me->SetCanMelee(false, true);
+                me->SetSheath(SHEATH_STATE_UNARMED);
+                me->GetMotionMaster()->MoveChase(who, GetDistance());
+            }
+            break;
+        }
+        case AI_Type::Hybrid:
+        {
+            // Pas d'auto-attaque mêlée, mais on suit à distance
+            if (me->Attack(who, false))
+            {
+                me->SetCanMelee(false, true);
+                me->SetSheath(SHEATH_STATE_RANGED);
+                me->GetMotionMaster()->MoveChase(who, GetDistance());
+            }
+            break;
+        }
+        case AI_Type::Melee:
+        {
+            // Auto-attaque mêlée + poursuite rapprochée
+            if (me->Attack(who, true))
+                me->GetMotionMaster()->MoveChase(who);
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 void CustomAI::JustDied(Unit* killer)

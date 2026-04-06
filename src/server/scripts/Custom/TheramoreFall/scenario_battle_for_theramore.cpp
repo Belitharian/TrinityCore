@@ -273,6 +273,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						kalecgos->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
 						kalecgos->RemoveAllAuras();
 					}
+                    if (Creature* hedric = GetHedric())
+                    {
+                        hedric->GetMotionMaster()->Clear();
+                        hedric->GetMotionMaster()->MoveIdle();
+                        hedric->SetHomePosition(HedricPoint01);
+                        hedric->NearTeleportTo(HedricPoint01);
+                        hedric->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+                        hedric->SetVisible(false);
+                    }
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
 					break;
 				}
@@ -411,6 +420,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					events.ScheduleEvent(122, 3s);
 					break;
 				}
+                // Step 9 : The Battle - After 10 Waves
+                case CRITERIA_TREE_SURVIVE_WAVES:
+                {
+                    if (Creature* kalecgos = GetKalecgos())
+                        kalecgos->AI()->SetData(DATA_KALECGOS_CANCEL_EVENT, 0U);
+                    break;
+                }
 				// Step 10 : Help the wounded - Parent
 				case CRITERIA_TREE_HELP_THE_WOUNDED:
 				{
@@ -547,7 +563,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case NPC_ADMIRAL_AUBREY:
 				case NPC_CAPTAIN_DROK:
-				//case NPC_WAVE_CALLER_GRUHTA:
+				case NPC_WAVE_CALLER_GRUHTA:
 				case NPC_KALECGOS_DRAGON:
 					creature->setActive(false);
 					creature->SetVisible(false);
@@ -987,18 +1003,18 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					HordeMembersInvoker(DATA_DECORATION_DUMMIES, true);
 					if (Creature* hedric = GetHedric())
 					{
-						hedric->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-						hedric->GetMotionMaster()->Clear();
-						hedric->GetMotionMaster()->MoveIdle();
-						hedric->NearTeleportTo(HedricPoint01);
+                        hedric->SetVisible(true);
 						hedric->PlayDirectSound(SOUND_FEARFUL_CROWD);
-						Talk(hedric, SAY_PRE_BATTLE_1);
 					}
 					Next(3s);
 					break;
 				case 72:
 					Talk(GetJaina(), SAY_PRE_BATTLE_2);
-					GetHedric()->GetMotionMaster()->MovePath(HedricPath01, false);
+                    if (Creature* hedric = GetHedric())
+                    {
+					    hedric->GetMotionMaster()->MovePath(HedricPath01, false);
+                        Talk(hedric, SAY_PRE_BATTLE_1);
+                    }
 					Next(2s);
 					break;
 				case 73:
@@ -1902,7 +1918,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			if (Creature* kalecgos = GetKalecgos())
 			{
 				SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, kalecgos);
-				kalecgos->AI()->SetData(DATA_KALECGOS_CANCEL_EVENT, 0U);
 				kalecgos->SetVisible(false);
 			}
 
@@ -2068,11 +2083,10 @@ class scene_theramore_explosion : public SceneScript
 	enum Misc
 	{
 		MAP_THERAMORE_RUINS     = 5001,
-		NPC_BOMB_TARGET         = 65443,
 		SPELL_DROP_BOMBE        = 128438
 	};
 
-	const Position Center = { -3009.70f, -4334.41f, 6.73f, 4.24f };
+	const Position Center = { -3002.74f, -4342.11f, 6.044930f, 3.76716f };
 	const Position BombPosition = { -3819.17f, -4350.76f, 270.0f, 0.0f };
 
 	const float Distance = 8.f;
@@ -2082,10 +2096,7 @@ class scene_theramore_explosion : public SceneScript
 		if (triggerName == "DropBombServer")
 		{
 			if (Creature* bombModel = player->SummonCreature(WORLD_TRIGGER, BombPosition))
-			{
-				if (Creature* bombTarget = GetClosestCreatureWithEntry(player, NPC_BOMB_TARGET, SIZE_OF_GRIDS))
-					bombModel->CastSpell(bombTarget, SPELL_DROP_BOMBE);
-			}
+                bombModel->CastSpell(bombModel, SPELL_DROP_BOMBE);
 		}
 	}
 

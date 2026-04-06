@@ -316,11 +316,21 @@ class scenario_dalaran_purge : public InstanceMapScript
 						creature->KillSelf();
 					});
 
-					if (Creature* zuros = GetCreature(DATA_MAGE_COMMANDER_ZUROS))
-                        zuros->SetVisible(false);
+                    instance->DoOnPlayers([this](Player* player)
+                    {
+                        player->CastSpell(player, SPELL_FLASHBACK_EFFECT, true);
+                        player->CastSpell(player, SPELL_FADING_TO_BLACK, true);
+                    });
 
-					if (Creature* rathaella = GetCreature(DATA_ARCANIST_RATHAELLA))
-						rathaella->SetVisible(false);
+                    if (Creature* zuros = GetCreature(DATA_MAGE_COMMANDER_ZUROS))
+                    {
+                        zuros->SetVisible(false);
+                    }
+
+                    if (Creature* rathaella = GetCreature(DATA_ARCANIST_RATHAELLA))
+                    {
+                        rathaella->SetVisible(false);
+                    }
 
 					if (Creature* landalock = GetCreature(DATA_ARCHMAGE_LANDALOCK))
 					{
@@ -357,7 +367,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 						surdiel->SetHomePosition(SurdielPos01);
 					}
 
-					events.ScheduleEvent(21, 1s);
+					events.ScheduleEvent(21, 500ms);
 					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape_Events);
 					break;
 				}
@@ -689,8 +699,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 					instance->DoOnPlayers([this](Player* player)
 					{
 						player->NearTeleportTo(SewersPos01);
-						player->CastSpell(player, SPELL_FLASHBACK_EFFECT, true);
-						player->CastSpell(player, SPELL_FADING_TO_BLACK, true);
 					});
 					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
 						surdiel->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, SurdielPos02, true, SurdielPos02.GetOrientation());

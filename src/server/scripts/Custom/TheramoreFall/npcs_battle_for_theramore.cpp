@@ -266,18 +266,22 @@ struct npc_theramore_troop : public CustomAI
 								{
 									case 0:
 										troop->SetFacingToObject(player);
-										context.Repeat(1s);
+										context.Repeat(800ms, 1s);
 										break;
 									case 1:
-										troop->PlayDirectSound(soundEmote, player);
 										troop->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
 										troop->AI()->SetData(NPC_THERAMORE_TROOPS_CREDIT, 1);
 										KillRewarder::Reward(player, troop, NPC_THERAMORE_TROOPS_CREDIT);
-										context.Repeat(3s);
+										context.Repeat(500ms, 1s);
 										break;
-									case 2:
-										troop->SetFacingTo(orientation);
-										break;
+                                    case 2:
+                                        troop->PlayDirectSound(soundEmote, player);
+                                        context.Repeat(3s, 5s);
+                                        break;
+                                    case 3:
+                                        troop->SetFacingTo(orientation);
+                                        context.CancelAll();
+                                        return;
 								}
 
 							});
@@ -924,6 +928,13 @@ struct npc_theramore_marksman : public npc_theramore_troop
 		SPELL_SHOOT                 = 22907,
 		SPELL_MULTI_SHOOT           = 38310,
 	};
+
+    void Reset() override
+    {
+        npc_theramore_troop::Reset();
+
+        me->SetEmoteState(EMOTE_STATE_READYCROSSBOW);
+    }
 
 	void JustEngagedWith(Unit* who) override
 	{
@@ -2251,11 +2262,15 @@ public:
             {
                 townCrier = owner->SummonCreature(
                     NPC_THERAMORE_CRIER,
-                    GetRandomPosition(stalker->GetPosition(), 2.0f),
+                    GetRandomPosition(stalker->GetPosition(), 5.0f),
                     TEMPSUMMON_MANUAL_DESPAWN);
 
                 if (townCrier)
                 {
+                    // Oriente le crier dos au stalker
+                    float angle = townCrier->GetAbsoluteAngle(stalker);
+                    townCrier->SetFacingTo(angle + static_cast<float>(M_PI));
+
                     townCrier->CastSpell(townCrier, SPELL_TELEPORT_DUMMY, true);
                     townCrier->AddAura(SPELL_CRIER_HOLDING_BELL_SCROLL, townCrier);
                 }
