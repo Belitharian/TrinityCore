@@ -23,8 +23,10 @@ struct npc_jaina_ruins : public CustomAI
 
 	npc_jaina_ruins(Creature* creature) : CustomAI(creature)
 	{
+        SetCanRandomMovement(false);
+
 		instance = me->GetInstanceScript();
-	}
+    }
 
 	void SetData(uint32 /*id*/, uint32 value) override
 	{

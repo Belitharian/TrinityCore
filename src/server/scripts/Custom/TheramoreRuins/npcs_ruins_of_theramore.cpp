@@ -18,6 +18,7 @@ struct npc_water_elementals_theramore : public CustomAI
 {
 	npc_water_elementals_theramore(Creature* creature) : CustomAI(creature), shielded(false)
 	{
+        SetCanRandomMovement(false);
 	}
 
 	enum Spells

@@ -1,4 +1,4 @@
-#include "AreaTrigger.h"
+ï»¿#include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
 #include "Containers.h"
 #include "GameObject.h"
@@ -686,27 +686,27 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 
 	void SpellHitTarget(WorldObject* /*object*/, SpellInfo const* spellInfo) override
 	{
-		// Ne réagit qu'au sort Arcane Blast
+		// Ne rï¿½agit qu'au sort Arcane Blast
 		if (spellInfo->Id != SPELL_ARCANE_BLAST)
 			return;
 
-		// Vérifie si le buff Arcane Tempo est actif
+		// Vï¿½rifie si le buff Arcane Tempo est actif
 		if (Aura* aura = me->GetAura(SPELL_ARCANE_TEMPO))
 		{
-			// Si moins de 5 stacks, on applique à nouveau le buff
+			// Si moins de 5 stacks, on applique ï¿½ nouveau le buff
 			if (aura->GetStackAmount() < 5)
 				me->CastSpell(me, SPELL_ARCANE_TEMPO, castSpellArcaneTempo);
 		}
 		else
 		{
-			// Buff non présent, on le lance
+			// Buff non prï¿½sent, on le lance
 			me->CastSpell(me, SPELL_ARCANE_TEMPO, castSpellArcaneTempo);
 		}
 
-		// Nombre de projectiles à lancer aléatoirement entre 1 et 8
+		// Nombre de projectiles ï¿½ lancer alï¿½atoirement entre 1 et 8
 		const uint8 splinters = irand(1, 5);
 
-		// Planifie une rafale de projectiles espacés
+		// Planifie une rafale de projectiles espacï¿½s
 		scheduler.Schedule(1ms, [this, splinters](TaskContext context)
 		{
 			const uint8 index = context.GetRepeatCounter();
@@ -714,11 +714,11 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 			if (index >= splinters)
 				return;
 
-			// Cible aléatoire et lancement du sort
+			// Cible alï¿½atoire et lancement du sort
 			if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
 				DoCast(victim, SPELL_ARCANE_SPLINTER, false);
 
-			// Replanifie avec un délai aléatoire entre 380ms et 560ms
+			// Replanifie avec un dï¿½lai alï¿½atoire entre 380ms et 560ms
 			context.Repeat(380ms, 560ms);
 		});
 	}
@@ -1515,14 +1515,14 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 
 	enum Spells
 	{
+		SPELL_MORTAL_COIL       = 6789,
 		SPELL_DRAIN_LIFE        = 149992,
-		SPELL_CONFLAGRATE       = 295418,
 		SPELL_CHAOS_BOLT        = 295420,
 		SPELL_IMMOLATE          = 295425,
 		SPELL_INCINERATE        = 295438,
-		SPELL_MORTAL_COIL       = 295459,
 		SPELL_SUMMON_FELHUNTER  = 285232,
 		SPELL_CORRUPTION        = 251406,
+		SPELL_WITHER            = 445468,
 	};
 
 	void Reset() override
@@ -1547,68 +1547,77 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 			{
 				if (HealthBelowPct(30))
 				{
-					if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 					{
-						CastStop(SPELL_DRAIN_LIFE);
+						scheduler.DelayAll(6s);
+
+						CastStop();
 						DoCast(target, SPELL_DRAIN_LIFE);
-						drain_life.Repeat(8s, 15s);
 					}
 				}
-				else
-					drain_life.Repeat(1s);
-			})
-			.Schedule(2s, 6s, [this](TaskContext conflagrate)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-				{
-					CastStop({ SPELL_DRAIN_LIFE, SPELL_IMMOLATE, SPELL_INCINERATE });
-					DoCast(target, SPELL_CONFLAGRATE);
-				}
-				conflagrate.Repeat(1s, 3s);
-			})
-			.Schedule(3s, 5s, [this](TaskContext chaos_bolt)
-			{
-				CastStop({ SPELL_DRAIN_LIFE, SPELL_IMMOLATE, SPELL_INCINERATE });
-				DoCastVictim(SPELL_CHAOS_BOLT);
-				chaos_bolt.Repeat(5s, 8s);
-			})
-			.Schedule(1ms, [this](TaskContext immolate)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_IMMOLATE))
-				{
-					CastStop({ SPELL_DRAIN_LIFE, SPELL_CHAOS_BOLT, SPELL_INCINERATE });
-					DoCast(target, SPELL_IMMOLATE);
-				}
-				immolate.Repeat(5s, 8s);
-			})
-			.Schedule(1ms, [this](TaskContext corruption)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_CORRUPTION))
-				{
-					CastStop(SPELL_DRAIN_LIFE);
-					DoCast(target, SPELL_CORRUPTION);
-				}
-				corruption.Repeat(2s, 5s);
-			})
-			.Schedule(1ms, [this](TaskContext incinerate)
-			{
-				CastStop(SPELL_DRAIN_LIFE);
-				DoCastVictim(SPELL_INCINERATE);
-				incinerate.Repeat(2300ms);
+                else
+				    drain_life.Repeat(1s);
 			})
 			.Schedule(12s, 14s, [this](TaskContext mortal_coil)
 			{
-				if (HealthBelowPct(20))
+				if (HealthBelowPct(50))
 				{
-					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+					if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 					{
 						CastStop();
 						DoCast(target, SPELL_MORTAL_COIL);
 						mortal_coil.Repeat(25s, 45s);
 					}
 				}
-				else
-					mortal_coil.Repeat(1s);
+                else
+				    mortal_coil.Repeat(1s);
+			})
+			.Schedule(3s, 5s, [this](TaskContext chaos_bolt)
+			{
+				CastStop({ SPELL_CHAOS_BOLT, SPELL_IMMOLATE, SPELL_WITHER, SPELL_CORRUPTION });
+				DoCastVictim(SPELL_CHAOS_BOLT);
+				chaos_bolt.Repeat(5s, 8s);
+			})
+			.Schedule(1ms, [this](TaskContext incinerate)
+			{
+				CastStop({ SPELL_CHAOS_BOLT, SPELL_IMMOLATE, SPELL_WITHER, SPELL_CORRUPTION });
+				DoCastVictim(SPELL_INCINERATE);
+				incinerate.Repeat(2300ms);
+			})
+			.Schedule(1ms, [this](TaskContext dots)
+			{
+				uint32 step = dots.GetRepeatCounter() % 7;
+
+				if (step == 0)
+				{
+					// Immolate
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_IMMOLATE))
+					{
+						CastStop(SPELL_CHAOS_BOLT);
+						DoCast(target, SPELL_IMMOLATE);
+					}
+					dots.Repeat(2s);
+				}
+                else if (step == 1)
+                {
+                    // Corruption
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_CORRUPTION))
+                    {
+                        CastStop(SPELL_CHAOS_BOLT);
+                        DoCast(target, SPELL_CORRUPTION);
+                    }
+                    dots.Repeat(3s, 4s);
+                }
+                else if (step > 5)
+				{
+					// Wither x5
+					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_WITHER))
+					{
+						CastStop(SPELL_CHAOS_BOLT);
+						DoCast(target, SPELL_WITHER);
+					}
+					dots.Repeat(24s, 45s);
+				}
 			});
 	}
 };
@@ -1620,6 +1629,8 @@ struct npc_wave_caller_gruhta : public CustomAI
 	npc_wave_caller_gruhta(Creature* creature) : CustomAI(creature, true, AI_Type::Hybrid),
 		stormkeeperStacks(0)
 	{
+        SetCanRandomMovement(false);
+
 		instance = creature->GetInstanceScript();
 
 		// Information des sorts
@@ -1764,13 +1775,13 @@ struct npc_wave_caller_gruhta : public CustomAI
 
         if (Aura* elementalProtection = me->GetAura(SPELL_ELEMENTAL_PROTECTION))
         {
-            // Récupére le nombre de protections activent
+            // Rï¿½cupï¿½re le nombre de protections activent
             uint32 stack = elementalProtection->GetStackAmount();
 
-            // Supprime une protection lors des dégâts
+            // Supprime une protection lors des dï¿½gï¿½ts
             elementalProtection->SetStackAmount(stack - 1);
 
-            // Si le stack est à zéro, la tempête s'annule
+            // Si le stack est ï¿½ zï¿½ro, la tempï¿½te s'annule
             if (stack <= 0)
             {
                 scheduler.CancelGroup(GROUP_TEMPEST);
@@ -2281,7 +2292,7 @@ public:
 
 			case 2:
 			{
-				if (!townCrier) // sécurité
+				if (!townCrier) // sï¿½curitï¿½
 					return true;
 
 				townCrier->AI()->Talk(0);
@@ -2629,7 +2640,7 @@ struct at_divine_word_sanctuary : AreaTriggerAI
 	{
 		_scheduler.Schedule(1s, [this](TaskContext task)
 		{
-			// Récupération du lanceur du sort
+			// Rï¿½cupï¿½ration du lanceur du sort
 			if (Unit* caster = at->GetCaster())
 			{
 				for (const ObjectGuid& unitGuid : at->GetInsideUnits())

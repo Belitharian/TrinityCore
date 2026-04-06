@@ -1,23 +1,37 @@
-#include "CustomAI.h"
+ï»¿#include "CustomAI.h"
 #include "CellImpl.h"
 #include "Containers.h"
 #include "GridNotifiers.h"
 
 CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
-	type(type), summons(creature), canCombatMove(true), damageReduction(false), textOnCooldown(false)
+	type(type), summons(creature), canCombatMove(true), damageReduction(false),
+    textOnCooldown(false), randomMovements(false), circleClockwise(roll_chance_i(50)), circleAngle(0.f)
 {
+    if (type == AI_Type::Distance)
+    {
+        SetCanRandomMovement(true);
+    }
+
 	Initialize();
 }
 
 CustomAI::CustomAI(Creature* creature, bool damageReduction, AI_Type type) : ScriptedAI(creature),
-	type(type), summons(creature), canCombatMove(true), damageReduction(damageReduction), textOnCooldown(false)
+	type(type), summons(creature), canCombatMove(true), damageReduction(damageReduction),
+    textOnCooldown(false), randomMovements(false), circleClockwise(roll_chance_i(50)), circleAngle(0.f)
 {
+    if (type == AI_Type::Distance)
+    {
+        SetCanRandomMovement(true);
+    }
+
 	Initialize();
 }
 
 void CustomAI::Initialize()
 {
 	interruptCounter = 0;
+	circleAngle = 0.f;
+	circleClockwise = roll_chance_i(50);
 
 	scheduler.SetValidator([this]
 	{
@@ -56,6 +70,26 @@ void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
 		&& (spellInfo->HasEffect(SPELL_EFFECT_INTERRUPT_CAST) || spellInfo->HasEffect(SPELL_EFFECT_KNOCK_BACK)))
 	{
 		interruptCounter++;
+
+		if (type == AI_Type::Distance)
+		{
+			if (Unit* unitCaster = caster->ToUnit())
+			{
+                int32 duration = spellInfo->CalcDuration();
+				float angle = unitCaster->GetAbsoluteAngle(me) ;
+				Position pos = me->GetPosition();
+
+				me->MovePositionToFirstCollision(pos, GetDistance(), angle);
+				me->GetMotionMaster()->MovePoint(0, pos);
+
+				scheduler.Schedule(Milliseconds(duration), [this](TaskContext /*context*/)
+				{
+					if (Unit* victim = me->GetVictim())
+						me->GetMotionMaster()->MoveChase(victim, GetDistance());
+				});
+			}
+		}
+
 		if (interruptCounter >= 3)
 		{
 			me->ApplySpellImmune(0, IMMUNITY_EFFECT, SPELL_EFFECT_INTERRUPT_CAST, true);
@@ -110,7 +144,7 @@ void CustomAI::AttackStart(Unit* who)
     {
         case AI_Type::Stay:
         {
-            // Pas d'auto-attaque mêlée, pas de déplacement
+            // Pas d'auto-attaque mï¿½lï¿½e, pas de dï¿½placement
             if (me->Attack(who, false))
             {
                 me->SetCanMelee(false, false);
@@ -121,18 +155,19 @@ void CustomAI::AttackStart(Unit* who)
         }
         case AI_Type::Distance:
         {
-            // Pas d'auto-attaque mêlée, mais on suit à distance
+            // Pas d'auto-attaque mï¿½lï¿½e, mais on suit ï¿½ distance
             if (me->Attack(who, false))
             {
                 me->SetCanMelee(false, true);
                 me->SetSheath(SHEATH_STATE_UNARMED);
                 me->GetMotionMaster()->MoveChase(who, GetDistance());
+                ScheduleRandomMovements();
             }
             break;
         }
         case AI_Type::Hybrid:
         {
-            // Pas d'auto-attaque mêlée, mais on suit à distance
+            // Pas d'auto-attaque mï¿½lï¿½e, mais on suit ï¿½ distance
             if (me->Attack(who, false))
             {
                 me->SetCanMelee(false, true);
@@ -143,7 +178,7 @@ void CustomAI::AttackStart(Unit* who)
         }
         case AI_Type::Melee:
         {
-            // Auto-attaque mêlée + poursuite rapprochée
+            // Auto-attaque mï¿½lï¿½e + poursuite rapprochï¿½e
             if (me->Attack(who, true))
                 me->GetMotionMaster()->MoveChase(who);
             break;
@@ -259,6 +294,37 @@ void CustomAI::TalkInCombat(uint8 textId, uint64 cooldown)
 	}
 }
 
+void CustomAI::MovementInform(uint32 type, uint32 id)
+{
+    // Reprendre le chase apres le dÃ©placement
+    if (type == EFFECT_MOTION_TYPE)
+    {
+        switch (id)
+        {
+            case Jump:
+            {
+                if (Unit* victim = me->GetVictim())
+                    me->GetMotionMaster()->MoveChase(victim, GetDistance());
+                break;
+            }
+            case Move:
+            {
+                if (roll_chance_i(60))
+                {
+                    Position pos = GetRandomJump();
+                    me->GetMotionMaster()->MoveJump(Jump, pos, me->GetSpeed(MOVE_RUN), 1.f);
+                }
+                else
+                {
+                    if (Unit* victim = me->GetVictim())
+                        me->GetMotionMaster()->MoveChase(victim, GetDistance());
+                }
+                break;
+            }
+        }
+    }
+}
+
 std::list<Unit*> CustomAI::DoFindMissingBuff(uint32 spellId)
 {
 	const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
@@ -278,4 +344,94 @@ Unit* CustomAI::SelectRandomMissingBuff(uint32 spell)
 	if (list.empty())
 		return nullptr;
 	return Trinity::Containers::SelectRandomContainerElement(list);
+}
+
+void CustomAI::ScheduleRandomMovements()
+{
+    // Si les mouvements alÃ©atoires sont dÃ©sactivÃ©s
+    if (!CanRandomMovement())
+        return;
+
+	scheduler.Schedule(5s, 10s, [this](TaskContext context)
+	{
+		if (!me->IsInCombat() || !me->GetVictim()
+			|| me->HasBreakableByDamageCrowdControlAura()
+            || me->HasRootAura() || me->IsFeared() || me->IsPolymorphed() || me->IsFrozen()
+            || me->IsInWater() || me->IsUnderWater()
+            || me->HasInvisibilityAura() || me->HasStealthAura()
+			|| me->HasUnitState(UNIT_STATE_FLEEING)
+			|| me->HasUnitState(UNIT_STATE_FLEEING_MOVE)
+			|| me->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+		{
+			context.Repeat(3s, 6s);
+			return;
+		}
+
+		// Stutter-step : interrompre le cast en cours (hors canalisations) avant de bouger
+		if (me->HasUnitState(UNIT_STATE_CASTING))
+			CastStop();
+
+		Unit* victim = me->GetVictim();
+		bool tooClose = victim->IsWithinCombatRange(me, GetDistance());
+
+		if (tooClose)
+		{
+			// Kite : s'eloigner immediatement au max range
+			Position pos = GetRandomMovementsPosition();
+			me->GetMotionMaster()->MovePoint(Move, pos);
+			context.Repeat(3s, 5s);
+		}
+		else if (roll_chance_i(60))
+		{
+			// Petit hop lateral
+			Position pos = GetRandomJump();
+			me->GetMotionMaster()->MoveJump(Jump, pos, me->GetSpeed(MOVE_RUN), 1.f);
+			context.Repeat(2s, 8s);
+		}
+		else
+		{
+			// Repositionnement au max range
+			Position pos = GetRandomMovementsPosition();
+			me->GetMotionMaster()->MovePoint(Move, pos);
+			context.Repeat(8s, 16s);
+		}
+	});
+}
+
+Position CustomAI::GetRandomMovementsPosition()
+{
+	Unit* victim = me->GetVictim();
+
+	// Direction actuelle (victim -> me)
+	float baseAngle = victim->GetAbsoluteAngle(me);
+
+	// Incrementer l'angle de circle kiting (40-70Â° par step)
+	float step = frand(float(M_PI / 4.5f), float(M_PI / 2.5f));
+	circleAngle += circleClockwise ? step : -step;
+
+	// Changer de direction aleatoirement (~15% de chance)
+	if (roll_chance_i(15))
+		circleClockwise = !circleClockwise;
+
+	// Appliquer le circle kiting : base + offset cumulatif
+	float finalAngle = baseAngle + circleAngle;
+
+	// Se positionner a GetDistance() de la cible
+	Position pos = victim->GetPosition();
+	victim->MovePositionToFirstCollision(pos, GetDistance(), finalAngle);
+
+	return pos;
+}
+
+Position CustomAI::GetRandomJump()
+{
+    // Petit hop lateral depuis la position actuelle (strafe-jump)
+    Unit* victim = me->GetVictim();
+    float perpAngle = victim->GetAbsoluteAngle(me)
+        + (roll_chance_f(50) ? float(M_PI / 2) : -float(M_PI / 2));
+
+    Position pos = me->GetPosition();
+    me->MovePositionToFirstCollision(pos, 5.f, perpAngle);
+
+    return pos;
 }

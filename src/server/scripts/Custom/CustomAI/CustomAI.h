@@ -81,8 +81,16 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         void TalkInCombat(uint8 textId, uint64 cooldown = 10);
 
+        void MovementInform(uint32 /*type*/, uint32 /*id*/) override;
+
         std::list<Unit*> DoFindMissingBuff(uint32 spellId);
         Unit* SelectRandomMissingBuff(uint32 spell);
+
+        void SetCanRandomMovement(bool apply) { randomMovements = apply; }
+        bool CanRandomMovement() const { return randomMovements; }
+        void ScheduleRandomMovements();
+        Position GetRandomMovementsPosition();
+        Position GetRandomJump();
 
     protected:
         TaskScheduler scheduler;
@@ -92,12 +100,21 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         bool canCombatMove;
         bool damageReduction;
         bool textOnCooldown;
+        bool randomMovements;
+        bool circleClockwise;
+        float circleAngle;
 
         uint32 FriendsInRange(float distance, uint8 pct);
         uint32 EnemiesInRange(float distance);
         uint32 EnemiesInFront(float distance);
 
         bool HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic);
+
+        enum MovementInformId : uint32
+        {
+            Jump = 2500000,
+            Move = 2500001
+        };
 };
 
 inline Position const GetRandomPosition(Position center, float dist)

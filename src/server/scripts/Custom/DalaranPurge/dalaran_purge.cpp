@@ -104,7 +104,7 @@ struct npc_aethas_sunreaver_purge : public CustomAI
 
 	InstanceScript* instance;
 
-	void MovementInform(uint32 /*type*/, uint32 id) override
+	void MovementInform(uint32 type, uint32 id) override
 	{
 		switch (id)
 		{
@@ -226,15 +226,6 @@ struct npc_magister_rommath_purge : public CustomAI
 			if (GameObject* passage = instance->GetGameObject(DATA_SECRET_PASSAGE))
 				passage->UseDoorOrButton(7200000);
 
-			//for (uint8 i = 0; i < TRACKING_PATH_01; i++)
-			//{
-			//    if (Creature* tracking = map->SummonCreature(NPC_INVISIBLE_STALKER, TrackingPath01[i]))
-			//    {
-			//        tracking->AddAura(SPELL_ARCANIC_TRACKING, tracking);
-			//        tracks.push_back(tracking->GetGUID());
-			//    }
-			//}
-
 			FollowPlayer();
 		}
 	}
@@ -258,8 +249,10 @@ struct npc_magister_rommath_purge : public CustomAI
 		}
 	}
 
-	void MovementInform(uint32 /*type*/, uint32 id) override
+	void MovementInform(uint32 type, uint32 id) override
 	{
+        CustomAI::MovementInform(type, id);
+
 		switch (id)
 		{
 			case MOVEMENT_INFO_POINT_02:

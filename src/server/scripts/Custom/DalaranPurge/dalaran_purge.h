@@ -12,7 +12,7 @@
 #define TRACKING_PATH_01                9
 #define SPECTRAL_BARRIER_COUNT          8
 
-#define CUSTOM_DEBUG
+//#define CUSTOM_DEBUG
 
 enum DLPCreatures
 {

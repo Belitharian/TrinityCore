@@ -234,6 +234,8 @@ struct npc_jaina_dalaran_patrol : public CustomAI
         textOnCooldown = false;
 
 		me->AddAura(SPELL_COSMETIC_SNOW, me);
+
+        SetCanRandomMovement(false);
 	}
 
 	InstanceScript* instance;
@@ -1420,8 +1422,10 @@ struct npc_sunreaver_unit : public CustomAI
 		CustomAI::Reset();
 	}
 
-	void MovementInform(uint32 /*type*/, uint32 id) override
+	void MovementInform(uint32 type, uint32 id) override
 	{
+        CustomAI::MovementInform(type, id);
+
 		switch (id)
 		{
 			case MOVEMENT_INFO_POINT_01:
@@ -1997,6 +2001,8 @@ struct npc_magister_brasael : public CustomAI
 	{
 		CustomAI::Initialize();
 
+        SetCanRandomMovement(false);
+
 		cauterized = false;
 		damagedBags = 0;
     }
@@ -2255,7 +2261,10 @@ struct npc_magister_surdiel : public CustomAI
     void Initialize() override
     {
         CustomAI::Initialize();
+
         fireballInfo = sSpellMgr->AssertSpellInfo(SPELL_FIREBALL, DIFFICULTY_NONE);
+
+        SetCanRandomMovement(false);
     }
 
     // Réinitialise l'AI, les area triggers, le scheduler et les états internes.
@@ -3266,6 +3275,8 @@ struct npc_high_arcanist_savor : public CustomAI
 
     void InitVar()
     {
+        SetCanRandomMovement(false);
+
         DoOnPlayers([this](Player* player)
         {
             player->RemoveAura(SPELL_ALT_POWER_BAR);

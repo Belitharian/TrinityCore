@@ -143,6 +143,8 @@ struct npc_jaina_theramore : public CustomAI
 
 	void MovementInform(uint32 type, uint32 id) override
 	{
+        CustomAI::MovementInform(type, id);
+
 		if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
 		{
 			switch (id)
@@ -214,6 +216,7 @@ struct npc_archmage_tervosh : public CustomAI
 {
 	npc_archmage_tervosh(Creature* creature) : CustomAI(creature, true)
 	{
+        SetCanRandomMovement(false);
 	}
 
 	enum Spells
