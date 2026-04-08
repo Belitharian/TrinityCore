@@ -2,10 +2,11 @@
 #include "CellImpl.h"
 #include "Containers.h"
 #include "GridNotifiers.h"
+#include "MotionMaster.h"
 
 CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 	type(type), summons(creature), canCombatMove(true), damageReduction(false),
-    textOnCooldown(false), randomMovements(false), circleClockwise(roll_chance_i(50)), circleAngle(0.f)
+    textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance_i(50)), circleAngle(0.f)
 {
     if (type == AI_Type::Distance)
     {
@@ -17,7 +18,7 @@ CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 
 CustomAI::CustomAI(Creature* creature, bool damageReduction, AI_Type type) : ScriptedAI(creature),
 	type(type), summons(creature), canCombatMove(true), damageReduction(damageReduction),
-    textOnCooldown(false), randomMovements(false), circleClockwise(roll_chance_i(50)), circleAngle(0.f)
+    textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance_i(50)), circleAngle(0.f)
 {
     if (type == AI_Type::Distance)
     {
@@ -294,33 +295,73 @@ void CustomAI::TalkInCombat(uint8 textId, uint64 cooldown)
 	}
 }
 
+void CustomAI::EnterBackped(Unit* victim)
+{
+    if (!backpedaling)
+    {
+        backpedaling = true;
+        OnBackpedStart(victim);
+    }
+    else
+    {
+        OnBackpedTick(victim);
+    }
+}
+
+void CustomAI::ExitBackped(Unit* victim)
+{
+    if (backpedaling)
+    {
+        backpedaling = false;
+        OnBackpedEnd(victim);
+    }
+}
+
 void CustomAI::MovementInform(uint32 type, uint32 id)
 {
-    // Reprendre le chase apres le déplacement
-    if (type == EFFECT_MOTION_TYPE)
+    // EFFECT_MOTION_TYPE = sauts (MoveJump)
+    // POINT_MOTION_TYPE = MovePoint et MoveBackward (BackwardMovementGenerator)
+    if (type != EFFECT_MOTION_TYPE && type != POINT_MOTION_TYPE)
+        return;
+
+    // Vérifie que l'unité à bien une cible
+    Unit* victim = me->GetVictim();
+    if (!victim)
+        return;
+
+    switch (id)
     {
-        switch (id)
+        case Backped:
         {
-            case Jump:
+            // Fin propre de la phase de recul : on notifie les classes filles
+            // puis on reprend le chase
+            ExitBackped(victim);
+            me->GetMotionMaster()->MoveChase(victim, GetDistance());
+            break;
+        }
+        case Jump:
+        {
+            // Apres un saut, on reprend toujours le chase
+            me->GetMotionMaster()->MoveChase(victim, GetDistance());
+            break;
+        }
+        case Move:
+        {
+            // Petite chance d'enchainer un saut apres un deplacement (effet de vie)
+            if (roll_chance_i(30))
             {
-                if (Unit* victim = me->GetVictim())
-                    me->GetMotionMaster()->MoveChase(victim, GetDistance());
-                break;
+                MovementFacingTarget facing;
+                facing = victim;
+
+                me->GetMotionMaster()->MoveJump(Jump, GetRandomJump(), me->GetSpeed(MOVE_RUN),
+                    JUMP_HEIGHT, JUMP_HEIGHT,
+                    facing, true);
             }
-            case Move:
+            else
             {
-                if (roll_chance_i(60))
-                {
-                    Position pos = GetRandomJump();
-                    me->GetMotionMaster()->MoveJump(Jump, pos, me->GetSpeed(MOVE_RUN), 1.f);
-                }
-                else
-                {
-                    if (Unit* victim = me->GetVictim())
-                        me->GetMotionMaster()->MoveChase(victim, GetDistance());
-                }
-                break;
+                me->GetMotionMaster()->MoveChase(victim, GetDistance());
             }
+            break;
         }
     }
 }
@@ -348,55 +389,86 @@ Unit* CustomAI::SelectRandomMissingBuff(uint32 spell)
 
 void CustomAI::ScheduleRandomMovements()
 {
-    // Si les mouvements aléatoires sont désactivés
     if (!CanRandomMovement())
         return;
 
-	scheduler.Schedule(5s, 10s, [this](TaskContext context)
-	{
-		if (!me->IsInCombat() || !me->GetVictim()
-			|| me->HasBreakableByDamageCrowdControlAura()
-            || me->HasRootAura() || me->IsFeared() || me->IsPolymorphed() || me->IsFrozen()
+    scheduler.Schedule(5s, 10s, [this](TaskContext context)
+    {
+        Unit* victim = me->GetVictim();
+
+        // Conditions bloquantes : on reporte
+        if (!me->IsInCombat() || !victim
+            || me->HasUnitState(UNIT_STATE_NOT_MOVE | UNIT_STATE_CONTROLLED | UNIT_STATE_JUMPING | UNIT_STATE_CHARGING)
+            || me->HasBreakableByDamageCrowdControlAura()
             || me->IsInWater() || me->IsUnderWater()
             || me->HasInvisibilityAura() || me->HasStealthAura()
-			|| me->HasUnitState(UNIT_STATE_FLEEING)
-			|| me->HasUnitState(UNIT_STATE_FLEEING_MOVE)
-			|| me->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
-		{
-			context.Repeat(3s, 6s);
-			return;
-		}
+            || me->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+        {
+            if (victim)
+                ExitBackped(victim);
+            context.Repeat(3s, 6s);
+            return;
+        }
 
-		// Stutter-step : interrompre le cast en cours (hors canalisations) avant de bouger
-		if (me->HasUnitState(UNIT_STATE_CASTING))
-			CastStop();
+        // Trop proche : on recule TANT QUE la cible est trop proche.
+        // On alterne aleatoirement entre walk back et jump back, toujours face a la cible
+        if (victim->IsWithinCombatRange(me, 8.f))
+        {
+            // Le sort est interrompu
+            CastStop();
 
-		Unit* victim = me->GetVictim();
-		bool tooClose = victim->IsWithinCombatRange(me, GetDistance());
+            EnterBackped(victim);
 
-		if (tooClose)
-		{
-			// Kite : s'eloigner immediatement au max range
-			Position pos = GetRandomMovementsPosition();
-			me->GetMotionMaster()->MovePoint(Move, pos);
-			context.Repeat(3s, 5s);
-		}
-		else if (roll_chance_i(60))
-		{
-			// Petit hop lateral
-			Position pos = GetRandomJump();
-			me->GetMotionMaster()->MoveJump(Jump, pos, me->GetSpeed(MOVE_RUN), 1.f);
-			context.Repeat(2s, 8s);
-		}
-		else
-		{
-			// Repositionnement au max range
-			Position pos = GetRandomMovementsPosition();
-			me->GetMotionMaster()->MovePoint(Move, pos);
-			context.Repeat(8s, 16s);
-		}
-	});
+            if (roll_chance_i(60))
+            {
+                me->GetMotionMaster()->MoveBackward(Backped, GetRandomBackStep(10.f), victim);
+            }
+            else
+            {
+                MovementFacingTarget facing;
+                facing = victim;
+
+                // Petit hop arriere face a la cible
+                me->GetMotionMaster()->MoveJump(Backped, GetRandomBackJump(), me->GetSpeed(MOVE_RUN_BACK),
+                    JUMP_BACK_HEIGHT, JUMP_BACK_HEIGHT,
+                    facing, true);
+            }
+
+            // Repeat court : on revient verifier rapidement, et on reculera encore si toujours trop proche
+            context.Repeat(500ms, 1s);
+            return;
+        }
+
+        // Hop lateral : 60% (laisse le cast finir, sinon on couperait les sorts)
+        if (roll_chance_i(60))
+        {
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+            {
+                context.Repeat(1s, 2s);
+                return;
+            }
+
+            std::cout << me->GetName().c_str() << " - Hop lateral" << std::endl;
+
+            MovementFacingTarget facing;
+            facing = victim;
+
+            ExitBackped(victim);
+            me->GetMotionMaster()->MoveJump(Jump, GetRandomJump(), me->GetSpeed(MOVE_RUN_BACK),
+                JUMP_HEIGHT, JUMP_HEIGHT,
+                facing, true);
+
+            context.Repeat(2s, 8s);
+            return;
+        }
+
+        // Mouvement : circle kite
+        ExitBackped(victim);
+        me->GetMotionMaster()->MovePoint(Move, GetRandomMovementsPosition());
+        context.Repeat(8s, 16s);
+    });
 }
+
 
 Position CustomAI::GetRandomMovementsPosition()
 {
@@ -417,8 +489,9 @@ Position CustomAI::GetRandomMovementsPosition()
 	float finalAngle = baseAngle + circleAngle;
 
 	// Se positionner a GetDistance() de la cible
+	// MovePositionToFirstCollision ajoute GetOrientation() en interne, on compense
 	Position pos = victim->GetPosition();
-	victim->MovePositionToFirstCollision(pos, GetDistance(), finalAngle);
+	victim->MovePositionToFirstCollision(pos, GetDistance(), finalAngle - victim->GetOrientation());
 
 	return pos;
 }
@@ -430,8 +503,39 @@ Position CustomAI::GetRandomJump()
     float perpAngle = victim->GetAbsoluteAngle(me)
         + (roll_chance_f(50) ? float(M_PI / 2) : -float(M_PI / 2));
 
+    // Compensation de l'orientation interne ajoutee par MovePositionToFirstCollision
     Position pos = me->GetPosition();
-    me->MovePositionToFirstCollision(pos, 5.f, perpAngle);
+    me->MovePositionToFirstCollision(pos, JUMP_DISTANCE, perpAngle - me->GetOrientation());
 
     return pos;
 }
+
+Position CustomAI::GetRandomBackJump()
+{
+    // Petit hop arriere depuis la position actuelle, strictement aligne sur l'axe victim -> me
+    Unit* victim = me->GetVictim();
+    float axisAngle = victim->GetAbsoluteAngle(me);
+
+    // Compensation de l'orientation interne ajoutee par MovePositionToFirstCollision
+    Position pos = me->GetPosition();
+    me->MovePositionToFirstCollision(pos, JUMP_BACK_DISTANCE, axisAngle - me->GetOrientation());
+
+    return pos;
+}
+
+Position CustomAI::GetRandomBackStep(float distance)
+{
+    // Recul strictement aligne sur l'axe victim -> me
+    Unit* victim = me->GetVictim();
+    float axisAngle = victim->GetAbsoluteAngle(me);
+    float currentDist = me->GetExactDist2d(victim);
+    float backDist = currentDist + distance;
+
+    // On part de la victime et on projete sur l'axe a une distance plus grande
+    // Compensation de l'orientation interne ajoutee par MovePositionToFirstCollision
+    Position pos = victim->GetPosition();
+    victim->MovePositionToFirstCollision(pos, backDist, axisAngle - victim->GetOrientation());
+
+    return pos;
+}
+

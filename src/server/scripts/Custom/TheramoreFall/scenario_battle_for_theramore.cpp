@@ -999,7 +999,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				#pragma region A_LITTLE_HELP
 
 				case 71:
-					EnsurePlayerHaveShaker();
+                    Talk(GetJaina(), SAY_PRE_BATTLE_2);
+                    EnsurePlayerHaveShaker();
 					HordeMembersInvoker(DATA_DECORATION_DUMMIES, true);
 					if (Creature* hedric = GetHedric())
 					{
@@ -1009,11 +1010,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					Next(3s);
 					break;
 				case 72:
-					Talk(GetJaina(), SAY_PRE_BATTLE_2);
                     if (Creature* hedric = GetHedric())
                     {
-					    hedric->GetMotionMaster()->MovePath(HedricPath01, false);
                         Talk(hedric, SAY_PRE_BATTLE_1);
+					    hedric->GetMotionMaster()->MovePath(HedricPath01, false);
                     }
 					Next(2s);
 					break;
@@ -1293,7 +1293,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* kalecgos = GetKalecgos())
 					{
 						kalecgos->SetVisible(true);
-						kalecgos->AI()->SetData(DATA_KALECGOS_SPELL_EVENT, 0U);
+						kalecgos->AI()->SetData(DATA_KALECGOS_COMBAT_EVENT, 0U);
 					}
 					GetJaina()->CastSpell(actorsRelocation[0].destination, SPELL_TELEPORT);
 					Next(2s);
@@ -1314,17 +1314,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					#ifdef CUSTOM_DEBUG
-						for (uint8 i = 0; i < HORDE_WAVES_COUNT; i++)
-						{
-							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
-							events.ScheduleEvent(WAVE_BREAKER, 1s);
-						}
-					#else
+					//#ifdef CUSTOM_DEBUG
+					//	for (uint8 i = 0; i < HORDE_WAVES_COUNT; i++)
+					//	{
+					//		DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
+					//		events.ScheduleEvent(WAVE_BREAKER, 1s);
+					//	}
+					//#else
 						HordeMembersInvoker(Waves[waves]);
 						waves++;
 						events.ScheduleEvent(++wavesInvoker, 1s);
-					#endif
+					//#endif
 					break;
 
 				case WAVE_01_CHECK:

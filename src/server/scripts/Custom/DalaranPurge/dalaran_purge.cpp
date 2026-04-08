@@ -9,16 +9,12 @@
 
 struct npc_jaina_dalaran_purge : public CustomAI
 {
-	npc_jaina_dalaran_purge(Creature* creature) : CustomAI(creature, AI_Type::Distance)
+	npc_jaina_dalaran_purge(Creature* creature) : CustomAI(creature)
 	{
-		Initialize();
-	}
+        instance = me->GetInstanceScript();
 
-	void Initialize()
-	{
-		instance = me->GetInstanceScript();
-		me->SetSheath(SHEATH_STATE_UNARMED);
-	}
+        SetCanRandomMovement(false);
+    }
 
 	enum Misc
 	{
@@ -170,7 +166,8 @@ struct npc_magister_rommath_purge : public CustomAI
 	npc_magister_rommath_purge(Creature* creature) : CustomAI(creature), eventId(0), evocating(false)
 	{
 		Initialize();
-	}
+        SetCanRandomMovement(false);
+    }
 
 	enum Groups
 	{

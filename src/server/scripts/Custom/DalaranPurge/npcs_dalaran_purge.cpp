@@ -65,7 +65,7 @@ struct npc_guardian_mage_dalaran : public CustomAI
 
     void SpellHitTarget(WorldObject* object, SpellInfo const* spellInfo) override
     {
-        if (spellInfo->GetSchoolMask() == SPELL_SCHOOL_MASK_FROST)
+        if (spellInfo->GetSchoolMask() & SPELL_SCHOOL_MASK_FROST)
         {
             Unit* victim = object->ToUnit();
             if (victim && victim->GetGUID() != me->GetGUID())
@@ -180,7 +180,7 @@ struct npc_assassin_dalaran : public CustomAI
 
 	void JustEngagedWith(Unit* who) override
 	{
-		if (!me->HasAura(SPELL_SPRINT) && !me->IsWithinCombatRange(who, true))
+		if (!me->HasAura(SPELL_SPRINT) && !me->IsWithinCombatRange(who, me->GetCombatReach()))
 			DoCast(SPELL_SPRINT);
 
 		scheduler
@@ -565,10 +565,9 @@ struct npc_mage_commander_zuros : public CustomAI
 	npc_mage_commander_zuros(Creature* creature) : CustomAI(creature, true, AI_Type::Melee),
         cleric(nullptr), surdiel(nullptr)
 	{
-		Initialize();
-
         instance = creature->GetInstanceScript();
-	}
+        SetCanRandomMovement(false);
+    }
 
 	enum Spells
 	{
@@ -750,9 +749,9 @@ struct npc_narasi_snowdawn : public CustomAI
 	npc_narasi_snowdawn(Creature* creature) : CustomAI(creature, true)
 	{
         creature->SetImmuneToPC(true, false);
-
         blastInfo = sSpellMgr->AssertSpellInfo(SPELL_ACCELERATING_BLAST, DIFFICULTY_NONE);
-	}
+        SetCanRandomMovement(false);
+    }
 
 	enum Spells
 	{
@@ -1179,7 +1178,8 @@ struct npc_arcanist_rathaella : public CustomAI
 	npc_arcanist_rathaella(Creature* creature) : CustomAI(creature, AI_Type::Melee)
 	{
 		Initialize();
-	}
+        SetCanRandomMovement(false);
+    }
 
 	enum Talks
 	{
@@ -1757,7 +1757,8 @@ struct npc_arcane_elemental : public CustomAI
 {
     npc_arcane_elemental(Creature* creature) : CustomAI(creature, AI_Type::Stay)
 	{
-	}
+        SetCanRandomMovement(false);
+    }
 
 	enum Spells
 	{
@@ -1917,7 +1918,8 @@ struct npc_magister_brasael : public CustomAI
 	npc_magister_brasael(Creature* creature) : CustomAI(creature, AI_Type::Distance),
 		cauterized(false), damagedBags(0)
 	{
-	}
+        SetCanRandomMovement(false);
+    }
 
 	enum Misc
 	{
@@ -2000,8 +2002,6 @@ struct npc_magister_brasael : public CustomAI
 	void Initialize() override
 	{
 		CustomAI::Initialize();
-
-        SetCanRandomMovement(false);
 
 		cauterized = false;
 		damagedBags = 0;
@@ -2251,6 +2251,7 @@ struct npc_magister_surdiel : public CustomAI
         combatFinal(false),
         canSummon(false)
     {
+        SetCanRandomMovement(false);
     }
 
     // -------------------------------------------------------------------------
@@ -2263,8 +2264,6 @@ struct npc_magister_surdiel : public CustomAI
         CustomAI::Initialize();
 
         fireballInfo = sSpellMgr->AssertSpellInfo(SPELL_FIREBALL, DIFFICULTY_NONE);
-
-        SetCanRandomMovement(false);
     }
 
     // Réinitialise l'AI, les area triggers, le scheduler et les états internes.
@@ -2691,7 +2690,8 @@ struct npc_high_arcanist_savor : public CustomAI
         timeCount(0), sunreaversCount(0), wavesCount(0)
 	{
 		instance = me->GetInstanceScript();
-	}
+        SetCanRandomMovement(false);
+    }
 
 	enum Spells
 	{
@@ -3275,8 +3275,6 @@ struct npc_high_arcanist_savor : public CustomAI
 
     void InitVar()
     {
-        SetCanRandomMovement(false);
-
         DoOnPlayers([this](Player* player)
         {
             player->RemoveAura(SPELL_ALT_POWER_BAR);

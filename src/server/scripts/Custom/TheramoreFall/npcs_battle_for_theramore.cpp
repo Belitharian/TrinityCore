@@ -126,9 +126,9 @@ struct npc_unmanned_tank : public CustomAI
 		SPELL_DEMOLISHER_CANNON = 271246
 	};
 
-	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
+	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
 	{
-		if (spellInfo->Id != SPELL_REPAIR)
+		if (spell->Id != SPELL_REPAIR)
 			return;
 
 		me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
@@ -161,9 +161,9 @@ struct npc_wounded_theramore_troop : public ScriptedAI
 	InstanceScript* instance;
 	bool preventClick;
 
-	void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
+	void SpellHit(WorldObject* caster, SpellInfo const* spell) override
 	{
-		if (spellInfo->Id != SPELL_TELEPORT_TROOP)
+		if (spell->Id != SPELL_TELEPORT_TROOP)
 			return;
 
 		if (preventClick)
@@ -464,11 +464,11 @@ struct npc_theramore_officier : public npc_theramore_troop
 
 	bool healthLow;
 
-	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
+	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
 	{
 		if (!me->GetSpellHistory()->HasCooldown(SPELL_BLESSING_OF_FREEDOM))
 		{
-			if (HasMechanic(spellInfo, MECHANIC_ROOT) || HasMechanic(spellInfo, MECHANIC_SNARE))
+			if (HasMechanic(spell, MECHANIC_ROOT) || HasMechanic(spell, MECHANIC_SNARE))
 			{
 				scheduler.Schedule(2s, [this](TaskContext /*blessing_of_freedom*/)
 				{
@@ -478,9 +478,9 @@ struct npc_theramore_officier : public npc_theramore_troop
 		}
 	}
 
-	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spellInfo) override
+	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spell) override
 	{
-		npc_theramore_troop::DamageTaken(attacker, damage, damageType, spellInfo);
+		npc_theramore_troop::DamageTaken(attacker, damage, damageType, spell);
 
 		if (roll_chance_i(30) && !healthLow && me->HealthBelowPctDamaged(25, damage))
 		{
@@ -684,10 +684,10 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 		});
 	}
 
-	void SpellHitTarget(WorldObject* /*object*/, SpellInfo const* spellInfo) override
+	void SpellHitTarget(WorldObject* /*object*/, SpellInfo const* spell) override
 	{
 		// Ne r�agit qu'au sort Arcane Blast
-		if (spellInfo->Id != SPELL_ARCANE_BLAST)
+		if (spell->Id != SPELL_ARCANE_BLAST)
 			return;
 
 		// V�rifie si le buff Arcane Tempo est actif
@@ -787,9 +787,9 @@ struct npc_theramore_faithful : public npc_theramore_troop
 
 	bool ascension;
 
-	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spellInfo) override
+	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spell) override
 	{
-		npc_theramore_troop::DamageTaken(attacker, damage, damageType, spellInfo);
+		npc_theramore_troop::DamageTaken(attacker, damage, damageType, spell);
 
 		if (!ascension && me->HealthBelowPctDamaged(10, damage))
 		{
@@ -1033,76 +1033,110 @@ struct npc_roknah_hag : public npc_theramore_horde
 
 	enum Spells
 	{
-		SPELL_FROSTBOLT         = 116,
-		SPELL_BLINK             = 295236,
-		SPELL_CONE_OF_COLD      = 292294,
-		SPELL_EBONBOLT          = 284752,
-		SPELL_FLURRY            = 284858,
-		SPELL_FROST_NOVA        = 284879,
-		SPELL_GLACIAL_SPIKE     = 284840,
-		SPELL_ICE_BLOCK         = 278960,
-		SPELL_ICE_BARRIER       = 198094,
-		SPELL_ICICLES           = 205473,
-		SPELL_MASS_ICE_BARRIER  = 382561,
+		SPELL_FROSTBOLT             = 116,
+        SPELL_GLACIAL_SPIKE_BUFF    = 199844,
+		SPELL_ICE_BARRIER           = 198094,
+		SPELL_ICICLES               = 205473,
+		SPELL_CHILLED               = 205708,
+		SPELL_HYPOTHERMIA           = 240132,
+		SPELL_ICE_BLOCK             = 278960,
+		SPELL_EBONBOLT              = 284752,
+		SPELL_GLACIAL_SPIKE         = 284840,
+		SPELL_FLURRY                = 284858,
+		SPELL_ICE_LANCE             = 284871,
+		SPELL_FROST_NOVA            = 284879,
+		SPELL_CONE_OF_COLD          = 292294,
+		SPELL_BLINK                 = 295236,
+		SPELL_MASS_ICE_BARRIER      = 382561,
 	};
 
 	bool closeTarget;
 	bool iceblock;
 	uint8 index;
 
-	void SpellHitTarget(WorldObject* /*object*/, SpellInfo const* spellInfo) override
+	void SpellHitTarget(WorldObject* object, SpellInfo const* spell) override
 	{
-		switch (spellInfo->Id)
+        // Les sorts de givre peuvent appliquer la technique : Transi
+        if ((spell->GetSchoolMask() & SPELL_SCHOOL_MASK_FROST) && roll_chance_i(60))
+        {
+            Unit* victim = object->ToUnit();
+            if (victim && victim->GetGUID() != me->GetGUID())
+                DoCast(victim, SPELL_CHILLED, true);
+        }
+
+		switch (spell->Id)
 		{
 			case SPELL_GLACIAL_SPIKE:
-				me->RemoveAurasDueToSpell(SPELL_ICICLES);
-				for (uint8 i = 0; i < 5; i++)
-					me->RemoveAurasDueToSpell(IciclesDummies[i]);
+                RemoveIcicles();
 				break;
-			case SPELL_FROSTBOLT:
-				if (Aura* aura = me->GetAura(SPELL_ICICLES))
-				{
-					uint8 stacks = aura->GetStackAmount();
-					if (stacks < 5)
-					{
-						CastIcicle(stacks);
-					}
-					else
-					{
-						if (index >= 5) index = 0;
-						DoCastVictim(IciclesProjectiles[index], true);
-						index++;
-					}
-				}
-				else
-					CastIcicle(0);
-				break;
+            case SPELL_FROSTBOLT:
+            {
+                Aura* aura = me->GetAura(SPELL_ICICLES);
+                uint8 stacks = aura ? aura->GetStackAmount() : 0;
+
+                // Cap a 5 stacks
+                if (stacks >= 5)
+                {
+                    // Si SPELL_GLACIAL_SPIKE_BUFF est encore présente, on retente de lancer SPELL_GLACIAL_SPIKE
+                    if (me->HasAura(SPELL_GLACIAL_SPIKE_BUFF))
+                    {
+                        CastStop();
+                        DoCastVictim(SPELL_GLACIAL_SPIKE);
+                    }
+
+                    break;
+                }
+
+                // Ajouter un eclat (visuel + stack du buff SPELL_ICICLES)
+                CastIcicle(stacks);
+
+                // Si on vient d'atteindre 5 stacks, le buff Glacial Spike devient disponible.
+                // Ajout manuel de l'aura
+                if (stacks + 1 == 5)
+                    DoCastSelf(SPELL_GLACIAL_SPIKE_BUFF, true);
+
+                break;
+            }
 		}
 	}
 
-	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
+	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
 	{
-		if (!me->GetSpellHistory()->HasCooldown(SPELL_BLINK))
+        // Si le SPELL_BLINK n'est pas en recharge et que l'unité est ROOT ou SNARE
+		if (!me->GetSpellHistory()->HasCooldown(SPELL_BLINK)
+            && (HasMechanic(spell, MECHANIC_ROOT) || HasMechanic(spell, MECHANIC_SNARE)))
 		{
-			if (HasMechanic(spellInfo, MECHANIC_ROOT) || HasMechanic(spellInfo, MECHANIC_SNARE))
-			{
-				scheduler.Schedule(2s, [this](TaskContext /*blink*/)
-				{
-					CastStop();
-					DoCastSelf(SPELL_BLINK);
-					me->RemoveMovementImpairingAuras(true);
-				});
-			}
+            scheduler.Schedule(2s, [this, spell](TaskContext /*context*/)
+            {
+                CastBlink(false, spell->Id);
+            });
 		}
+
+        // Gestion du SPELL_GLACIAL_SPIKE_BUFF pour lancer SPELL_GLACIAL_SPIKE
+        if (spell->Id == SPELL_GLACIAL_SPIKE_BUFF)
+        {
+            CastStop();
+            DoCastVictim(SPELL_GLACIAL_SPIKE);
+        }
 	}
 
-	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spellInfo) override
-	{
-		npc_theramore_horde::DamageTaken(attacker, damage, damageType, spellInfo);
+    void OnSpellFailed(SpellInfo const* spell) override
+    {
+        // Si SPELL_GLACIAL_SPIKE est interrompu alors qu'on retente
+        if (spell->Id == SPELL_GLACIAL_SPIKE)
+        {
+            CastStop();
+            DoCastVictim(SPELL_GLACIAL_SPIKE);
+        }
+    }
 
+	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spell) override
+	{
+        // 30% de chance de lancer la barriere de masse
 		if (roll_chance_i(30))
 		{
-			DoCastSelf(SPELL_MASS_ICE_BARRIER);
+			DoCastSelf(SPELL_MASS_ICE_BARRIER,
+                CastSpellExtraArgs(TRIGGERED_CAST_DIRECTLY));
 		}
 
 		if (!iceblock && HealthBelowPct(20))
@@ -1115,8 +1149,10 @@ struct npc_roknah_hag : public npc_theramore_horde
 			iceblock = true;
 
 			CastStop();
-
 			DoCast(SPELL_ICE_BLOCK);
+
+            // Hypothermie
+            me->AddAura(SPELL_HYPOTHERMIA, me);
 
 			scheduler.Schedule(1min, [this](TaskContext /*context*/)
 			{
@@ -1126,6 +1162,16 @@ struct npc_roknah_hag : public npc_theramore_horde
 			CastFleeSequence(12s);
 		}
 	}
+
+    void OnBackpedStart(Unit* victim) override
+    {
+        CastBackped(victim);
+    }
+
+    void OnBackpedTick(Unit* victim) override
+    {
+        CastBackped(victim);
+    }
 
 	void JustEngagedWith(Unit* who) override
 	{
@@ -1139,7 +1185,7 @@ struct npc_roknah_hag : public npc_theramore_horde
 			{
 				if (EnemiesInRange(12.0f) > 2)
 				{
-					CastStop(SPELL_CONE_OF_COLD);
+					CastStop(SPELL_GLACIAL_SPIKE);
 					DoCast(SPELL_CONE_OF_COLD);
 					cone_of_cold.Repeat(5s, 8s);
 				}
@@ -1151,32 +1197,11 @@ struct npc_roknah_hag : public npc_theramore_horde
 				DoCastVictim(SPELL_EBONBOLT);
 				ebonbolt.Repeat(2s, 5s);
 			})
-			.Schedule(1s, 3s, GROUP_NORMAL, [this](TaskContext glacial_spike)
-			{
-				if (Aura* aura = me->GetAura(SPELL_ICICLES))
-				{
-					uint8 stacks = aura->GetStackAmount();
-					if (stacks == 5 && roll_chance_i(10))
-					{
-						CastStop(SPELL_GLACIAL_SPIKE);
-						DoCastVictim(SPELL_GLACIAL_SPIKE);
-						glacial_spike.Repeat(10s);
-					}
-					else
-					{
-						glacial_spike.Repeat(5ms);
-					}
-				}
-				else
-				{
-					glacial_spike.Repeat(5ms);
-				}
-			})
 			.Schedule(12s, 15s, GROUP_NORMAL, [this](TaskContext flurry)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random))
-					DoCast(target, SPELL_FLURRY);
-				flurry.Repeat(12s, 14s);
+                    DoCast(target, SPELL_FLURRY);
+                flurry.Repeat(12s, 14s);
 			})
 			.Schedule(1ms, GROUP_FROSTBOLT, [this](TaskContext frostbolt)
 			{
@@ -1196,7 +1221,6 @@ struct npc_roknah_hag : public npc_theramore_horde
 			closeTarget = true;
 			scheduler.DelayGroup(GROUP_NORMAL, 2s);
 			scheduler.DelayGroup(GROUP_FROSTBOLT, 2s);
-			CastStop();
 			CastFleeSequence(1s);
 		}
 	}
@@ -1213,12 +1237,12 @@ struct npc_roknah_hag : public npc_theramore_horde
 				case 0:
 					CastStop();
 					DoCastSelf(SPELL_FROST_NOVA, true);
-					context.Repeat(500ms);
+					context.Repeat(300ms);
 					break;
 				case 1:
-					DoCastSelf(SPELL_BLINK, true);
+                    CastBlink(true);
 					scheduler.CancelGroup(GROUP_FLEE);
-					context.Repeat(5s);
+					context.Repeat(8s, 14s);
 					break;
 				case 2:
 					closeTarget = false;
@@ -1229,11 +1253,51 @@ struct npc_roknah_hag : public npc_theramore_horde
 
 	void CastIcicle(uint8 index)
 	{
+        // Visual des eclats
 		uint32 icicle = IciclesDummies[index];
 		DoCastSelf(icicle, true);
 
+        // Buff des eclats
 		DoCastSelf(SPELL_ICICLES, true);
 	}
+
+    void RemoveIcicles()
+    {
+        // Buff des eclats
+        me->RemoveAurasDueToSpell(SPELL_ICICLES);
+
+        // Buff de la Glacial Pike
+        me->RemoveAurasDueToSpell(SPELL_GLACIAL_SPIKE_BUFF);
+
+        // Visual des eclats
+        for (uint8 i = 0; i < 5; i++)
+            me->RemoveAurasDueToSpell(IciclesDummies[i]);
+    }
+
+    void CastBackped(Unit* victim)
+    {
+        CastStop();
+        DoCast(victim, RAND(SPELL_ICE_LANCE, SPELL_FLURRY), CastSpellExtraArgs(TRIGGERED_IGNORE_GCD));
+    }
+
+    void CastBlink(bool triggered, Optional<uint32> removeAura = {})
+    {
+        CastStop();
+
+        if (triggered)
+        {
+            DoCastSelf(SPELL_BLINK, true);
+        }
+        else
+        {
+            DoCastSelf(SPELL_BLINK);
+        }
+
+        me->RemoveMovementImpairingAuras(true);
+
+        if (removeAura)
+            me->RemoveAurasDueToSpell(*removeAura);
+    }
 };
 
 struct npc_roknah_grunt : public npc_theramore_horde
@@ -1270,7 +1334,7 @@ struct npc_roknah_grunt : public npc_theramore_horde
 		slayerStrikeCount = 0;
 	}
 
-	void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo*/) override
+	void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
 	{
 		if (!commandingShout && HealthBelowPct(50))
 		{
@@ -1385,9 +1449,9 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 		NPC_HEALING_TIDE_TOTEM  = 65349,
 	};
 
-	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spellInfo) override
+	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spell) override
 	{
-		npc_theramore_horde::DamageTaken(attacker, damage, damageType, spellInfo);
+		npc_theramore_horde::DamageTaken(attacker, damage, damageType, spell);
 
 		if (me->HealthBelowPctDamaged(50, damage) && !me->HasAura(SPELL_ASTRAL_SHIFT))
 		{
@@ -1769,9 +1833,9 @@ struct npc_wave_caller_gruhta : public CustomAI
 		}
 	}
 
-    void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
+    void SpellHit(WorldObject* caster, SpellInfo const* spell) override
     {
-        CustomAI::SpellHit(caster, spellInfo);
+        CustomAI::SpellHit(caster, spell);
 
         if (Aura* elementalProtection = me->GetAura(SPELL_ELEMENTAL_PROTECTION))
         {
@@ -2156,6 +2220,59 @@ struct npc_healing_tide_totem : public TotemAI
 
 	private:
 	TaskScheduler scheduler;
+};
+
+// Flurry - 284858
+class spell_roknah_hag_flurry : public SpellScript
+{
+    enum Misc
+    {
+        SPELL_MAGE_FLURRY_DAMAGE = 284860
+    };
+
+    class FlurryEvent : public BasicEvent
+    {
+    public:
+        FlurryEvent(Unit* caster, ObjectGuid const& target, ObjectGuid const& originalCastId, int32 count)
+            : _caster(caster), _target(target), _originalCastId(originalCastId), _count(count) { }
+
+        bool Execute(uint64 time, uint32 /*diff*/) override
+        {
+            Unit* target = ObjectAccessor::GetUnit(*_caster, _target);
+
+            if (!target)
+                return true;
+
+            _caster->CastSpell(target, SPELL_MAGE_FLURRY_DAMAGE, CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS).SetOriginalCastId(_originalCastId));
+
+            if (!--_count)
+                return true;
+
+            _caster->m_Events.AddEvent(this, Milliseconds(time) + randtime(300ms, 400ms));
+            return false;
+        }
+
+    private:
+        Unit* _caster;
+        ObjectGuid _target;
+        ObjectGuid _originalCastId;
+        int32 _count;
+    };
+
+    bool Validate(SpellInfo const* /*spell*/) override
+    {
+        return ValidateSpellInfo({ SPELL_MAGE_FLURRY_DAMAGE });
+    }
+
+    void EffectHit(SpellEffIndex /*effIndex*/) const
+    {
+        GetCaster()->m_Events.AddEventAtOffset(new FlurryEvent(GetCaster(), GetHitUnit()->GetGUID(), GetSpell()->m_castId, GetEffectValue() - 1), randtime(300ms, 400ms));
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_roknah_hag_flurry::EffectHit, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
 };
 
 // Light of Dawn - 295712
@@ -2786,6 +2903,7 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterCreatureAI(npc_healing_tide_totem);
 	//-
 
+	RegisterSpellScript(spell_roknah_hag_flurry);
 	RegisterSpellScript(spell_theramore_light_of_dawn);
 	RegisterSpellScript(spell_theramore_throw_bucket);
 	RegisterSpellScript(spell_powder_keg);

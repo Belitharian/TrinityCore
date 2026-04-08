@@ -37,6 +37,7 @@
 #include "ChaseMovementGenerator.h"
 #include "ConfusedMovementGenerator.h"
 #include "FleeingMovementGenerator.h"
+#include "BackwardMovementGenerator.h"
 #include "FlightPathMovementGenerator.h"
 #include "FollowMovementGenerator.h"
 #include "FormationMovementGenerator.h"
@@ -852,6 +853,15 @@ void MotionMaster::MoveKnockbackFrom(Position const& origin, float speedXY, floa
     movement->Priority = MOTION_PRIORITY_HIGHEST;
     movement->AddFlag(MOVEMENTGENERATOR_FLAG_PERSIST_ON_DEATH);
     Add(movement);
+}
+
+void MotionMaster::MoveBackward(uint32 id, Position const& pos,
+    Unit const* faceTarget /*= nullptr*/, Optional<float> speed /*= {}*/,
+    MovementWalkRunSpeedSelectionMode speedSelectionMode /*= MovementWalkRunSpeedSelectionMode::ForceWalk*/)
+{
+    TC_LOG_DEBUG("movement.motionmaster", "MotionMaster::MoveBackward: '{}', walking backward to point Id: {} ({})", _owner->GetGUID(), id, pos.ToString());
+    Add(new BackwardMovementGenerator(id, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(),
+        speed, speedSelectionMode, faceTarget));
 }
 
 void MotionMaster::MoveJump(uint32 id, Position const& pos, std::variant<std::monostate, float, Milliseconds> speedOrTime /*= {}*/,

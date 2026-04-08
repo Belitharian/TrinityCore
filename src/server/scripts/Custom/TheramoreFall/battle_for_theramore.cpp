@@ -19,7 +19,9 @@ struct npc_jaina_theramore : public CustomAI
 		instance(nullptr)
 	{
 		instance = me->GetInstanceScript();
-	}
+
+        SetCanRandomMovement(false);
+    }
 
 	enum Spells
 	{
@@ -316,7 +318,9 @@ struct npc_amara_leeson : public CustomAI
 	npc_amara_leeson(Creature* creature) : CustomAI(creature, true)
 	{
 		instance = me->GetInstanceScript();
-	}
+
+        SetCanRandomMovement(false);
+    }
 
 	enum Spells
 	{
@@ -408,6 +412,8 @@ struct npc_rhonin : public CustomAI
 	npc_rhonin(Creature* creature) : CustomAI(creature, true), arcaneCharges(0)
 	{
 		instance = creature->GetInstanceScript();
+
+        SetCanRandomMovement(false);
 	}
 
 	InstanceScript* instance;
@@ -537,7 +543,8 @@ struct npc_kinndy_sparkshine : public CustomAI
 {
 	npc_kinndy_sparkshine(Creature* creature) : CustomAI(creature, true, AI_Type::Stay)
 	{
-	}
+        SetCanRandomMovement(false);
+    }
 
 	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
 	{
@@ -557,7 +564,8 @@ struct npc_tari_cogg : public CustomAI
 {
 	npc_tari_cogg(Creature* creature) : CustomAI(creature, true, AI_Type::Stay), evocating(false)
 	{
-	}
+        SetCanRandomMovement(false);
+    }
 
 	enum Spells
 	{
@@ -696,7 +704,9 @@ struct npc_kalecgos_theramore : public CustomAI
 	npc_kalecgos_theramore(Creature* creature) : CustomAI(creature, true)
 	{
 		instance = me->GetInstanceScript();
-	}
+
+        SetCanRandomMovement(false);
+    }
 
 	enum Spells
 	{
@@ -824,7 +834,9 @@ struct npc_kalecgos_dragon : public CustomAI
 	npc_kalecgos_dragon(Creature* creature) : CustomAI(creature), m_loopTime(0)
 	{
 		instance = me->GetInstanceScript();
-	}
+
+        SetCanRandomMovement(false);
+    }
 
 	enum Spells
 	{
@@ -846,14 +858,13 @@ struct npc_kalecgos_dragon : public CustomAI
 	{
 		switch (id)
 		{
-			case DATA_KALECGOS_SPELL_EVENT:
+			case DATA_KALECGOS_COMBAT_EVENT:
 			{
-				scheduler.Schedule(1s, [this](TaskContext frost_breath)
+				scheduler.Schedule(8s, 12s, [this](TaskContext talk_combat)
 				{
 					if (roll_chance_i(30))
-						TalkInCombat(SAY_KALECGOS_SPELL_01);
-					DoCastAOE(SPELL_FROST_BREATH);
-					frost_breath.Repeat(8s, 12s);
+                        TalkInCombat(SAY_KALECGOS_SPELL_01);
+                    talk_combat.Repeat(8s, 12s);
 				});
 				break;
 			}

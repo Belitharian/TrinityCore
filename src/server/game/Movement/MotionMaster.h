@@ -192,6 +192,9 @@ class TC_GAME_API MotionMaster
         void MoveCharge(float x, float y, float z, float speed = SPEED_CHARGE, uint32 id = EVENT_CHARGE, bool generatePath = false, Unit const* target = nullptr, Movement::SpellEffectExtraData const* spellEffectExtraData = nullptr);
         void MoveCharge(PathGenerator const& path, float speed = SPEED_CHARGE, Unit const* target = nullptr, Movement::SpellEffectExtraData const* spellEffectExtraData = nullptr);
         void MoveKnockbackFrom(Position const& origin, float speedXY, float speedZ, float angle = M_PI, Movement::SpellEffectExtraData const* spellEffectExtraData = nullptr);
+        void MoveBackward(uint32 id, Position const& pos,
+            Unit const* faceTarget = nullptr, Optional<float> speed = {},
+            MovementWalkRunSpeedSelectionMode speedSelectionMode = MovementWalkRunSpeedSelectionMode::ForceWalk);
         void MoveJump(uint32 id, Position const& pos, std::variant<std::monostate, float, Milliseconds> speedOrTime = {},
             Optional<float> minHeight = {}, Optional<float> maxHeight = {},
             MovementFacingTarget const& facing = {}, bool orientationFixed = false, bool unlimitedSpeed = false, Optional<float> speedMultiplier = {},

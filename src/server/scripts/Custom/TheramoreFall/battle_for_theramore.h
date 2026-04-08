@@ -10,7 +10,7 @@
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader "BFT"
 
-//#define CUSTOM_DEBUG
+#define CUSTOM_DEBUG
 
 #define PERITH_LOCATION          3
 #define ARCHMAGES_LOCATION       6
@@ -79,7 +79,7 @@ enum BFTData
 
 	// Kalecgos Events
 	DATA_KALECGOS_CIRCLE_EVENT,
-	DATA_KALECGOS_SPELL_EVENT,
+    DATA_KALECGOS_COMBAT_EVENT,
 	DATA_KALECGOS_CANCEL_EVENT,
 
 	// GameObjects

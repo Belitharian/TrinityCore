@@ -91,6 +91,30 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void ScheduleRandomMovements();
         Position GetRandomMovementsPosition();
         Position GetRandomJump();
+        Position GetRandomBackStep(float distance);
+        Position GetRandomBackJump();
+
+        // Hook appele une seule fois quand une unite entre dans la phase de recul
+        // (transition false -> true). Override pour reagir a l'entree dans la phase.
+        virtual void OnBackpedStart(Unit* /*victim*/) { }
+
+        // Hook appele a chaque tick du scheduler tant que l'unite est en phase de recul.
+        // Override pour lancer des sorts instantanes pendant le kite (le cast normal
+        // est interrompu par CastStop pendant cette phase).
+        virtual void OnBackpedTick(Unit* /*victim*/) { }
+
+        // Hook appele une seule fois quand l'unite sort de la phase de recul
+        // (mouvement Backped termine et plus en train de kiter).
+        virtual void OnBackpedEnd(Unit* /*victim*/) { }
+
+        bool IsBackpedaling() const { return backpedaling; }
+
+    private:
+        // Transition logic pour la phase de recul. EnterBackped declenche
+        // OnBackpedStart au passage false->true, sinon OnBackpedTick.
+        // ExitBackped declenche OnBackpedEnd au passage true->false.
+        void EnterBackped(Unit* victim);
+        void ExitBackped(Unit* victim);
 
     protected:
         TaskScheduler scheduler;
@@ -101,6 +125,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         bool damageReduction;
         bool textOnCooldown;
         bool randomMovements;
+        bool backpedaling;
         bool circleClockwise;
         float circleAngle;
 
@@ -112,9 +137,16 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         enum MovementInformId : uint32
         {
-            Jump = 2500000,
-            Move = 2500001
+            Jump        = 2500000,
+            Move        = 2500001,
+            Backped     = 2500002,
         };
+
+        static constexpr float JUMP_HEIGHT = 2.f;
+        static constexpr float JUMP_DISTANCE = 4.f;
+
+        static constexpr float JUMP_BACK_HEIGHT = 1.8f;
+        static constexpr float JUMP_BACK_DISTANCE = 2.5f;
 };
 
 inline Position const GetRandomPosition(Position center, float dist)
