@@ -1,4 +1,4 @@
-#include "Custom/CustomAI/CustomAI.h"
+ï»¿#include "Custom/CustomAI/CustomAI.h"
 #include "GameObject.h"
 #include "Group.h"
 #include "GroupMgr.h"
@@ -198,7 +198,7 @@ struct npc_magister_rommath_purge : public CustomAI
 	EventMap events;
 	uint32 eventId;
 	bool evocating;
-	GuidVector tracks;
+    ObjectGuid playerGuid;
 
 	void Reset() override
 	{
@@ -229,21 +229,19 @@ struct npc_magister_rommath_purge : public CustomAI
 
 	void FollowPlayer()
 	{
-		Map* map = me->GetMap();
-		if (!map)
-			return;
+        if (playerGuid.IsEmpty())
+            return;
 
-		auto playerIt = map->GetPlayers().begin();
-		if (playerIt != map->GetPlayers().end() && playerIt->GetSource())
-		{
-			Player* player = playerIt->GetSource();
-			player->SetMinionGUID(me->GetGUID());
+        Player* player = ObjectAccessor::GetPlayer(*me, playerGuid);
+        if (!player)
+            return;
 
-			me->SetOwnerGUID(player->GetGUID());
-			me->SetImmuneToAll(false);
-			me->GetMotionMaster()->Clear();
-			me->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, me->GetFollowAngle());
-		}
+		player->SetMinionGUID(me->GetGUID());
+
+		me->SetOwnerGUID(playerGuid);
+		me->SetImmuneToAll(false);
+		me->GetMotionMaster()->Clear();
+		me->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, me->GetFollowAngle());
 	}
 
 	void MovementInform(uint32 type, uint32 id) override
@@ -258,11 +256,6 @@ struct npc_magister_rommath_purge : public CustomAI
 				me->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
 				break;
 			case MOVEMENT_INFO_POINT_03:
-				for (ObjectGuid guid : tracks)
-				{
-					if (Creature* tracking = ObjectAccessor::GetCreature(*me, guid))
-						tracking->DespawnOrUnsummon();
-				}
 				DoCast(SPELL_TELEPORT_VISUAL_ONLY);
 				me->SetVisible(false);
 				scheduler.Schedule(5s, [this](TaskContext /*context*/)
@@ -292,6 +285,8 @@ struct npc_magister_rommath_purge : public CustomAI
 
 			if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 5.f))
 			{
+                playerGuid = player->GetGUID();
+
 				DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
 				switch (phase)
 				{
@@ -327,7 +322,7 @@ struct npc_magister_rommath_purge : public CustomAI
 	{
 		if (me->HealthBelowPctDamaged(10, damage))
 		{
-			// On supprime les dégâts actuels
+			// On supprime les dï¿½gï¿½ts actuels
 			damage = 0;
 
 			if (evocating)
@@ -429,22 +424,36 @@ struct npc_magister_rommath_purge : public CustomAI
 
 enum Spells
 {
-	SPELL_METEOR_STORM_VISUAL   = 215555
+    SPELL_METEOR_STORM_VISUAL = 215555
 };
 
 class MeteorStormEvent : public BasicEvent
 {
 public:
-	MeteorStormEvent(Unit* caster, ObjectGuid originalCastId, Position const& dest) : _caster(caster), _originalCastId(originalCastId), _dest(dest), _count(0) { }
+	MeteorStormEvent(Unit* caster, ObjectGuid originalCastId, Position const& dest)
+        : _caster(caster),
+        _originalCastId(originalCastId),
+        _dest(dest), _count(0)
+    {
+    }
 
 	bool Execute(uint64 time, uint32 /*diff*/) override
 	{
-		Position destPosition = { _dest.GetPositionX() + frand(-8.0f, 8.0f), _dest.GetPositionY() + frand(-8.0f, 8.0f), _dest.GetPositionZ() };
+		float angle = frand(0.0f, 2.0f * float(M_PI));
+		float radius = METEROS_RANGE * std::sqrt(frand(0.0f, 1.0f));
+
+		Position destPosition = {
+            _dest.GetPositionX() + radius * std::cos(angle),
+            _dest.GetPositionY() + radius * std::sin(angle),
+            _dest.GetPositionZ()
+        };
+
 		_caster->CastSpell(destPosition, SPELL_METEOR_STORM_VISUAL,
 			CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS).SetOriginalCastId(_originalCastId));
+
 		++_count;
 
-		if (_count >= 12)
+		if (_count >= METEROS_COUNT)
 			return true;
 
 		_caster->m_Events.AddEvent(this, Milliseconds(time) + randtime(100ms, 275ms));
@@ -452,6 +461,10 @@ public:
 	}
 
 private:
+
+    const int METEROS_COUNT = 12;
+    const float METEROS_RANGE = 8;
+
 	Unit* _caster;
 	ObjectGuid _originalCastId;
 	Position _dest;

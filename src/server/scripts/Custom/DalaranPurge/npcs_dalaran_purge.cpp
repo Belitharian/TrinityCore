@@ -65,7 +65,8 @@ struct npc_guardian_mage_dalaran : public CustomAI
 
     void SpellHitTarget(WorldObject* object, SpellInfo const* spellInfo) override
     {
-        if (spellInfo->GetSchoolMask() & SPELL_SCHOOL_MASK_FROST)
+        if ((spellInfo->GetSchoolMask() & SPELL_SCHOOL_MASK_FROST)
+            && spellInfo->Id != SPELL_FROST_SPLINTER)
         {
             Unit* victim = object->ToUnit();
             if (victim && victim->GetGUID() != me->GetGUID())
@@ -73,7 +74,7 @@ struct npc_guardian_mage_dalaran : public CustomAI
                 if (roll_chance_i(30))
                     DoCast(victim, SPELL_FROSTBITE);
 
-                const uint8 splinters = irand(3, 8);
+                const uint8 splinters = irand(1, 4);
 
                 scheduler.Schedule(1ms, [this, splinters](TaskContext context)
                 {

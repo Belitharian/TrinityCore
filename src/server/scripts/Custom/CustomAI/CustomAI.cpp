@@ -419,11 +419,7 @@ void CustomAI::ScheduleRandomMovements()
 
             EnterBackped(victim);
 
-            if (roll_chance_i(60))
-            {
-                me->GetMotionMaster()->MoveBackward(Backped, GetRandomBackStep(10.f), victim);
-            }
-            else
+            if (roll_chance_i(30))
             {
                 MovementFacingTarget facing;
                 facing = victim;
@@ -432,6 +428,10 @@ void CustomAI::ScheduleRandomMovements()
                 me->GetMotionMaster()->MoveJump(Backped, GetRandomBackJump(), me->GetSpeed(MOVE_RUN_BACK),
                     JUMP_BACK_HEIGHT, JUMP_BACK_HEIGHT,
                     facing, true);
+            }
+            else
+            {
+                me->GetMotionMaster()->MoveBackward(Backped, GetRandomBackStep(10.f), victim);
             }
 
             // Repeat court : on revient verifier rapidement, et on reculera encore si toujours trop proche

@@ -1002,7 +1002,7 @@ struct npc_theramore_horde : public CustomAI
 struct npc_roknah_hag : public npc_theramore_horde
 {
 	npc_roknah_hag(Creature* creature) : npc_theramore_horde(creature, AI_Type::Distance),
-		closeTarget(false), iceblock(false), index(0)
+		closeTarget(false), iceblock(false)
 	{
 	}
 
@@ -1013,22 +1013,13 @@ struct npc_roknah_hag : public npc_theramore_horde
 		GROUP_FROSTBOLT
 	};
 
-	const uint32 IciclesDummies[5] =
+	static constexpr uint32 IciclesDummies[5] =
 	{
 		214124,
 		214125,
 		214126,
 		214127,
 		214130
-	};
-
-	const uint32 IciclesProjectiles[5] =
-	{
-		148021,
-		148020,
-		148019,
-		148018,
-		148017
 	};
 
 	enum Spells
@@ -1052,7 +1043,6 @@ struct npc_roknah_hag : public npc_theramore_horde
 
 	bool closeTarget;
 	bool iceblock;
-	uint8 index;
 
 	void SpellHitTarget(WorldObject* object, SpellInfo const* spell) override
 	{
@@ -1122,18 +1112,24 @@ struct npc_roknah_hag : public npc_theramore_horde
 
     void OnSpellFailed(SpellInfo const* spell) override
     {
-        // Si SPELL_GLACIAL_SPIKE est interrompu alors qu'on retente
-        if (spell->Id == SPELL_GLACIAL_SPIKE)
+        // Si SPELL_GLACIAL_SPIKE est interrompu, retenter une seule fois apres un delai
+        if (spell->Id == SPELL_GLACIAL_SPIKE && me->HasAura(SPELL_GLACIAL_SPIKE_BUFF))
         {
-            CastStop();
-            DoCastVictim(SPELL_GLACIAL_SPIKE);
+            scheduler.Schedule(500ms, [this](TaskContext /*context*/)
+            {
+                if (me->HasAura(SPELL_GLACIAL_SPIKE_BUFF))
+                {
+                    CastStop();
+                    DoCastVictim(SPELL_GLACIAL_SPIKE);
+                }
+            });
         }
     }
 
 	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spell) override
 	{
-        // 30% de chance de lancer la barriere de masse
-		if (roll_chance_i(30))
+        // 30% de chance de lancer la barriere de masse à partir de 50% de PV
+		if (HealthBelowPct(50) && roll_chance_i(30))
 		{
 			DoCastSelf(SPELL_MASS_ICE_BARRIER,
                 CastSpellExtraArgs(TRIGGERED_CAST_DIRECTLY));
@@ -1283,16 +1279,7 @@ struct npc_roknah_hag : public npc_theramore_horde
     void CastBlink(bool triggered, Optional<uint32> removeAura = {})
     {
         CastStop();
-
-        if (triggered)
-        {
-            DoCastSelf(SPELL_BLINK, true);
-        }
-        else
-        {
-            DoCastSelf(SPELL_BLINK);
-        }
-
+        DoCastSelf(SPELL_BLINK, triggered);
         me->RemoveMovementImpairingAuras(true);
 
         if (removeAura)
