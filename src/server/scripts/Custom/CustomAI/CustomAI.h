@@ -1,6 +1,7 @@
 #ifndef CUSTOM_CUSTOMAI_H
 #define CUSTOM_CUSTOMAI_H
 
+#include "Custom/FakeParty/FakeParty.h"
 #include "Creature.h"
 #include "CreatureAI.h"
 #include "ScriptedCreature.h"
@@ -76,22 +77,26 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         bool CanAIAttack(Unit const* /*who*/) const override;
         void CastStop();
-        void CastStop(uint32 exception);
-        void CastStop(const std::vector<uint32>& exceptions);
+        void CastStop(uint32 /*exception*/);
+        void CastStop(const std::vector<uint32>& /*exceptions*/);
 
-        void TalkInCombat(uint8 textId, uint64 cooldown = 10);
+        //
+        void StartFakeParty(Player* /*player*/);
+        void StopFakeParty();
+
+        void TalkInCombat(uint8 textId, Seconds cooldown = 10s);
 
         void MovementInform(uint32 /*type*/, uint32 /*id*/) override;
 
-        std::list<Unit*> DoFindMissingBuff(uint32 spellId);
-        Unit* SelectRandomMissingBuff(uint32 spell);
+        std::list<Unit*> DoFindMissingBuff(uint32 /*spellId*/);
+        Unit* SelectRandomMissingBuff(uint32 /*spell*/);
 
         void SetCanRandomMovement(bool apply) { randomMovements = apply; }
         bool CanRandomMovement() const { return randomMovements; }
         void ScheduleRandomMovements();
         Position GetRandomMovementsPosition();
         Position GetRandomJump();
-        Position GetRandomBackStep(float distance);
+        Position GetRandomBackStep(float /*distance*/);
         Position GetRandomBackJump();
 
         // Hook appele une seule fois quand une unite entre dans la phase de recul
@@ -121,6 +126,8 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         AI_Type type;
         SummonList summons;
         uint8 interruptCounter;
+        FakeParty fakeParty;
+        Player* linkedPlayer;
         bool canCombatMove;
         bool damageReduction;
         bool textOnCooldown;
@@ -142,8 +149,10 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
             Backped     = 2500002,
         };
 
-        static constexpr float JUMP_HEIGHT = 2.f;
-        static constexpr float JUMP_DISTANCE = 4.f;
+        static constexpr float JUMP_SPEED = 5.f;
+
+        static constexpr float JUMP_HEIGHT = 1.8f;
+        static constexpr float JUMP_DISTANCE = 5.f;
 
         static constexpr float JUMP_BACK_HEIGHT = 1.8f;
         static constexpr float JUMP_BACK_DISTANCE = 2.5f;
@@ -209,6 +218,17 @@ inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, f
 
     // Set final position
     return { x, y, z, o };
+}
+
+inline void FeingDeath(Creature* creature)
+{
+    creature->RemoveAllAuras();
+    creature->SetRegenerateHealth(false);
+    creature->SetHealth(0U);
+    creature->SetStandState(UNIT_STAND_STATE_DEAD);
+    creature->SetUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
+    creature->SetUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
+    creature->SetImmuneToAll(true);
 }
 
 #endif // CUSTOM_CUSTOMAI_H

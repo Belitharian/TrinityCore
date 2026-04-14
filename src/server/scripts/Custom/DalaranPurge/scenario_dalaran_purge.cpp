@@ -8,6 +8,7 @@
 #include "MotionMaster.h"
 #include "Player.h"
 #include "TemporarySummon.h"
+#include "CustomAI.h"
 #include "dalaran_purge.h"
 
 const ObjectData creatureData[] =
@@ -62,7 +63,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 		void OnPlayerEnter(Player* player) override
 		{
-			player->CastSpell(player, SPELL_RAINY_WEATHER, true);
+			player->CastSpell(player, SPELL_SNOWY_WEATHER, true);
 
 			DLPPhases phase = (DLPPhases)GetData(DATA_SCENARIO_PHASE);
 			if (phase >= DLPPhases::FreeCitizens && phase < DLPPhases::RemainingSunreavers)
@@ -80,7 +81,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 		void OnPlayerLeave(Player* player) override
 		{
-			player->RemoveAurasDueToSpell(SPELL_RAINY_WEATHER);
+			player->RemoveAurasDueToSpell(SPELL_SNOWY_WEATHER);
 			player->RemoveAurasDueToSpell(SPELL_WAND_OF_DISPELLING);
 			player->RemoveAurasDueToSpell(SPELL_HORDE_ILLUSION);
 			player->RemoveAurasDueToSpell(SPELL_FACTION_OVERRIDE);
@@ -153,14 +154,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 						creature->setActive(true);
 						creature->SetVisible(true);
 					});
-
-					DoOnCreatures(highmages, [this](Creature* creature)
-					{
-						creature->SetFaction(FACTION_FRIENDLY);
-						creature->setActive(false);
-						creature->SetVisible(false);
-					});
-
 					break;
 				}
 				// A Facelift
@@ -570,11 +563,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 				#pragma region DALARAN
 
 				case 1:
-                    if (Creature* jaina = GetJaina())
-                    {
-                        jaina->SetAIAnimKitId(18213);
-                        Talk(jaina, SAY_PURGE_JAINA_01);
-                    }
+                    Talk(GetJaina(), SAY_PURGE_JAINA_01);
 					Next(2s);
 					break;
 				case 2:
@@ -604,24 +593,48 @@ class scenario_dalaran_purge : public InstanceMapScript
 					Next(2s);
 					break;
 				case 8:
-					DoOnCreatures(highmages, [this](Creature* creature)
-					{
-						creature->SetSpeedRate(MOVE_RUN, 0.8f);
-						creature->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, GetJaina(), 1.6f);
-					});
+                {
+                    Creature* jaina = GetJaina();
+                    for (uint8 i = 0;
+                        i < highmages.size(); ++i)
+                    {
+                        if (Creature* highmage = instance->GetCreature(highmages[i]))
+                        {
+                            if (i <= 2)
+                            {
+                                highmage->CastSpell(jaina, SPELL_FIREBALL_COSMETIC);
+                            }
+                            else
+                            {
+                                highmage->SetSpeedRate(MOVE_RUN, 0.7f);
+                                highmage->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, jaina, 1.6f);
+                            }
+                        }
+                    }
 					Next(760ms);
 					break;
+                }
 				case 9:
-					GetJaina()->CastSpell(GetJaina(), SPELL_ARCANE_NOVA, CastSpellExtraArgs(TRIGGERED_CAST_DIRECTLY));
-					Next(630ms);
+                    if (Creature* jaina = GetJaina())
+                        jaina->CastSpell(jaina, SPELL_FROST_NOVA_COSMETIC,
+                            CastSpellExtraArgs(TRIGGERED_CAST_DIRECTLY));
+					Next(380ms);
 					break;
-				case 10:
-					DoOnCreatures(highmages, [this](Creature* creature)
-					{
-						creature->KillSelf();
-					});
-					Next(1s);
-					break;
+                case 10:
+                {
+                    for (uint8 i = 0;
+                        i < highmages.size(); ++i)
+                    {
+                        if (Creature* highmage = instance->GetCreature(highmages[i]))
+                        {
+                            FeingDeath(highmage);
+                            highmage->CastStop();
+                            highmage->GetMotionMaster()->StopOnDeath();
+                        }
+                    }
+                    Next(1s);
+                    break;
+                }
 				case 11:
 					if (Creature* jaina = GetJaina())
 					{
@@ -631,19 +644,17 @@ class scenario_dalaran_purge : public InstanceMapScript
 					Next(6s);
 					break;
 				case 12:
-					GetJaina()->CastSpell(GetJaina(), SPELL_DISSOLVE);
-					GetJaina()->CastSpell(GetJaina(), SPELL_TELEPORT, true);
-					GetAethas()->CastSpell(GetAethas(), SPELL_TELEPORT, true);
+                    GetAethas()->CastSpell(GetAethas(), SPELL_TELEPORT);
+                    if (Creature* jaina = GetJaina())
+                    {
+                        jaina->SetWalk(false);
+                        jaina->CastSpell(jaina, SPELL_TELEPORT);
+                    }
 					Next(1s);
 					break;
 				case 13:
 					GetJaina()->SetVisible(false);
-					GetElemental()->SetVisible(false);
 					GetAethas()->SetVisible(false);
-					DoOnCreatures(highmages, [this](Creature* creature)
-					{
-						creature->SetVisible(false);
-					});
 					TriggerGameEvent(EVENT_ASSIST_JAINA);
 					break;
 				// DELETED
@@ -1044,17 +1055,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 			if (player && player->IsWithinDist(creature, 5.f, false))
 				return player;
 			return nullptr;
-		}
-
-		void FeingDeath(Creature* creature)
-		{
-			creature->RemoveAllAuras();
-			creature->SetRegenerateHealth(false);
-			creature->SetHealth(0U);
-			creature->SetStandState(UNIT_STAND_STATE_DEAD);
-			creature->SetUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
-			creature->SetUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
-			creature->SetImmuneToAll(true);
 		}
 
 		template <typename T>

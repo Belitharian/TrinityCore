@@ -6,7 +6,8 @@
 
 CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 	type(type), summons(creature), canCombatMove(true), damageReduction(false),
-    textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance_i(50)), circleAngle(0.f)
+    textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance_i(50)), circleAngle(0.f),
+    fakeParty(creature), linkedPlayer(nullptr)
 {
     if (type == AI_Type::Distance)
     {
@@ -18,7 +19,8 @@ CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 
 CustomAI::CustomAI(Creature* creature, bool damageReduction, AI_Type type) : ScriptedAI(creature),
 	type(type), summons(creature), canCombatMove(true), damageReduction(damageReduction),
-    textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance_i(50)), circleAngle(0.f)
+    textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance_i(50)), circleAngle(0.f),
+    fakeParty(creature), linkedPlayer(nullptr)
 {
     if (type == AI_Type::Distance)
     {
@@ -47,22 +49,16 @@ void CustomAI::Initialize()
 void CustomAI::JustSummoned(Creature* summon)
 {
 	summons.Summon(summon);
-
-	ScriptedAI::JustSummoned(summon);
 }
 
 void CustomAI::SummonedCreatureDespawn(Creature* summon)
 {
 	summons.Despawn(summon);
-
-	ScriptedAI::SummonedCreatureDespawn(summon);
 }
 
 void CustomAI::SummonedCreatureDies(Creature* summon, Unit* killer)
 {
 	summons.Despawn(summon);
-
-	ScriptedAI::SummonedCreatureDies(summon, killer);
 }
 
 void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
@@ -111,17 +107,12 @@ void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
 
 void CustomAI::EnterEvadeMode(EvadeReason why)
 {
-	if (me->GetWaypointPathId() != 0)
+    ScriptedAI::EnterEvadeMode(why);
+
+    if (me->GetWaypointPathId() != 0)
 	{
 		me->ResumeMovement();
 	}
-
-	me->RemoveAllAreaTriggers();
-
-	summons.DespawnAll();
-	scheduler.CancelAll();
-
-	ScriptedAI::EnterEvadeMode(why);
 }
 
 void CustomAI::Reset()
@@ -133,7 +124,12 @@ void CustomAI::Reset()
 	summons.DespawnAll();
 	scheduler.CancelAll();
 
-	ScriptedAI::Reset();
+    // Si un joueur était lié, on détruit le frame avant de reset
+    if (linkedPlayer)
+    {
+        fakeParty.DestroyFakeParty(linkedPlayer);
+        linkedPlayer = nullptr;
+    }
 }
 
 void CustomAI::AttackStart(Unit* who)
@@ -196,12 +192,29 @@ void CustomAI::JustDied(Unit* killer)
 
 	me->RemoveAllAreaTriggers();
 
-	ScriptedAI::JustDied(killer);
+    StopFakeParty();
 }
 
 void CustomAI::UpdateAI(uint32 diff)
 {
+    // Mise à jour périodique du party frame (santé, mana, position)
+    if (fakeParty.IsActive())
+    {
+        // Vérifier que le joueur est toujours valide et en range
+        if (!linkedPlayer
+            || !linkedPlayer->IsInWorld()
+            || !linkedPlayer->IsWithinDistInMap(me, 100.0f))
+        {
+            StopFakeParty();
+        }
+        else
+        {
+            fakeParty.Update(diff, linkedPlayer);
+        }
+    }
+
 	UpdateVictim();
+
 	scheduler.Update(diff);
 }
 
@@ -248,7 +261,6 @@ void CustomAI::CastStop(uint32 exception)
 	}
 }
 
-
 uint32 CustomAI::FriendsInRange(float range, uint8 pct)
 {
 	std::list<Unit*> list;
@@ -281,7 +293,26 @@ bool CustomAI::HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic)
 	return spellInfo->GetAllEffectsMechanicMask() & (UI64LIT(1) << mechanic);
 }
 
-void CustomAI::TalkInCombat(uint8 textId, uint64 cooldown)
+void CustomAI::StartFakeParty(Player* player)
+{
+    if (!player || fakeParty.IsActive())
+        return;
+
+    linkedPlayer = player;
+    fakeParty.SendFakePartyUpdate(player);
+    fakeParty.SendFakePartyMemberState(player);
+}
+
+void CustomAI::StopFakeParty()
+{
+    if (!linkedPlayer || !fakeParty.IsActive())
+        return;
+
+    fakeParty.DestroyFakeParty(linkedPlayer);
+    linkedPlayer = nullptr;
+}
+
+void CustomAI::TalkInCombat(uint8 textId, Seconds cooldown)
 {
 	if (!textOnCooldown)
 	{
@@ -406,7 +437,7 @@ void CustomAI::ScheduleRandomMovements()
         {
             if (victim)
                 ExitBackped(victim);
-            context.Repeat(3s, 6s);
+            context.Repeat(6s, 8s);
             return;
         }
 
@@ -414,24 +445,37 @@ void CustomAI::ScheduleRandomMovements()
         // On alterne aleatoirement entre walk back et jump back, toujours face a la cible
         if (victim->IsWithinCombatRange(me, 8.f))
         {
-            // Le sort est interrompu
+            // On calcule la position de recul AVANT d'interrompre le sort
+            // Si un mur bloque derriere, on ne coupe pas le cast inutilement
+            bool useJump = roll_chance_i(30);
+            Position backPos = useJump ? GetRandomBackJump() : GetRandomBackStep(10.f);
+            float movedDist = me->GetExactDist2d(backPos);
+
+            // Si on ne peut pas reculer assez (mur derriere), on garde le cast et on reessaye plus tard
+            if (movedDist < 1.f)
+            {
+                context.Repeat(500ms, 1s);
+                return;
+            }
+
+            // On peut reculer : on interrompt le sort et on recule
             CastStop();
 
             EnterBackped(victim);
 
-            if (roll_chance_i(30))
+            if (useJump)
             {
                 MovementFacingTarget facing;
                 facing = victim;
 
                 // Petit hop arriere face a la cible
-                me->GetMotionMaster()->MoveJump(Backped, GetRandomBackJump(), me->GetSpeed(MOVE_RUN_BACK),
+                me->GetMotionMaster()->MoveJump(Backped, backPos, JUMP_SPEED,
                     JUMP_BACK_HEIGHT, JUMP_BACK_HEIGHT,
                     facing, true);
             }
             else
             {
-                me->GetMotionMaster()->MoveBackward(Backped, GetRandomBackStep(10.f), victim);
+                me->GetMotionMaster()->MoveBackward(Backped, backPos, victim);
             }
 
             // Repeat court : on revient verifier rapidement, et on reculera encore si toujours trop proche
@@ -448,13 +492,11 @@ void CustomAI::ScheduleRandomMovements()
                 return;
             }
 
-            std::cout << me->GetName().c_str() << " - Hop lateral" << std::endl;
-
             MovementFacingTarget facing;
             facing = victim;
 
             ExitBackped(victim);
-            me->GetMotionMaster()->MoveJump(Jump, GetRandomJump(), me->GetSpeed(MOVE_RUN_BACK),
+            me->GetMotionMaster()->MoveJump(Jump, GetRandomJump(), JUMP_SPEED,
                 JUMP_HEIGHT, JUMP_HEIGHT,
                 facing, true);
 
@@ -468,7 +510,6 @@ void CustomAI::ScheduleRandomMovements()
         context.Repeat(8s, 16s);
     });
 }
-
 
 Position CustomAI::GetRandomMovementsPosition()
 {

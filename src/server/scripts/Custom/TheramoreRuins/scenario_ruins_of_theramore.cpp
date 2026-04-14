@@ -1,3 +1,4 @@
+#include "CustomAI.h"
 #include "EventMap.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
@@ -194,7 +195,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					elementals.push_back(creature);
 					break;
 				case NPC_DEAD_ROKNAH_TROOP:
-					FeingDeath(creature);
+                    FeingDeath(creature);
 					if (roll_chance_i(50))
 						creature->AddAura(RAND(SPELL_GLACIAL_SPIKE_COSMETIC, SPELL_BURNING), creature);
 					break;
@@ -695,17 +696,6 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		{
 			eventId++;
 			events.ScheduleEvent(eventId, time);
-		}
-
-		void FeingDeath(Creature* creature)
-		{
-			creature->RemoveAllAuras();
-			creature->SetRegenerateHealth(false);
-			creature->SetHealth(0U);
-			creature->SetStandState(UNIT_STAND_STATE_DEAD);
-			creature->SetUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
-			creature->SetUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
-			creature->SetImmuneToAll(true);
 		}
 
 		void TeleportPlayers(const Position center, float distance)

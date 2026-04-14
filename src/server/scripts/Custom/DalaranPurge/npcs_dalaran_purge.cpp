@@ -11,7 +11,7 @@
 #include "ScriptMgr.h"
 #include "TemporarySummon.h"
 #include "SpellAuraEffects.h"
-#include "Custom/CustomAI/CustomAI.h"
+#include "CustomAI.h"
 #include "dalaran_purge.h"
 
 enum Atonement
@@ -474,10 +474,12 @@ struct npc_stormwind_cleric : public CustomAI
 
 	enum Spells
 	{
+        SPELL_SHADOW_WORD_PAIN          = 23268,
         SPELL_POWER_WORD_BARRIER        = 62618,
         SPELL_PURGE_THE_WICKED          = 451738,
         SPELL_PURGE_THE_WICKED_DEBUFF   = 451740,
         SPELL_POWER_WORD_AEGIS          = 222403,
+        SPELL_POWER_WORD_FORTITUDE      = 284466,
 		SPELL_SMITE                     = 419880,
         SPELL_ULTIMATE_PENITENCE        = 421453,
         SPELL_FLASH_HEAL                = 314655,
@@ -494,6 +496,15 @@ struct npc_stormwind_cleric : public CustomAI
     void Reset() override
     {
         CustomAI::Reset();
+
+        scheduler.Schedule(2s, [this](TaskContext fortitude)
+		{
+			if (Unit* target = SelectRandomMissingBuff(SPELL_POWER_WORD_FORTITUDE))
+				DoCast(target, SPELL_POWER_WORD_FORTITUDE,
+                    CastSpellExtraArgs(TRIGGERED_IGNORE_SET_FACING));
+
+			fortitude.Repeat(2s);
+		});
 
         ultimatePenitence = false;
     }
@@ -513,9 +524,18 @@ struct npc_stormwind_cleric : public CustomAI
             scheduler.DelayGroup(NORMAL, 10s);
 
             CastStop();
-            //DoCastSelf(SPELL_POWER_WORD_AEGIS, true);
             DoCastSelf(SPELL_ULTIMATE_PENITENCE);
         }
+    }
+
+    void OnBackpedStart(Unit* victim) override
+    {
+        CastBackped(victim);
+    }
+
+    void OnBackpedTick(Unit* victim) override
+    {
+        CastBackped(victim);
     }
 
 	void JustEngagedWith(Unit* /*who*/) override
@@ -559,6 +579,12 @@ struct npc_stormwind_cleric : public CustomAI
                 power_word_radiance.Repeat(15s, 22s);
             });
 	}
+
+    void CastBackped(Unit* victim)
+    {
+        CastStop();
+        DoCast(victim, SPELL_SHADOW_WORD_PAIN, CastSpellExtraArgs(TRIGGERED_IGNORE_GCD));
+    }
 };
 
 struct npc_mage_commander_zuros : public CustomAI
@@ -731,18 +757,6 @@ struct npc_mage_commander_zuros : public CustomAI
             }
         }
     }
-
-    void FeingDeath(Creature* creature)
-    {
-        creature->RemoveAllAuras();
-        creature->SetRegenerateHealth(false);
-        creature->SetHealth(0U);
-        creature->SetStandState(UNIT_STAND_STATE_DEAD);
-        creature->SetUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
-        creature->SetUnitFlag2(UNIT_FLAG2_PLAY_DEATH_ANIM);
-        creature->SetImmuneToAll(true);
-        creature->SetUninteractible(true);
-    }
 };
 
 struct npc_narasi_snowdawn : public CustomAI
@@ -829,8 +843,11 @@ public:
     enum Misc : uint32
     {
         SPELL_ICE_BURST             = 283591,
+
         GOSSIP_MENU_DEFAULT         = 65003,
+
         NPC_ICEWALL                 = 178819,
+
         RESPAWN_24H                 = 86400,
     };
 
@@ -1147,9 +1164,10 @@ public:
 
                                 citizen->CastSpell(citizen, SPELL_TELEPORT_TARGET);
                                 citizen->DisappearAndDie();
+
                             }, Milliseconds(delay));
 
-                        delay += urand(500, 800);
+                        delay += urand(300, 600);
                     }
                 #endif
             break;
@@ -1418,11 +1436,6 @@ struct npc_sunreaver_unit : public CustomAI
 		Initialize();
 	}
 
-	void Reset() override
-	{
-		CustomAI::Reset();
-	}
-
 	void MovementInform(uint32 type, uint32 id) override
 	{
         CustomAI::MovementInform(type, id);
@@ -1431,7 +1444,7 @@ struct npc_sunreaver_unit : public CustomAI
 		{
 			case MOVEMENT_INFO_POINT_01:
 				me->SetReactState(REACT_AGGRESSIVE);
-				me->RemoveUnitFlag(UnitFlags::UNIT_FLAG_NON_ATTACKABLE);
+				me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
 				break;
 		}
 	}
@@ -1449,12 +1462,13 @@ struct npc_sunreaver_pyromancer : public npc_sunreaver_unit
 	enum Spells
 	{
 		SPELL_MOLTEN_ARMOR          = 79849,
+        SPELL_FIRE_BLAST            = 108853,
         SPELL_PYROBLAST             = 244402,
         SPELL_PHOENIX_FLAMES        = 257541,
         SPELL_SCORCH                = 296457,
         SPELL_FLAMESTRIKE           = 330347,
 		SPELL_FIREBALL              = 338914,
-        SPELL_FIRESPELL_SPHERE      = 448604
+        SPELL_FIRESPELL_SPHERE      = 448604,
 	};
 
     uint32 FirespellSpheres[FIRESPELL_MAX_SPHERES] =
@@ -1507,6 +1521,16 @@ struct npc_sunreaver_pyromancer : public npc_sunreaver_unit
         }
 	}
 
+    void OnBackpedStart(Unit* victim) override
+    {
+        CastBackped(victim);
+    }
+
+    void OnBackpedTick(Unit* victim) override
+    {
+        CastBackped(victim);
+    }
+
 	void JustEngagedWith(Unit* who) override
 	{
 		DoCast(who, SPELL_FIREBALL);
@@ -1530,6 +1554,12 @@ struct npc_sunreaver_pyromancer : public npc_sunreaver_unit
 				flamestrike.Repeat(14s, 22s);
 			});
 	}
+
+    void CastBackped(Unit* victim)
+    {
+        CastStop();
+        DoCast(victim, SPELL_FIRE_BLAST, CastSpellExtraArgs(TRIGGERED_IGNORE_GCD));
+    }
 };
 
 struct npc_sunreaver_aegis : public npc_sunreaver_unit
@@ -1648,12 +1678,14 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 	enum Spells
 	{
 		SPELL_ARCANE_HASTE          = 50182,
+        SPELL_SUPERNOVA             = 157980,
 		SPELL_MAGE_ARMOR            = 183079,
-		SPELL_ARCANE_MISSILES       = 191293,
         SPELL_ARCANE_BLITZ          = 197797,
         SPELL_ARCANE_RECONSTITUTION = 226206,
 		SPELL_ARCANE_EXPLOSION      = 277012,
         SPELL_ARCANE_SUMMONS        = 390233,
+		SPELL_ARCANE_MISSILES       = 333820,
+        SPELL_ARCANE_BARRAGE        = 450499,
 		SPELL_ARCANE_BLAST          = 1222815,
         SPELL_TITAN_FORCE_SHIELD    = 1223453,
 	};
@@ -1675,13 +1707,7 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 		});
 	}
 
-    void EnterEvadeMode(EvadeReason why) override
-    {
-        CustomAI::EnterEvadeMode(why);
-        summons.DespawnAll();
-    }
-
-    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo*/) override
     {
         if (!healDone && HealthBelowPct(40))
         {
@@ -1698,11 +1724,21 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
         switch (summon->GetEntry())
         {
             case NPC_ARCANE_ELEMENTAL:
-                summon->Attack(me->EnsureVictim(), false);
+                summon->Attack(me->GetVictim(), false);
                 break;
             default:
                 break;
         }
+    }
+
+    void OnBackpedStart(Unit* victim) override
+    {
+        CastBackped(victim);
+    }
+
+    void OnBackpedTick(Unit* victim) override
+    {
+        CastBackped(victim);
     }
 
 	void JustEngagedWith(Unit* /*who*/) override
@@ -1752,6 +1788,12 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
                 DoCastSelf(SPELL_ARCANE_SUMMONS);
             });
 	}
+
+    void CastBackped(Unit* victim)
+    {
+        CastStop();
+        DoCast(victim, RAND(SPELL_ARCANE_BARRAGE, SPELL_SUPERNOVA), CastSpellExtraArgs(TRIGGERED_IGNORE_GCD));
+    }
 };
 
 struct npc_arcane_elemental : public CustomAI
@@ -3673,35 +3715,19 @@ struct at_arcane_barrier : AreaTriggerAI
         SPELL_ARCANE_BARRIER_DAMAGE = 264848
     };
 
-    void OnCreate(Spell const* /*creatingSpell*/) override
+    void OnUnitEnter([[maybe_unused]] Unit* unit) override
     {
-        _scheduler.Schedule(1s, [this](TaskContext task)
-        {
-            if (Unit* caster = at->GetCaster())
-            {
-                for (ObjectGuid unit : at->GetInsideUnits())
-                {
-                    if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
-                    {
-                        if (!caster->IsHostileTo(target))
-                            continue;
+        Unit* caster = at->GetCaster();
+        if (!caster)
+            return;
 
-                        caster->CastSpell(target, SPELL_ARCANE_BARRIER_DAMAGE, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
-                    }
-                }
-            }
+        if (!unit->IsHostileTo(caster))
+            return;
 
-            task.Repeat(1s);
-        });
+        unit->CastSpell(unit,
+            SPELL_ARCANE_BARRIER_DAMAGE,
+            CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_IGNORE_GCD));
     }
-
-    void OnUpdate(uint32 diff) override
-    {
-        _scheduler.Update(diff);
-    }
-
-private:
-    TaskScheduler _scheduler;
 };
 
 // Arcane Barrier - 271187
@@ -3778,7 +3804,7 @@ struct at_rain_of_fire : AreaTriggerAI
 			if (unit->GetGUID() == caster->GetGUID())
 				return;
 
-			if (unit->IsFriendlyTo(caster))
+            if (!unit->IsHostileTo(caster))
 				return;
 
 			caster->CastSpell(unit, SPELL_RAIN_OF_FIRE_DAMAGE, true);
@@ -3813,7 +3839,7 @@ struct at_frigid_blizzard_dalaran : AreaTriggerAI
 			if (unit->GetGUID() == caster->GetGUID())
 				return;
 
-			if (unit->IsFriendlyTo(caster))
+			if (!unit->IsHostileTo(caster))
 				return;
 
 			caster->CastSpell(unit, SPELL_FRIGID_BLIZZARD_DAMAGE, true);
@@ -3823,9 +3849,7 @@ struct at_frigid_blizzard_dalaran : AreaTriggerAI
     void OnUnitExit(Unit* unit, AreaTriggerExitReason /*reason*/) override
 	{
 		if (unit->HasAura(SPELL_FRIGID_BLIZZARD_DAMAGE))
-		{
 			unit->RemoveAurasDueToSpell(SPELL_FRIGID_BLIZZARD_DAMAGE);
-		}
 	}
 };
 

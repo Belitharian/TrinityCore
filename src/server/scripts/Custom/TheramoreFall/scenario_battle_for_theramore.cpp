@@ -1810,7 +1810,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				{
 					horde->SetImmuneToAll(true);
 
-					switch (horde->GetCreatureTemplate()->unit_class)
+					switch (horde->GetClass())
 					{
 						case UNIT_CLASS_PALADIN:
 							horde->SetEmoteState(EMOTE_STATE_READY2H);

@@ -7120,7 +7120,7 @@ int32 Unit::SpellBaseDamageBonusDone(SpellSchoolMask schoolMask) const
         UnitMods unitMod = UNIT_MOD_DAMAGE_MAINHAND;
         WeaponAttackType attackType = BASE_ATTACK;
 
-        if (creature->GetCreatureTemplate()->unit_class == UNIT_CLASS_MAGE)
+        if (creature->GetClass() == UNIT_CLASS_MAGE)
         {
             variance = creature->GetCreatureTemplate()->RangeVariance;
             attackType = RANGED_ATTACK;
