@@ -115,6 +115,11 @@ enum RFTMisc
 	// Sounds
 	SOUND_ZEPPELIN_FLIGHT               = 85549,
 
+    // Data
+    DATA_SET_DISTANCE                   = 1,
+    DATA_CANCEL_GROUP                   = 2,
+    DATA_PHASE_COMBAT                   = 3,
+
     // Weather
     WEATHER_ARCANE_BUILD                = 182,
 

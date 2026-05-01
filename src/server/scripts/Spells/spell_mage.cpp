@@ -1780,6 +1780,31 @@ class spell_mage_ray_of_frost_aura : public AuraScript
     }
 };
 
+// 5143 - Arcane Missiles
+class spell_mage_arcane_missiles : public AuraScript
+{
+    enum Spells
+    {
+        SPELL_ARCANE_MISSILES_DAMAGE = 7268
+    };
+
+    void HandleEffectPeriodic(AuraEffect const* /*aurEff*/)
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetTarget();
+
+        if (caster && target)
+        {
+            caster->CastSpell(target, SPELL_ARCANE_MISSILES_DAMAGE, TRIGGERED_IGNORE_CAST_IN_PROGRESS);
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_mage_arcane_missiles::HandleEffectPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
+    }
+};
+
 // 136511 - Ring of Frost
 class spell_mage_ring_of_frost : public AuraScript
 {
@@ -2229,6 +2254,7 @@ void AddSC_mage_spell_scripts()
     RegisterSpellScript(spell_mage_pyrotechnics);
     RegisterSpellScript(spell_mage_radiant_spark);
     RegisterSpellAndAuraScriptPair(spell_mage_ray_of_frost, spell_mage_ray_of_frost_aura);
+    RegisterSpellScript(spell_mage_arcane_missiles);
     RegisterSpellScript(spell_mage_ring_of_frost);
     RegisterSpellAndAuraScriptPair(spell_mage_ring_of_frost_freeze, spell_mage_ring_of_frost_freeze_AuraScript);
     RegisterSpellScript(spell_mage_scald);

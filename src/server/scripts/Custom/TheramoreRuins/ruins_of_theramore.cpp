@@ -28,9 +28,18 @@ struct npc_jaina_ruins : public CustomAI
 		instance = me->GetInstanceScript();
     }
 
-	void SetData(uint32 /*id*/, uint32 value) override
+	void SetData(uint32 id, uint32 value) override
 	{
-		distance = (float)value;
+        switch (id)
+        {
+            case DATA_SET_DISTANCE:
+    		    distance = (float)value;
+                break;
+            case DATA_CANCEL_GROUP:
+                scheduler.CancelGroup(value);
+                break;
+        }
+
 	}
 
 	void SpellHit(WorldObject*, SpellInfo const*) override { }
@@ -97,12 +106,12 @@ struct npc_jaina_ruins : public CustomAI
 		DoCast(who, SPELL_FROSTBOLT);
 
 		scheduler
-			.Schedule(2s, [this](TaskContext frostbolt)
+			.Schedule(2s, DATA_PHASE_COMBAT, [this](TaskContext frostbolt)
 			{
 				DoCastVictim(SPELL_FROSTBOLT);
 				frostbolt.Repeat(2800ms);
 			})
-			.Schedule(8s, [this](TaskContext grasp_of_frost)
+			.Schedule(8s, DATA_PHASE_COMBAT, [this](TaskContext grasp_of_frost)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
@@ -111,25 +120,25 @@ struct npc_jaina_ruins : public CustomAI
 				}
 				grasp_of_frost.Repeat(18s, 32s);
 			})
-			.Schedule(15s, [this](TaskContext comet_barrage)
+			.Schedule(15s, DATA_PHASE_COMBAT, [this](TaskContext comet_barrage)
 			{
 				DoCastAOE(SPELL_COMET_BARRAGE);
 				comet_barrage.Repeat(12s, 14s);
 			})
-            .Schedule(30s, [this](TaskContext arcane_chaos)
+            .Schedule(20s, DATA_PHASE_COMBAT, [this](TaskContext arcane_chaos)
             {
                 CastStop(SPELL_COMET_BARRAGE);
                 DoCast(SPELL_ARCANE_CHAOS);
                 arcane_chaos.Repeat(45s, 60s);
             })
-			.Schedule(12s, [this](TaskContext blink)
+			.Schedule(12s, DATA_PHASE_COMBAT, [this](TaskContext blink)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 				{
                     Position dest = me->GetRandomPoint(target->GetPosition(), 6.0f);
                     me->CastSpell(dest, SPELL_BLINK, true);
 				}
-				blink.Repeat(30s, 45s);
+				blink.Repeat(15s, 20s);
 			});
 	}
 
@@ -179,12 +188,15 @@ struct npc_jaina_ruins : public CustomAI
 	void MoveInLineOfSight(Unit* who) override
 	{
 		ScriptedAI::MoveInLineOfSight(who);
+
 		if (me->IsEngaged() || who->GetTypeId() != TYPEID_PLAYER)
 			return;
+
 		if (Player* player = who->ToPlayer())
 		{
 			if (player->IsGameMaster())
 				return;
+
 			if (player->IsFriendlyTo(me) && player->IsWithinDist(me, distance))
 			{
 				switch ((RFTPhases)instance->GetData(DATA_SCENARIO_PHASE))
@@ -204,7 +216,9 @@ struct npc_jaina_ruins : public CustomAI
 
 	void UpdateAI(uint32 diff) override
 	{
-		scheduler.Update(diff, [this] { UpdateVictim(); });
+		scheduler.Update(diff, [this]{
+            UpdateVictim();
+        });
 	}
 };
 

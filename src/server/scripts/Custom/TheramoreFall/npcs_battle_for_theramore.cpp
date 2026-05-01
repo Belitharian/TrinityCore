@@ -653,267 +653,499 @@ struct npc_theramore_footman : public npc_theramore_troop
 	}
 };
 
+// =============================================================================
+// npc_theramore_arcanist - Mage Arcane (caster a distance)
+// =============================================================================
+// Rotation principale :
+//   - Arcane Blast en continu (cast time = duree du Repeat -> ratio 1:1)
+//   - Chaque Blast genere 1 Arcane Charge et refresh Arcane Tempo
+//   - 5+ charges -> Arcane Barrage (finisher, consomme les charges)
+//   - 15% de proc Clearcasting au hit -> Arcane Missiles instant
+//   - Touch of the Magi sur cible aleatoire (debuff vulnerabilite)
+//   - Salves d'Arcane Orbs sur cible aleatoire
+// AOE :
+//   - 4+ ennemis melee -> Mass Polymorph (2 min CD)
+//   - 2+ ennemis melee -> Arcane Explosion (2 min CD)
+// Mecaniques de hit :
+//   - Arcane Blast / Missiles -> 1 Arcane Splinter en plus
+//   - Arcane Barrage -> 4 Arcane Splinters en plus
+// =============================================================================
 struct npc_theramore_arcanist : public npc_theramore_troop
 {
-	npc_theramore_arcanist(Creature* creature) : npc_theramore_troop(creature, AI_Type::Distance)
-	{
-		castSpellArcaneTempo.SetTriggerFlags(TRIGGERED_FULL_MASK & ~(TRIGGERED_IGNORE_POWER_COST | TRIGGERED_IGNORE_REAGENT_COST));
-		castSpellArcaneTempo.AddSpellBP0(2U);
-	}
+    npc_theramore_arcanist(Creature* creature) : npc_theramore_troop(creature, AI_Type::Distance), arcaneCharges(0)
+    {
+        arcaneBlastInfo = sSpellMgr->AssertSpellInfo(SPELL_ARCANE_BLAST, DIFFICULTY_NONE);
+        // Arcane Tempo doit payer son cout en charges -> on retire les flags qui ignorent le cout.
+        arcaneTempoArgs.SetTriggerFlags(TRIGGERED_FULL_MASK & ~(TRIGGERED_IGNORE_POWER_COST | TRIGGERED_IGNORE_REAGENT_COST));
+    }
 
-	enum Spells
-	{
-		SPELL_MAGE_ARMOR        = 183079,
-		SPELL_ARCANE_BLAST      = 291336,
-		SPELL_ARCANE_MISSILES   = 314734,
-		SPELL_MASS_POLYMORPH    = 383121,
-		SPELL_ARCANE_TEMPO      = 383997,
-		SPELL_ARCANE_EXPLOSION  = 414381,
-		SPELL_ARCANE_SPLINTER   = 443763
-	};
+    enum Spells
+    {
+        SPELL_ARCANE_MISSILES           = 5143,
+        SPELL_ARCANE_MISSILES_DAMAGE    = 7268,
+        SPELL_ARCANE_BARRAGE            = 44425,
+        SPELL_MAGE_ARMOR                = 183079,
+        SPELL_CLEARCASTING              = 263725,
+        SPELL_ARCANE_BLAST              = 291336,
+        SPELL_TOUCH_OF_THE_MAGI         = 321507,
+        SPELL_TOUCH_OF_THE_MAGI_BUFF    = 210824,
+        SPELL_MASS_POLYMORPH            = 383121,
+        SPELL_ARCANE_TEMPO              = 383997,
+        SPELL_ARCANE_EXPLOSION          = 414381,
+        SPELL_ARCANE_SPLINTER           = 443763,
+        SPELL_ARCANE_ORB                = 440458,
+        SPELL_TEMPORAL_REALIGNMENT      = 1244092,
+        SPELL_TEMPORAL_REALIGNMENT_BUFF = 1244093
+    };
 
-	CastSpellExtraArgs castSpellArcaneTempo;
+    static constexpr int32  ARCANE_BARRAGE_MIN_CHARGES  = 4;        // Charges requises pour Barrage
+    static constexpr uint32 CLEARCASTING_PROC_CHANCE    = 15;       // % de proc au hit d'Arcane Blast
+    static constexpr float  AOE_RANGE                   = 10.0f;    // Distance de detection AOE
+    static constexpr uint32 MASS_POLYMORPH_THRESHOLD    = 4;        // Au-dela de N ennemis -> Polymorph
+    static constexpr uint32 ARCANE_EXPLOSION_THRESHOLD  = 2;        // Au-dela de N ennemis -> Explosion
+    static constexpr float  TARGET_RANGE                = 30.0f;    // Portee de selection des cibles a distance
 
-	void Reset() override
-	{
-		npc_theramore_troop::Reset();
+    const SpellInfo* arcaneBlastInfo;
+    uint32 arcaneCharges;
+    CastSpellExtraArgs arcaneTempoArgs;
 
-		scheduler.Schedule(1s, [this](TaskContext /*context*/)
-		{
-			DoCastSelf(SPELL_MAGE_ARMOR);
-		});
-	}
+    // Drapeau utilise pour tout cast interne (visuels, buffs auto, splinters) :
+    // ignore GCD, cast en cours, cout, etc. - ne doit jamais bloquer la rotation.
+    static constexpr TriggerCastFlags INTERNAL_CAST = TRIGGERED_FULL_MASK;
 
-	void SpellHitTarget(WorldObject* /*object*/, SpellInfo const* spell) override
-	{
-		// Ne r�agit qu'au sort Arcane Blast
-		if (spell->Id != SPELL_ARCANE_BLAST)
-			return;
+    void Reset() override
+    {
+        npc_theramore_troop::Reset();
 
-		// V�rifie si le buff Arcane Tempo est actif
-		if (Aura* aura = me->GetAura(SPELL_ARCANE_TEMPO))
-		{
-			// Si moins de 5 stacks, on applique � nouveau le buff
-			if (aura->GetStackAmount() < 5)
-				me->CastSpell(me, SPELL_ARCANE_TEMPO, castSpellArcaneTempo);
-		}
-		else
-		{
-			// Buff non pr�sent, on le lance
-			me->CastSpell(me, SPELL_ARCANE_TEMPO, castSpellArcaneTempo);
-		}
+        arcaneCharges = 0;
 
-		// Nombre de projectiles � lancer al�atoirement entre 1 et 8
-		const uint8 splinters = irand(1, 5);
+        // Mage Armor au reveil (apres 1s pour laisser le mob spawner proprement).
+        scheduler.Schedule(1s, [this](TaskContext /*context*/)
+        {
+            DoCastSelf(SPELL_MAGE_ARMOR);
+        });
+    }
 
-		// Planifie une rafale de projectiles espac�s
-		scheduler.Schedule(1ms, [this, splinters](TaskContext context)
-		{
-			const uint8 index = context.GetRepeatCounter();
+    // -------------------------------------------------------------------------
+    // Hit handler
+    // -------------------------------------------------------------------------
 
-			if (index >= splinters)
-				return;
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
+    {
+        if (me->HealthBelowPctDamaged(25, damage) && !me->HasAura(SPELL_TEMPORAL_REALIGNMENT_BUFF))
+        {
+            DoCastSelf(SPELL_TEMPORAL_REALIGNMENT, INTERNAL_CAST);
+            DoCastSelf(SPELL_TEMPORAL_REALIGNMENT_BUFF, INTERNAL_CAST);
+        }
+    }
 
-			// Cible al�atoire et lancement du sort
-			if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
-				DoCast(victim, SPELL_ARCANE_SPLINTER, false);
+    void SpellHitTarget(WorldObject* object, SpellInfo const* spell) override
+    {
+        Unit* victim = object->ToUnit();
+        if (!victim)
+            return;
 
-			// Replanifie avec un d�lai al�atoire entre 380ms et 560ms
-			context.Repeat(380ms, 560ms);
-		});
-	}
+        // Arcane Blast : genere 1 charge, refresh Tempo, et a 15% de chance de proc Clearcasting.
+        if (spell->Id == SPELL_ARCANE_BLAST)
+        {
+            arcaneCharges++;
 
-	void JustEngagedWith(Unit* who) override
-	{
-		npc_theramore_troop::JustEngagedWith(who);
+            if (roll_chance_i(CLEARCASTING_PROC_CHANCE))
+            {
+                DoCastSelf(SPELL_CLEARCASTING);
 
-		scheduler
-			.Schedule(1ms, [this](TaskContext arcane_blast)
-			{
-				DoCastVictim(SPELL_ARCANE_BLAST);
-				arcane_blast.Repeat(2300ms);
-			})
-			.Schedule(3s, 5s, [this](TaskContext mass_polymorph)
-			{
-				if (EnemiesInRange(10.f) >= 4)
-				{
-					CastStop();
-					DoCastSelf(SPELL_MASS_POLYMORPH);
-					mass_polymorph.Repeat(2min);
-				}
-				else
-					mass_polymorph.Repeat(1s);
-			})
-			.Schedule(8s, 10s, [this](TaskContext arcane_explosion)
-			{
-				if (EnemiesInRange(10.f) >= 2)
-				{
-					CastStop();
-					DoCastSelf(SPELL_ARCANE_EXPLOSION);
-					arcane_explosion.Repeat(2min);
-				}
-				else
-					arcane_explosion.Repeat(1s);
-			})
-			.Schedule(4s, 8s, [this](TaskContext arcane_missiles)
-			{
-				if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
-					DoCast(victim, SPELL_ARCANE_MISSILES);
-				arcane_missiles.Repeat(8s, 12s);
-			});
-	}
+                // Apres 1-5s on consomme Clearcasting via Arcane Missiles instant.
+                scheduler.Schedule(1s, 5s, [this](TaskContext /*arcane_missiles*/)
+                {
+                    if (!me->HasAura(SPELL_CLEARCASTING))
+                        return;
+
+                    Unit* target = SelectTarget(SelectTargetMethod::Random);
+                    if (!target)
+                        return;
+
+                    CastStop();
+                    DoCast(target, SPELL_ARCANE_MISSILES);
+                    me->RemoveAurasDueToSpell(SPELL_CLEARCASTING);
+                });
+            }
+        }
+
+        // Splinters supplementaires en fonction du sort qui a touche.
+        switch (spell->Id)
+        {
+            case SPELL_ARCANE_BLAST:
+            case SPELL_ARCANE_MISSILES_DAMAGE:
+                CastSplinters(victim, spell, 1);
+                break;
+            case SPELL_ARCANE_BARRAGE:
+                CastSplinters(victim, spell, 4);
+                break;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Rotation
+    // -------------------------------------------------------------------------
+
+    // Quand le mage commence a reculer (kite).
+    void OnBackpedStart(Unit* victim) override
+    {
+        DoCast(victim, SPELL_ARCANE_BARRAGE);
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        npc_theramore_troop::JustEngagedWith(who);
+
+        // Premier Arcane Blast immediat sur l'agresseur.
+        DoCast(who, SPELL_ARCANE_BLAST);
+
+        scheduler
+            // --- Arcane Blast continu ---
+            // Re-schedule a la duree exacte du cast time (qui descend avec les charges).
+            .Schedule(2s, [this](TaskContext arcane_blast)
+            {
+                DoCastVictim(SPELL_ARCANE_BLAST);
+                arcane_blast.Repeat(Milliseconds(arcaneBlastInfo->CalcCastTime()));
+            })
+            // --- Arcane Orbs ---
+            // Salve de 1-5 orbs centree sur soi (cible utilisee uniquement pour l'arret si elle meurt).
+            .Schedule(2s, [this](TaskContext arcane_orb)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random))
+                    CastArcaneOrbs(target);
+                arcane_orb.Repeat(10s, 15s);
+            })
+            // --- Arcane Barrage (finisher) ---
+            // Cast quand on a >= 5 charges, sinon on re-check toutes les 2s.
+            .Schedule(2s, [this](TaskContext arcane_barrage)
+            {
+                if (arcaneCharges >= ARCANE_BARRAGE_MIN_CHARGES)
+                {
+                    DoCastVictim(SPELL_ARCANE_BARRAGE);
+                    arcaneCharges = 0;
+                }
+                arcane_barrage.Repeat(2s);
+            })
+            // --- Touch of the Magi ---
+            // Sur cible aleatoire qui n'a pas deja le debuff. Toutes les 3-8s.
+            .Schedule(4s, 8s, [this](TaskContext touch_of_the_magi)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, TARGET_RANGE, false, true, -SPELL_TOUCH_OF_THE_MAGI_BUFF))
+                    DoCast(target, SPELL_TOUCH_OF_THE_MAGI);
+                touch_of_the_magi.Repeat(3s, 8s);
+            })
+            // --- Mass Polymorph ---
+            // 4+ ennemis colles -> CC AOE, 2 min de cooldown.
+            .Schedule(5s, 8s, [this](TaskContext mass_polymorph)
+            {
+                if (EnemiesInRange(AOE_RANGE) >= MASS_POLYMORPH_THRESHOLD)
+                {
+                    CastStop();
+                    DoCastSelf(SPELL_MASS_POLYMORPH);
+                    mass_polymorph.Repeat(1min);
+                }
+                else
+                    mass_polymorph.Repeat(1s);
+            })
+            // --- Arcane Explosion ---
+            // 2+ ennemis colles -> degats AOE, 2 min de cooldown.
+            .Schedule(2s, 8s, [this](TaskContext arcane_explosion)
+            {
+                if (EnemiesInRange(AOE_RANGE) >= ARCANE_EXPLOSION_THRESHOLD)
+                {
+                    CastStop();
+                    DoCastSelf(SPELL_ARCANE_EXPLOSION);
+                    arcane_explosion.Repeat(45s);
+                }
+                else
+                    arcane_explosion.Repeat(1s);
+            });
+    }
+
+    // -------------------------------------------------------------------------
+    // Splinters / Orbs
+    // -------------------------------------------------------------------------
+
+    // Apres un hit (Blast/Missiles = 1, Barrage = 4), tire `count` Arcane Splinters
+    // espaces de 380-560ms sur la meme cible. Re-resout le GUID a chaque tick pour
+    // eviter le pointeur dangling si la cible meurt en cours de salve.
+    void CastSplinters(Unit* victim, SpellInfo const* spell, uint8 count)
+    {
+        // Pas de splinter sur soi-meme.
+        if (victim->GetGUID() == me->GetGUID())
+            return;
+
+        // Anti-recursion : ne pas chainer un splinter sur un hit de splinter.
+        if (spell->Id == SPELL_ARCANE_SPLINTER)
+            return;
+
+        ObjectGuid victimGuid = victim->GetGUID();
+        scheduler.Schedule(1ms, [this, victimGuid, count](TaskContext context)
+        {
+            if (context.GetRepeatCounter() >= count)
+                return;
+
+            Unit* target = ObjectAccessor::GetUnit(*me, victimGuid);
+            if (!target || !target->IsAlive())
+                return;
+
+            DoCast(target, SPELL_ARCANE_SPLINTER, INTERNAL_CAST);
+            context.Repeat(380ms, 560ms);
+        });
+    }
+
+    // Tire 1-3 Arcane Orbs sur soi-meme (sort AOE auto-centre) espaces de 325ms.
+    // La cible passee en parametre sert uniquement de "trigger" : si elle meurt,
+    // la salve s'arrete (cible morte = plus de raison de continuer le burst).
+    void CastArcaneOrbs(Unit* victim)
+    {
+        if (victim->GetGUID() == me->GetGUID())
+            return;
+
+        uint8 count = urand(1, 3);
+        ObjectGuid victimGuid = victim->GetGUID();
+        scheduler.Schedule(1ms, [this, victimGuid, count](TaskContext context)
+        {
+            if (context.GetRepeatCounter() >= count)
+                return;
+
+            Unit* target = ObjectAccessor::GetUnit(*me, victimGuid);
+            if (!target || !target->IsAlive())
+                return;
+
+            DoCastSelf(SPELL_ARCANE_ORB, INTERNAL_CAST);
+            context.Repeat(325ms);
+        });
+    }
 };
 
+// =============================================================================
+// npc_theramore_faithful - Pretre hybride (Discipline + Saint avec touche d'Ombre)
+// =============================================================================
+// Rotation offensive (GROUP_NORMAL) :
+//   - Smite en continu (filler, 2s)
+//   - Halo : burst AOE (14-25s)
+//   - Psychic Scream si 2+ ennemis colles
+// Rotation de heal (GROUP_HEALING) :
+//   - Power Word: Shield (BP0 = 20% PV max de la cible)
+//   - Renew en HoT preventif
+//   - Prayer of Healing en AOE toutes les 14s
+//   - Flash Heal en spot toutes les 2s sur allie sous 40% PV
+//   - Echo of Light proc apres Renew/Flash Heal/Prayer
+// Defense (GROUP_PAIN_SUPPRESSION) :
+//   - <10% PV : Divine Hymn + Pain Suppression (cooldown 3 min)
+// Buff permanent (hors combat) :
+//   - Power Word: Fortitude sur les allies qui ne l'ont pas
+// Backpedal :
+//   - Roll : 25% self-heal (Renew/Plea/Shield), 37.5% Shadow Word Death,
+//     37.5% Shadow Word Pain sur cible aleatoire
+// =============================================================================
 struct npc_theramore_faithful : public npc_theramore_troop
 {
-	npc_theramore_faithful(Creature* creature) : npc_theramore_troop(creature, AI_Type::Distance),
-		ascension(false)
-	{
-	}
+    npc_theramore_faithful(Creature* creature) : npc_theramore_troop(creature, AI_Type::Distance),
+        painSuppression(false)
+    {
+    }
 
-	enum Spells
-	{
-		SPELL_PSYCHIC_SCREAM        = 65543,
-		SPELL_PAIN_SUPPRESSION      = 69910,
-		SPELL_HALO                  = 120517,
-		SPELL_PRAYER_OF_HEALING     = 266969,
-		SPELL_POWER_WORD_FORTITUDE  = 267528,
-		SPELL_RENEW                 = 294342,
-		SPELL_FLASH_HEAL            = 314655,
-		SPELL_POWER_WORD_SHIELD     = 318158,
-		SPELL_SMITE                 = 332705,
-		SPELL_DIVINE_WORD_SANTUARY  = 372784,
-	};
+    enum Groups
+    {
+        GROUP_NORMAL,           // Rotation offensive (Smite, Halo, Psychic Scream)
+        GROUP_HEALING,          // Routines de soin (Shield, Renew, Prayer, Flash Heal)
+        GROUP_PAIN_SUPPRESSION  // Sequence defensive a 10% PV
+    };
 
-	bool ascension;
+    enum Spells
+    {
+        SPELL_SHADOW_WORD_DEATH     = 51818,
+        SPELL_DIVINE_HYMN           = 64843,
+        SPELL_PSYCHIC_SCREAM        = 65543,
+        SPELL_PAIN_SUPPRESSION      = 69910,
+        SPELL_ECHO_OF_LIGHT         = 77489,
+        SPELL_HALO                  = 120517,
+        SPELL_PLEA                  = 200829,
+        SPELL_PRAYER_OF_HEALING     = 266969,
+        SPELL_POWER_WORD_FORTITUDE  = 267528,
+        SPELL_RENEW                 = 294342,
+        SPELL_FLASH_HEAL            = 314655,
+        SPELL_POWER_WORD_SHIELD     = 318158,
+        SPELL_SMITE                 = 332705,
+        SPELL_SHADOW_WORD_PAIN      = 435397
+    };
 
-	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spell) override
-	{
-		npc_theramore_troop::DamageTaken(attacker, damage, damageType, spell);
+    static constexpr uint8 PAIN_SUPPRESSION_HP_PCT      = 10;       // PV qui declenche la sequence defensive
+    static constexpr Seconds PAIN_SUPPRESSION_DELAY     = 6s;       // Duree pendant laquelle on bloque les autres routines
+    static constexpr Minutes PAIN_SUPPRESSION_CD        = 3min;     // Cooldown interne avant de pouvoir re-declencher
 
-		if (!ascension && me->HealthBelowPctDamaged(10, damage))
-		{
-			ascension = true;
+    static constexpr float HEAL_FRIENDLY_RANGE          = 40.0f;    // Portee standard des soins cibles
+    static constexpr uint8 SHIELD_HP_PCT                = 80;       // Allie sous ce % -> shield
+    static constexpr uint8 SHIELD_BP_PCT                = 20;       // Force du shield = % des PV max de la cible
+    static constexpr uint8 HEAL_PCT                     = 60;       // Seuil pour Renew / Flash Heal
+    static constexpr float MELEE_AOE_RANGE              = 10.0f;    // Distance de detection AOE
+    static constexpr uint32 PSYCHIC_SCREAM_THRESHOLD    = 2;        // Au-dela de N ennemis colles -> Psychic Scream
+    static constexpr float SHADOW_RANGE                 = 30.0f;    // Portee du Shadow Word Pain en backpedal
 
-			scheduler.CancelAll();
+    // Drapeau utilise pour tout cast interne (procs, buffs auto) : ignore GCD, cast en cours, etc.
+    static constexpr TriggerCastFlags INTERNAL_CAST = TRIGGERED_FULL_MASK;
 
-			CastSpellExtraArgs args;
-			args.AddSpellBP0(85000);
+    bool painSuppression;       // True tant que la sequence defensive est en cooldown interne
 
-			CastStop();
-			DoCastSelf(SPELL_PRAYER_OF_HEALING, args);
-			DoCastSelf(SPELL_PAIN_SUPPRESSION, true);
+    void Reset() override
+    {
+        npc_theramore_troop::Reset();
 
-			scheduler
-				.Schedule(4s, [this](TaskContext /*context*/)
-				{
-					StartCombatRoutine();
-				})
-				.Schedule(1min, [this](TaskContext /*context*/)
-				{
-					ascension = false;
-				});
-		}
-	}
+        painSuppression = false;
 
-	void Reset() override
-	{
-		npc_theramore_troop::Reset();
+        // Buff permanent : Power Word: Fortitude sur les allies qui ne l'ont pas (re-check toutes les 2s).
+        scheduler.Schedule(1s, 5s, [this](TaskContext fortitude)
+        {
+            if (Unit* target = SelectRandomMissingBuff(SPELL_POWER_WORD_FORTITUDE))
+                DoCast(target, SPELL_POWER_WORD_FORTITUDE);
+            fortitude.Repeat(2s);
+        });
+    }
 
-		scheduler.Schedule(1s, 5s, [this](TaskContext fortitude)
-		{
-			BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-			if (phase < BFTPhases::HelpTheWounded)
-			{              
-				CastSpellExtraArgs args(true);
-				args.SetTriggerFlags(TRIGGERED_IGNORE_SET_FACING);
+    // -------------------------------------------------------------------------
+    // Hit handlers
+    // -------------------------------------------------------------------------
 
-				if (Unit* target = SelectRandomMissingBuff(SPELL_POWER_WORD_FORTITUDE))
-					DoCast(target, SPELL_POWER_WORD_FORTITUDE, args);
+    void SpellHitTarget(WorldObject* object, SpellInfo const* spell) override
+    {
+        Unit* victim = object->ToUnit();
+        if (!victim)
+            return;
 
-				fortitude.Repeat(2s);
-			}
-		});
-	}
+        // Echo of Light : proc qui ajoute un HoT secondaire apres certains soins.
+        switch (spell->Id)
+        {
+            case SPELL_PRAYER_OF_HEALING:
+            case SPELL_RENEW:
+            case SPELL_FLASH_HEAL:
+                DoCast(victim, SPELL_ECHO_OF_LIGHT, INTERNAL_CAST);
+                break;
+        }
+    }
 
-	void JustEngagedWith(Unit* who) override
-	{
-		npc_theramore_troop::JustEngagedWith(who);
+    // -------------------------------------------------------------------------
+    // Reactions
+    // -------------------------------------------------------------------------
 
-		StartCombatRoutine();
-	}
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
+    {
+        // Sequence defensive declenchee une seule fois par fenetre de 3 min.
+        if (painSuppression || !me->HealthBelowPctDamaged(PAIN_SUPPRESSION_HP_PCT, damage))
+            return;
 
-	void StartCombatRoutine()
-	{
-		scheduler
-			.Schedule(1ms, [this](TaskContext smite)
-			{
-				DoCastVictim(SPELL_SMITE);
-				smite.Repeat(2s);
-			})
-			.Schedule(1s, 2s, [this](TaskContext power_word_shield)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 80))
-				{
-					CastSpellExtraArgs args;
-					args.AddSpellBP0(target->CountPctFromMaxHealth(20));
+        painSuppression = true;
 
-					CastStop({ SPELL_RENEW, SPELL_FLASH_HEAL });
-					DoCast(target, SPELL_POWER_WORD_SHIELD, args);
-				}
-				power_word_shield.Repeat(8s);
-			})
-			.Schedule(5s, 7s, [this](TaskContext renew)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
-					DoCast(target, SPELL_RENEW);
-				renew.Repeat(10s, 15s);
-			})
-			.Schedule(12s, 14s, [this](TaskContext mass_healing)
-			{
-				CastStop({ SPELL_RENEW, SPELL_FLASH_HEAL, SPELL_PRAYER_OF_HEALING });
+        // Gel les rotations offensives ET de heal pendant la canalisation de Divine Hymn.
+        scheduler.DelayGroup(GROUP_NORMAL, PAIN_SUPPRESSION_DELAY);
+        scheduler.DelayGroup(GROUP_HEALING, PAIN_SUPPRESSION_DELAY);
 
-				if (roll_chance_i(60))
-				{
-					DoCastAOE(SPELL_PRAYER_OF_HEALING);
-					mass_healing.Repeat(14s);
-				}
-				else
-				{
-					if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
-					{
-						DoCast(SPELL_DIVINE_WORD_SANTUARY);
-						mass_healing.Repeat(25s, 45s);
-					}
-					else
-					{
-						mass_healing.Repeat(1s);
-					}
-				}
-			})
-			.Schedule(1s, 5s, [this](TaskContext halo)
-			{
-				CastStop(SPELL_HALO);
-				DoCastAOE(SPELL_HALO);
-				halo.Repeat(14s, 25s);
-			})
-			.Schedule(3s, 8s, [this](TaskContext psychic_scream)
-			{
-				if (EnemiesInRange(10.f) >= 2)
-				{
-					DoCastAOE(SPELL_PSYCHIC_SCREAM);
-					psychic_scream.Repeat(10s, 25s);
-				}
-				else
-					psychic_scream.Repeat(1s);
-			})
-			.Schedule(1s, 8s, [this](TaskContext flash_heal)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 50))
-					DoCast(target, SPELL_FLASH_HEAL);
-				flash_heal.Repeat(2s);
-			});
-	}
+        CastStop();
+        DoCastSelf(SPELL_DIVINE_HYMN);
+        DoCastSelf(SPELL_PAIN_SUPPRESSION, true);
+
+        // Re-armement du flag apres le cooldown interne.
+        scheduler.Schedule(PAIN_SUPPRESSION_CD, GROUP_PAIN_SUPPRESSION, [this](TaskContext /*context*/)
+        {
+            painSuppression = false;
+        });
+    }
+
+    // En backpedal : trois branches mutuellement exclusives selon roll_chance_i sequentiel.
+    // Probabilites finales : 25% self-heal, 37.5% Shadow Word Death, 37.5% Shadow Word Pain.
+    void OnBackpedStart(Unit* victim) override
+    {
+        if (roll_chance_i(25))
+        {
+            DoCastSelf(RAND(SPELL_RENEW, SPELL_PLEA, SPELL_POWER_WORD_SHIELD));
+        }
+        else if (roll_chance_i(50))
+        {
+            DoCast(victim, SPELL_SHADOW_WORD_DEATH);
+        }
+        else if (Unit* dotTarget = SelectTarget(SelectTargetMethod::Random, 0, SHADOW_RANGE, false, true, -SPELL_SHADOW_WORD_PAIN))
+        {
+            DoCast(dotTarget, SPELL_SHADOW_WORD_PAIN);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Rotation
+    // -------------------------------------------------------------------------
+
+    void JustEngagedWith(Unit* who) override
+    {
+        npc_theramore_troop::JustEngagedWith(who);
+
+        DoCast(who, SPELL_SMITE);
+
+        scheduler
+            // === DPS (GROUP_NORMAL) ===
+
+            // Smite en continu (filler offensif).
+            .Schedule(1s, GROUP_NORMAL, [this](TaskContext smite)
+            {
+                DoCastVictim(SPELL_SMITE);
+                smite.Repeat(2s);
+            })
+            // Psychic Scream si 2+ ennemis colles.
+            .Schedule(3s, 8s, GROUP_NORMAL, [this](TaskContext psychic_scream)
+            {
+                if (EnemiesInRange(MELEE_AOE_RANGE) >= PSYCHIC_SCREAM_THRESHOLD)
+                {
+                    DoCastAOE(SPELL_PSYCHIC_SCREAM);
+                    psychic_scream.Repeat(10s, 25s);
+                }
+                else
+                    psychic_scream.Repeat(1s);
+            })
+
+            // === HEAL (GROUP_HEALING) ===
+
+            // Halo : heal AOE radial.
+            .Schedule(1s, 5s, GROUP_HEALING, [this](TaskContext halo)
+            {
+                DoCastAOE(SPELL_HALO);
+                halo.Repeat(14s, 25s);
+            })
+            // Power Word: Shield avec BP0 = 20% PV max de la cible (toutes les 8s).
+            .Schedule(1s, 2s, GROUP_HEALING, [this](TaskContext power_word_shield)
+            {
+                if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, SHIELD_HP_PCT))
+                {
+                    CastSpellExtraArgs args;
+                    args.AddSpellBP0(target->CountPctFromMaxHealth(SHIELD_BP_PCT));
+
+                    CastStop(SPELL_FLASH_HEAL);
+                    DoCast(target, SPELL_POWER_WORD_SHIELD, args);
+                }
+                power_word_shield.Repeat(8s);
+            })
+            // Renew en HoT preventif sur allie sous 60% PV.
+            .Schedule(5s, 7s, GROUP_HEALING, [this](TaskContext renew)
+            {
+                if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, HEAL_PCT))
+                    DoCast(target, SPELL_RENEW);
+                renew.Repeat(10s, 15s);
+            })
+            // Prayer of Healing AOE toutes les 14s (interrompt Flash Heal au passage).
+            .Schedule(12s, 14s, GROUP_HEALING, [this](TaskContext mass_healing)
+            {
+                CastStop(SPELL_FLASH_HEAL);
+                DoCastAOE(SPELL_PRAYER_OF_HEALING);
+                mass_healing.Repeat(14s);
+            })
+            // Flash Heal en spot sur allie sous 60% PV (toutes les 2s).
+            .Schedule(1s, 8s, GROUP_HEALING, [this](TaskContext flash_heal)
+            {
+                if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, HEAL_PCT))
+                    DoCast(target, SPELL_FLASH_HEAL);
+                flash_heal.Repeat(2s);
+            });
+    }
 };
 
 struct npc_theramore_marksman : public npc_theramore_troop
@@ -999,283 +1231,430 @@ struct npc_theramore_horde : public CustomAI
 	}
 };
 
+// =============================================================================
+// npc_roknah_hag - Mage Frost (caster a distance)
+// =============================================================================
+// Rotation principale :
+//   - Frostbolt en continu (alimente les Icicles)
+//   - 5 stacks d'Icicles -> buff Glacial Spike -> finisher
+//   - Salves d'Ice Lance (2-5) sur cibles affectees par Freezing
+//   - Cone of Cold si trop d'ennemis au corps a corps
+//   - Flurry sur cible aleatoire
+// Defenses :
+//   - Ice Barrier au pull (30%)
+//   - Sequence de fuite (Frost Nova -> Blink) si melee colle
+//   - Ice Block + fuite a <20% PV (cooldown interne 1 min)
+//   - Blink reactif si root/snare
+// Mecaniques de hit :
+//   - Frostbolt / Glacial Spike -> tire des Frost Splinters supplementaires
+//   - Splinters appliquent Freezing (stacks) sur la cible
+//   - Frostbolt / Flurry / Ice Lance sur cible Freezing >8 stacks -> Shatter
+//     et consomme 4 stacks
+// =============================================================================
 struct npc_roknah_hag : public npc_theramore_horde
 {
-	npc_roknah_hag(Creature* creature) : npc_theramore_horde(creature, AI_Type::Distance),
-		closeTarget(false), iceblock(false)
-	{
-	}
+    npc_roknah_hag(Creature* creature) : npc_theramore_horde(creature, AI_Type::Distance),
+        closeTarget(false), iceblock(false)
+    {
+    }
 
-	enum Groups
-	{
-		GROUP_NORMAL,
-		GROUP_FLEE,
-		GROUP_FROSTBOLT
-	};
+    // Groupes de scheduler. Chaque groupe peut etre delay/cancel independamment.
+    enum Groups
+    {
+        GROUP_NORMAL,       // Cycle long : Glacial Spike retry, Cone of Cold, Flurry
+        GROUP_FLEE,         // Sequence Frost Nova -> Blink declenchee par melee/Ice Block
+        GROUP_FROSTBOLT,    // Cast continu de Frostbolt (pilier de la rotation)
+        GROUP_ICE_LANCE,    // Salves d'Ice Lance sur cibles Freezing
+        GROUP_SPLINTERS     // Salves de Frost Splinters consecutives a un hit
+    };
 
-	static constexpr uint32 IciclesDummies[5] =
-	{
-		214124,
-		214125,
-		214126,
-		214127,
-		214130
-	};
-
-	enum Spells
-	{
-		SPELL_FROSTBOLT             = 116,
+    enum Spells
+    {
+        SPELL_FROSTBOLT             = 116,
         SPELL_GLACIAL_SPIKE_BUFF    = 199844,
-		SPELL_ICE_BARRIER           = 198094,
-		SPELL_ICICLES               = 205473,
-		SPELL_CHILLED               = 205708,
-		SPELL_HYPOTHERMIA           = 240132,
-		SPELL_ICE_BLOCK             = 278960,
-		SPELL_EBONBOLT              = 284752,
-		SPELL_GLACIAL_SPIKE         = 284840,
-		SPELL_FLURRY                = 284858,
-		SPELL_ICE_LANCE             = 284871,
-		SPELL_FROST_NOVA            = 284879,
-		SPELL_CONE_OF_COLD          = 292294,
-		SPELL_BLINK                 = 295236,
-		SPELL_MASS_ICE_BARRIER      = 382561,
-	};
+        SPELL_ICE_BARRIER           = 198094,
+        SPELL_CHILLED               = 204206,
+        SPELL_ICICLES               = 205473,
+        SPELL_HYPOTHERMIA           = 240132,
+        SPELL_ICE_BLOCK             = 278960,
+        SPELL_GLACIAL_SPIKE         = 284840,
+        SPELL_FLURRY                = 284858,
+        SPELL_ICE_LANCE             = 284871,
+        SPELL_FROST_NOVA            = 284879,
+        SPELL_CONE_OF_COLD          = 292294,
+        SPELL_BLINK                 = 295236,
+        SPELL_FROST_SPLINTER        = 443722,
+        SPELL_FREEZING              = 1221389,
+        SPELL_SHATTER               = 1246949,
+    };
 
-	bool closeTarget;
-	bool iceblock;
+    static constexpr uint8 MAX_ICICLES                  = 5;        // Stacks max avant Glacial Spike
+    static constexpr int32 FREEZING_SHATTER_CONSUME     = 4;        // Stacks consommes par Shatter
+    static constexpr float MELEE_FLEE_RANGE             = 12.0f;    // Distance "trop proche" pour fuir
+    static constexpr uint32 MELEE_FLEE_THRESHOLD        = 2;        // Au-dela de N ennemis melee, on fuit
+    static constexpr float ICE_LANCE_RANGE              = 30.0f;    // Portee de selection des cibles Ice Lance
 
-	void SpellHitTarget(WorldObject* object, SpellInfo const* spell) override
-	{
-        // Les sorts de givre peuvent appliquer la technique : Transi
-        if ((spell->GetSchoolMask() & SPELL_SCHOOL_MASK_FROST) && roll_chance_i(60))
+    // Visuels d'icicles flottant autour du mage (1 par stack).
+    static constexpr uint32 IciclesDummies[MAX_ICICLES] =
+    {
+        214124, 214125, 214126, 214127, 214130
+    };
+
+    // Drapeau utilise pour tout cast interne (visuels, buffs auto, finishers, retries) :
+    // ignore GCD, cast en cours, cout, etc. - ne doit jamais bloquer la rotation.
+    static constexpr TriggerCastFlags INTERNAL_CAST = TRIGGERED_FULL_MASK;
+
+    bool closeTarget;   // True tant qu'on fuit un melee (re-arme apres Blink)
+    bool iceblock;      // True tant qu'Ice Block est en cooldown interne (1 min)
+
+    void Reset() override
+    {
+        npc_theramore_horde::Reset();
+
+        closeTarget = false;
+        iceblock = false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    // Tente de lancer Glacial Spike si le buff finisher est encore actif.
+    // Centralise la logique appelee depuis SpellHit (proc), OnSpellFailed (retry),
+    // UpdateIcicles (cap atteint) et la tache GROUP_NORMAL (filet de securite).
+    void TryCastGlacialSpike()
+    {
+        if (!me->HasAura(SPELL_GLACIAL_SPIKE_BUFF))
+            return;
+
+        CastStop();
+        DoCastVictim(SPELL_GLACIAL_SPIKE);
+    }
+
+    // -------------------------------------------------------------------------
+    // Hit handlers
+    // -------------------------------------------------------------------------
+
+    void SpellHitTarget(WorldObject* object, SpellInfo const* spell) override
+    {
+        Unit* victim = object->ToUnit();
+        if (!victim)
+            return;
+
+        // Mecanique de Shatter : Frostbolt / Flurry / Ice Lance sur une cible
+        // chargee en Freezing declenche un Shatter et consomme des stacks.
+        // 60% de ralentir la cible.
+        if (spell->Id == SPELL_FROSTBOLT || spell->Id == SPELL_FLURRY || spell->Id == SPELL_ICE_LANCE)
         {
-            Unit* victim = object->ToUnit();
-            if (victim && victim->GetGUID() != me->GetGUID())
-                DoCast(victim, SPELL_CHILLED, true);
-        }
-
-		switch (spell->Id)
-		{
-			case SPELL_GLACIAL_SPIKE:
-                RemoveIcicles();
-				break;
-            case SPELL_FROSTBOLT:
+            if (roll_chance_i(60))
             {
-                Aura* aura = me->GetAura(SPELL_ICICLES);
-                uint8 stacks = aura ? aura->GetStackAmount() : 0;
-
-                // Cap a 5 stacks
-                if (stacks >= 5)
-                {
-                    // Si SPELL_GLACIAL_SPIKE_BUFF est encore présente, on retente de lancer SPELL_GLACIAL_SPIKE
-                    if (me->HasAura(SPELL_GLACIAL_SPIKE_BUFF))
-                    {
-                        CastStop();
-                        DoCastVictim(SPELL_GLACIAL_SPIKE);
-                    }
-
-                    break;
-                }
-
-                // Ajouter un eclat (visuel + stack du buff SPELL_ICICLES)
-                CastIcicle(stacks);
-
-                // Si on vient d'atteindre 5 stacks, le buff Glacial Spike devient disponible.
-                // Ajout manuel de l'aura
-                if (stacks + 1 == 5)
-                    DoCastSelf(SPELL_GLACIAL_SPIKE_BUFF, true);
-
-                break;
+                DoCast(victim, SPELL_CHILLED, INTERNAL_CAST);
             }
-		}
-	}
 
-	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
-	{
-        // Si le SPELL_BLINK n'est pas en recharge et que l'unité est ROOT ou SNARE
-		if (!me->GetSpellHistory()->HasCooldown(SPELL_BLINK)
-            && (HasMechanic(spell, MECHANIC_ROOT) || HasMechanic(spell, MECHANIC_SNARE)))
-		{
-            scheduler.Schedule(2s, [this, spell](TaskContext /*context*/)
+            if (Aura* freezing = victim->GetAura(SPELL_FREEZING))
             {
-                CastBlink(false, spell->Id);
-            });
-		}
-
-        // Gestion du SPELL_GLACIAL_SPIKE_BUFF pour lancer SPELL_GLACIAL_SPIKE
-        if (spell->Id == SPELL_GLACIAL_SPIKE_BUFF)
-        {
-            CastStop();
-            DoCastVictim(SPELL_GLACIAL_SPIKE);
+                if (freezing->GetStackAmount() > FREEZING_SHATTER_CONSUME)
+                {
+                    DoCast(victim, SPELL_SHATTER, INTERNAL_CAST);
+                    freezing->ModStackAmount(-FREEZING_SHATTER_CONSUME, AURA_REMOVE_BY_DEFAULT, false);
+                }
+            }
         }
-	}
+
+        switch (spell->Id)
+        {
+            case SPELL_FROSTBOLT:
+                // Frostbolt = generateur : ajoute un Icicle et tire 3 splinters.
+                UpdateIcicles();
+                CastSplinters(victim, spell, 3);
+                break;
+            case SPELL_GLACIAL_SPIKE:
+                // Finisher : consomme tous les Icicles et tire 5 splinters.
+                RemoveIcicles();
+                CastSplinters(victim, spell, 5);
+                break;
+            case SPELL_FROST_SPLINTER:
+                // Chaque splinter applique une stack de Freezing sur sa cible.
+                DoCast(victim, SPELL_FREEZING, INTERNAL_CAST);
+                break;
+        }
+    }
+
+    void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
+    {
+        // Blink reactif : si on subit un root/snare et que Blink est dispo, on le lance dans 2s.
+        if (!me->GetSpellHistory()->HasCooldown(SPELL_BLINK)
+            && (HasMechanic(spell, MECHANIC_ROOT) || HasMechanic(spell, MECHANIC_SNARE)))
+        {
+            scheduler.Schedule(2s, [this, spellId = spell->Id](TaskContext /*context*/)
+            {
+                CastBlink(false, spellId);
+            });
+        }
+
+        // Le buff Glacial Spike vient d'etre applique -> on tente le finisher immediatement.
+        if (spell->Id == SPELL_GLACIAL_SPIKE_BUFF)
+            TryCastGlacialSpike();
+    }
 
     void OnSpellFailed(SpellInfo const* spell) override
     {
-        // Si SPELL_GLACIAL_SPIKE est interrompu, retenter une seule fois apres un delai
-        if (spell->Id == SPELL_GLACIAL_SPIKE && me->HasAura(SPELL_GLACIAL_SPIKE_BUFF))
+        // Glacial Spike interrompu (kick, deplacement, OOR) -> retry rapide apres 500ms.
+        // Le scheduler GROUP_NORMAL fait deja un retry plus lent (2s) comme filet de securite.
+        if (spell->Id == SPELL_GLACIAL_SPIKE)
         {
             scheduler.Schedule(500ms, [this](TaskContext /*context*/)
             {
-                if (me->HasAura(SPELL_GLACIAL_SPIKE_BUFF))
-                {
-                    CastStop();
-                    DoCastVictim(SPELL_GLACIAL_SPIKE);
-                }
+                TryCastGlacialSpike();
             });
         }
     }
 
-	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spell) override
-	{
-        // 30% de chance de lancer la barriere de masse à partir de 50% de PV
-		if (HealthBelowPct(50) && roll_chance_i(30))
-		{
-			DoCastSelf(SPELL_MASS_ICE_BARRIER,
-                CastSpellExtraArgs(TRIGGERED_CAST_DIRECTLY));
-		}
+    // -------------------------------------------------------------------------
+    // Reactions
+    // -------------------------------------------------------------------------
 
-		if (!iceblock && HealthBelowPct(20))
-		{
-			damage = 0;
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
+    {
+        // En dessous de 20% PV : on annule le coup et on declenche Ice Block + fuite.
+        // Cooldown interne d'1 min - Hypothermia empeche cote sort un re-block immediat.
+        if (!iceblock && HealthBelowPct(20))
+        {
+            damage = 0;
 
-			scheduler.DelayGroup(GROUP_NORMAL, 2s);
-			scheduler.DelayGroup(GROUP_FROSTBOLT, 2s);
+            iceblock = true;
 
-			iceblock = true;
+            CastStop();
+            DoCast(SPELL_ICE_BLOCK);
+            DoCastSelf(SPELL_HYPOTHERMIA, INTERNAL_CAST);
 
-			CastStop();
-			DoCast(SPELL_ICE_BLOCK);
+            // 10s (+1s) = duree d'Ice Block : on enchaine Frost Nova + Blink.
+            CastFleeSequence(11s);
 
-            // Hypothermie
-            me->AddAura(SPELL_HYPOTHERMIA, me);
+            scheduler.Schedule(1min, [this](TaskContext /*context*/)
+            {
+                iceblock = false;
+            });
+        }
+    }
 
-			scheduler.Schedule(1min, [this](TaskContext /*context*/)
-			{
-				iceblock = false;
-			});
-
-			CastFleeSequence(12s);
-		}
-	}
-
+    // Quand le mage commence a reculer (kite), on lache une Ice Lance gratuite.
     void OnBackpedStart(Unit* victim) override
     {
-        CastBackped(victim);
+        DoCast(victim, SPELL_ICE_LANCE, TRIGGERED_IGNORE_GCD);
     }
 
-    void OnBackpedTick(Unit* victim) override
+    // -------------------------------------------------------------------------
+    // Rotation principale
+    // -------------------------------------------------------------------------
+
+    void JustEngagedWith(Unit* who) override
     {
-        CastBackped(victim);
-    }
+        npc_theramore_horde::JustEngagedWith(who);
 
-	void JustEngagedWith(Unit* who) override
-	{
-		npc_theramore_horde::JustEngagedWith(who);
+        // 30% de chance de se buffer Ice Barrier au pull.
+        if (roll_chance_i(30))
+            DoCastSelf(SPELL_ICE_BARRIER);
 
-		if (roll_chance_i(30))
-			DoCastSelf(SPELL_ICE_BARRIER);
+        // Premier Frostbolt immediat sur l'agresseur (sinon il faut attendre 2s).
+        DoCast(who, SPELL_FROSTBOLT);
 
-		scheduler
-			.Schedule(13s, 18s, GROUP_NORMAL, [this](TaskContext cone_of_cold)
-			{
-				if (EnemiesInRange(12.0f) > 2)
-				{
-					CastStop(SPELL_GLACIAL_SPIKE);
-					DoCast(SPELL_CONE_OF_COLD);
-					cone_of_cold.Repeat(5s, 8s);
-				}
-				else
-					cone_of_cold.Repeat(2s);
-			})
-			.Schedule(2s, 5s, GROUP_NORMAL, [this](TaskContext ebonbolt)
-			{
-				DoCastVictim(SPELL_EBONBOLT);
-				ebonbolt.Repeat(2s, 5s);
-			})
-			.Schedule(12s, 15s, GROUP_NORMAL, [this](TaskContext flurry)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random))
+        scheduler
+            // --- Salve d'Ice Lance ---
+            // Selectionne une cible aleatoire avec Freezing, puis enchaine 2-5 lances
+            // espacees de 800ms-1s. Le prochain cycle est planifie a +8/12s apres
+            // la fin de la derniere lance (offset cumule).
+            .Schedule(1s, GROUP_ICE_LANCE, [this](TaskContext shatter)
+            {
+                Unit* target = SelectTarget(SelectTargetMethod::Random, 0, ICE_LANCE_RANGE, false, true, SPELL_FREEZING);
+                if (!target)
+                {
+                    shatter.Repeat(2s);
+                    return;
+                }
+
+                // Laisse respirer Frostbolt et la rotation pendant la salve.
+                scheduler.DelayGroup(GROUP_NORMAL, 1s);
+                scheduler.DelayGroup(GROUP_FROSTBOLT, 1s);
+
+                ObjectGuid targetGuid = target->GetGUID();
+                uint32 count = urand(2, 5);
+                Milliseconds offset = 0ms;
+
+                for (uint32 i = 0; i < count; ++i)
+                {
+                    scheduler.Schedule(offset, GROUP_ICE_LANCE, [this, targetGuid](TaskContext /*lance*/)
+                    {
+                        Unit* victim = ObjectAccessor::GetUnit(*me, targetGuid);
+                        if (victim && victim->IsAlive())
+                            DoCast(victim, SPELL_ICE_LANCE, TRIGGERED_IGNORE_GCD);
+                    });
+                    offset += randtime(800ms, 1s);
+                }
+
+                shatter.Repeat(offset + 8s, offset + 12s);
+            })
+            // --- Filet de securite Glacial Spike ---
+            // Si Glacial Spike rate (interrompu, OOR), retente toutes les 2s tant que le buff est la.
+            .Schedule(1s, GROUP_NORMAL, [this](TaskContext glacial_spike)
+            {
+                if (!me->HasUnitState(UNIT_STATE_CASTING) && me->HasAura(SPELL_GLACIAL_SPIKE_BUFF))
+                    TryCastGlacialSpike();
+                else
+                    glacial_spike.Repeat(2s);
+            })
+            // --- Cone of Cold ---
+            // Quand 3+ ennemis sont au corps a corps : interrompt Glacial Spike et lance Cone of Cold.
+            .Schedule(13s, 18s, GROUP_NORMAL, [this](TaskContext cone_of_cold)
+            {
+                if (EnemiesInRange(MELEE_FLEE_RANGE) > MELEE_FLEE_THRESHOLD)
+                {
+                    CastStop(SPELL_GLACIAL_SPIKE);
+                    DoCast(SPELL_CONE_OF_COLD);
+                    cone_of_cold.Repeat(5s, 8s);
+                }
+                else
+                    cone_of_cold.Repeat(2s);
+            })
+            // --- Flurry ---
+            // Cible aleatoire toutes les 12-14s.
+            .Schedule(12s, 15s, GROUP_NORMAL, [this](TaskContext flurry)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random))
                     DoCast(target, SPELL_FLURRY);
                 flurry.Repeat(12s, 14s);
-			})
-			.Schedule(1ms, GROUP_FROSTBOLT, [this](TaskContext frostbolt)
-			{
-				DoCastVictim(SPELL_FROSTBOLT);
-				frostbolt.Repeat(2s);
-			});
-	}
+            })
+            // --- Frostbolt continu ---
+            // Pilier de la rotation : 1 Frostbolt toutes les 2s sur la cible courante.
+            .Schedule(2s, GROUP_FROSTBOLT, [this](TaskContext frostbolt)
+            {
+                DoCastVictim(SPELL_FROSTBOLT);
+                frostbolt.Repeat(2s);
+            });
+    }
 
-	void UpdateAI(uint32 diff) override
-	{
-		CustomAI::UpdateAI(diff);
+    void UpdateAI(uint32 diff) override
+    {
+        CustomAI::UpdateAI(diff);
 
-		if (!closeTarget
-			&& !me->HasAura(SPELL_ICE_BLOCK)
-			&& EnemiesInRange(12.0f) > 2)
-		{
-			closeTarget = true;
-			scheduler.DelayGroup(GROUP_NORMAL, 2s);
-			scheduler.DelayGroup(GROUP_FROSTBOLT, 2s);
-			CastFleeSequence(1s);
-		}
-	}
+        // Detection des melee : si trop d'ennemis sont colles et qu'on est libre, on declenche la fuite.
+        if (!closeTarget
+            && !me->HasAura(SPELL_ICE_BLOCK)
+            && EnemiesInRange(MELEE_FLEE_RANGE) > MELEE_FLEE_THRESHOLD)
+        {
+            closeTarget = true;
+            CastFleeSequence(1s);
+        }
+    }
 
-	void CastFleeSequence(Seconds start)
-	{
-		if (me->HasAura(SPELL_ICE_BLOCK))
-			return;
+    // Sequence de fuite : Delai -> Frost Nova (root les melee) -> 300ms -> Blink (degage) -> reset apres 8-14s.
+    void CastFleeSequence(Seconds start)
+    {
+        scheduler
+            .Schedule(start, GROUP_FLEE, [this](TaskContext context)
+            {
+                if (me->HasAura(SPELL_ICE_BLOCK))
+                    return;
 
-		scheduler.Schedule(start, GROUP_FLEE, [this](TaskContext context)
-		{
-			switch (context.GetRepeatCounter())
-			{
-				case 0:
-					CastStop();
-					DoCastSelf(SPELL_FROST_NOVA, true);
-					context.Repeat(300ms);
-					break;
-				case 1:
-                    CastBlink(true);
-					scheduler.CancelGroup(GROUP_FLEE);
-					context.Repeat(8s, 14s);
-					break;
-				case 2:
-					closeTarget = false;
-					break;
-			}
-		});
-	}
+                switch (context.GetRepeatCounter())
+                {
+                    case 0: // Delai des groupes de combat
+                        scheduler.DelayGroup(GROUP_NORMAL, 2s);
+                        scheduler.DelayGroup(GROUP_FROSTBOLT, 2s);
+                        scheduler.DelayGroup(GROUP_ICE_LANCE, 2s);
+                        context.Repeat(100ms);
+                        break;
+                    case 1: // Root les melee autour
+                        CastStop();
+                        DoCastSelf(SPELL_FROST_NOVA, INTERNAL_CAST);
+                        context.Repeat(300ms);
+                        break;
+                    case 2: // Blink pour reprendre de la distance
+                        CastBlink(true);
+                        context.Repeat(8s, 14s);
+                        break;
+                    case 3: // Re-armement : on peut redeclencher la fuite
+                        closeTarget = false;
+                        break;
+                }
+            });
+    }
 
-	void CastIcicle(uint8 index)
-	{
-        // Visual des eclats
-		uint32 icicle = IciclesDummies[index];
-		DoCastSelf(icicle, true);
+    // -------------------------------------------------------------------------
+    // Icicles (build vers Glacial Spike)
+    // -------------------------------------------------------------------------
 
-        // Buff des eclats
-		DoCastSelf(SPELL_ICICLES, true);
-	}
+    // Affiche le visuel du eclat numero `index` et incremente la stack du buff.
+    void CastIcicle(uint8 index)
+    {
+        DoCastSelf(IciclesDummies[index], INTERNAL_CAST);
+        DoCastSelf(SPELL_ICICLES, INTERNAL_CAST);
+    }
 
+    // Appele a chaque hit de Frostbolt : ajoute un Icicle (jusqu'a MAX_ICICLES = 5).
+    // Au 5e stack, le buff Glacial Spike est applique.
+    void UpdateIcicles()
+    {
+        Aura* aura = me->GetAura(SPELL_ICICLES);
+        uint8 stacks = aura ? aura->GetStackAmount() : 0;
+
+        // Cap atteint : si le buff finisher traine encore, on retente le Glacial Spike.
+        if (stacks >= MAX_ICICLES)
+        {
+            TryCastGlacialSpike();
+            return;
+        }
+
+        CastIcicle(stacks);
+
+        // Vient de passer a MAX_ICICLES -> on declenche le buff Glacial Spike.
+        if (stacks + 1 == MAX_ICICLES)
+            DoCastSelf(SPELL_GLACIAL_SPIKE_BUFF, INTERNAL_CAST);
+    }
+
+    // Nettoie tous les Icicles (visuels + buff de stacks + buff finisher) apres Glacial Spike.
     void RemoveIcicles()
     {
-        // Buff des eclats
         me->RemoveAurasDueToSpell(SPELL_ICICLES);
-
-        // Buff de la Glacial Pike
         me->RemoveAurasDueToSpell(SPELL_GLACIAL_SPIKE_BUFF);
 
-        // Visual des eclats
-        for (uint8 i = 0; i < 5; i++)
-            me->RemoveAurasDueToSpell(IciclesDummies[i]);
+        for (uint32 dummy : IciclesDummies)
+            me->RemoveAurasDueToSpell(dummy);
     }
 
-    void CastBackped(Unit* victim)
+    // -------------------------------------------------------------------------
+    // Splinters / Backped / Blink
+    // -------------------------------------------------------------------------
+
+    // Apres un hit (Frostbolt = 1, Glacial Spike = 3), tire `count` Frost Splinters
+    // espaces de 380-560ms sur la meme cible. Re-resout le GUID a chaque tick pour
+    // eviter le pointeur dangling si la cible meurt en cours de salve.
+    void CastSplinters(Unit* victim, SpellInfo const* spell, uint8 count)
     {
-        CastStop();
-        DoCast(victim, RAND(SPELL_ICE_LANCE, SPELL_FLURRY), CastSpellExtraArgs(TRIGGERED_IGNORE_GCD));
+        // Pas de splinter sur soi-meme.
+        if (victim->GetGUID() == me->GetGUID())
+            return;
+
+        // Anti-recursion : ne pas chainer un splinter sur un hit de splinter.
+        if (spell->Id == SPELL_FROST_SPLINTER)
+            return;
+
+        ObjectGuid victimGuid = victim->GetGUID();
+        scheduler.Schedule(1ms, GROUP_SPLINTERS, [this, victimGuid, count](TaskContext context)
+        {
+            if (context.GetRepeatCounter() >= count)
+                return;
+
+            Unit* target = ObjectAccessor::GetUnit(*me, victimGuid);
+            if (!target || !target->IsAlive())
+                return;
+
+            DoCast(target, SPELL_FROST_SPLINTER, INTERNAL_CAST);
+            context.Repeat(380ms, 560ms);
+        });
     }
 
+    // Blink + nettoyage des effets de mouvement, avec retrait optionnel de l'aura qui nous a touche.
     void CastBlink(bool triggered, Optional<uint32> removeAura = {})
     {
         CastStop();
@@ -1409,148 +1788,255 @@ struct npc_roknah_grunt : public npc_theramore_horde
 	}
 };
 
+// =============================================================================
+// npc_roknah_loasinger - Chamane hybride (DPS Elementaire + heal Restauration)
+// =============================================================================
+// Rotation offensive (GROUP_NORMAL) :
+//   - Lightning Bolt en continu (filler, 2.8s)
+//   - Lava Burst toutes les 8-10s
+//   - Chain Lightning sur cible aleatoire
+//   - Flame Shock / Frost Shock sur cibles qui n'ont pas encore le DoT
+//   - Earthquake si 3+ ennemis colles
+//   - Wind Shear pour kick les casters ennemis
+// Rotation de heal (GROUP_HEALING) :
+//   - Healing Surge en spot (allie sous 40% PV)
+//   - Riptide en HoT (allie sous 60% PV qui n'a pas deja le HoT)
+//   - Chain Heal sur allie sous 30% PV
+//   - Healing Rain quand un allie est tres bas (cooldown 24-32s)
+//   - Healing Tide Totem si un allie est critique (5% PV)
+// Defense (GROUP_ASCENDANCE) :
+//   - <40% PV : Astral Shift -> Ascendance -> Chain Heal d'urgence
+//     (declenchable une seule fois grace au flag `ascending`)
+// =============================================================================
 struct npc_roknah_loasinger : public npc_theramore_horde
 {
-	npc_roknah_loasinger(Creature* creature) : npc_theramore_horde(creature, AI_Type::Distance)
-	{
-	}
+    npc_roknah_loasinger(Creature* creature) : npc_theramore_horde(creature, AI_Type::Distance),
+        ascending(false)
+    {
+        ascendanceInfo = sSpellMgr->AssertSpellInfo(SPELL_ASCENDANCE, DIFFICULTY_NONE);
+    }
 
-	enum Spells
-	{
-		SPELL_ASTRAL_SHIFT      = 292158,
-		SPELL_CHAIN_LIGHTNING   = 290411,
-		SPELL_FLAME_SHOCK       = 290422,
-		SPELL_FROST_SHOCK       = 290441,
-		SPELL_EARTHQUAKE        = 160162,
-		SPELL_HEALING_SURGE     = 290435,
-		SPELL_LAVA_BURST        = 290423,
-		SPELL_WIND_SHEAR        = 290439,
-		SPELL_LIGHTNING_BOLT    = 290395,
-		SPELL_RIPTIDE           = 241892,
-		SPELL_CHAIN_HEAL        = 258099,
-		SPELL_HEALING_TIDE      = 127945,
-	};
+    enum Groups
+    {
+        GROUP_NORMAL,       // Rotation offensive (DPS + interrupt + AOE)
+        GROUP_HEALING,      // Routines de soin sur les allies
+        GROUP_ASCENDANCE,   // Sequence defensive declenchee a 40% PV
+    };
 
-	enum Misc
-	{
-		NPC_HEALING_TIDE_TOTEM  = 65349,
-	};
+    enum Spells
+    {
+        SPELL_HEALING_RAIN      = 73920,
+        SPELL_ASCENDANCE        = 114052,
+        SPELL_ASTRAL_SHIFT      = 292158,
+        SPELL_CHAIN_LIGHTNING   = 290411,
+        SPELL_FLAME_SHOCK       = 290422,
+        SPELL_FROST_SHOCK       = 290441,
+        SPELL_EARTHQUAKE        = 160162,
+        SPELL_HEALING_SURGE     = 290435,
+        SPELL_LAVA_BURST        = 290423,
+        SPELL_WIND_SHEAR        = 290439,
+        SPELL_RIPTIDE           = 241892,
+        SPELL_CHAIN_HEAL        = 258099,
+        SPELL_HEALING_TIDE      = 127945,
+        SPELL_LIGHTNING_BOLT    = 1246687,
+    };
 
-	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spell) override
-	{
-		npc_theramore_horde::DamageTaken(attacker, damage, damageType, spell);
+    static constexpr uint8 ASCENDANCE_HP_PCT             = 40;       // PV qui declenche la sequence defensive
+    static constexpr float SHOCK_RANGE                   = 30.0f;    // Portee des shocks
+    static constexpr float WIND_SHEAR_RANGE              = 35.0f;    // Portee du kick
+    static constexpr float EARTHQUAKE_RANGE              = 8.0f;     // Distance de detection AOE
+    static constexpr uint32 EARTHQUAKE_THRESHOLD         = 3;        // Au-dela de N ennemis -> Earthquake
 
-		if (me->HealthBelowPctDamaged(50, damage) && !me->HasAura(SPELL_ASTRAL_SHIFT))
-		{
-			scheduler.Schedule(1ms, [this](TaskContext astral_shift)
-			{
-				DoCast(SPELL_ASTRAL_SHIFT);
-				astral_shift.Repeat(1min);
-			});
-		}
-	}
+    // Seuils de heal : (range, pct PV).
+    static constexpr float HEAL_FRIENDLY_RANGE           = 40.0f;    // Portee standard des soins cibles
+    static constexpr uint8 HEALING_SURGE_PCT             = 60;       // Spot heal
+    static constexpr uint8 RIPTIDE_PCT                   = 80;       // HoT preventif
+    static constexpr uint8 CHAIN_HEAL_PCT                = 50;       // Heal multi-cible
+    static constexpr float HEALING_RAIN_RANGE            = 80.0f;    // Healing Rain (gros radius)
+    static constexpr uint8 HEALING_TIDE_PCT              = 30;        // Healing Tide Totem (urgence absolue)
+    static constexpr float HEALING_TIDE_RANGE            = 60.0f;    // Healing Tide (gros radius)
+    static constexpr float CHAIN_HEAL_FRIENDLY_RANGE     = 30.0f;    // Chain Heal (radius des sauts)
 
-	void JustEngagedWith(Unit* who) override
-	{
-		npc_theramore_horde::JustEngagedWith(who);
+    const SpellInfo* ascendanceInfo;
+    bool ascending;     // True une fois la sequence Ascendance declenchee (one-shot par combat)
 
-		DoCastVictim(SPELL_LIGHTNING_BOLT);
+    void Reset() override
+    {
+        npc_theramore_horde::Reset();
+        ascending = false;
+    }
 
-		scheduler
-			.Schedule(8s, 14s, [this](TaskContext chain_lightning)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-					DoCast(target, SPELL_CHAIN_LIGHTNING);
-				chain_lightning.Repeat(3s, 5s);
-			})
-			.Schedule(5s, 8s, [this](TaskContext frost_shock)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_FROST_SHOCK))
-					DoCast(target, SPELL_FROST_SHOCK);
-				frost_shock.Repeat(8s, 10s);
-			})
-			.Schedule(5s, 8s, [this](TaskContext flame_shock)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 30.0f, false, true, -SPELL_FLAME_SHOCK))
-					DoCast(target, SPELL_FLAME_SHOCK);
-				flame_shock.Repeat(5s, 8s);
-			})
-			.Schedule(20s, 25s, [this](TaskContext earthquake)
-			{
-				if (EnemiesInRange(8.0f) >= 3)
-				{
-					DoCast(SPELL_EARTHQUAKE);
-					earthquake.Repeat(10s, 13s);
-				}
-				else
-					earthquake.Repeat(1s);
-			})
-			.Schedule(3s, [this](TaskContext healing_surge)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 40))
-				{
-					CastStop(SPELL_HEALING_SURGE);
-					DoCast(target, SPELL_HEALING_SURGE);
-				}
-				healing_surge.Repeat(3s);
-			})
-			.Schedule(5s, [this](TaskContext riptide)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
-				{
-					if (!target->HasAura(SPELL_RIPTIDE))
-						DoCast(target, SPELL_RIPTIDE);
-				}
-				riptide.Repeat(5s);
-			})
-			.Schedule(2s, [this](TaskContext healing_tide)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(60.f, 5))
-				{
-					Creature* totem = me->FindNearestCreature(NPC_HEALING_TIDE_TOTEM, 60.f);
-					if (!totem)
-					{
-						CastStop();
-						DoCast(SPELL_HEALING_TIDE);
-						healing_tide.Repeat(1min);
-					}
-					else
-					{
-						healing_tide.Repeat(2s);
-					}
-				}
-				else
-					healing_tide.Repeat(2s);
-			})
-			.Schedule(2s, [this](TaskContext chain_heal)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 30))
-					DoCast(target, SPELL_CHAIN_HEAL);
-				chain_heal.Repeat(2s);
-			})
-			.Schedule(11s, 15s, [this](TaskContext lava_burst)
-			{
-				DoCastVictim(SPELL_LAVA_BURST);
-				lava_burst.Repeat(8s, 10s);
-			})
-			.Schedule(1s, [this](TaskContext wind_shear)
-			{
-				if (Unit* target = DoSelectCastingUnit(SPELL_WIND_SHEAR, 35.f))
-				{
-					CastStop();
-					DoCast(target, SPELL_WIND_SHEAR);
-					wind_shear.Repeat(10s, 18s);
-				}
-				else
-					wind_shear.Repeat(1s);
+    // -------------------------------------------------------------------------
+    // Reactions
+    // -------------------------------------------------------------------------
 
-			})
-			.Schedule(1ms, [this](TaskContext lightning_bolt)
-			{
-				DoCastVictim(SPELL_LIGHTNING_BOLT);
-				lightning_bolt.Repeat(2800ms);
-			});
-	}
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
+    {
+        // Sequence defensive declenchee une seule fois par combat (ou par cooldown si reset).
+        // Le flag `ascending` evite l'empilement de plusieurs sequences entre le declenchement
+        // et le cast effectif d'Ascendance (qui pose le cooldown).
+        if (ascending)
+            return;
+
+        if (!me->HealthBelowPctDamaged(ASCENDANCE_HP_PCT, damage))
+            return;
+
+        if (me->GetSpellHistory()->HasCooldown(ascendanceInfo))
+            return;
+
+        ascending = true;
+
+        // Gel la rotation offensive pendant toute la duree d'Ascendance.
+        scheduler.DelayGroup(GROUP_NORMAL, 15s);
+
+        scheduler.Schedule(1ms, GROUP_ASCENDANCE, [this](TaskContext ascendance)
+        {
+            switch (ascendance.GetRepeatCounter())
+            {
+                case 0: // Reduction de degats immediate
+                    DoCastSelf(SPELL_ASTRAL_SHIFT);
+                    ascendance.Repeat(400ms);
+                    break;
+                case 1: // Forme Ascendance (heals deviennent instants)
+                    DoCastSelf(SPELL_ASCENDANCE);
+                    ascendance.Repeat(350ms);
+                    break;
+                case 2: // Chain Heal d'urgence sur l'allie le plus bas
+                    if (Unit* target = DoSelectBelowHpPctFriendly(CHAIN_HEAL_FRIENDLY_RANGE, CHAIN_HEAL_PCT))
+                    {
+                        CastStop();
+                        DoCast(target, SPELL_CHAIN_HEAL);
+                    }
+                    break;
+            }
+        });
+    }
+
+    // Shock instant en sortie de backpedal.
+    void OnBackpedStart(Unit* victim) override
+    {
+        DoCast(victim, RAND(SPELL_FROST_SHOCK, SPELL_FLAME_SHOCK), TRIGGERED_IGNORE_GCD | TRIGGERED_IGNORE_CAST_IN_PROGRESS);
+    }
+
+    // -------------------------------------------------------------------------
+    // Rotation
+    // -------------------------------------------------------------------------
+
+    void JustEngagedWith(Unit* who) override
+    {
+        npc_theramore_horde::JustEngagedWith(who);
+
+        // Premier Lightning Bolt immediat sur l'agresseur.
+        DoCast(who, SPELL_LIGHTNING_BOLT);
+
+        scheduler
+            // === DPS ===
+
+            // Chain Lightning sur cible aleatoire toutes les 3-5s.
+            .Schedule(8s, 14s, GROUP_NORMAL, [this](TaskContext chain_lightning)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                    DoCast(target, SPELL_CHAIN_LIGHTNING);
+                chain_lightning.Repeat(3s, 5s);
+            })
+            // Frost Shock sur cible qui ne l'a pas deja.
+            .Schedule(5s, 8s, GROUP_NORMAL, [this](TaskContext frost_shock)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, SHOCK_RANGE, false, true, -SPELL_FROST_SHOCK))
+                    DoCast(target, SPELL_FROST_SHOCK);
+                frost_shock.Repeat(8s, 10s);
+            })
+            // Flame Shock sur cible qui ne l'a pas deja (DoT).
+            .Schedule(5s, 8s, GROUP_NORMAL, [this](TaskContext flame_shock)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, SHOCK_RANGE, false, true, -SPELL_FLAME_SHOCK))
+                    DoCast(target, SPELL_FLAME_SHOCK);
+                flame_shock.Repeat(5s, 8s);
+            })
+            // Earthquake si 3+ ennemis colles.
+            .Schedule(20s, 25s, GROUP_NORMAL, [this](TaskContext earthquake)
+            {
+                if (EnemiesInRange(EARTHQUAKE_RANGE) >= EARTHQUAKE_THRESHOLD)
+                {
+                    DoCast(SPELL_EARTHQUAKE);
+                    earthquake.Repeat(10s, 13s);
+                }
+                else
+                    earthquake.Repeat(1s);
+            })
+            // Lava Burst sur la victime courante.
+            .Schedule(11s, 15s, GROUP_NORMAL, [this](TaskContext lava_burst)
+            {
+                CastStop();
+                DoCastVictim(SPELL_LAVA_BURST);
+                lava_burst.Repeat(8s, 10s);
+            })
+            // Wind Shear : kick les casters ennemis dans la portee.
+            .Schedule(1s, GROUP_NORMAL, [this](TaskContext wind_shear)
+            {
+                if (Unit* target = DoSelectCastingUnit(SPELL_WIND_SHEAR, WIND_SHEAR_RANGE))
+                {
+                    CastStop();
+                    DoCast(target, SPELL_WIND_SHEAR);
+                    wind_shear.Repeat(10s, 18s);
+                }
+                else
+                    wind_shear.Repeat(1s);
+            })
+            // Lightning Bolt en continu (filler, 2.8s = cast time approche).
+            .Schedule(1s, GROUP_NORMAL, [this](TaskContext lightning_bolt)
+            {
+                DoCastVictim(SPELL_LIGHTNING_BOLT);
+                lightning_bolt.Repeat(3200ms);
+            })
+
+            // === HEAL ===
+
+            // Healing Surge : spot heal sur allie sous 30% PV (toutes les 3s).
+            .Schedule(1s, GROUP_HEALING, [this](TaskContext healing_surge)
+            {
+                if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, HEALING_SURGE_PCT))
+                {
+                    CastStop(SPELL_HEALING_SURGE);
+                    DoCast(target, SPELL_HEALING_SURGE);
+                }
+                healing_surge.Repeat(3s);
+            })
+            // Riptide : HoT preventif sur allie sous 60% PV qui n'a pas deja le HoT.
+            .Schedule(1s, GROUP_HEALING, [this](TaskContext riptide)
+            {
+                if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, RIPTIDE_PCT, SPELL_RIPTIDE))
+                    DoCast(target, SPELL_RIPTIDE);
+                riptide.Repeat(2s);
+            })
+            // Chain Heal : heal multi-cible si un allie est sous 40% PV.
+            .Schedule(2s, GROUP_HEALING, [this](TaskContext chain_heal)
+            {
+                if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, CHAIN_HEAL_PCT))
+                {
+                    CastStop();
+                    DoCast(target, SPELL_CHAIN_HEAL);
+                }
+                chain_heal.Repeat(8s, 14s);
+            })
+            // Healing Rain : zone de soin si un allie est tres bas. Cooldown 24-32s.
+            .Schedule(8s, GROUP_HEALING, [this](TaskContext healing_rain)
+            {
+                if (Unit* target = DoSelectBelowHpPctFriendly(HEALING_RAIN_RANGE, CHAIN_HEAL_PCT))
+                    DoCast(target, SPELL_HEALING_RAIN);
+                healing_rain.Repeat(24s, 32s);
+            })
+            // Healing Tide Totem : urgence absolue (allie a 5% PV). Re-check toutes les 2s.
+            .Schedule(15s, GROUP_HEALING, [this](TaskContext healing_tide)
+            {
+                if (DoSelectBelowHpPctFriendly(HEALING_TIDE_RANGE, HEALING_TIDE_PCT))
+                {
+                    CastStop();
+                    DoCast(SPELL_HEALING_TIDE);
+                }
+                healing_tide.Repeat(2s);
+            });
+    }
 };
 
 struct npc_roknah_felcaster : public npc_theramore_horde
@@ -2165,56 +2651,12 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 	}
 };
 
-// Healing Tide Totem - 65349
-struct npc_healing_tide_totem : public TotemAI
-{
-	npc_healing_tide_totem(Creature* creature) : TotemAI(creature)
-	{
-		Initialize();
-	}
-
-	enum Spells
-	{
-		SPELL_HEALING_TIDE_TOTEM_DUMMY      = 114941,
-		SPELL_HEALING_TIDE_TOTEM_HEAL       = 255021,
-	};
-
-	void Initialize()
-	{
-		scheduler.SetValidator([this]
-		{
-			return me->ToTotem()->GetTotemType() != TOTEM_ACTIVE || !me->IsAlive() || me->IsNonMeleeSpellCast(false);
-		});
-	}
-
-	void Reset() override
-	{
-		DoCastSelf(SPELL_HEALING_TIDE_TOTEM_DUMMY, true);
-
-		DoCast(SPELL_HEALING_TIDE_TOTEM_HEAL);
-
-		scheduler.Schedule(2s, [this](TaskContext spell)
-		{
-			DoCast(SPELL_HEALING_TIDE_TOTEM_HEAL);
-			spell.Repeat(2s);
-		});
-	}
-
-	void UpdateAI(uint32 diff) override
-	{
-		scheduler.Update(diff);
-	}
-
-	private:
-	TaskScheduler scheduler;
-};
-
 // Flurry - 284858
 class spell_roknah_hag_flurry : public SpellScript
 {
     enum Misc
     {
-        SPELL_MAGE_FLURRY_DAMAGE = 284860
+        SPELL_MAGE_FLURRY_DAMAGE = 228596
     };
 
     class FlurryEvent : public BasicEvent
@@ -2824,6 +3266,44 @@ struct at_scorched_earth : AreaTriggerAI
 	}
 };
 
+// Arcane Orb - 440458
+// AreaTriggerID - 32530
+struct at_arcane_orb : AreaTriggerAI
+{
+    using AreaTriggerAI::AreaTriggerAI;
+
+    enum Spells
+    {
+        SPELL_ARCANE_ORB_DAMAGE = 440552
+    };
+
+    void OnInitialize() override
+    {
+        Position destPos = at->GetPosition();
+        at->MovePositionToFirstCollision(destPos, 40.0f, 0.0f);
+
+        PathGenerator path(at);
+        path.CalculatePath(destPos.GetPositionX(), destPos.GetPositionY(), destPos.GetPositionZ(), true);
+
+        at->InitSplines(path.GetPath());
+    }
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        Unit* caster = at->GetCaster();
+        if (!caster)
+            return;
+
+        if (caster->IsValidAttackTarget(unit))
+            caster->CastSpell(unit, SPELL_ARCANE_ORB_DAMAGE, TRIGGERED_IGNORE_GCD | TRIGGERED_IGNORE_CAST_IN_PROGRESS);
+    }
+
+    void OnDestinationReached() override
+    {
+        at->Remove();
+    }
+};
+
 // AreaTriggerID - 25183
 struct areatrigger_theramore_citizens : AreaTriggerAI
 {
@@ -2887,8 +3367,6 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterCreatureAI(npc_roknah_grunt);
 	RegisterCreatureAI(npc_roknah_loasinger);
 	RegisterCreatureAI(npc_roknah_felcaster);
-	RegisterCreatureAI(npc_healing_tide_totem);
-	//-
 
 	RegisterSpellScript(spell_roknah_hag_flurry);
 	RegisterSpellScript(spell_theramore_light_of_dawn);
@@ -2900,6 +3378,7 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterAreaTriggerAI(at_divine_word_sanctuary);
 	RegisterAreaTriggerAI(at_uncontrolled_energy);
 	RegisterAreaTriggerAI(at_scorched_earth);
+	RegisterAreaTriggerAI(at_arcane_orb);
 
 	// Custom AT
 	RegisterSpellScript(spell_yell_at_citizens);

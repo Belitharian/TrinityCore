@@ -32,6 +32,7 @@ void AddSC_instance_dalaran_convo();
 void AddSC_npcs_dalaran_convo();
 
 void AddSC_instance_amirdrassil_the_fallen_dream();
+void AddSC_amirdrassil_the_fallen_dream();
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
@@ -53,4 +54,5 @@ void AddCustomScripts()
     AddSC_npcs_dalaran_convo();
 
     AddSC_instance_amirdrassil_the_fallen_dream();
+    AddSC_amirdrassil_the_fallen_dream();
 }

@@ -204,6 +204,8 @@ struct TC_GAME_API ScriptedAI : public CreatureAI
 
         Unit* DoSelectBelowHpPctFriendly(float range, uint8 minHPDiff = 1);
 
+        Unit* DoSelectBelowHpPctFriendly(float range, uint8 pct, uint32 aura);
+
         Unit* DoSelectCastingUnit(uint32 uiSpellid, float range);
 
         // Returns friendly unit with hp pct below specified and with specified entry

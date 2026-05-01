@@ -471,6 +471,16 @@ Unit* ScriptedAI::DoSelectBelowHpPctFriendly(float range, uint8 minHPDiff)
     return unit;
 }
 
+Unit* ScriptedAI::DoSelectBelowHpPctFriendly(float range, uint8 pct, uint32 aura)
+{
+    Unit* unit = nullptr;
+    Trinity::FriendlyBelowHpPctInRangeMissingAura u_check(me, range, pct, aura);
+    Trinity::UnitLastSearcher<Trinity::FriendlyBelowHpPctInRangeMissingAura> searcher(me, unit, u_check);
+    Cell::VisitAllObjects(me, searcher, range);
+
+    return unit;
+}
+
 Unit* ScriptedAI::DoSelectCastingUnit(uint32 uiSpellid, float range)
 {
     Unit* unit = nullptr;

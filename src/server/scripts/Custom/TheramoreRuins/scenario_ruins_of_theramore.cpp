@@ -611,43 +611,53 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				// Check dead hordes
 				#pragma region HORDE_CHECKER
 
-				case 44:
-				{
-					uint32 deadCounter = 0;
+                case 44:
+                {
+                    Creature* jaina = GetJaina();
+                    if (!jaina)
+                    {
+                        events.CancelEvent(44);
+                        break;
+                    }
 
-					if (Creature* jaina = GetJaina())
-					{
-						for (uint8 i = 0; i < hordeCounter; ++i)
-						{
-							Creature* temp = ObjectAccessor::GetCreature(*jaina, hordeChecker[i]);
-							if (temp && temp->IsAlive() && !temp->IsEngaged())
-								temp->AI()->AttackStart(jaina);
+                    uint32 deadCount = 0;
 
-							if (!temp || temp->isDead())
-								++deadCounter;
-						}
+                    for (uint8 i = 0; i < hordeCounter; ++i)
+                    {
+                        Creature* horde = ObjectAccessor::GetCreature(*jaina, hordeChecker[i]);
 
-						// Quand le nombre de membres vivants est inférieur ou égal au nombre de membres morts
-						if (deadCounter >= hordeCounter)
-						{
-							Talk(jaina, SAY_IRIS_PROTECTION_JAINA_04);
-							if (Player* player = instance->GetPlayers().begin()->GetSource())
-								jaina->SetFacingToObject(player);
+                        if (!horde || horde->isDead())
+                        {
+                            ++deadCount;
+                            continue;
+                        }
 
-							jaina->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
-							jaina->SetReactState(REACT_PASSIVE);
-							jaina->LoadEquipment(2);
+                        if (!horde->IsEngaged())
+                            horde->AI()->AttackStart(jaina);
+                    }
 
-							events.CancelEvent(44);
+                    // Tous les membres de la Horde sont morts
+                    if (deadCount >= hordeCounter)
+                    {
+                        Talk(jaina, SAY_IRIS_PROTECTION_JAINA_04);
 
-							Next(5s);
-						}
-						else
-							events.RescheduleEvent(44, 1s);
-					}
+                        if (Player* player = instance->GetPlayers().begin()->GetSource())
+                            jaina->SetFacingToObject(player);
 
-					break;
-				}
+                        jaina->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+                        jaina->SetReactState(REACT_PASSIVE);
+                        jaina->LoadEquipment(2);
+                        jaina->AI()->SetData(DATA_CANCEL_GROUP, DATA_PHASE_COMBAT);
+                        events.CancelEvent(44);
+                        Next(5s);
+                    }
+                    else
+                    {
+                        events.RescheduleEvent(44, 1s);
+                    }
+
+                    break;
+                }
 				case 45:
 					if (Creature* jaina = GetJaina())
 					{

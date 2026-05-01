@@ -1223,6 +1223,31 @@ namespace Trinity
             uint8 i_pct;
     };
 
+    class FriendlyBelowHpPctInRangeMissingAura
+    {
+        public:
+            FriendlyBelowHpPctInRangeMissingAura(Unit const* obj, float range, uint8 pct, uint32 aura)
+                : i_obj(obj), i_range(range), i_pct(pct), i_aura(aura) { }
+
+            bool operator()(Unit* u)
+            {
+                if (u->IsAlive() && u->IsInCombat()
+                    && !i_obj->IsHostileTo(u) && i_obj->IsWithinDistInMap(u, i_range)
+                    && u->HealthBelowPct(i_pct) && !u->HasAura(i_aura))
+                {
+                    return true;
+                }
+
+                return false;
+            }
+
+        private:
+            Unit const* i_obj;
+            float i_range;
+            uint8 i_pct;
+            uint32 i_aura;
+    };
+
     class FriendlyCCedInRange
     {
         public:

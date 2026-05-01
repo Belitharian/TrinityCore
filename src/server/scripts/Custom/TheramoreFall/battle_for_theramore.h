@@ -10,7 +10,7 @@
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader "BFT"
 
-#define CUSTOM_DEBUG
+//#define CUSTOM_DEBUG
 
 #define PERITH_LOCATION          3
 #define ARCHMAGES_LOCATION       6

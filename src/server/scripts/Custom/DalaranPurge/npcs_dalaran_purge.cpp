@@ -3804,7 +3804,7 @@ struct at_rain_of_fire : AreaTriggerAI
 			if (unit->GetGUID() == caster->GetGUID())
 				return;
 
-            if (!unit->IsHostileTo(caster))
+            if (!unit->IsValidAttackTarget(caster))
 				return;
 
 			caster->CastSpell(unit, SPELL_RAIN_OF_FIRE_DAMAGE, true);
@@ -3839,8 +3839,8 @@ struct at_frigid_blizzard_dalaran : AreaTriggerAI
 			if (unit->GetGUID() == caster->GetGUID())
 				return;
 
-			if (!unit->IsHostileTo(caster))
-				return;
+            if (!unit->IsValidAttackTarget(caster))
+                return;
 
 			caster->CastSpell(unit, SPELL_FRIGID_BLIZZARD_DAMAGE, true);
 		}

@@ -149,9 +149,9 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
             Backped     = 2500002,
         };
 
-        static constexpr float JUMP_SPEED = 5.f;
+        static constexpr float JUMP_SPEED = 6.f;
 
-        static constexpr float JUMP_HEIGHT = 1.8f;
+        static constexpr float JUMP_HEIGHT = 1.5f;
         static constexpr float JUMP_DISTANCE = 5.f;
 
         static constexpr float JUMP_BACK_HEIGHT = 1.8f;
