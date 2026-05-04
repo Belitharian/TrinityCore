@@ -175,9 +175,43 @@ void CustomAI::AttackStart(Unit* who)
         }
         case AI_Type::Melee:
         {
-            // Auto-attaque m�l�e + poursuite rapproch�e
+            // Auto-attaque melee + poursuite rapproch�e
             if (me->Attack(who, true))
-                me->GetMotionMaster()->MoveChase(who);
+            {
+                // Repartit tous les melee CustomAI autour de la cible pour qu'ils
+                // ne se superposent pas. On recolte les attaquants melee CustomAI
+                // (self inclus, vu que Unit::Attack a deja insere me dans m_attackers)
+                // puis on leur assigne a chacun un slot angulaire equireparti.
+                std::vector<Creature*> meleeBots;
+                for (Unit* a : who->getAttackers())
+                {
+                    Creature* c = a->ToCreature();
+                    if (!c || !c->IsAlive())
+                        continue;
+                    CustomAI* cai = dynamic_cast<CustomAI*>(c->AI());
+                    if (!cai || cai->type != AI_Type::Melee)
+                        continue;
+                    meleeBots.push_back(c);
+                }
+
+                // Filet de securite : si pour une raison X self n'est pas dans la liste
+                if (std::find(meleeBots.begin(), meleeBots.end(), me) == meleeBots.end())
+                    meleeBots.push_back(me);
+
+                // Tri stable par GUID pour que chaque bot retombe toujours sur le meme slot
+                std::sort(meleeBots.begin(), meleeBots.end(), [](Creature* lhs, Creature* rhs)
+                {
+                    return lhs->GetGUID() < rhs->GetGUID();
+                });
+
+                uint32 const total = uint32(meleeBots.size());
+                float const tolerance = float(M_PI) / float(std::max<uint32>(total, 2u));
+                for (uint32 i = 0; i < total; ++i)
+                {
+                    float const angle = (2.f * float(M_PI) * float(i)) / float(total);
+                    meleeBots[i]->GetMotionMaster()->MoveChase(who, me->GetCombatReach(), ChaseAngle(angle, tolerance));
+                }
+            }
             break;
         }
         default:
