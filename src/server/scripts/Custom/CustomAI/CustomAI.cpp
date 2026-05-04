@@ -454,7 +454,7 @@ void CustomAI::ScheduleRandomMovements()
             // Si on ne peut pas reculer assez (mur derriere), on garde le cast et on reessaye plus tard
             if (movedDist < 1.f)
             {
-                context.Repeat(500ms, 1s);
+                context.Repeat(500ms);
                 return;
             }
 
@@ -479,7 +479,7 @@ void CustomAI::ScheduleRandomMovements()
             }
 
             // Repeat court : on revient verifier rapidement, et on reculera encore si toujours trop proche
-            context.Repeat(500ms, 1s);
+            context.Repeat(500ms);
             return;
         }
 

@@ -12,20 +12,18 @@
 
 //#define CUSTOM_DEBUG
 
-#define PERITH_LOCATION          3
-#define ARCHMAGES_LOCATION       6
-#define ARCHMAGES_RELOCATION     6
-#define ACTORS_RELOCATION       10
-#define BARRIERS_LOCATION        2
-
-#define FIRE_LOCATION           32
-#define TOWER_BARRIERS_LOCATION  8
-
-#define HORDE_WAVES_COUNT       10
-#define NUMBER_OF_WOUNDED       6
-#define NUMBER_OF_CITIZENS      8
-#define NUMBER_OF_TROOPS        5
-#define NUMBER_OF_FIRES         8
+static constexpr uint8 PERITH_LOCATION          = 3;
+static constexpr uint8 ARCHMAGES_LOCATION       = 6;
+static constexpr uint8 ARCHMAGES_RELOCATION     = 6;
+static constexpr uint8 ACTORS_RELOCATION        = 10;
+static constexpr uint8 BARRIERS_LOCATION        = 2;
+static constexpr uint8 FIRE_LOCATION            = 32;
+static constexpr uint8 TOWER_BARRIERS_LOCATION  = 8;
+static constexpr uint8 HORDE_WAVES_COUNT        = 10;
+static constexpr uint8 NUMBER_OF_WOUNDED        = 6;
+static constexpr uint8 NUMBER_OF_CITIZENS       = 8;
+static constexpr uint8 NUMBER_OF_TROOPS         = 5;
+static constexpr uint8 NUMBER_OF_FIRES          = 8;
 
 enum class BFTPhases
 {
@@ -126,6 +124,8 @@ enum BFTCreatures
 	NPC_ROKNAH_HAG                      = 64734,
 	NPC_ROKNAH_FELCASTER                = 65507,
 	NPC_WAVE_CALLER_GRUHTA              = 65510,
+    NPC_HORDE_BOMBARDIER                = 149639,
+    NPC_HORDE_DEMOLISHER                = 144289,
 
 	NPC_ARCHMAGE_TERVOSH 	            = 500000,
 	NPC_KINNDY_SPARKSHINE 	            = 500001,
@@ -651,15 +651,39 @@ WaypointPath const HedricPath01
 {
 	1,
 	{
-		{ 0, -3717.79f, -4522.24f, 25.82f, 5.16f },
-		{ 1, -3714.91f, -4528.24f, 25.82f, 5.16f },
-		{ 2, -3713.09f, -4532.02f, 25.82f, 5.16f },
-		{ 3, -3711.22f, -4535.91f, 25.82f, 5.16f },
-		{ 4, -3710.03f, -4538.38f, 25.82f, 5.16f },
-		{ 5, -3712.85f, -4539.80f, 25.82f, 3.60f },
-		{ 6, -3716.85f, -4541.81f, 25.82f, 3.60f }
+		{ 0, -3714.91f, -4528.24f, 25.82f, 5.16f },
+		{ 1, -3713.09f, -4532.02f, 25.82f, 5.16f },
+		{ 2, -3711.22f, -4535.91f, 25.82f, 5.16f },
+		{ 3, -3710.03f, -4538.38f, 25.82f, 5.16f },
+		{ 4, -3712.85f, -4539.80f, 25.82f, 3.60f },
+		{ 5, -3716.85f, -4541.81f, 25.82f, 3.60f }
 	},
 	WaypointMoveType::Run,
+    WaypointPathFlags::ExactSplinePath
+};
+
+WaypointPath const HedricPath02
+{
+    2,
+	{
+        { 0 , -3666.18f, -4378.58f, 9.35000f, 3.79857f },
+        { 1 , -3673.38f, -4383.78f, 9.98580f, 3.71610f },
+        { 2 , -3678.69f, -4386.71f, 10.4702f, 3.63953f },
+        { 3 , -3674.33f, -4393.23f, 10.6134f, 5.12982f },
+        { 4 , -3672.90f, -4402.25f, 10.6570f, 4.71750f },
+        { 5 , -3672.36f, -4410.95f, 10.6122f, 5.14160f },
+        { 6 , -3666.33f, -4413.72f, 10.8155f, 0.16019f },
+        { 7 , -3658.37f, -4414.11f, 10.5193f, 6.23722f },
+        { 8 , -3650.40f, -4414.56f, 10.1990f, 6.11941f },
+        { 9 , -3643.04f, -4416.15f, 9.90331f, 5.96037f },
+        { 10, -3631.56f, -4420.73f, 9.74590f, 5.75421f },
+        { 11, -3622.44f, -4427.16f, 10.7825f, 5.53626f },
+        { 12, -3615.40f, -4437.50f, 13.7058f, 4.61147f },
+        { 13, -3615.60f, -4447.22f, 14.2323f, 4.69982f },
+        { 14, -3622.47f, -4449.48f, 14.2464f, 3.43222f }
+
+	},
+    WaypointMoveType::Run,
     WaypointPathFlags::ExactSplinePath
 };
 

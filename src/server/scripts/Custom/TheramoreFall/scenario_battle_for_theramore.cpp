@@ -279,7 +279,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
                         hedric->GetMotionMaster()->MoveIdle();
                         hedric->SetHomePosition(HedricPoint01);
                         hedric->NearTeleportTo(HedricPoint01);
-                        hedric->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
                         hedric->SetVisible(false);
                     }
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
@@ -423,6 +422,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
                 // Step 9 : The Battle - After 10 Waves
                 case CRITERIA_TREE_SURVIVE_WAVES:
                 {
+                    DespawnDummies();
                     if (Creature* kalecgos = GetKalecgos())
                         kalecgos->AI()->SetData(DATA_KALECGOS_CANCEL_EVENT, 0U);
                     break;
@@ -1006,7 +1006,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
                         hedric->SetVisible(true);
 						hedric->PlayDirectSound(SOUND_FEARFUL_CROWD);
-					}
+                        hedric->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+                    }
 					Next(3s);
 					break;
 				case 72:
@@ -1023,18 +1024,19 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 74:
 					Talk(GetJaina(), SAY_PRE_BATTLE_4);
-					Next(4s);
+					Next(2s);
 					break;
 				case 75:
 					GetJaina()->SummonGameObject(GOB_PORTAL_TO_DALARAN, PortalPoint01, QuaternionData::QuaternionData(), 0s);
+                    if (Creature* hedric = GetHedric())
+                        hedric->SetFacingTo(0.461802f);
 					Next(500ms);
 					break;
 				case 76:
 					if (Creature* hedric = GetHedric())
 					{
 						hedric->SetWalk(true);
-						hedric->SetFacingTo(0.178294f, true);
-						hedric->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HedricPoint02, true, HedricPoint02.GetOrientation());
+						hedric->GetMotionMaster()->MoveBackward(MOVEMENT_INFO_POINT_01, HedricPoint02, nullptr, 1.12f);
 					}
 					Next(500ms);
 					break;
@@ -1409,7 +1411,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 127:
 					if (Creature* hedric = GetHedric())
-						hedric->GetMotionMaster()->MovePath(JainaPath01, false);
+						hedric->GetMotionMaster()->MovePath(HedricPath02, false);
 					break;
 
 				// PART II
@@ -1689,6 +1691,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		GuidVector tanks;
 		GuidVector troops;
 		GuidVector hordeMembers;
+		GuidVector dummyMembers;
 
 		// Accesseurs
 		#pragma region ACCESSORS
@@ -1806,6 +1809,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				if (Unit* target = SelectNearestHostileInRange(horde))
 					horde->AI()->AttackStart(target);
 
+                hordeMembers.push_back(horde->GetGUID());
+
 				if (dummies)
 				{
 					horde->SetImmuneToAll(true);
@@ -1825,10 +1830,22 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							break;
 					}
 
+                    enum Spells
+                    {
+                        SPELL_CHANNEL_WATER     = 365307,
+                        SPELL_CHANNEL_FROST     = 1271695
+                    };
+
 					switch (horde->GetEntry())
 					{
-						// Horde Bombardier
-						case 149639:
+                        case NPC_ROKNAH_LOA_SINGER:
+                            horde->CastSpell(horde, SPELL_CHANNEL_WATER);
+                            break;
+                        case NPC_ROKNAH_HAG:
+                            horde->CastSpell(horde, SPELL_CHANNEL_FROST);
+                            break;
+						case NPC_HORDE_BOMBARDIER:
+                            horde->SetLevel(90);
 							horde->SetWalk(false);
 							horde->SetCanFly(true);
 							horde->SetDisableGravity(true);
@@ -1837,10 +1854,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							horde->SetSpeedRate(MOVE_FLIGHT, 2.f);
 							horde->m_Events.AddEvent(new HordeBombardierThrowBomb(horde), horde->m_Events.CalculateTime(Seconds(urand(2, 8))));
 							break;
+                        case NPC_HORDE_DEMOLISHER:
+                            horde->SetLevel(90);
+                            break;
 					}
-				}
 
-				hordeMembers.push_back(horde->GetGUID());
+                    dummyMembers.push_back(horde->GetGUID());
+				}
 			}
 
 			if (Creature* jaina = GetJaina())
@@ -1860,6 +1880,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					c->DespawnOrUnsummon();
 			}
 		}
+
+        void DespawnDummies()
+        {
+            for (ObjectGuid guid : dummyMembers)
+            {
+                if (Creature* creature = instance->GetCreature(guid))
+                    creature->DespawnOrUnsummon();
+            }
+        }
 
 		void SpawnWoundedTroops()
 		{
@@ -1887,7 +1916,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						wounded->SetRegenerateHealth(false);
 						wounded->SetMaxHealth(health);
 						wounded->SetHealth(health * frand(0.15f, 0.20f));
-						wounded->SetStandState(UNIT_STAND_STATE_SLEEP);
+						wounded->SetStandState(UNIT_STAND_STATE_DEAD);
 						wounded->SetDisplayId(troop->GetDisplayId());
 						wounded->SetImmuneToNPC(true);
 					}

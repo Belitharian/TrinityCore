@@ -2195,6 +2195,81 @@ struct at_ring_of_fire : AreaTriggerAI
     }
 };
 
+// Frozen Orb - 84714
+// AreaTriggerID - 8661
+struct at_mage_froze_orb : AreaTriggerAI
+{
+    at_mage_froze_orb(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger), _canCollide(true) { }
+
+    enum Spells
+    {
+        SPELL_FROZEN_ORB_DAMAGE = 84721,
+        SPELL_FROZEN_ORB_ROOT   = 289308
+    };
+
+    void OnInitialize() override
+    {
+        Position destPos = at->GetPosition();
+        at->MovePositionToFirstCollision(destPos, 40.0f, 0.0f);
+
+        PathGenerator path(at);
+        path.CalculatePath(destPos.GetPositionX(), destPos.GetPositionY(), destPos.GetPositionZ(), false);
+        at->InitSplines(path.GetPath());
+
+        _scheduler
+            .Schedule(350ms, [this](TaskContext /*context*/)
+            {
+                _canCollide = false;
+            })
+            .Schedule(725ms, [this](TaskContext task)
+            {
+                Unit* caster = at->GetCaster();
+                if (!caster)
+                    return;
+
+                CastSpellExtraArgs args;
+                args.TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR;
+
+                caster->CastSpell(at->GetPosition(), SPELL_FROZEN_ORB_DAMAGE, args);
+
+                for (ObjectGuid const& insideUnitGuid : at->GetInsideUnits())
+                {
+                    Unit* unitInside = ObjectAccessor::GetUnit(*at, insideUnitGuid);
+                    if (unitInside && caster->IsValidAttackTarget(unitInside) && unitInside->IsAlive())
+                        caster->CastSpell(unitInside, SPELL_FROZEN_ORB_ROOT, args);
+                }
+
+                task.Repeat(725ms);
+            });
+    }
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        if (_canCollide)
+            return;
+
+        Unit* caster = at->GetCaster();
+        if (!caster)
+            return;
+
+        if (!caster->IsValidAttackTarget(unit))
+            return;
+
+        PathGenerator path(at);
+        path.CalculatePath(at->GetPositionX(), at->GetPositionY(), at->GetPositionZ(), false);
+        at->InitSplines(path.GetPath());
+    }
+
+    void OnUpdate(uint32 diff) override
+    {
+        _scheduler.Update();
+    }
+
+private:
+    TaskScheduler _scheduler;
+    bool _canCollide;
+};
+
 void AddSC_mage_spell_scripts()
 {
     RegisterSpellScript(spell_mage_alter_time_aura);
@@ -2268,4 +2343,5 @@ void AddSC_mage_spell_scripts()
     RegisterSpellScriptWithArgs(spell_mage_wildfire_crit, "spell_mage_wildfire_caster_crit", SPELL_AURA_ADD_PCT_MODIFIER, EFFECT_2);
     RegisterSpellScript(spell_ice_wall);
     RegisterAreaTriggerAI(at_ring_of_fire);
+    RegisterAreaTriggerAI(at_mage_froze_orb);
 }

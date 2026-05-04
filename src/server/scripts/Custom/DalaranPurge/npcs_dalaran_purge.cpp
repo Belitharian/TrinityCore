@@ -36,15 +36,17 @@ struct npc_guardian_mage_dalaran : public CustomAI
 
 	enum Spells
 	{
+		SPELL_FROZEN_ORB            = 84714,
 		SPELL_COUNTERSPELL          = 173077,
-		SPELL_ICE_BARRIER           = 198094,
-		SPELL_FROSTBITE             = 198121,
+		SPELL_CHILLED               = 204206,
 		SPELL_FROSTBOLT             = 284703,
+        SPELL_ICE_LANCE             = 284871,
 		SPELL_FROST_NOVA            = 284879,
 		SPELL_BLINK                 = 284877,
-		SPELL_BLIZZARD              = 396400,
+		SPELL_ICE_BARRIER           = 372749,
         SPELL_FROST_SPLINTER        = 443722,
-	};
+        SPELL_FROSTFIRE_BOLT        = 431044
+    };
 
 	float GetDistance() override
 	{
@@ -63,90 +65,125 @@ struct npc_guardian_mage_dalaran : public CustomAI
 		}
 	}
 
-    void SpellHitTarget(WorldObject* object, SpellInfo const* spellInfo) override
+    void SpellHitTarget(WorldObject* object, SpellInfo const* spell) override
     {
-        if ((spellInfo->GetSchoolMask() & SPELL_SCHOOL_MASK_FROST)
-            && spellInfo->Id != SPELL_FROST_SPLINTER)
+        Unit* victim = object->ToUnit();
+        if (!victim)
+            return;
+
+        if (spell->Id == SPELL_FROSTBOLT)
         {
-            Unit* victim = object->ToUnit();
-            if (victim && victim->GetGUID() != me->GetGUID())
-            {
-                if (roll_chance_i(30))
-                    DoCast(victim, SPELL_FROSTBITE);
+            if (roll_chance_i(60))
+                DoCast(victim, SPELL_CHILLED, TRIGGERED_FULL_MASK);
 
-                const uint8 splinters = irand(1, 4);
-
-                scheduler.Schedule(1ms, [this, splinters](TaskContext context)
-                {
-                    const uint8 index = context.GetRepeatCounter();
-
-                    if (index >= splinters)
-                        return;
-
-                    DoCastVictim(SPELL_FROST_SPLINTER, false);
-
-                    context.Repeat(380ms, 560ms);
-                });
-            }
+            CastSplinters(victim, spell, urand(2, 4));
         }
+    }
+
+    void OnBackpedStart(Unit* victim) override
+    {
+        CastBackped(victim);
+    }
+
+    void OnBackpedTick(Unit* victim) override
+    {
+        CastBackped(victim);
+    }
+
+    void CastBackped(Unit* victim)
+    {
+        DoCast(victim, SPELL_ICE_LANCE, TRIGGERED_IGNORE_GCD);
     }
 
 	void JustEngagedWith(Unit* who) override
 	{
-        if (roll_chance_i(30))
-            DoCast(who, SPELL_BLIZZARD);
+        DoCast(who, SPELL_FROSTBOLT);
 
-		scheduler
-			.Schedule(5s, [this](TaskContext ice_barrier)
-			{
-				if (roll_chance_i(60))
-				{
-					if (!me->HasAura(SPELL_ICE_BARRIER))
-					{
-						CastStop();
-						DoCastSelf(SPELL_ICE_BARRIER, true);
-						ice_barrier.Repeat(1min);
-					}
-					else
-						ice_barrier.Repeat(32s);
-				}
-				else
-					ice_barrier.Repeat(5s);
-			})
-			.Schedule(2s, [this](TaskContext fireball)
-			{
-				DoCastVictim(SPELL_FROSTBOLT);
-				fireball.Repeat(2s);
-			})
-			.Schedule(10s, [this](TaskContext counterspell)
-			{
-				if (Unit* target = DoSelectCastingUnit(SPELL_COUNTERSPELL, 30.0f))
-				{
-					CastStop();
-					DoCast(target, SPELL_COUNTERSPELL);
-					counterspell.Repeat(15s, 30s);
-				}
-				else
-					counterspell.Repeat(1s);
-			})
-			.Schedule(8s, [this](TaskContext frost_nova)
-			{
-				if (EnemiesInRange(12.0f) >= 2)
-				{
-					CastStop();
-					DoCast(SPELL_FROST_NOVA);
-					frost_nova.Repeat(8s, 10s);
-				}
-				else
-					frost_nova.Repeat(1s);
-			})
-			.Schedule(15s, 32s, [this](TaskContext blizzard)
-			{
-				CastStop(SPELL_BLIZZARD);
-				DoCastVictim(SPELL_BLIZZARD);
-				blizzard.Repeat(20s, 35s);
-			});
+        scheduler
+            .Schedule(5s, [this](TaskContext ice_barrier)
+            {
+                if (roll_chance_i(60))
+                {
+                    if (!me->HasAura(SPELL_ICE_BARRIER))
+                    {
+                        CastStop();
+                        DoCastSelf(SPELL_ICE_BARRIER);
+                        ice_barrier.Repeat(1min);
+                    }
+                    else
+                        ice_barrier.Repeat(32s);
+                }
+                else
+                    ice_barrier.Repeat(5s);
+            })
+            .Schedule(2s, [this](TaskContext frostbolt)
+            {
+                DoCastVictim(SPELL_FROSTBOLT);
+                frostbolt.Repeat(5s);
+            })
+            .Schedule(5s, [this](TaskContext frostfire_bolt)
+            {
+                if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
+                    DoCast(victim , SPELL_FROSTFIRE_BOLT);
+                frostfire_bolt.Repeat(3s, 5s);
+            })
+            .Schedule(1s, [this](TaskContext frozen_orb)
+            {
+                if (Unit* victim = SelectTarget(SelectTargetMethod::Random))
+                {
+                    CastStop(SPELL_FROSTFIRE_BOLT);
+                    DoCast(victim, SPELL_FROZEN_ORB);
+                }
+                frozen_orb.Repeat(60s, 75s);
+            })
+            .Schedule(10s, [this](TaskContext counterspell)
+            {
+                if (Unit* target = DoSelectCastingUnit(SPELL_COUNTERSPELL, 30.0f))
+                {
+                    CastStop();
+                    DoCast(target, SPELL_COUNTERSPELL);
+                    counterspell.Repeat(15s, 30s);
+                }
+                else
+                    counterspell.Repeat(1s);
+            })
+            .Schedule(8s, [this](TaskContext frost_nova)
+            {
+                if (EnemiesInRange(12.0f) >= 2)
+                {
+                    CastStop();
+                    DoCast(SPELL_FROST_NOVA);
+                    frost_nova.Repeat(8s, 10s);
+                }
+                else
+                    frost_nova.Repeat(1s);
+            });
 	}
+
+    void CastSplinters(Unit* victim, SpellInfo const* spell, uint8 count)
+    {
+        // Pas de splinter sur soi-meme.
+        if (victim->GetGUID() == me->GetGUID())
+            return;
+
+        // Anti-recursion : ne pas chainer un splinter sur un hit de splinter.
+        if (spell->Id == SPELL_FROST_SPLINTER)
+            return;
+
+        ObjectGuid victimGuid = victim->GetGUID();
+        scheduler.Schedule(1ms, [this, victimGuid, count](TaskContext context)
+        {
+            if (context.GetRepeatCounter() >= count)
+                return;
+
+            Unit* target = ObjectAccessor::GetUnit(*me, victimGuid);
+            if (!target || !target->IsAlive())
+                return;
+
+            DoCast(target, SPELL_FROST_SPLINTER, TRIGGERED_FULL_MASK);
+            context.Repeat(380ms, 560ms);
+        });
+    }
 };
 
 struct npc_assassin_dalaran : public CustomAI
@@ -474,7 +511,7 @@ struct npc_stormwind_cleric : public CustomAI
 
 	enum Spells
 	{
-        SPELL_SHADOW_WORD_PAIN          = 23268,
+        SPELL_SHADOW_WORD_DEATH         = 51818,
         SPELL_POWER_WORD_BARRIER        = 62618,
         SPELL_PURGE_THE_WICKED          = 451738,
         SPELL_PURGE_THE_WICKED_DEBUFF   = 451740,
@@ -483,6 +520,7 @@ struct npc_stormwind_cleric : public CustomAI
 		SPELL_SMITE                     = 419880,
         SPELL_ULTIMATE_PENITENCE        = 421453,
         SPELL_FLASH_HEAL                = 314655,
+        SPELL_SHADOW_WORD_PAIN          = 435397,
     };
 
     enum Phases
@@ -530,12 +568,8 @@ struct npc_stormwind_cleric : public CustomAI
 
     void OnBackpedStart(Unit* victim) override
     {
-        CastBackped(victim);
-    }
-
-    void OnBackpedTick(Unit* victim) override
-    {
-        CastBackped(victim);
+        CastStop();
+        DoCast(victim, RAND(SPELL_SHADOW_WORD_PAIN, SPELL_SHADOW_WORD_DEATH), TRIGGERED_IGNORE_GCD);
     }
 
 	void JustEngagedWith(Unit* /*who*/) override
@@ -579,12 +613,6 @@ struct npc_stormwind_cleric : public CustomAI
                 power_word_radiance.Repeat(15s, 22s);
             });
 	}
-
-    void CastBackped(Unit* victim)
-    {
-        CastStop();
-        DoCast(victim, SPELL_SHADOW_WORD_PAIN, CastSpellExtraArgs(TRIGGERED_IGNORE_GCD));
-    }
 };
 
 struct npc_mage_commander_zuros : public CustomAI
@@ -985,196 +1013,196 @@ public:
                 // Séquence : destruction du mur de glace
                 // -------------------------------------------------------
 
-            case EVENT_WALL_TALK_01:
-                // Landalock s'adresse au joueur et lui fait face.
-                Talk(SAY_LANDALOCK_01);
-                if (Player* player = ObjectAccessor::GetPlayer(*me, m_playerGUID))
-                {
-                    me->SetFacingToObject(player);
-                    KillRewarder::Reward(player, me);
-                }
-                m_events.ScheduleEvent(EVENT_WALL_TALK_02, 3s);
-                break;
-            case EVENT_WALL_TALK_02:
-                Talk(SAY_LANDALOCK_02);
-                m_events.ScheduleEvent(EVENT_WALL_FACE, 4s);
-                break;
-            case EVENT_WALL_FACE:
-                // Landalock se tourne vers le mur avant de lancer le sort.
-                me->SetFacingTo(5.55f);
-                m_events.ScheduleEvent(EVENT_WALL_BURST, 2s);
-                break;
-            case EVENT_WALL_BURST:
-                // Summon d'un trigger invisible à la position du mur
-                // qui sert de point d'impact pour SPELL_ICE_BURST.
-                if (Creature* trigger = me->SummonCreature(WORLD_TRIGGER, m_summonPos, TEMPSUMMON_TIMED_DESPAWN, 10s))
-                {
-                    me->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
-                    trigger->CastSpell(trigger, SPELL_ICE_BURST);
-                }
-                m_events.ScheduleEvent(EVENT_WALL_KILL, 500ms);
-                break;
-            case EVENT_WALL_KILL:
-                // Cache et tue le mur de glace, supprime le collider GameObject.
-                if (Creature* icewall = me->FindNearestCreature(NPC_ICEWALL, 15.f))
-                {
-                    m_icewallGUID = icewall->GetGUID();
-                    icewall->KillSelf();
-                }
-                if (GameObject* collider = me->FindNearestGameObject(GOB_ICE_WALL_COLLISION, 15.f))
-                    collider->Delete();
-                m_events.ScheduleEvent(EVENT_WALL_TALK_03, 2s);
-                break;
-            case EVENT_WALL_TALK_03:
-                if (Creature* icewall = ObjectAccessor::GetCreature(*me, m_icewallGUID))
-                    icewall->SetVisible(false);
-                // Landalock se retourne vers le joueur et annonce qu'il rejoint Sorin.
-                if (Player* player = ObjectAccessor::GetPlayer(*me, m_playerGUID))
-                    me->SetFacingToObject(player);
-                Talk(SAY_LANDALOCK_03);
-                me->SetWalk(true);
-                m_events.ScheduleEvent(EVENT_WALL_MOVE, 4s);
-                break;
-            case EVENT_WALL_MOVE:
-                // Déplacement vers Sorin Magehand — la suite est gérée dans MovementInform.
-                me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, SORIN_POS, true, SORIN_POS.GetOrientation());
-                break;
+                case EVENT_WALL_TALK_01:
+                    // Landalock s'adresse au joueur et lui fait face.
+                    Talk(SAY_LANDALOCK_01);
+                    if (Player* player = ObjectAccessor::GetPlayer(*me, m_playerGUID))
+                    {
+                        me->SetFacingToObject(player);
+                        KillRewarder::Reward(player, me);
+                    }
+                    m_events.ScheduleEvent(EVENT_WALL_TALK_02, 3s);
+                    break;
+                case EVENT_WALL_TALK_02:
+                    Talk(SAY_LANDALOCK_02);
+                    m_events.ScheduleEvent(EVENT_WALL_FACE, 4s);
+                    break;
+                case EVENT_WALL_FACE:
+                    // Landalock se tourne vers le mur avant de lancer le sort.
+                    me->SetFacingTo(5.55f);
+                    m_events.ScheduleEvent(EVENT_WALL_BURST, 2s);
+                    break;
+                case EVENT_WALL_BURST:
+                    // Summon d'un trigger invisible à la position du mur
+                    // qui sert de point d'impact pour SPELL_ICE_BURST.
+                    if (Creature* trigger = me->SummonCreature(WORLD_TRIGGER, m_summonPos, TEMPSUMMON_TIMED_DESPAWN, 10s))
+                    {
+                        me->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
+                        trigger->CastSpell(trigger, SPELL_ICE_BURST);
+                    }
+                    m_events.ScheduleEvent(EVENT_WALL_KILL, 500ms);
+                    break;
+                case EVENT_WALL_KILL:
+                    // Cache et tue le mur de glace, supprime le collider GameObject.
+                    if (Creature* icewall = me->FindNearestCreature(NPC_ICEWALL, 15.f))
+                    {
+                        m_icewallGUID = icewall->GetGUID();
+                        icewall->KillSelf();
+                    }
+                    if (GameObject* collider = me->FindNearestGameObject(GOB_ICE_WALL_COLLISION, 15.f))
+                        collider->Delete();
+                    m_events.ScheduleEvent(EVENT_WALL_TALK_03, 2s);
+                    break;
+                case EVENT_WALL_TALK_03:
+                    if (Creature* icewall = ObjectAccessor::GetCreature(*me, m_icewallGUID))
+                        icewall->SetVisible(false);
+                    // Landalock se retourne vers le joueur et annonce qu'il rejoint Sorin.
+                    if (Player* player = ObjectAccessor::GetPlayer(*me, m_playerGUID))
+                        me->SetFacingToObject(player);
+                    Talk(SAY_LANDALOCK_03);
+                    me->SetWalk(true);
+                    m_events.ScheduleEvent(EVENT_WALL_MOVE, 4s);
+                    break;
+                case EVENT_WALL_MOVE:
+                    // Déplacement vers Sorin Magehand — la suite est gérée dans MovementInform.
+                    me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, SORIN_POS, true, SORIN_POS.GetOrientation());
+                    break;
 
                 // -------------------------------------------------------
                 // Séquence : dispersion et téléportation des citoyens
                 // -------------------------------------------------------
 
-            case EVENT_CITIZEN_FACE:
-                // Landalock se tourne vers la barrière arcanique avant de parler.
-                if (Creature* barrier = GetClosestCreatureWithEntry(me, NPC_ARCANE_BARRIER, 15.f))
-                    me->SetFacingToObject(barrier);
-                m_events.ScheduleEvent(EVENT_CITIZEN_TALK, 1s);
-                break;
-            case EVENT_CITIZEN_TALK:
-                Talk(SAY_LANDALOCK_04);
-                m_events.ScheduleEvent(EVENT_CITIZEN_SCATTER, 2s);
-                break;
-            case EVENT_CITIZEN_SCATTER:
-            {
-                // Répartit les citoyens en cercle autour de Landalock.
-                // Chaque citoyen est envoyé à un angle régulier sur un rayon de 3.2f.
-                // Le respawn est désactivé pour éviter qu'ils réapparaissent pendant la séquence.
-                uint8 index = 0;
-                float const slice = 2.f * float(M_PI) / float(m_citizens.size());
-                for (Creature* citizen : m_citizens)
+                case EVENT_CITIZEN_FACE:
+                    // Landalock se tourne vers la barrière arcanique avant de parler.
+                    if (Creature* barrier = GetClosestCreatureWithEntry(me, NPC_ARCANE_BARRIER, 15.f))
+                        me->SetFacingToObject(barrier);
+                    m_events.ScheduleEvent(EVENT_CITIZEN_TALK, 1s);
+                    break;
+                case EVENT_CITIZEN_TALK:
+                    Talk(SAY_LANDALOCK_04);
+                    m_events.ScheduleEvent(EVENT_CITIZEN_SCATTER, 2s);
+                    break;
+                case EVENT_CITIZEN_SCATTER:
                 {
-                    if (!citizen || citizen->isDead())
-                        continue;
-
-                    constexpr uint32 NO_RESPAWN = std::numeric_limits<uint32>::max();
-                    citizen->SetRespawnDelay(NO_RESPAWN);
-                    citizen->SetRespawnTime(NO_RESPAWN);
-
-                    float const angle = slice * index++;
-                    Position const dest = GetRandomPositionAroundCircle(me, angle, 3.2f);
-                    citizen->SetHomePosition(dest);
-                    citizen->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, dest, true, dest.GetOrientation());
-                }
-
-                // Démarre le chrono — le wait forcera le TP après 5s quoi qu'il arrive.
-                m_citizenWaitExpiry = GameTime::Now() + 5s;
-                m_events.ScheduleEvent(EVENT_CITIZEN_WAIT, 500ms);
-                break;
-            }
-            case EVENT_CITIZEN_WAIT:
-            {
-                // Attend que tous les citoyens soient arrivés à proximité de Landalock.
-                // Le check combine distance planaire (XY), visibilité et delta Z
-                // pour exclure les citoyens tombés sous la géométrie.
-                uint32 ready = 0;
-                uint32 expected = 0;
-
-                for (Creature* citizen : m_citizens)
-                {
-                    if (!citizen || citizen->isDead())
-                        continue;
-
-                    expected++;
-
-                    float const dx = citizen->GetPositionX() - me->GetPositionX();
-                    float const dy = citizen->GetPositionY() - me->GetPositionY();
-                    float const dist2D = std::sqrt(dx * dx + dy * dy);
-                    float const dz = std::abs(citizen->GetPositionZ() - me->GetPositionZ());
-
-                    // Un delta Z > 4.f signale une chute dans la géométrie :
-                    // le citoyen est ignoré pour le check d'arrivée.
-                    bool const isClose = dist2D <= 6.f;
-                    bool const isVisible = citizen->IsVisible();
-                    bool const notFallen = dz <= 4.f;
-
-                    if (isClose && isVisible && notFallen)
-                        ready++;
-                }
-
-                bool const allReady = expected == 0 || ready >= expected;
-                // Fallback : si 5s sont écoulées on force le TP
-                // pour ne pas bloquer sur un citoyen coincé.
-                bool const timedOut = GameTime::Now() >= m_citizenWaitExpiry;
-
-                if (allReady || timedOut)
-                {
-                    if (timedOut && !allReady)
-                        TC_LOG_WARN("scripts", "npc_archmage_landalock: citizen wait timed out ({}/{} ready)", ready, expected);
-
-                    m_events.ScheduleEvent(EVENT_CITIZEN_TELEPORT, 500ms);
-                }
-                else
-                {
-                    m_events.ScheduleEvent(EVENT_CITIZEN_WAIT, 500ms);
-                }
-                break;
-            }
-            case EVENT_CITIZEN_TELEPORT:
-            {
-                // Landalock commence son cast, puis les citoyens partent en décalé
-                // pour donner l'impression que c'est lui qui les téléporte.
-                DoCast(SPELL_TELEPORT_CASTER);
-
-                Player* player = ObjectAccessor::GetPlayer(*me, m_playerGUID);
-
-                #ifdef CUSTOM_DEBUG
-                    // En debug : récompense accélérée sur un seul citizen pour tester rapidement.
-                    if (player && !m_citizens.empty())
-                    {
-                        Creature* citizen = m_citizens.front();
-                        for (uint8 i = 0; i < 20; i++)
-                            KillRewarder::Reward(player, citizen);
-                    }
-                #else
-                    // En prod : récompense + téléportation + despawn pour chaque citoyen valide,
-                    // avec un délai échelonné pour que les TP ne partent pas tous en même temps.
-                    uint32 delay = 500;
+                    // Répartit les citoyens en cercle autour de Landalock.
+                    // Chaque citoyen est envoyé à un angle régulier sur un rayon de 3.2f.
+                    // Le respawn est désactivé pour éviter qu'ils réapparaissent pendant la séquence.
+                    uint8 index = 0;
+                    float const slice = 2.f * float(M_PI) / float(m_citizens.size());
                     for (Creature* citizen : m_citizens)
                     {
                         if (!citizen || citizen->isDead())
                             continue;
 
-                        citizen->m_Events.AddEventAtOffset([citizen, player]()
-                            {
-                                if (!citizen || citizen->isDead())
-                                    return;
+                        constexpr uint32 NO_RESPAWN = std::numeric_limits<uint32>::max();
+                        citizen->SetRespawnDelay(NO_RESPAWN);
+                        citizen->SetRespawnTime(NO_RESPAWN);
 
-                                if (player)
-                                    KillRewarder::Reward(player, citizen);
-
-                                citizen->CastSpell(citizen, SPELL_TELEPORT_TARGET);
-                                citizen->DisappearAndDie();
-
-                            }, Milliseconds(delay));
-
-                        delay += urand(300, 600);
+                        float const angle = slice * index++;
+                        Position const dest = GetRandomPositionAroundCircle(me, angle, 3.2f);
+                        citizen->SetHomePosition(dest);
+                        citizen->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, dest, true, dest.GetOrientation());
                     }
-                #endif
-            break;
-            }
 
-            default:
+                    // Démarre le chrono — le wait forcera le TP après 5s quoi qu'il arrive.
+                    m_citizenWaitExpiry = GameTime::Now() + 5s;
+                    m_events.ScheduleEvent(EVENT_CITIZEN_WAIT, 500ms);
+                    break;
+                }
+                case EVENT_CITIZEN_WAIT:
+                {
+                    // Attend que tous les citoyens soient arrivés à proximité de Landalock.
+                    // Le check combine distance planaire (XY), visibilité et delta Z
+                    // pour exclure les citoyens tombés sous la géométrie.
+                    uint32 ready = 0;
+                    uint32 expected = 0;
+
+                    for (Creature* citizen : m_citizens)
+                    {
+                        if (!citizen || citizen->isDead())
+                            continue;
+
+                        expected++;
+
+                        float const dx = citizen->GetPositionX() - me->GetPositionX();
+                        float const dy = citizen->GetPositionY() - me->GetPositionY();
+                        float const dist2D = std::sqrt(dx * dx + dy * dy);
+                        float const dz = std::abs(citizen->GetPositionZ() - me->GetPositionZ());
+
+                        // Un delta Z > 4.f signale une chute dans la géométrie :
+                        // le citoyen est ignoré pour le check d'arrivée.
+                        bool const isClose = dist2D <= 6.f;
+                        bool const isVisible = citizen->IsVisible();
+                        bool const notFallen = dz <= 4.f;
+
+                        if (isClose && isVisible && notFallen)
+                            ready++;
+                    }
+
+                    bool const allReady = expected == 0 || ready >= expected;
+                    // Fallback : si 5s sont écoulées on force le TP
+                    // pour ne pas bloquer sur un citoyen coincé.
+                    bool const timedOut = GameTime::Now() >= m_citizenWaitExpiry;
+
+                    if (allReady || timedOut)
+                    {
+                        if (timedOut && !allReady)
+                            TC_LOG_WARN("scripts", "npc_archmage_landalock: citizen wait timed out ({}/{} ready)", ready, expected);
+
+                        m_events.ScheduleEvent(EVENT_CITIZEN_TELEPORT, 500ms);
+                    }
+                    else
+                    {
+                        m_events.ScheduleEvent(EVENT_CITIZEN_WAIT, 500ms);
+                    }
+                    break;
+                }
+                case EVENT_CITIZEN_TELEPORT:
+                {
+                    // Landalock commence son cast, puis les citoyens partent en décalé
+                    // pour donner l'impression que c'est lui qui les téléporte.
+                    DoCast(SPELL_TELEPORT_CASTER);
+
+                    Player* player = ObjectAccessor::GetPlayer(*me, m_playerGUID);
+
+                    #ifdef CUSTOM_DEBUG
+                        // En debug : récompense accélérée sur un seul citizen pour tester rapidement.
+                        if (player && !m_citizens.empty())
+                        {
+                            Creature* citizen = m_citizens.front();
+                            for (uint8 i = 0; i < 20; i++)
+                                KillRewarder::Reward(player, citizen);
+                        }
+                    #else
+                        // En prod : récompense + téléportation + despawn pour chaque citoyen valide,
+                        // avec un délai échelonné pour que les TP ne partent pas tous en même temps.
+                        uint32 delay = 500;
+                        for (Creature* citizen : m_citizens)
+                        {
+                            if (!citizen || citizen->isDead())
+                                continue;
+
+                            citizen->m_Events.AddEventAtOffset([citizen, player]()
+                                {
+                                    if (!citizen || citizen->isDead())
+                                        return;
+
+                                    if (player)
+                                        KillRewarder::Reward(player, citizen);
+
+                                    citizen->CastSpell(citizen, SPELL_TELEPORT_TARGET);
+                                    citizen->DisappearAndDie();
+
+                                }, Milliseconds(delay));
+
+                            delay += urand(300, 600);
+                        }
+                    #endif
                 break;
+                }
+
+                default:
+                    break;
             }
         }
     }
