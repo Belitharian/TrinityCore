@@ -216,14 +216,21 @@ struct npc_theramore_troop : public CustomAI
 		soundEmote = creature->GetGender() == GENDER_FEMALE ? 74679 : 74681;
 	}
 
-	enum Misc
-	{
-		NPC_THERAMORE_TROOPS_CREDIT = 500011,
+    enum Misc
+    {
+        // NPCs
+        NPC_THERAMORE_TROOPS_CREDIT = 500011,
+
+        // Actions
+        ACTION_RECEIVE_EMOTE        = 1
 	};
 
 	InstanceScript* instance;
+    ObjectGuid playerGuid;
 	uint32 soundEmote;
 	bool emoteReceived;
+
+    static constexpr float EMOTE_EFFECT_RANGE = 8.f;
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
@@ -238,60 +245,73 @@ struct npc_theramore_troop : public CustomAI
 		}
 	}
 
+    void DoAction(int32 param) override
+    {
+        if (param != ACTION_RECEIVE_EMOTE)
+            return;
+
+        Player* player = ObjectAccessor::GetPlayer(*me, playerGuid);
+        if (!player)
+            return;
+
+        float orientation = me->GetOrientation();
+        scheduler.Schedule(1ms, 1s, [this, player, orientation](TaskContext context)
+        {
+            switch (context.GetRepeatCounter())
+            {
+                case 0:
+                    me->SetFacingToObject(player);
+                    context.Repeat(800ms, 1s);
+                    break;
+                case 1:
+                    me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
+                    KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
+                    context.Repeat(1ms, 2s);
+                    break;
+                case 2:
+                    me->PlayDirectSound(soundEmote, player);
+                    context.Repeat(3s, 5s);
+                    break;
+                case 3:
+                    me->SetFacingTo(orientation);
+                    context.CancelAll();
+                    return;
+            }
+        });
+    }
+
 	void ReceiveEmote(Player* player, uint32 emoteId) override
 	{
 		BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
 		if (phase == BFTPhases::Preparation || phase == BFTPhases::Preparation_Rhonin)
 		{
-			#ifdef CUSTOM_DEBUG
-				for (uint8 i = 0; i < NUMBER_OF_TROOPS; i++)
-				{
-					KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
-				}
-			#else
-				if (!emoteReceived && emoteId == TEXT_EMOTE_FORTHEALLIANCE)
-				{
-					if (player->IsWithinDist(me, 5.f))
-					{
-						std::list<Creature*> troops;
-						me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_FOOTMAN, 8.f);
-						me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_FAITHFUL, 8.f);
-						me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_ARCANIST, 8.f);
-						me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_OFFICER, 8.f);
-						me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_MARKSMAN, 8.f);
+            #ifdef CUSTOM_DEBUG
+                for (uint8 i = 0; i < NUMBER_OF_TROOPS; i++)
+                    KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
+                return;
+            #endif
 
-						for (Creature* troop : troops)
-						{
-							float orientation = troop->GetOrientation();
-							scheduler.Schedule(2ms, 8ms, [troop, orientation, player, this](TaskContext context)
-							{
-								switch (context.GetRepeatCounter())
-								{
-									case 0:
-										troop->SetFacingToObject(player);
-										context.Repeat(800ms, 1s);
-										break;
-									case 1:
-										troop->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
-										troop->AI()->SetData(NPC_THERAMORE_TROOPS_CREDIT, 1);
-										KillRewarder::Reward(player, troop, NPC_THERAMORE_TROOPS_CREDIT);
-										context.Repeat(500ms, 1s);
-										break;
-									case 2:
-										troop->PlayDirectSound(soundEmote, player);
-										context.Repeat(3s, 5s);
-										break;
-									case 3:
-										troop->SetFacingTo(orientation);
-										context.CancelAll();
-										return;
-								}
+            if (emoteId != TEXT_EMOTE_FORTHEALLIANCE)
+                return;
 
-							});
-						}
-					}
-				}
-			#endif
+            if (!emoteReceived)
+                return;
+
+            playerGuid = player->GetGUID();
+            emoteReceived = true;
+
+			if (player->IsWithinDist(me, 3.5f))
+			{
+				std::list<Creature*> troops;
+				me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_FOOTMAN, EMOTE_EFFECT_RANGE);
+				me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_FAITHFUL, EMOTE_EFFECT_RANGE);
+				me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_ARCANIST, EMOTE_EFFECT_RANGE);
+				me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_OFFICER, EMOTE_EFFECT_RANGE);
+				me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_MARKSMAN, EMOTE_EFFECT_RANGE);
+
+				for (Creature* troop : troops)
+                    troop->AI()->DoAction(ACTION_RECEIVE_EMOTE);
+			}
 		}
 	}
 };
