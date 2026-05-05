@@ -61,6 +61,7 @@ struct npc_guardian_mage_dalaran : public CustomAI
 			{
 				CastStop();
 				DoCast(SPELL_BLINK);
+		        NotifyTeleported();
 			});
 		}
 	}

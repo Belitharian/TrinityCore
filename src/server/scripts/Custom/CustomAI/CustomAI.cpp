@@ -457,7 +457,7 @@ void CustomAI::ScheduleRandomMovements()
     if (!CanRandomMovement())
         return;
 
-    scheduler.Schedule(5s, 10s, [this](TaskContext context)
+    scheduler.Schedule(5s, 10s, GROUP_RANDOM_MOVEMENT, [this](TaskContext context)
     {
         Unit* victim = me->GetVictim();
 
@@ -612,5 +612,44 @@ Position CustomAI::GetRandomBackStep(float distance)
     victim->MovePositionToFirstCollision(pos, backDist, axisAngle - victim->GetOrientation());
 
     return pos;
+}
+
+void CustomAI::NotifyTeleported(Milliseconds settleDuration)
+{
+    // Reset eventuel d'un settle precedent encore en cours.
+    scheduler.CancelGroup(GROUP_TELEPORT_SETTLE);
+
+    // Repousse le circle-kite : sans ca, son MovePoint replacerait l'unite
+    // a GetDistance() de la victime, annulant le gain de distance du teleport.
+    scheduler.DelayGroup(GROUP_RANDOM_MOVEMENT, settleDuration);
+
+    if (!canCombatMove)
+        return;
+
+    if (type != AI_Type::Distance && type != AI_Type::Hybrid)
+        return;
+
+    // Le teleport s'execute via un MoveJump :
+    // on attend l'atterrissage avant de mesurer la distance reelle, sinon on
+    // ecraserait le saut en cours par un MoveChase.
+    scheduler.Schedule(500ms, GROUP_TELEPORT_SETTLE, [this, settleDuration](TaskContext /*context*/)
+    {
+        Unit* victim = me->GetVictim();
+        if (!victim)
+            return;
+
+        // Re-ancre le chase sur la distance courante : tant qu'on est plus
+        // loin que GetDistance(), MoveChase ne tirera plus l'unite vers la
+        // cible. On garde quand meme GetDistance() comme plancher.
+        float keepDist = std::max(GetDistance(), me->GetExactDist2d(victim));
+        me->GetMotionMaster()->MoveChase(victim, keepDist);
+
+        // Restaure la distance de poursuite par defaut a la fin de la fenetre.
+        scheduler.Schedule(settleDuration, GROUP_TELEPORT_SETTLE, [this](TaskContext /*ctx*/)
+        {
+            if (Unit* v = me->GetVictim())
+                me->GetMotionMaster()->MoveChase(v, GetDistance());
+        });
+    });
 }
 

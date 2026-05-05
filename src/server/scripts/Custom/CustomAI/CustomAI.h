@@ -99,6 +99,14 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         Position GetRandomBackStep(float /*distance*/);
         Position GetRandomBackJump();
 
+        // A appeler apres tout teleport / saut volontaire (Blink, leap, ...) :
+        // - repousse le scheduler de mouvement aleatoire pour qu'il ne ramene
+        //   pas l'unite vers la position d'avant le teleport ;
+        // - re-ancre MoveChase sur la nouvelle distance afin que la poursuite
+        //   ne tire pas mecaniquement l'unite en arriere. La distance par
+        //   defaut (GetDistance()) est restauree apres `settleDuration`.
+        void NotifyTeleported(Milliseconds settleDuration = 2s);
+
         // Hook appele une seule fois quand une unite entre dans la phase de recul
         // (transition false -> true). Override pour reagir a l'entree dans la phase.
         virtual void OnBackpedStart(Unit* /*victim*/) { }
@@ -148,6 +156,12 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
             Move        = 2500001,
             Backped     = 2500002,
         };
+
+        // Groupes de scheduler internes a CustomAI. Choisis dans une plage
+        // haute pour ne pas entrer en collision avec les enums de groupes
+        // definis par les sous-classes (qui partent generalement de 0).
+        static constexpr uint32 GROUP_RANDOM_MOVEMENT = 9001;
+        static constexpr uint32 GROUP_TELEPORT_SETTLE = 9002;
 
         static constexpr float JUMP_SPEED = 6.f;
 

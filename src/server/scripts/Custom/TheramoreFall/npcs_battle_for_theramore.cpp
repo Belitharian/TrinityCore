@@ -210,40 +210,47 @@ struct npc_wounded_theramore_troop : public ScriptedAI
 
 struct npc_theramore_troop : public CustomAI
 {
-	npc_theramore_troop(Creature* creature, AI_Type type) : CustomAI(creature, true, type), emoteReceived(false)
-	{
-		instance = creature->GetInstanceScript();
-		soundEmote = creature->GetGender() == GENDER_FEMALE ? 74679 : 74681;
-	}
+    npc_theramore_troop(Creature* creature, AI_Type type)
+        : CustomAI(creature, true, type),
+          instance(creature->GetInstanceScript()),
+          soundEmote(creature->GetGender() == GENDER_FEMALE ? 74679 : 74681),
+          emoteReceived(false)
+    {
+    }
 
     enum Misc
     {
-        // NPCs
         NPC_THERAMORE_TROOPS_CREDIT = 500011,
-
-        // Actions
         ACTION_RECEIVE_EMOTE        = 1
-	};
+    };
 
-	InstanceScript* instance;
+    static constexpr float EMOTE_EFFECT_RANGE  = 8.f;
+    static constexpr float EMOTE_TRIGGER_RANGE = 3.5f;
+
+    static constexpr uint32 TroopEntries[] =
+    {
+        NPC_THERAMORE_FOOTMAN,
+        NPC_THERAMORE_FAITHFUL,
+        NPC_THERAMORE_ARCANIST,
+        NPC_THERAMORE_OFFICER,
+        NPC_THERAMORE_MARKSMAN
+    };
+
+    InstanceScript* instance;
     ObjectGuid playerGuid;
-	uint32 soundEmote;
-	bool emoteReceived;
+    uint32 soundEmote;
+    bool emoteReceived;
 
-    static constexpr float EMOTE_EFFECT_RANGE = 8.f;
+    void JustEngagedWith(Unit* /*who*/) override
+    {
+        me->CallAssistance();
+    }
 
-	void JustEngagedWith(Unit* /*who*/) override
-	{
-		me->CallAssistance();
-	}
-
-	void SetData(uint32 id, uint32 value) override
-	{
-		if (id == NPC_THERAMORE_TROOPS_CREDIT)
-		{
-			emoteReceived = value ? true : false;
-		}
-	}
+    void SetData(uint32 id, uint32 value) override
+    {
+        if (id == NPC_THERAMORE_TROOPS_CREDIT)
+            emoteReceived = (value != 0);
+    }
 
     void DoAction(int32 param) override
     {
@@ -254,7 +261,7 @@ struct npc_theramore_troop : public CustomAI
         if (!player)
             return;
 
-        float orientation = me->GetOrientation();
+        float const orientation = me->GetOrientation();
         scheduler.Schedule(1ms, 1s, [this, player, orientation](TaskContext context)
         {
             switch (context.GetRepeatCounter())
@@ -265,6 +272,7 @@ struct npc_theramore_troop : public CustomAI
                     break;
                 case 1:
                     me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
+                    me->AI()->SetData(NPC_THERAMORE_TROOPS_CREDIT, 1U);
                     KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
                     context.Repeat(1ms, 2s);
                     break;
@@ -280,40 +288,33 @@ struct npc_theramore_troop : public CustomAI
         });
     }
 
-	void ReceiveEmote(Player* player, uint32 emoteId) override
-	{
-		BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-		if (phase == BFTPhases::Preparation || phase == BFTPhases::Preparation_Rhonin)
-		{
-            #ifdef CUSTOM_DEBUG
-                for (uint8 i = 0; i < NUMBER_OF_TROOPS; i++)
-                    KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
-                return;
-            #endif
+    void ReceiveEmote(Player* player, uint32 emoteId) override
+    {
+        BFTPhases const phase = static_cast<BFTPhases>(instance->GetData(DATA_SCENARIO_PHASE));
+        if (phase != BFTPhases::Preparation && phase != BFTPhases::Preparation_Rhonin)
+            return;
 
-            if (emoteId != TEXT_EMOTE_FORTHEALLIANCE)
-                return;
+#ifdef CUSTOM_DEBUG
+        for (uint8 i = 0; i < NUMBER_OF_TROOPS; ++i)
+            KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
+        return;
+#else
+        if (emoteId != TEXT_EMOTE_FORTHEALLIANCE || !emoteReceived)
+            return;
 
-            if (!emoteReceived)
-                return;
+        if (!player->IsWithinDist(me, EMOTE_TRIGGER_RANGE))
+            return;
 
-            playerGuid = player->GetGUID();
-            emoteReceived = true;
+        playerGuid = player->GetGUID();
 
-			if (player->IsWithinDist(me, 3.5f))
-			{
-				std::list<Creature*> troops;
-				me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_FOOTMAN, EMOTE_EFFECT_RANGE);
-				me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_FAITHFUL, EMOTE_EFFECT_RANGE);
-				me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_ARCANIST, EMOTE_EFFECT_RANGE);
-				me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_OFFICER, EMOTE_EFFECT_RANGE);
-				me->GetCreatureListWithEntryInGrid(troops, NPC_THERAMORE_MARKSMAN, EMOTE_EFFECT_RANGE);
+        std::list<Creature*> troops;
+        for (uint32 entry : TroopEntries)
+            me->GetCreatureListWithEntryInGrid(troops, entry, EMOTE_EFFECT_RANGE);
 
-				for (Creature* troop : troops)
-                    troop->AI()->DoAction(ACTION_RECEIVE_EMOTE);
-			}
-		}
-	}
+        for (Creature* troop : troops)
+            troop->AI()->DoAction(ACTION_RECEIVE_EMOTE);
+#endif
+    }
 };
 
 struct npc_thader_windermere : public CustomAI
@@ -1042,6 +1043,9 @@ struct npc_theramore_faithful : public npc_theramore_troop
             {
 		        CastStop();
                 DoCastSelf(SPELL_DIVINE_HYMN);
+
+                // Empeche le circle-kite et le MoveChase
+		        NotifyTeleported(PAIN_SUPPRESSION_DELAY);
             })
             // Re-armement du flag apres le cooldown interne.
             .Schedule(PAIN_SUPPRESSION_CD, GROUP_PAIN_SUPPRESSION, [this](TaskContext /*context*/)
@@ -1627,6 +1631,10 @@ struct npc_roknah_hag : public npc_theramore_horde
 		CastStop();
 		DoCastSelf(SPELL_BLINK, triggered);
 		me->RemoveMovementImpairingAuras(true);
+
+		// Empeche le circle-kite et le MoveChase de ramener le mage sur sa
+		// position d'avant le Blink.
+		NotifyTeleported();
 
 		if (removeAura)
 			me->RemoveAurasDueToSpell(*removeAura);
