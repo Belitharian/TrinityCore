@@ -210,111 +210,118 @@ struct npc_wounded_theramore_troop : public ScriptedAI
 
 struct npc_theramore_troop : public CustomAI
 {
-    npc_theramore_troop(Creature* creature, AI_Type type)
-        : CustomAI(creature, true, type),
-          instance(creature->GetInstanceScript()),
-          soundEmote(creature->GetGender() == GENDER_FEMALE ? 74679 : 74681),
-          emoteReceived(false)
-    {
-    }
+	npc_theramore_troop(Creature* creature, AI_Type type)
+		: CustomAI(creature, true, type),
+		  instance(creature->GetInstanceScript()),
+		  soundEmote(creature->GetGender() == GENDER_FEMALE ? 74679 : 74681),
+		  emoteReceived(false)
+	{
+	}
 
-    enum Misc
-    {
-        NPC_THERAMORE_TROOPS_CREDIT = 500011,
-        ACTION_RECEIVE_EMOTE        = 1
-    };
+	enum Misc
+	{
+		NPC_THERAMORE_TROOPS_CREDIT = 500011,
+		ACTION_RECEIVE_EMOTE        = 1
+	};
 
-    static constexpr float EMOTE_EFFECT_RANGE  = 8.f;
-    static constexpr float EMOTE_TRIGGER_RANGE = 3.5f;
+	static constexpr float EMOTE_EFFECT_RANGE  = 8.f;
+	static constexpr float EMOTE_TRIGGER_RANGE = 3.5f;
 
-    static constexpr uint32 TroopEntries[] =
-    {
-        NPC_THERAMORE_FOOTMAN,
-        NPC_THERAMORE_FAITHFUL,
-        NPC_THERAMORE_ARCANIST,
-        NPC_THERAMORE_OFFICER,
-        NPC_THERAMORE_MARKSMAN
-    };
+	static constexpr uint32 TroopEntries[] =
+	{
+		NPC_THERAMORE_FOOTMAN,
+		NPC_THERAMORE_FAITHFUL,
+		NPC_THERAMORE_ARCANIST,
+		NPC_THERAMORE_OFFICER,
+		NPC_THERAMORE_MARKSMAN
+	};
 
-    InstanceScript* instance;
-    ObjectGuid playerGuid;
-    uint32 soundEmote;
-    bool emoteReceived;
+	InstanceScript* instance;
+	ObjectGuid playerGuid;
+	uint32 soundEmote;
+	bool emoteReceived;
 
-    void JustEngagedWith(Unit* /*who*/) override
-    {
-        me->CallAssistance();
-    }
+	void JustEngagedWith(Unit* /*who*/) override
+	{
+		me->CallAssistance();
+	}
 
-    void SetData(uint32 id, uint32 value) override
-    {
-        if (id == NPC_THERAMORE_TROOPS_CREDIT)
-            emoteReceived = (value != 0);
-    }
+	void SetData(uint32 id, uint32 value) override
+	{
+		if (id == NPC_THERAMORE_TROOPS_CREDIT)
+			emoteReceived = (value != 0);
+	}
 
-    void DoAction(int32 param) override
-    {
-        if (param != ACTION_RECEIVE_EMOTE)
-            return;
+	void SetGUID(ObjectGuid const& guid, int32 id) override
+	{
+		if (id == NPC_THERAMORE_TROOPS_CREDIT)
+			playerGuid = guid;
+	}
 
-        Player* player = ObjectAccessor::GetPlayer(*me, playerGuid);
-        if (!player)
-            return;
+	void DoAction(int32 param) override
+	{
+		if (param != ACTION_RECEIVE_EMOTE)
+			return;
 
-        float const orientation = me->GetOrientation();
-        scheduler.Schedule(1ms, 1s, [this, player, orientation](TaskContext context)
-        {
-            switch (context.GetRepeatCounter())
-            {
-                case 0:
-                    me->SetFacingToObject(player);
-                    context.Repeat(800ms, 1s);
-                    break;
-                case 1:
-                    me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
-                    me->AI()->SetData(NPC_THERAMORE_TROOPS_CREDIT, 1U);
-                    KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
-                    context.Repeat(1ms, 2s);
-                    break;
-                case 2:
-                    me->PlayDirectSound(soundEmote, player);
-                    context.Repeat(3s, 5s);
-                    break;
-                case 3:
-                    me->SetFacingTo(orientation);
-                    context.CancelAll();
-                    return;
-            }
-        });
-    }
+		Player* player = ObjectAccessor::GetPlayer(*me, playerGuid);
+		if (!player)
+			return;
 
-    void ReceiveEmote(Player* player, uint32 emoteId) override
-    {
-        BFTPhases const phase = static_cast<BFTPhases>(instance->GetData(DATA_SCENARIO_PHASE));
-        if (phase != BFTPhases::Preparation && phase != BFTPhases::Preparation_Rhonin)
-            return;
+		float const orientation = me->GetOrientation();
+		scheduler.Schedule(1ms, 1s, [this, player, orientation](TaskContext context)
+		{
+			switch (context.GetRepeatCounter())
+			{
+				case 0:
+					me->SetFacingToObject(player);
+					context.Repeat(800ms, 1s);
+					break;
+				case 1:
+					me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
+					KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
+					context.Repeat(1ms, 2s);
+					break;
+				case 2:
+					me->PlayDirectSound(soundEmote, player);
+					context.Repeat(3s, 5s);
+					break;
+				case 3:
+					me->SetFacingTo(orientation);
+					context.CancelAll();
+					return;
+			}
+		});
+	}
+
+	void ReceiveEmote(Player* player, uint32 emoteId) override
+	{
+		BFTPhases const phase = static_cast<BFTPhases>(instance->GetData(DATA_SCENARIO_PHASE));
+		if (phase != BFTPhases::Preparation && phase != BFTPhases::Preparation_Rhonin)
+			return;
 
 #ifdef CUSTOM_DEBUG
-        for (uint8 i = 0; i < NUMBER_OF_TROOPS; ++i)
-            KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
-        return;
+		for (uint8 i = 0; i < NUMBER_OF_TROOPS; ++i)
+			KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
+		return;
 #else
-        if (emoteId != TEXT_EMOTE_FORTHEALLIANCE || !emoteReceived)
-            return;
+		if (emoteId != TEXT_EMOTE_FORTHEALLIANCE || emoteReceived)
+			return;
 
-        if (!player->IsWithinDist(me, EMOTE_TRIGGER_RANGE))
-            return;
+		if (!player->IsWithinDist(me, EMOTE_TRIGGER_RANGE))
+			return;
 
-        playerGuid = player->GetGUID();
+		std::list<Creature*> troops;
+		for (uint32 entry : TroopEntries)
+			me->GetCreatureListWithEntryInGrid(troops, entry, EMOTE_EFFECT_RANGE);
 
-        std::list<Creature*> troops;
-        for (uint32 entry : TroopEntries)
-            me->GetCreatureListWithEntryInGrid(troops, entry, EMOTE_EFFECT_RANGE);
-
-        for (Creature* troop : troops)
-            troop->AI()->DoAction(ACTION_RECEIVE_EMOTE);
+		for (Creature* troop : troops)
+		{
+			troop->AI()->SetGUID(player->GetGUID(), NPC_THERAMORE_TROOPS_CREDIT);
+			troop->AI()->SetData(NPC_THERAMORE_TROOPS_CREDIT, 1U);
+			troop->AI()->DoAction(ACTION_RECEIVE_EMOTE);
+		}
 #endif
-    }
+	}
 };
 
 struct npc_thader_windermere : public CustomAI
@@ -444,9 +451,9 @@ struct npc_hedric_evencane : public CustomAI
 		{
 			switch (id)
 			{
-                case MOVEMENT_INFO_POINT_01:
-                    me->SetFacingTo(HedricPoint02.GetOrientation());
-                    break;
+				case MOVEMENT_INFO_POINT_01:
+					me->SetFacingTo(HedricPoint02.GetOrientation());
+					break;
 				case MOVEMENT_INFO_POINT_02:
 					me->SetSheath(SHEATH_STATE_UNARMED);
 					me->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
@@ -462,72 +469,158 @@ struct npc_hedric_evencane : public CustomAI
 struct npc_theramore_officier : public npc_theramore_troop
 {
 	npc_theramore_officier(Creature* creature) : npc_theramore_troop(creature, AI_Type::Melee),
-		healthLow(false)
-	{
-	}
+        shieldCount(0)
+    {
+    }
 
-	enum Misc
+	// Groupes de tasks : permet de retarder en bloc les routines DPS/Heal
+	// quand l'officier passe sous Divine Shield pour caster un Holy Light d'urgence.
+	enum Groups
 	{
-		SPELL_FROST_NOVA            = 284879
+		GROUP_NORMAL,
+		GROUP_HEAL,
+		GROUP_DIVINE_SHIELD
 	};
 
 	enum Spells
 	{
 		SPELL_DIVINE_SHIELD         = 642,
 		SPELL_HOLY_SHOCK            = 20473,
-		SPELL_LIGHT_HAMMER          = 114158,
-		SPELL_DIVINE_STORM          = 444705,
-		SPELL_HEAL                  = 225638,
-		SPELL_EXARCH_BLADE          = 268742,
+		SPELL_JUDGMENT              = 20271,
+		SPELL_AVENGER_SHIELD        = 31935,
+		SPELL_WORD_OF_GLORY         = 85673,
+		SPELL_FLASH_OF_LIGHT        = 283634,
 		SPELL_AVENGING_WRATH        = 292266,
-		SPELL_CRUSADER_STRIKE       = 295670,
 		SPELL_HOLY_LIGHT            = 295698,
-		SPELL_JUDGMENT              = 295671,
 		SPELL_LIGHT_OF_DAWN         = 295710,
 		SPELL_BLESSING_OF_FREEDOM   = 299256,
+		SPELL_SHIELD_RIGHTEOUS      = 337629,
+		SPELL_DIVINE_STORM          = 357849,
 		SPELL_REBUKE                = 405397,
-		SPELL_CONSECRATION          = 424429,
+		SPELL_BLESSED_HAMMER        = 420092,
+
+		// Passifs
+		SPELL_SHINING_LIGHT         = 327510,
+		SPELL_AFTERIMAGE            = 400745
 	};
 
-	bool healthLow;
+    uint8 shieldCount;
+
+	static constexpr uint8  DIVINE_SHIELD_HP_PCT      = 25;     // HP sous lequel on tente la bulle
+	static constexpr int32  DIVINE_SHIELD_CHANCE      = 30;     // % de chance de proc sur le tick de degats
+	static constexpr float  HOLY_LIGHT_HP_PCT         = 40.f;   // Allie sous ce % -> Holy Light prioritaire
+	static constexpr uint32 HOLY_LIGHT_RANGE          = 60;
+	static constexpr float  FLASH_OF_LIGHT_HP_PCT     = 40.f;
+	static constexpr uint32 FLASH_OF_LIGHT_RANGE      = 80;
+	static constexpr uint8  LIGHT_OF_DAWN_WOUNDED_HP  = 30;     // HP % considere comme "blesse"
+	static constexpr float  LIGHT_OF_DAWN_RANGE       = 15.f;
+	static constexpr uint32 LIGHT_OF_DAWN_MIN_FRIENDS = 3;      // Seuil pour lancer le cone AOE de heal
+	static constexpr float  HOLY_SHOCK_HP_PCT         = 40.f;
+	static constexpr uint32 HOLY_SHOCK_RANGE          = 90;
+	static constexpr int32  HOLY_SHOCK_HEAL_CHANCE    = 60;     // Si un allie est blesse, % de heal vs damage
+	static constexpr uint32 DIVINE_STORM_MIN_ENEMIES  = 3;
+	static constexpr float  DIVINE_STORM_RANGE        = 8.f;
+	static constexpr float  INTERRUPT_RANGE           = 30.f;
+	static constexpr uint8  STACK_AMOUNT_SL           = 2;
+	static constexpr uint8  STACK_AMOUNT_AFTERIMAGE   = 15;
+	static constexpr float  WORD_OF_GLORY_RANGE       = 35;
+
+    void Reset() override
+    {
+        npc_theramore_troop::Reset();
+
+        shieldCount = 0;
+    }
 
 	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
 	{
-		if (!me->GetSpellHistory()->HasCooldown(SPELL_BLESSING_OF_FREEDOM))
+        if (spell->Id == SPELL_SHINING_LIGHT)
+        {
+            scheduler.Schedule(2s, 5s, [this](TaskContext /*context*/)
+            {
+                if (Aura* aura = me->GetAura(SPELL_SHINING_LIGHT))
+                {
+                    aura->ModStackAmount(-1);
+                }
+
+                CastStop();
+                DoCastSelf(SPELL_WORD_OF_GLORY, true);
+            });
+        }
+
+		// Proc Afterimage : double WoG (soi + allie blesse) gratuit
+        if (spell->Id == SPELL_AFTERIMAGE)
+        {
+            Aura* aura = me->GetAura(SPELL_AFTERIMAGE);
+            if (aura && aura->GetStackAmount() >= STACK_AMOUNT_AFTERIMAGE)
+            {
+                scheduler.Schedule(2s, 3s, [this](TaskContext /*context*/)
+                {
+                    // Verifie si une cible est là, sinon on fait rien
+                    if (Unit* target = FindLowestHealthFriend(me, WORD_OF_GLORY_RANGE))
+                    {
+                        if (Aura* afterimage = me->GetAura(SPELL_AFTERIMAGE))
+                        {
+                            CastStop();
+                            DoCastSelf(SPELL_WORD_OF_GLORY, true);
+                            DoCast(target, SPELL_WORD_OF_GLORY, true);
+                            afterimage->ModStackAmount(-STACK_AMOUNT_AFTERIMAGE);
+                        }
+                    }
+                });
+            }
+        }
+
+		// Anti-kite : Blessing of Freedom sur root/snare
+		if (HasMechanic(spell, MECHANIC_ROOT) || HasMechanic(spell, MECHANIC_SNARE))
 		{
-			if (HasMechanic(spell, MECHANIC_ROOT) || HasMechanic(spell, MECHANIC_SNARE))
+			scheduler.Schedule(1s, 2s, [this](TaskContext /*blessing*/)
 			{
-				scheduler.Schedule(2s, [this](TaskContext /*blessing_of_freedom*/)
-				{
-					DoCastSelf(SPELL_BLESSING_OF_FREEDOM);
-				});
-			}
+				DoCastSelf(SPELL_BLESSING_OF_FREEDOM);
+			});
 		}
 	}
 
-	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* spell) override
+	void OnSpellCast(SpellInfo const* spell) override
 	{
-		npc_theramore_troop::DamageTaken(attacker, damage, damageType, spell);
-
-		if (roll_chance_i(30) && !healthLow && me->HealthBelowPctDamaged(25, damage))
+		switch (spell->Id)
 		{
-			healthLow = true;
+			case SPELL_HOLY_LIGHT:
+			case SPELL_FLASH_OF_LIGHT:
+			case SPELL_LIGHT_OF_DAWN:
+			case SPELL_AVENGER_SHIELD:
+			case SPELL_DIVINE_STORM:
+			case SPELL_BLESSED_HAMMER:
+				DoCastSelf(SPELL_AFTERIMAGE, true);
+				break;
+		}
+	}
 
+	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
+	{
+		// HasCooldown attend un spellId - ici Divine Shield, pas l'enum de groupe.
+		if (me->GetSpellHistory()->HasCooldown(SPELL_DIVINE_SHIELD))
+			return;
+
+		if (me->HealthBelowPctDamaged(DIVINE_SHIELD_HP_PCT, damage) && roll_chance_i(DIVINE_SHIELD_CHANCE))
+		{
 			DoCastSelf(SPELL_DIVINE_SHIELD);
 
-			scheduler
-				.Schedule(1s, [this](TaskContext /*context*/)
-				{
-					CastSpellExtraArgs args;
-					args.AddSpellBP0(me->GetMaxHealth());
+			// On gele DPS et heals pendant la bulle pour eviter qu'un cast en cours
+			// reprenne la main avant le Holy Light d'urgence.
+			scheduler.DelayGroup(GROUP_NORMAL, 4s);
+			scheduler.DelayGroup(GROUP_HEAL, 4s);
 
-					CastStop();
-					DoCastSelf(SPELL_HEAL, args);
-				})
-				.Schedule(5min, [this](TaskContext /*context*/)
-				{
-					healthLow = false;
-				});
+			scheduler.Schedule(1s, GROUP_DIVINE_SHIELD, [this](TaskContext /*context*/)
+			{
+				// Heal d'urgence pleine vie : on injecte MaxHealth en BP0 pour
+				// surcharger la valeur du sort - intentionnel, fait office de full heal sous bulle.
+				CastSpellExtraArgs args;
+				args.AddSpellBP0(me->GetMaxHealth());
+
+				CastStop();
+				DoCastSelf(SPELL_HOLY_LIGHT, args);
+			});
 		}
 	}
 
@@ -535,104 +628,146 @@ struct npc_theramore_officier : public npc_theramore_troop
 	{
 		npc_theramore_troop::JustEngagedWith(who);
 
-		if (roll_chance_i(50))
-			DoCastSelf(SPELL_AVENGING_WRATH);
+		// Ouverture : Judgment immediat
+		DoCast(who, SPELL_JUDGMENT);
 
 		scheduler
-			// Heal
-			.Schedule(1s, 2s, [this](TaskContext holy_light)
+			// -------- Cooldowns offensifs --------
+			.Schedule(1s, GROUP_NORMAL, [this](TaskContext avenging_wrath)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 80))
+				// Avenging Wrath en boucle sur son CD reel (~2min) pour les combats longs.
+				if (roll_chance_i(60))
+					DoCastSelf(SPELL_AVENGING_WRATH);
+				avenging_wrath.Repeat(2min, 3min);
+			})
+			// -------- Heals --------
+			.Schedule(5s, 8s, GROUP_HEAL, [this](TaskContext holy_light)
+			{
+				if (Unit* target = DoSelectBelowHpPctFriendly(HOLY_LIGHT_HP_PCT, HOLY_LIGHT_RANGE))
 				{
-					CastStop({ SPELL_HOLY_LIGHT, SPELL_EXARCH_BLADE, SPELL_HEAL });
+					CastStop(SPELL_FLASH_OF_LIGHT);
 					DoCast(target, SPELL_HOLY_LIGHT);
 				}
-				holy_light.Repeat(8s);
+				holy_light.Repeat(8s, 14s);
 			})
-			.Schedule(5s, 7s, [this](TaskContext light_of_dawn)
+			.Schedule(1s, 2s, GROUP_HEAL, [this](TaskContext flash_of_light)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(15.0f, 50))
+				if (Unit* target = DoSelectBelowHpPctFriendly(FLASH_OF_LIGHT_HP_PCT, FLASH_OF_LIGHT_RANGE))
 				{
-					CastStop({ SPELL_EXARCH_BLADE, SPELL_HEAL });
-					DoCast(target, SPELL_LIGHT_OF_DAWN);
+					CastStop(SPELL_HOLY_LIGHT);
+					DoCast(target, SPELL_FLASH_OF_LIGHT);
 				}
-				light_of_dawn.Repeat(10s, 15s);
+				flash_of_light.Repeat(5s, 8s);
 			})
-			// Utils
-			.Schedule(5ms, [this](TaskContext rebuke)
+			.Schedule(8s, 11s, GROUP_HEAL, [this](TaskContext light_of_dawn)
 			{
-				if (Unit* target = DoSelectCastingUnit(SPELL_REBUKE, 35.f))
+				// AOE heal en cone : on attend qu'au moins LIGHT_OF_DAWN_MIN_FRIENDS allies
+				// soient blesses devant pour rentabiliser le cast.
+				if (FriendsInFront(LIGHT_OF_DAWN_RANGE, LIGHT_OF_DAWN_WOUNDED_HP) >= LIGHT_OF_DAWN_MIN_FRIENDS)
 				{
-					CastStop({ SPELL_HOLY_LIGHT, SPELL_EXARCH_BLADE, SPELL_HEAL });
+					CastStop();
+					DoCastSelf(SPELL_LIGHT_OF_DAWN);
+					light_of_dawn.Repeat(10s, 15s);
+				}
+				else
+					light_of_dawn.Repeat(1s);
+			})
+			// -------- Controle / Interrupt --------
+			.Schedule(5ms, GROUP_NORMAL, [this](TaskContext rebuke)
+			{
+				// Interrupt melee : casser meme un heal en cours pour stop un cast adverse.
+				if (Unit* target = DoSelectCastingUnit(SPELL_REBUKE, me->GetCombatReach()))
+				{
+					CastStop();
 					DoCast(target, SPELL_REBUKE);
 					rebuke.Repeat(25s, 40s);
 				}
 				else
-				{
 					rebuke.Repeat(1s);
-				}
 			})
-			.Schedule(5ms, [this](TaskContext light_hammer)
+			.Schedule(5ms, GROUP_NORMAL, [this](TaskContext avenger_shield)
 			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+				// Silence ranged : meme priorite que Rebuke sur les casters ennemis.
+				if (Unit* target = DoSelectCastingUnit(SPELL_AVENGER_SHIELD, INTERRUPT_RANGE))
 				{
-					CastStop({ SPELL_EXARCH_BLADE, SPELL_HEAL });
-					DoCast(target, SPELL_LIGHT_HAMMER);
-				}
-				light_hammer.Repeat(30s);
-			})
-			// Damage
-			.Schedule(20s, [this](TaskContext holy_shock)
-			{
-				uint32 mode = urand(0, 1);
-				if (mode == 1)
-				{
-					if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 90))
-					{
-						CastStop({ SPELL_EXARCH_BLADE, SPELL_HEAL });
-						DoCast(target, SPELL_HOLY_SHOCK);
-					}
+					CastStop({ SPELL_HOLY_LIGHT, SPELL_FLASH_OF_LIGHT });
+					DoCast(target, SPELL_AVENGER_SHIELD);
+					avenger_shield.Repeat(15s, 23s);
 				}
 				else
-				{
+					avenger_shield.Repeat(1s);
+			})
+			// -------- Rotation DPS / Hybrides --------
+			.Schedule(20s, GROUP_NORMAL, [this](TaskContext holy_shock)
+			{
+				// Holy Shock est hybride : heal sur allie blesse en priorite, sinon damage sur la victime.
+				CastStop();
+				if (Unit* target = DoSelectBelowHpPctFriendly(HOLY_SHOCK_HP_PCT, HOLY_SHOCK_RANGE);
+					target && roll_chance_i(HOLY_SHOCK_HEAL_CHANCE))
+					DoCast(target, SPELL_HOLY_SHOCK);
+				else
 					DoCastVictim(SPELL_HOLY_SHOCK);
-				}
-				holy_shock.Repeat(8s, 12s);
+
+				holy_shock.Repeat(3s, 8s);
 			})
-			.Schedule(10s, 20s, [this](TaskContext exarch_blade)
+			.Schedule(8s, 14s, GROUP_NORMAL, [this](TaskContext divine_storm)
 			{
-				DoCast(SPELL_EXARCH_BLADE);
-				exarch_blade.Repeat(30s);
-			})
-			.Schedule(3s, 15s, [this](TaskContext consecration)
-			{
-				DoCast(SPELL_CONSECRATION);
-				consecration.Repeat(31s);
-			})
-			.Schedule(8s, 14s, [this](TaskContext divine_storm)
-			{
-				if (EnemiesInRange(8.0f) >= 3)
+				if (EnemiesInRange(DIVINE_STORM_RANGE) >= DIVINE_STORM_MIN_ENEMIES)
 				{
+					CastStop({ SPELL_HOLY_LIGHT, SPELL_FLASH_OF_LIGHT });
 					DoCast(SPELL_DIVINE_STORM);
-					divine_storm.Repeat(12s, 25s);
+					divine_storm.Repeat(35s, 42s);
 				}
 				else
 					divine_storm.Repeat(1s);
 			})
-			.Schedule(14s, 22s, [this](TaskContext crusader_strike)
+            .Schedule(14s, 22s, GROUP_NORMAL, [this](TaskContext blessed_hammer)
+            {
+                for (uint8 i = 0; i < 3; ++i)
+                {
+                    scheduler.Schedule(i * 1s, [this](TaskContext /*context*/)
+                    {
+                        CastBlessedHammer();
+                    });
+                }
+
+                blessed_hammer.Repeat(8s, 14s);
+            })
+			.Schedule(2s, 8s, GROUP_NORMAL, [this](TaskContext shield_righteous)
 			{
-				DoCastVictim(SPELL_CRUSADER_STRIKE);
-				crusader_strike.Repeat(5s, 8s);
+                DoCastVictim(SPELL_SHIELD_RIGHTEOUS);
+                ++shieldCount;
+
+                if (shieldCount >= 3)
+                {
+                    Aura const* aura = me->GetAura(SPELL_SHINING_LIGHT);
+                    if (!aura || aura->GetStackAmount() < STACK_AMOUNT_SL)
+                    {
+                        DoCastSelf(SPELL_SHINING_LIGHT, true);
+                    }
+
+                    shieldCount = 0;
+                }
+
+                shield_righteous.Repeat(2s, 5s);
 			})
-			.Schedule(2s, 8s, [this](TaskContext judgment)
+			.Schedule(2s, 8s, GROUP_NORMAL, [this](TaskContext judgment)
 			{
+				// Judgment sur la cible la plus eloignee : applique le debuff aux kiteurs/casters.
 				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
-				{
-					CastStop({ SPELL_EXARCH_BLADE, SPELL_HEAL });
 					DoCast(target, SPELL_JUDGMENT);
-				}
-				judgment.Repeat(12s, 15s);
+				judgment.Repeat(8s, 142s);
 			});
+	}
+
+private:
+
+	/// Lance Blessed Hammer
+	void CastBlessedHammer()
+	{
+		CastStop();
+		me->GetSpellHistory()->ResetCooldown(SPELL_BLESSED_HAMMER);
+		DoCastAOE(SPELL_BLESSED_HAMMER, TRIGGERED_IGNORE_GCD);
 	}
 };
 
@@ -688,7 +823,7 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 		// Arcane Tempo doit payer son cout en charges -> on retire les flags qui ignorent le cout.
 		arcaneTempoArgs.SetTriggerFlags(TRIGGERED_FULL_MASK & ~(TRIGGERED_IGNORE_POWER_COST | TRIGGERED_IGNORE_REAGENT_COST));
 
-        creature->SetPowerType(POWER_ARCANE_CHARGES, true, true);
+		creature->SetPowerType(POWER_ARCANE_CHARGES, true, true);
 	}
 
 	enum Spells
@@ -949,6 +1084,7 @@ struct npc_theramore_faithful : public npc_theramore_troop
 
 	enum Spells
 	{
+		SPELL_PRAYER_OF_HEALING     = 596,
 		SPELL_SHADOW_WORD_DEATH     = 51818,
 		SPELL_DIVINE_HYMN           = 64843,
 		SPELL_PSYCHIC_SCREAM        = 65543,
@@ -956,7 +1092,6 @@ struct npc_theramore_faithful : public npc_theramore_troop
 		SPELL_ECHO_OF_LIGHT         = 77489,
 		SPELL_HALO                  = 120517,
 		SPELL_PLEA                  = 200829,
-		SPELL_PRAYER_OF_HEALING     = 266969,
 		SPELL_POWER_WORD_FORTITUDE  = 267528,
 		SPELL_RENEW                 = 294342,
 		SPELL_FLASH_HEAL            = 314655,
@@ -972,7 +1107,6 @@ struct npc_theramore_faithful : public npc_theramore_troop
 	static constexpr float HEAL_FRIENDLY_RANGE          = 40.0f;    // Portee standard des soins cibles
 	static constexpr uint8 SHIELD_HP_PCT                = 80;       // Allie sous ce % -> shield
 	static constexpr uint8 SHIELD_BP_PCT                = 20;       // Force du shield = % des PV max de la cible
-	static constexpr uint8 HEAL_PCT                     = 60;       // Seuil pour Renew / Flash Heal
 	static constexpr float MELEE_AOE_RANGE              = 10.0f;    // Distance de detection AOE
 	static constexpr uint32 PSYCHIC_SCREAM_THRESHOLD    = 2;        // Au-dela de N ennemis colles -> Psychic Scream
 	static constexpr float SHADOW_RANGE                 = 30.0f;    // Portee du Shadow Word Pain en backpedal
@@ -1038,20 +1172,20 @@ struct npc_theramore_faithful : public npc_theramore_troop
 		DoCastSelf(SPELL_PAIN_SUPPRESSION);
 
 		scheduler
-            // Lancement d'Hymne divin apres un court delai.
-            .Schedule(800ms, [this](TaskContext /*context*/)
-            {
-		        CastStop();
-                DoCastSelf(SPELL_DIVINE_HYMN);
+			// Lancement d'Hymne divin apres un court delai.
+			.Schedule(800ms, [this](TaskContext /*context*/)
+			{
+				CastStop();
+				DoCastSelf(SPELL_DIVINE_HYMN);
 
-                // Empeche le circle-kite et le MoveChase
-		        NotifyTeleported(PAIN_SUPPRESSION_DELAY);
-            })
-            // Re-armement du flag apres le cooldown interne.
-            .Schedule(PAIN_SUPPRESSION_CD, GROUP_PAIN_SUPPRESSION, [this](TaskContext /*context*/)
-		    {
-			    painSuppression = false;
-		    });
+				// Empeche le circle-kite et le MoveChase
+				NotifyTeleported(PAIN_SUPPRESSION_DELAY);
+			})
+			// Re-armement du flag apres le cooldown interne.
+			.Schedule(PAIN_SUPPRESSION_CD, GROUP_PAIN_SUPPRESSION, [this](TaskContext /*context*/)
+			{
+				painSuppression = false;
+			});
 	}
 
 	// En backpedal : trois branches mutuellement exclusives selon roll_chance_i sequentiel.
@@ -1127,23 +1261,29 @@ struct npc_theramore_faithful : public npc_theramore_troop
 			// Renew en HoT preventif sur allie sous 60% PV.
 			.Schedule(5s, 7s, GROUP_HEALING, [this](TaskContext renew)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, HEAL_PCT))
+				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, 60))
 					DoCast(target, SPELL_RENEW);
 				renew.Repeat(10s, 15s);
 			})
 			// Prayer of Healing AOE toutes les 14s (interrompt Flash Heal au passage).
 			.Schedule(12s, 14s, GROUP_HEALING, [this](TaskContext mass_healing)
 			{
-				CastStop(SPELL_FLASH_HEAL);
-				DoCastAOE(SPELL_PRAYER_OF_HEALING);
-				mass_healing.Repeat(14s);
+				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, 30))
+				{
+					CastStop(SPELL_SMITE);
+					DoCast(target, SPELL_PRAYER_OF_HEALING);
+				}
+				mass_healing.Repeat(10s, 14s);
 			})
 			// Flash Heal en spot sur allie sous 60% PV (toutes les 2s).
 			.Schedule(1s, 8s, GROUP_HEALING, [this](TaskContext flash_heal)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, HEAL_PCT))
+				if (Unit* target = FindLowestHealthFriend(me, HEAL_FRIENDLY_RANGE))
+				{
+					CastStop(SPELL_PRAYER_OF_HEALING);
 					DoCast(target, SPELL_FLASH_HEAL);
-				flash_heal.Repeat(2s);
+				}
+                flash_heal.Repeat(2s, 8s);
 			});
 	}
 };
@@ -1234,9 +1374,12 @@ struct npc_theramore_horde : public CustomAI
 struct npc_roknah_hag : public npc_theramore_horde
 {
 	npc_roknah_hag(Creature* creature) : npc_theramore_horde(creature, AI_Type::Distance),
-		closeTarget(false), iceblock(false)
+		iceblock(false)
 	{
 	}
+
+	// Override : detection d'encerclement plus large (12y comme l'ancien MELEE_FLEE_RANGE).
+	float GetEncircleRadius() const override { return MELEE_FLEE_RANGE; }
 
 	// Groupes de scheduler. Chaque groupe peut etre delay/cancel independamment.
 	enum Groups
@@ -1284,14 +1427,12 @@ struct npc_roknah_hag : public npc_theramore_horde
 	// ignore GCD, cast en cours, cout, etc. - ne doit jamais bloquer la rotation.
 	static constexpr TriggerCastFlags INTERNAL_CAST = TRIGGERED_FULL_MASK;
 
-	bool closeTarget;   // True tant qu'on fuit un melee (re-arme apres Blink)
 	bool iceblock;      // True tant qu'Ice Block est en cooldown interne (1 min)
 
 	void Reset() override
 	{
 		npc_theramore_horde::Reset();
 
-		closeTarget = false;
 		iceblock = false;
 	}
 
@@ -1344,9 +1485,9 @@ struct npc_roknah_hag : public npc_theramore_horde
 		switch (spell->Id)
 		{
 			case SPELL_ICE_LANCE:
-                // Ice Lance = generateur : tire 1 splinter.
-                CastSplinters(victim, spell, 1);
-                break;
+				// Ice Lance = generateur : tire 1 splinter.
+				CastSplinters(victim, spell, 1);
+				break;
 			case SPELL_FROSTBOLT:
 				// Frostbolt = generateur : ajoute un Icicle et tire 2 splinters.
 				UpdateIcicles();
@@ -1409,11 +1550,11 @@ struct npc_roknah_hag : public npc_theramore_horde
 		}
 	}
 
-    // Quand le mage commence a reculer (kite), on lache une Ice Lance gratuite.
-    void OnBackpedTick(Unit* victim) override
-    {
-        DoCast(victim, SPELL_ICE_LANCE, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_IGNORE_GCD);
-    }
+	// Quand le mage commence a reculer (kite), on lache une Ice Lance gratuite.
+	void OnBackpedTick(Unit* victim) override
+	{
+		DoCast(victim, SPELL_ICE_LANCE, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_IGNORE_GCD);
+	}
 
 	// -------------------------------------------------------------------------
 	// Rotation principale
@@ -1504,21 +1645,19 @@ struct npc_roknah_hag : public npc_theramore_horde
 			});
 	}
 
-	void UpdateAI(uint32 diff) override
+	// Encerclee par des melee -> Frost Nova + Blink. Le cooldown de re-declenchement
+	// est gere par CustomAI (encircleReactOnCooldown).
+	bool OnEncircled(Unit* /*victim*/) override
 	{
-		CustomAI::UpdateAI(diff);
+		if (me->HasAura(SPELL_ICE_BLOCK))
+			return false;
 
-		// Detection des melee : si trop d'ennemis sont colles et qu'on est libre, on declenche la fuite.
-		if (!closeTarget
-			&& !me->HasAura(SPELL_ICE_BLOCK)
-			&& EnemiesInRange(MELEE_FLEE_RANGE) > MELEE_FLEE_THRESHOLD)
-		{
-			closeTarget = true;
-			CastFleeSequence(1s);
-		}
+		CastFleeSequence(1s);
+		return true;
 	}
 
-	// Sequence de fuite : Delai -> Frost Nova (root les melee) -> 300ms -> Blink (degage) -> reset apres 8-14s.
+	// Sequence de fuite : Delai -> Frost Nova (root les melee) -> 300ms -> Blink (degage).
+	// Reutilisee par DamageTaken (Ice Block a 20% PV) et OnEncircled (encerclement).
 	void CastFleeSequence(Seconds start)
 	{
 		scheduler
@@ -1542,10 +1681,6 @@ struct npc_roknah_hag : public npc_theramore_horde
 						break;
 					case 2: // Blink pour reprendre de la distance
 						CastBlink(true);
-						context.Repeat(8s, 14s);
-						break;
-					case 3: // Re-armement : on peut redeclencher la fuite
-						closeTarget = false;
 						break;
 				}
 			});
@@ -1769,8 +1904,8 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 		ascending(false)
 	{
 		ascendanceInfo = sSpellMgr->AssertSpellInfo(SPELL_ASCENDANCE, DIFFICULTY_NONE);
-        flameShockInfo = sSpellMgr->AssertSpellInfo(SPELL_FLAME_SHOCK, DIFFICULTY_NONE);
-        frostShockInfo = sSpellMgr->AssertSpellInfo(SPELL_FROST_SHOCK, DIFFICULTY_NONE);
+		flameShockInfo = sSpellMgr->AssertSpellInfo(SPELL_FLAME_SHOCK, DIFFICULTY_NONE);
+		frostShockInfo = sSpellMgr->AssertSpellInfo(SPELL_FROST_SHOCK, DIFFICULTY_NONE);
 	}
 
 	enum Groups
@@ -1785,7 +1920,7 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 		SPELL_HEALING_RAIN      = 73920,
 		SPELL_ASCENDANCE        = 114052,
 		SPELL_EARTHQUAKE        = 160162,
-        SPELL_GUST_OF_WIND      = 204853,
+		SPELL_GUST_OF_WIND      = 204853,
 		SPELL_LAVA_BURST        = 290423,
 		SPELL_HEALING_SURGE     = 290435,
 		SPELL_WIND_SHEAR        = 290439,
@@ -1874,7 +2009,7 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 	}
 
 	// Shock instant en sortie de backpedal.
-	void OnBackpedStart(Unit* victim) override
+	void OnBackpedStart(Unit* /*victim*/) override
 	{
 		DoCastSelf(SPELL_GUST_OF_WIND, TRIGGERED_IGNORE_GCD | TRIGGERED_IGNORE_CAST_IN_PROGRESS);
 	}
@@ -1910,7 +2045,7 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 			// Flame Shock sur cible qui ne l'a pas deja (DoT).
 			.Schedule(5s, 8s, GROUP_NORMAL, [this](TaskContext flame_shock)
 			{
-                if (Unit* target = DoFindEnemyMissingDot(flameShockInfo))
+				if (Unit* target = DoFindEnemyMissingDot(flameShockInfo))
 					DoCast(target, SPELL_FLAME_SHOCK);
 				flame_shock.Repeat(5s, 8s);
 			})
@@ -2176,9 +2311,9 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 
 	void JustEngagedWith(Unit* who) override
 	{
-        me->AddAura(SPELL_SHARDS, me);
+		me->AddAura(SPELL_SHARDS, me);
 
-        npc_theramore_horde::JustEngagedWith(who);
+		npc_theramore_horde::JustEngagedWith(who);
 
 		DoCast(who, SPELL_SHADOWBOLT);
 
@@ -2226,10 +2361,10 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 				if (soulShardsCount >= SOUL_SHARDS_MAX)
 				{
 					CastStop(SPELL_DRAIN_LIFE);
-                    if (roll_chance_i(30))
-                        DoCastVictim(SPELL_DEMONBOLT, TRIGGERED_CAST_DIRECTLY);
-                    else
-					    DoCastVictim(SPELL_HAND_OF_GULDAN);
+					if (roll_chance_i(30))
+						DoCastVictim(SPELL_DEMONBOLT, TRIGGERED_CAST_DIRECTLY);
+					else
+						DoCastVictim(SPELL_HAND_OF_GULDAN);
 					hand_of_guldan.Repeat(5s, 8s);
 				}
 				else
@@ -2238,7 +2373,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 			// Trait de l'ombre en filler (toutes les 4s) ; remplace par Bolt infernal si le buff est actif.
 			.Schedule(3s, GROUP_NORMAL, [this](TaskContext shadowbolt)
 			{
-                CastStop({ SPELL_HAND_OF_GULDAN, SPELL_INFERNAL_BOLT });
+				CastStop({ SPELL_HAND_OF_GULDAN, SPELL_INFERNAL_BOLT });
 
 				if (me->HasAura(SPELL_INFERNAL_BOLT_BUFF))
 					DoCastVictim(SPELL_INFERNAL_BOLT);
@@ -3217,21 +3352,57 @@ class spell_hand_of_guldan : public SpellScript
 		return ValidateSpellInfo ({ SPELL_HAND_OF_GULDAN });
 	}
 
-	void HandleDummy(SpellEffIndex effIndex)
+	void HandleDummy(SpellEffIndex /*effIndex*/)
 	{
 		Unit* caster = GetCaster();
-        Unit* target = GetHitUnit();
+		Unit* target = GetHitUnit();
 
 		if (!caster || !target)
 			return;
 
-        const Position dest = target->GetPosition();
+		const Position dest = target->GetPosition();
 		caster->CastSpell(dest, SPELL_HAND_OF_GULDAN_DAMAGE, true);
 	}
 
 	void Register() override
 	{
-        OnEffectHitTarget += SpellEffectFn(spell_hand_of_guldan::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+		OnEffectHitTarget += SpellEffectFn(spell_hand_of_guldan::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+	}
+};
+
+// 295710 - Light of Dawn
+class spell_light_of_dawn : public SpellScript
+{
+	enum Spells
+	{
+		SPELL_LIGHT_OF_DAWN_HEAL = 295712
+	};
+
+	bool Validate(SpellInfo const* /*spellInfo*/) override
+	{
+		return ValidateSpellInfo({ SPELL_LIGHT_OF_DAWN_HEAL });
+	}
+
+	void HandleDummy(SpellEffIndex /*effIndex*/) const
+	{
+		Unit* caster = GetCaster();
+		Unit* target = GetHitUnit();
+
+		if (!caster || !target)
+			return;
+
+		if (caster->IsValidAttackTarget(target))
+			return;
+
+		caster->CastSpell(target, SPELL_LIGHT_OF_DAWN_HEAL, CastSpellExtraArgsInit{
+			.TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+			.TriggeringSpell = GetSpell()
+			});
+	}
+
+	void Register() override
+	{
+		OnEffectHitTarget += SpellEffectFn(spell_light_of_dawn::HandleDummy, EFFECT_1, SPELL_EFFECT_DUMMY);
 	}
 };
 
@@ -3463,6 +3634,64 @@ struct at_arcane_orb : AreaTriggerAI
 	}
 };
 
+// Blessed Hammer - 420092
+// AreaTriggerID - 29807
+struct at_blessed_hammer : AreaTriggerAI
+{
+	using AreaTriggerAI::AreaTriggerAI;
+
+	enum Spells
+	{
+		SPELL_BLESSED_HAMMER_DAMAGE = 420091
+	};
+
+	void OnCreate(Spell const* /*creatingSpell*/) override
+	{
+		Unit* caster = at->GetCaster();
+		if (!caster)
+			return;
+
+		Position center  = caster->GetPosition();
+		float startAngle = caster->GetOrientation();
+		float fixedZ     = center.GetPositionZ() + Z_OFFSET;
+
+		std::vector<G3D::Vector3> path;
+		path.reserve(POINTS + 1);
+
+		for (std::size_t i = 0; i <= POINTS; ++i)
+		{
+			float t     = float(i) / float(POINTS);
+			float theta = t * TURNS * 2.0f * float(M_PI);
+			float r     = R0 + GROWTH * theta;
+
+			float x = center.GetPositionX() + r * std::cos(startAngle + theta);
+			float y = center.GetPositionY() + r * std::sin(startAngle + theta);
+
+			path.emplace_back(x, y, fixedZ);
+		}
+
+		at->InitSplines(std::move(path));
+	}
+
+	void OnUnitEnter(Unit* unit) override
+	{
+		Unit* caster = at->GetCaster();
+		if (!caster)
+			return;
+
+		if (caster->IsValidAttackTarget(unit))
+			caster->CastSpell(unit, SPELL_BLESSED_HAMMER_DAMAGE, TRIGGERED_IGNORE_GCD | TRIGGERED_IGNORE_CAST_IN_PROGRESS);
+	}
+
+private:
+	// AreaTrigger 29807 dure 5 s : on étale la spirale sur toute la durée.
+	static constexpr std::size_t POINTS = 200;    // Densité totale (40 pts/seconde)
+	static constexpr float TURNS        = 10.0f;  // 10 tours sur 5 s = 2 tours/s
+	static constexpr float R0           = 2.0f;   // Rayon de départ
+	static constexpr float GROWTH       = 0.35f;  // Expansion par radian (spirale d'Archimède)
+	static constexpr float Z_OFFSET     = 1.5f;   // Hauteur du marteau au-dessus du sol
+};
+
 // AreaTriggerID - 25183
 struct areatrigger_theramore_citizens : AreaTriggerAI
 {
@@ -3532,6 +3761,7 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterSpellScript(spell_theramore_throw_bucket);
 	RegisterSpellScript(spell_powder_keg);
 	RegisterSpellScript(spell_hand_of_guldan);
+	RegisterSpellScript(spell_light_of_dawn);
 
 	RegisterAreaTriggerAI(at_blizzard_theramore);
 	RegisterAreaTriggerAI(at_consecration);
@@ -3539,6 +3769,7 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterAreaTriggerAI(at_uncontrolled_energy);
 	RegisterAreaTriggerAI(at_scorched_earth);
 	RegisterAreaTriggerAI(at_arcane_orb);
+	RegisterAreaTriggerAI(at_blessed_hammer);
 
 	// Custom AT
 	RegisterSpellScript(spell_yell_at_citizens);

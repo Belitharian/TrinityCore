@@ -77,7 +77,7 @@ enum BFTData
 
 	// Kalecgos Events
 	DATA_KALECGOS_CIRCLE_EVENT,
-    DATA_KALECGOS_COMBAT_EVENT,
+	DATA_KALECGOS_COMBAT_EVENT,
 	DATA_KALECGOS_CANCEL_EVENT,
 
 	// GameObjects
@@ -124,8 +124,8 @@ enum BFTCreatures
 	NPC_ROKNAH_HAG                      = 64734,
 	NPC_ROKNAH_FELCASTER                = 65507,
 	NPC_WAVE_CALLER_GRUHTA              = 65510,
-    NPC_HORDE_BOMBARDIER                = 149639,
-    NPC_HORDE_DEMOLISHER                = 144289,
+	NPC_HORDE_BOMBARDIER                = 149639,
+	NPC_HORDE_DEMOLISHER                = 144289,
 
 	NPC_ARCHMAGE_TERVOSH 	            = 500000,
 	NPC_KINNDY_SPARKSHINE 	            = 500001,
@@ -166,7 +166,7 @@ enum BFTMisc
 	SPELL_COSMETIC_LARGE_FIRE           = 414772,
 	SPELL_COSMETIC_EAT_SOUP             = 364139,
 	SPELL_COSMETIC_DRINK                = 162443,
-    SPELL_THROW_BOMB                    = 414422,
+	SPELL_THROW_BOMB                    = 414422,
 
 	// GameObjects
 	GOB_POWDER_BARREL                   = 294148,
@@ -195,7 +195,7 @@ enum BFTMisc
 	CRITERIA_TREE_THE_BATTLE            = 1000017,
 	CRITERIA_TREE_RETRIEVE_JAINA        = 1000018,
 	CRITERIA_TREE_SURVIVE_THE_BATTLE    = 1000019,
-    CRITERIA_TREE_SURVIVE_WAVES         = 1000020,
+	CRITERIA_TREE_SURVIVE_WAVES         = 1000020,
 	CRITERIA_TREE_HELP_THE_WOUNDED      = 1000021,
 	CRITERIA_TREE_FOLLOW_JAINA          = 1000022,
 	CRITERIA_TREE_HELP_THE_TROOPS       = 1000023,
@@ -452,7 +452,7 @@ WaypointPath const TervoshPath01 =
 		{ 5, -3749.70f, -4440.37f, 30.54f, 0.46f }
 	},
 	WaypointMoveType::Walk,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const TervoshPath02 =
@@ -471,7 +471,7 @@ WaypointPath const TervoshPath02 =
 		{ 9, -3760.45f, -4442.08f, 35.21f, 2.08f }
 	},
 	WaypointMoveType::Walk,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const TervoshPath03 =
@@ -496,7 +496,7 @@ WaypointPath const TervoshPath03 =
 		{ 15, -3757.23f, -4449.74f, 30.55f, 4.07f }
 	},
 	WaypointMoveType::Walk,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const KinndyPath01 =
@@ -521,7 +521,7 @@ WaypointPath const KinndyPath01 =
 		{ 15, -3762.73f, -4450.42f, 37.99f, 4.62f }
 	},
 	WaypointMoveType::Walk,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const KinndyPath02 =
@@ -540,7 +540,7 @@ WaypointPath const KinndyPath02 =
 		{ 9, -3745.87f, -4443.12f, 30.55f, 3.83f }
 	},
 	WaypointMoveType::Walk,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const KalecPath01 =
@@ -566,7 +566,7 @@ WaypointPath const KalecPath01 =
 		{ 16, -3685.71f, -4390.25f, 10.67f, 0.45f }
 	},
 	WaypointMoveType::Walk,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const KalecPath02 =
@@ -580,7 +580,7 @@ WaypointPath const KalecPath02 =
 		{ 4, -3621.30f, -4459.18f, 13.62f, 4.72f }
 	},
 	WaypointMoveType::Run,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const KalecPath03 =
@@ -594,7 +594,7 @@ WaypointPath const KalecPath03 =
 		{ 4, -3615.43f, -4440.26f, 14.23f, 4.72f }
 	},
 	WaypointMoveType::Run,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const RhoninPath01 =
@@ -609,7 +609,7 @@ WaypointPath const RhoninPath01 =
 		{ 5, -3615.43f, -4440.26f, 14.23f, 4.72f }
 	},
 	WaypointMoveType::Run,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const AmaraPath01 =
@@ -625,7 +625,7 @@ WaypointPath const AmaraPath01 =
 		{ 6, -3615.43f, -4440.26f, 14.23f, 4.72f }
 	},
 	WaypointMoveType::Run,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const OfficerPath01 =
@@ -644,7 +644,7 @@ WaypointPath const OfficerPath01 =
 		{ 9, -3723.88f, -4415.31f, 26.56f, 0.76f }
 	},
 	WaypointMoveType::Walk,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const HedricPath01
@@ -659,32 +659,32 @@ WaypointPath const HedricPath01
 		{ 5, -3716.85f, -4541.81f, 25.82f, 3.60f }
 	},
 	WaypointMoveType::Run,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const HedricPath02
 {
-    2,
+	2,
 	{
-        { 0 , -3666.18f, -4378.58f, 9.35000f, 3.79857f },
-        { 1 , -3673.38f, -4383.78f, 9.98580f, 3.71610f },
-        { 2 , -3678.69f, -4386.71f, 10.4702f, 3.63953f },
-        { 3 , -3674.33f, -4393.23f, 10.6134f, 5.12982f },
-        { 4 , -3672.90f, -4402.25f, 10.6570f, 4.71750f },
-        { 5 , -3672.36f, -4410.95f, 10.6122f, 5.14160f },
-        { 6 , -3666.33f, -4413.72f, 10.8155f, 0.16019f },
-        { 7 , -3658.37f, -4414.11f, 10.5193f, 6.23722f },
-        { 8 , -3650.40f, -4414.56f, 10.1990f, 6.11941f },
-        { 9 , -3643.04f, -4416.15f, 9.90331f, 5.96037f },
-        { 10, -3631.56f, -4420.73f, 9.74590f, 5.75421f },
-        { 11, -3622.44f, -4427.16f, 10.7825f, 5.53626f },
-        { 12, -3615.40f, -4437.50f, 13.7058f, 4.61147f },
-        { 13, -3615.60f, -4447.22f, 14.2323f, 4.69982f },
-        { 14, -3622.47f, -4449.48f, 14.2464f, 3.43222f }
+		{ 0 , -3666.18f, -4378.58f, 9.35000f, 3.79857f },
+		{ 1 , -3673.38f, -4383.78f, 9.98580f, 3.71610f },
+		{ 2 , -3678.69f, -4386.71f, 10.4702f, 3.63953f },
+		{ 3 , -3674.33f, -4393.23f, 10.6134f, 5.12982f },
+		{ 4 , -3672.90f, -4402.25f, 10.6570f, 4.71750f },
+		{ 5 , -3672.36f, -4410.95f, 10.6122f, 5.14160f },
+		{ 6 , -3666.33f, -4413.72f, 10.8155f, 0.16019f },
+		{ 7 , -3658.37f, -4414.11f, 10.5193f, 6.23722f },
+		{ 8 , -3650.40f, -4414.56f, 10.1990f, 6.11941f },
+		{ 9 , -3643.04f, -4416.15f, 9.90331f, 5.96037f },
+		{ 10, -3631.56f, -4420.73f, 9.74590f, 5.75421f },
+		{ 11, -3622.44f, -4427.16f, 10.7825f, 5.53626f },
+		{ 12, -3615.40f, -4437.50f, 13.7058f, 4.61147f },
+		{ 13, -3615.60f, -4447.22f, 14.2323f, 4.69982f },
+		{ 14, -3622.47f, -4449.48f, 14.2464f, 3.43222f }
 
 	},
-    WaypointMoveType::Run,
-    WaypointPathFlags::ExactSplinePath
+	WaypointMoveType::Run,
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const JainaPath01 =
@@ -717,7 +717,7 @@ WaypointPath const JainaPath01 =
 		{ 23, -3619.56f, -4461.36f, 13.62f, 2.96f }
 	},
 	WaypointMoveType::Run,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const JainaPath02 =
@@ -732,7 +732,7 @@ WaypointPath const JainaPath02 =
 		{ 5, -3615.43f, -4440.26f, 14.23f, 4.72f }
 	},
 	WaypointMoveType::Run,
-    WaypointPathFlags::ExactSplinePath
+	WaypointPathFlags::ExactSplinePath
 };
 
 WaypointPath const KalecgosPath01 =
@@ -822,6 +822,36 @@ Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f };
 Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };
 Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f };
 Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f };
+
+/// Cherche l'ami avec le moins de PV dans la portée donnée
+inline Unit* FindLowestHealthFriend(Unit const* obj, float range)
+{
+	Unit* lowest = nullptr;
+	uint32 lowestPct = 100;
+
+	std::list<Unit*> friendList;
+	Trinity::AnyFriendlyUnitInObjectRangeCheck check(obj, obj, range);
+	Trinity::UnitListSearcher<Trinity::AnyFriendlyUnitInObjectRangeCheck> finder(obj, friendList, check);
+	Cell::VisitGridObjects(obj, finder, range);
+
+	for (Unit* u : friendList)
+	{
+		// Si la cible est le lanceur, on saute
+		if (u->GetGUID() == obj->GetGUID())
+		{
+			continue;
+		}
+
+		uint32 pct = u->GetHealthPct();
+		if (pct < lowestPct)
+		{
+			lowestPct = pct;
+			lowest = u;
+		}
+	}
+
+	return lowest;
+}
 
 template <class AI>
 class TheramoreCreatureScript : public CreatureScript

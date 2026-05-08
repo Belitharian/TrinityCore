@@ -195,7 +195,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					elementals.push_back(creature);
 					break;
 				case NPC_DEAD_ROKNAH_TROOP:
-                    FeingDeath(creature);
+                    FeignDeath(creature);
 					if (roll_chance_i(50))
 						creature->AddAura(RAND(SPELL_GLACIAL_SPIKE_COSMETIC, SPELL_BURNING), creature);
 					break;
@@ -207,7 +207,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case NPC_THERAMORE_OFFICER:
 				case NPC_ARCHMAGE_TERVOSH:
 				case NPC_KINNDY_SPARKSHINE:
-					FeingDeath(creature);
+					FeignDeath(creature);
 					creature->SetUninteractible(true);
 					creature->AddAura(SPELL_SHIMMERDUST, creature);
 					creature->AddAura(SPELL_COSMETIC_PURPLE_VERTEX_STATE, creature);

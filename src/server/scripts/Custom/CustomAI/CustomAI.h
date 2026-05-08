@@ -78,7 +78,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         bool CanAIAttack(Unit const* /*who*/) const override;
         void CastStop();
         void CastStop(uint32 /*exception*/);
-        void CastStop(const std::vector<uint32>& /*exceptions*/);
+        void CastStop(const std::unordered_set<uint32>& /*exceptions*/);
 
         //
         void StartFakeParty(Player* /*player*/);
@@ -122,6 +122,41 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         bool IsBackpedaling() const { return backpedaling; }
 
+        // -------------------------------------------------------------------------
+        // Encerclement (anti-melee)
+        // -------------------------------------------------------------------------
+        // Detecte quand un caster distance est entoure de melee sans arc de fuite
+        // exploitable, et declenche une reaction (sort AOE/blink cote sous-classe,
+        // ou fuite generique sinon).
+
+        // Hook appele une fois quand l'unite est detectee encerclee. Retourne true
+        // si la sous-classe a gere (ex: Frost Nova + Blink), false pour utiliser
+        // le fallback PanicFlee.
+        virtual bool OnEncircled(Unit* /*victim*/) { return false; }
+
+        // Hook appele en dernier recours quand meme la fuite n'a pas de direction
+        // exploitable (ennemis et murs partout). La sous-classe peut switcher en
+        // sorts instantanes, lancer un AOE auto-defense, etc.
+        virtual void OnCornered(Unit* /*victim*/) { }
+
+        // Distance et nombre minimal d'ennemis pour considerer l'encerclement.
+        // Surchargeables par les sous-classes pour ajuster la sensibilite.
+        virtual float GetEncircleRadius() const { return 8.f; }
+        virtual uint32 GetEncircleMinEnemies() const { return 3; }
+
+        // Vrai si >= GetEncircleMinEnemies() ennemis dans le radius ET qu'il
+        // n'existe aucun arc libre de >= minClearArc radians (par defaut 150°).
+        bool IsEncircled(float minClearArc = float(5.0 * M_PI / 6.0)) const;
+
+        // Centre du plus grand arc vide d'ennemis, projete a `distance` via
+        // MovePositionToFirstCollision. Retourne la position courante si aucun
+        // ennemi n'est a portee.
+        Position GetBestEscapePosition(float distance) const;
+
+        // Interrompt le cast, MovePoint vers la direction de fuite optimale,
+        // suspend le circle-kite. Si aucun arc viable: appelle OnCornered.
+        void PanicFlee(float distance = 20.f);
+
     private:
         // Transition logic pour la phase de recul. EnterBackped declenche
         // OnBackpedStart au passage false->true, sinon OnBackpedTick.
@@ -142,9 +177,14 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         bool randomMovements;
         bool backpedaling;
         bool circleClockwise;
+        bool encircleReactOnCooldown;
         float circleAngle;
 
+        // Schedule la boucle de detection d'encerclement (Distance/Hybrid).
+        void ScheduleEncircleCheck();
+
         uint32 FriendsInRange(float distance, uint8 pct);
+        uint32 FriendsInFront(float distance, uint8 pct);
         uint32 EnemiesInRange(float distance);
         uint32 EnemiesInFront(float distance);
 
@@ -157,19 +197,36 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
             Backped     = 2500002,
         };
 
-        // Groupes de scheduler internes a CustomAI. Choisis dans une plage
-        // haute pour ne pas entrer en collision avec les enums de groupes
-        // definis par les sous-classes (qui partent generalement de 0).
-        static constexpr uint32 GROUP_RANDOM_MOVEMENT = 9001;
-        static constexpr uint32 GROUP_TELEPORT_SETTLE = 9002;
+        enum SchedulerGroup : uint32
+        {
+            RandomMovement  = 9001,
+            TeleportSettle  = 9002,
+            Encircle        = 9003,
+        };
 
         static constexpr float JUMP_SPEED = 6.f;
-
         static constexpr float JUMP_HEIGHT = 1.5f;
         static constexpr float JUMP_DISTANCE = 5.f;
-
         static constexpr float JUMP_BACK_HEIGHT = 1.8f;
         static constexpr float JUMP_BACK_DISTANCE = 2.5f;
+};
+
+struct FriendlyInFront
+{
+    Unit const* me;
+    float range;
+    uint8 pct;
+
+    FriendlyInFront(Unit const* me, float range, uint8 pct)
+        : me(me), range(range), pct(pct) {
+    }
+
+    bool operator()(Unit* u) const
+    {
+        return u->IsAlive() && u->IsWithinDist(me, range)
+            && u->HealthBelowPct(pct) && me->isInFront(u)
+            && me->IsValidAssistTarget(u);
+    }
 };
 
 inline Position const GetRandomPosition(Position center, float dist)
@@ -234,7 +291,7 @@ inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, f
     return { x, y, z, o };
 }
 
-inline void FeingDeath(Creature* creature)
+inline void FeignDeath(Creature* creature)
 {
     creature->RemoveAllAuras();
     creature->SetRegenerateHealth(false);

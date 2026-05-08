@@ -5266,6 +5266,42 @@ void SpellMgr::LoadSpellInfoCorrections()
         });
     });
 
+    // Blessed Hammer
+    ApplySpellFix({ 420091 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->BasePoints = 4;
+        });
+    });
+
+    // Holy Shock
+    ApplySpellFix({ 25914 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->BasePoints = 10;
+        });
+    });
+
+    // Prayer of Healing
+    ApplySpellFix({ 596 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_1 , [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->BasePoints = 40;
+        });
+    });
+
+    // Word of Glory
+    ApplySpellFix({ 85673 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0 , [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->BasePoints = 50;
+        });
+    });
+
     for (SpellInfo const& s : mSpellInfoMap)
     {
         SpellInfo* spellInfo = &const_cast<SpellInfo&>(s);

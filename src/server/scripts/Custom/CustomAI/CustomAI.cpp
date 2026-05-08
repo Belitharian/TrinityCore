@@ -6,7 +6,8 @@
 
 CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 	type(type), summons(creature), canCombatMove(true), damageReduction(false),
-    textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance_i(50)), circleAngle(0.f),
+    textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance_i(50)),
+    encircleReactOnCooldown(false), circleAngle(0.f),
     fakeParty(creature), linkedPlayer(nullptr)
 {
     if (type == AI_Type::Distance)
@@ -19,7 +20,8 @@ CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 
 CustomAI::CustomAI(Creature* creature, bool damageReduction, AI_Type type) : ScriptedAI(creature),
 	type(type), summons(creature), canCombatMove(true), damageReduction(damageReduction),
-    textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance_i(50)), circleAngle(0.f),
+    textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance_i(50)),
+    encircleReactOnCooldown(false), circleAngle(0.f),
     fakeParty(creature), linkedPlayer(nullptr)
 {
     if (type == AI_Type::Distance)
@@ -35,15 +37,16 @@ void CustomAI::Initialize()
 	interruptCounter = 0;
 	circleAngle = 0.f;
 	circleClockwise = roll_chance_i(50);
+	encircleReactOnCooldown = false;
 
-	scheduler.SetValidator([this]
-	{
-		return !me->HasBreakableByDamageCrowdControlAura()
-			|| !me->HasAuraType(SPELL_AURA_MOD_FEAR_2)
-			|| !me->HasUnitState(UNIT_STATE_CASTING)
-			|| !me->HasUnitState(UNIT_STATE_FLEEING)
-			|| !me->HasUnitState(UNIT_STATE_FLEEING_MOVE);
-	});
+    scheduler.SetValidator([this]
+    {
+        return !me->HasBreakableByDamageCrowdControlAura()
+            && !me->HasAuraType(SPELL_AURA_MOD_FEAR_2)
+            && !me->HasUnitState(UNIT_STATE_CASTING)
+            && !me->HasUnitState(UNIT_STATE_FLEEING)
+            && !me->HasUnitState(UNIT_STATE_FLEEING_MOVE);
+    });
 }
 
 void CustomAI::JustSummoned(Creature* summon)
@@ -91,13 +94,13 @@ void CustomAI::SpellHit(WorldObject* caster, SpellInfo const* spellInfo)
 		{
 			me->ApplySpellImmune(0, IMMUNITY_EFFECT, SPELL_EFFECT_INTERRUPT_CAST, true);
 			me->ApplySpellImmune(0, IMMUNITY_STATE, SPELL_AURA_MOD_STUN, true);
-			me->ApplySpellImmune(0, IMMUNITY_STATE, SPELL_EFFECT_KNOCK_BACK, true);
+            me->ApplySpellImmune(0, IMMUNITY_EFFECT, SPELL_EFFECT_KNOCK_BACK, true);
 
 			scheduler.Schedule(5s, [this](TaskContext /*context*/)
 			{
 				me->ApplySpellImmune(0, IMMUNITY_EFFECT, SPELL_EFFECT_INTERRUPT_CAST, false);
 				me->ApplySpellImmune(0, IMMUNITY_STATE, SPELL_AURA_MOD_STUN, false);
-				me->ApplySpellImmune(0, IMMUNITY_STATE, SPELL_EFFECT_KNOCK_BACK, false);
+                me->ApplySpellImmune(0, IMMUNITY_EFFECT, SPELL_EFFECT_KNOCK_BACK, false);
 
 				interruptCounter = 0;
 			});
@@ -159,6 +162,7 @@ void CustomAI::AttackStart(Unit* who)
                 me->SetSheath(SHEATH_STATE_UNARMED);
                 me->GetMotionMaster()->MoveChase(who, GetDistance());
                 ScheduleRandomMovements();
+                ScheduleEncircleCheck();
             }
             break;
         }
@@ -170,6 +174,7 @@ void CustomAI::AttackStart(Unit* who)
                 me->SetCanMelee(false, true);
                 me->SetSheath(SHEATH_STATE_RANGED);
                 me->GetMotionMaster()->MoveChase(who, GetDistance());
+                ScheduleEncircleCheck();
             }
             break;
         }
@@ -209,7 +214,7 @@ void CustomAI::AttackStart(Unit* who)
                 for (uint32 i = 0; i < total; ++i)
                 {
                     float const angle = (2.f * float(M_PI) * float(i)) / float(total);
-                    meleeBots[i]->GetMotionMaster()->MoveChase(who, me->GetCombatReach(), ChaseAngle(angle, tolerance));
+                    meleeBots[i]->GetMotionMaster()->MoveChase(who, me->GetBoundingRadius(), ChaseAngle(angle, tolerance));
                 }
             }
             break;
@@ -267,18 +272,18 @@ void CustomAI::CastStop()
 		me->InterruptSpell(CurrentSpellTypes(i), false);
 }
 
-void CustomAI::CastStop(const std::vector<uint32>& exceptions)
+void CustomAI::CastStop(const std::unordered_set<uint32>& exceptions)
 {
-	for (uint32 i = CURRENT_FIRST_NON_MELEE_SPELL; i < CURRENT_MAX_SPELL; i++)
-	{
-		if (const Spell* spell = me->GetCurrentSpell(i))
-		{
-			if (std::find(exceptions.begin(), exceptions.end(), spell->m_spellInfo->Id) != exceptions.end())
-				continue;
+    for (uint32 i = CURRENT_FIRST_NON_MELEE_SPELL; i < CURRENT_MAX_SPELL; ++i)
+    {
+        if (Spell const* spell = me->GetCurrentSpell(i))
+        {
+            if (exceptions.find(spell->m_spellInfo->Id) != exceptions.end())
+                continue;
 
-			me->InterruptSpell(CurrentSpellTypes(i), false);
-		}
-	}
+            me->InterruptSpell(CurrentSpellTypes(i), false);
+        }
+    }
 }
 
 void CustomAI::CastStop(uint32 exception)
@@ -302,6 +307,15 @@ uint32 CustomAI::FriendsInRange(float range, uint8 pct)
 	Trinity::UnitListSearcher<Trinity::FriendlyBelowHpPctInRange> searcher(me, list, u_check);
 	Cell::VisitAllObjects(me, searcher, range);
 	return list.size();
+}
+
+uint32 CustomAI::FriendsInFront(float range, uint8 pct)
+{
+    std::list<Unit*> list;
+    FriendlyInFront check(me, range, pct);
+    Trinity::UnitListSearcher<FriendlyInFront> searcher(me, list, check);
+    Cell::VisitAllObjects(me, searcher, range);
+    return list.size();
 }
 
 uint32 CustomAI::EnemiesInRange(float distance)
@@ -457,7 +471,7 @@ void CustomAI::ScheduleRandomMovements()
     if (!CanRandomMovement())
         return;
 
-    scheduler.Schedule(5s, 10s, GROUP_RANDOM_MOVEMENT, [this](TaskContext context)
+    scheduler.Schedule(5s, 10s, RandomMovement, [this](TaskContext context)
     {
         Unit* victim = me->GetVictim();
 
@@ -614,14 +628,150 @@ Position CustomAI::GetRandomBackStep(float distance)
     return pos;
 }
 
+bool CustomAI::IsEncircled(float minClearArc) const
+{
+    float radius = GetEncircleRadius();
+    uint32 minEnemies = GetEncircleMinEnemies();
+
+    std::vector<float> angles;
+    for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
+    {
+        Unit* enemy = ref->GetVictim();
+        if (!enemy || !enemy->IsAlive() || !me->IsWithinDist(enemy, radius))
+            continue;
+        angles.push_back(me->GetAbsoluteAngle(enemy));
+    }
+
+    if (angles.size() < minEnemies)
+        return false;
+
+    std::sort(angles.begin(), angles.end());
+
+    // Plus grand gap angulaire entre deux ennemis consecutifs (avec wrap-around).
+    float largestGap = (angles.front() + 2.f * float(M_PI)) - angles.back();
+    for (size_t i = 0; i + 1 < angles.size(); ++i)
+    {
+        float gap = angles[i + 1] - angles[i];
+        if (gap > largestGap)
+            largestGap = gap;
+    }
+
+    // Aucun arc libre suffisamment large -> encerclee.
+    return largestGap < minClearArc;
+}
+
+Position CustomAI::GetBestEscapePosition(float distance) const
+{
+    float radius = GetEncircleRadius();
+
+    std::vector<float> angles;
+    for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
+    {
+        Unit* enemy = ref->GetVictim();
+        if (!enemy || !enemy->IsAlive() || !me->IsWithinDist(enemy, radius))
+            continue;
+        angles.push_back(me->GetAbsoluteAngle(enemy));
+    }
+
+    if (angles.empty())
+        return me->GetPosition();
+
+    std::sort(angles.begin(), angles.end());
+
+    // On cherche le plus grand arc vide et son angle de depart (pour viser son centre).
+    float bestGap = (angles.front() + 2.f * float(M_PI)) - angles.back();
+    float bestStart = angles.back();
+    for (size_t i = 0; i + 1 < angles.size(); ++i)
+    {
+        float gap = angles[i + 1] - angles[i];
+        if (gap > bestGap)
+        {
+            bestGap = gap;
+            bestStart = angles[i];
+        }
+    }
+
+    float fleeAngle = bestStart + bestGap / 2.f;
+
+    Position pos = me->GetPosition();
+    me->MovePositionToFirstCollision(pos, distance, fleeAngle - me->GetOrientation());
+    return pos;
+}
+
+void CustomAI::PanicFlee(float distance)
+{
+    Unit* victim = me->GetVictim();
+    if (!victim)
+        return;
+
+    Position fleePos = GetBestEscapePosition(distance);
+    float moved = me->GetExactDist2d(fleePos);
+
+    // Arc de fuite bloque par un mur ou inexistant : dernier recours.
+    if (moved < 3.f)
+    {
+        OnCornered(victim);
+        return;
+    }
+
+    CastStop();
+    ExitBackped(victim);
+    me->GetMotionMaster()->MovePoint(Move, fleePos);
+
+    // Suspend le circle-kite pour ne pas etre ramene vers la cible avant d'arriver.
+    scheduler.DelayGroup(RandomMovement, 4s);
+}
+
+void CustomAI::ScheduleEncircleCheck()
+{
+    scheduler.Schedule(2s, Encircle, [this](TaskContext context)
+    {
+        Unit* victim = me->GetVictim();
+
+        // Conditions bloquantes : on reporte sans toucher au cooldown.
+        if (!victim || !me->IsInCombat()
+            || me->HasUnitState(UNIT_STATE_NOT_MOVE | UNIT_STATE_CONTROLLED | UNIT_STATE_JUMPING | UNIT_STATE_CHARGING)
+            || me->HasBreakableByDamageCrowdControlAura()
+            || encircleReactOnCooldown)
+        {
+            context.Repeat(2s);
+            return;
+        }
+
+        if (!IsEncircled())
+        {
+            context.Repeat(1500ms);
+            return;
+        }
+
+        // On bloque les nouveaux declenchements pendant que la sous-classe
+        // (ou le fallback) gere la situation, et on libere le circle-kite.
+        encircleReactOnCooldown = true;
+        scheduler.DelayGroup(RandomMovement, 3s);
+
+        bool handled = OnEncircled(victim);
+        Milliseconds cooldown = handled ? 12s : 6s;
+
+        if (!handled)
+            PanicFlee();
+
+        scheduler.Schedule(cooldown, TeleportSettle, [this](TaskContext /*ctx*/)
+        {
+            encircleReactOnCooldown = false;
+        });
+
+        context.Repeat(2s);
+    });
+}
+
 void CustomAI::NotifyTeleported(Milliseconds settleDuration)
 {
     // Reset eventuel d'un settle precedent encore en cours.
-    scheduler.CancelGroup(GROUP_TELEPORT_SETTLE);
+    scheduler.CancelGroup(TeleportSettle);
 
     // Repousse le circle-kite : sans ca, son MovePoint replacerait l'unite
     // a GetDistance() de la victime, annulant le gain de distance du teleport.
-    scheduler.DelayGroup(GROUP_RANDOM_MOVEMENT, settleDuration);
+    scheduler.DelayGroup(RandomMovement, settleDuration);
 
     if (!canCombatMove)
         return;
@@ -632,7 +782,7 @@ void CustomAI::NotifyTeleported(Milliseconds settleDuration)
     // Le teleport s'execute via un MoveJump :
     // on attend l'atterrissage avant de mesurer la distance reelle, sinon on
     // ecraserait le saut en cours par un MoveChase.
-    scheduler.Schedule(500ms, GROUP_TELEPORT_SETTLE, [this, settleDuration](TaskContext /*context*/)
+    scheduler.Schedule(500ms, TeleportSettle, [this, settleDuration](TaskContext /*context*/)
     {
         Unit* victim = me->GetVictim();
         if (!victim)
@@ -645,7 +795,7 @@ void CustomAI::NotifyTeleported(Milliseconds settleDuration)
         me->GetMotionMaster()->MoveChase(victim, keepDist);
 
         // Restaure la distance de poursuite par defaut a la fin de la fenetre.
-        scheduler.Schedule(settleDuration, GROUP_TELEPORT_SETTLE, [this](TaskContext /*ctx*/)
+        scheduler.Schedule(settleDuration, TeleportSettle, [this](TaskContext /*ctx*/)
         {
             if (Unit* v = me->GetVictim())
                 me->GetMotionMaster()->MoveChase(v, GetDistance());

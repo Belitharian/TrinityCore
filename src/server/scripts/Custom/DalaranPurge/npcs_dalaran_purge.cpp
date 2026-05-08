@@ -759,7 +759,7 @@ struct npc_mage_commander_zuros : public CustomAI
                     events.ScheduleEvent(5, 4300ms);
                     break;
                 case 5:
-                    FeingDeath(me);
+                    FeignDeath(me);
                     for (Creature* sunreaver : sunreavers)
                     {
                         sunreaver->KillSelf();

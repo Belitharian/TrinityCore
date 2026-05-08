@@ -520,7 +520,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					barriers.push_back(creature->GetGUID());
 					break;
 				case NPC_SUNREAVER_EXTRACTION_TROOP:
-					FeingDeath(creature);
+					FeignDeath(creature);
 					if (roll_chance_i(50))
 						creature->AddAura(RAND(SPELL_FROZEN_SOLID, SPELL_BURNING), creature);
 					extraction.push_back(creature->GetGUID());
@@ -627,7 +627,7 @@ class scenario_dalaran_purge : public InstanceMapScript
                     {
                         if (Creature* highmage = instance->GetCreature(highmages[i]))
                         {
-                            FeingDeath(highmage);
+                            FeignDeath(highmage);
                             highmage->CastStop();
                             highmage->GetMotionMaster()->StopOnDeath();
                         }

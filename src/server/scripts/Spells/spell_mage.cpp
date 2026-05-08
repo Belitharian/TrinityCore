@@ -2199,7 +2199,7 @@ struct at_ring_of_fire : AreaTriggerAI
 // AreaTriggerID - 8661
 struct at_mage_froze_orb : AreaTriggerAI
 {
-    at_mage_froze_orb(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger), _canCollide(true) { }
+    at_mage_froze_orb(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger) { }
 
     enum Spells
     {
@@ -2212,15 +2212,20 @@ struct at_mage_froze_orb : AreaTriggerAI
         Position destPos = at->GetPosition();
         at->MovePositionToFirstCollision(destPos, 40.0f, 0.0f);
 
-        PathGenerator path(at);
-        path.CalculatePath(destPos.GetPositionX(), destPos.GetPositionY(), destPos.GetPositionZ(), false);
-        at->InitSplines(path.GetPath());
+        std::vector<G3D::Vector3> points;
+        points.emplace_back(at->GetPositionX(), at->GetPositionY(), at->GetPositionZ());
+        points.emplace_back(destPos.GetPositionX(), destPos.GetPositionY(), destPos.GetPositionZ());
+
+        // Avoid degenerate spline (zero length -> timeToTarget = 0 -> NaN in UpdateSplinePosition)
+        if ((points[1] - points[0]).squaredMagnitude() < 0.01f)
+        {
+            at->Remove();
+            return;
+        }
+
+        at->InitSplines(points);
 
         _scheduler
-            .Schedule(350ms, [this](TaskContext /*context*/)
-            {
-                _canCollide = false;
-            })
             .Schedule(725ms, [this](TaskContext task)
             {
                 Unit* caster = at->GetCaster();
@@ -2245,11 +2250,11 @@ struct at_mage_froze_orb : AreaTriggerAI
 
     void OnUnitEnter(Unit* unit) override
     {
-        if (_canCollide)
-            return;
-
         Unit* caster = at->GetCaster();
         if (!caster)
+            return;
+
+        if (unit->GetDistance2d(caster) <= 3.f)
             return;
 
         if (!caster->IsValidAttackTarget(unit))
@@ -2267,7 +2272,6 @@ struct at_mage_froze_orb : AreaTriggerAI
 
 private:
     TaskScheduler _scheduler;
-    bool _canCollide;
 };
 
 void AddSC_mage_spell_scripts()
