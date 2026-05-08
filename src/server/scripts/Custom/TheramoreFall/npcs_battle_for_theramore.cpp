@@ -2804,16 +2804,40 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 	enum Misc
 	{
 		// Group
-		COSMETIC_GROUP,
+		COSMETIC_GROUP_NORMAL,
+		COSMETIC_GROUP_MISSILES,
+
 
 		// Spells
+		SPELL_ARCANE_PROJECTILES        = 5143,
+		SPELL_ARCANE_BARRAGE            = 44425,
 		SPELL_SUPERNOVA                 = 157980,
 		SPELL_EVOCATION                 = 243070,
-		SPELL_ARCANE_BLAST              = 291316,
-		SPELL_ARCANE_BARRAGE            = 291318,
-		SPELL_ARCANE_PROJECTILES        = 303311,
+		SPELL_CLEARCASTING              = 263725,
+		SPELL_ARCANE_BLAST              = 291336,
 		SPELL_ARCANE_SURGE              = 365350,
 	};
+
+    void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
+    {
+        if (spell->Id == SPELL_CLEARCASTING)
+        {
+            scheduler.Schedule(1s, 3s, COSMETIC_GROUP_MISSILES, [this](TaskContext /*context*/)
+            {
+                Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
+                if (!training)
+                    return;
+
+                scheduler.DelayGroup(COSMETIC_GROUP_NORMAL, 3s);
+
+                CastStop();
+
+                me->GetSpellHistory()->ResetAllCooldowns();
+                me->CastSpell(training, SPELL_ARCANE_PROJECTILES, true);
+                me->RemoveAurasDueToSpell(SPELL_CLEARCASTING);
+            });
+        }
+    }
 
 	void Reset() override
 	{
@@ -2824,22 +2848,21 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 			return;
 
 		scheduler
-			.Schedule(5s, COSMETIC_GROUP, [this](TaskContext check_phase)
+			.Schedule(5s, COSMETIC_GROUP_NORMAL, [this](TaskContext check_phase)
 			{
 				BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
 				if (phase >= BFTPhases::Preparation)
 				{
 					float angle = me->GetAbsoluteAngle(LookAtPos);
 					me->SetOrientation(angle);
-
 					me->SetFacingToPoint(LookAtPos);
-
-					scheduler.CancelGroup(COSMETIC_GROUP);
+					scheduler.CancelGroup(COSMETIC_GROUP_NORMAL);
+					scheduler.CancelGroup(COSMETIC_GROUP_MISSILES);
 				}
 
 				check_phase.Repeat(2s);
 			})
-			.Schedule(5s, 8s, COSMETIC_GROUP, [this](TaskContext context)
+			.Schedule(5s, 8s, COSMETIC_GROUP_NORMAL, [this](TaskContext context)
 			{
 				Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
 				if (!training)
@@ -2872,11 +2895,9 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 					if (!me->HasUnitState(UNIT_STATE_CASTING))
 					{
 						uint32 spellId = SPELL_ARCANE_BLAST;
-						if (roll_chance_i(10))
-						{
-							spellId = SPELL_ARCANE_PROJECTILES;
-						}
-						else if (roll_chance_i(20))
+                        bool triggered = false;
+
+						if (roll_chance_i(20))
 						{
 							spellId = SPELL_ARCANE_SURGE;
 						}
@@ -2892,11 +2913,15 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 						const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
 						ms = Milliseconds(info->CalcCastTime());
 
-						me->CastSpell(training, spellId);
+                        me->GetSpellHistory()->ResetAllCooldowns();
+                        me->CastSpell(training, spellId, triggered);
 						me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
 
 						if (info->IsChanneled())
 							ms = Milliseconds(info->CalcDuration(me));
+
+                        if (roll_chance_i(80))
+                            me->CastSpell(me, SPELL_CLEARCASTING, true);
 					}
 
 					context.Repeat(ms + 500ms);
