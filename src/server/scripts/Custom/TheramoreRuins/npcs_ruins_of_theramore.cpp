@@ -136,7 +136,7 @@ struct npc_roknah_warlord : public CustomAI
 				switch (mortal_strike.GetRepeatCounter())
 				{
 					case 0:
-						if (!me->HasAura(SPELL_OVERPOWER) && roll_chance_i(60))
+						if (!me->HasAura(SPELL_OVERPOWER) && roll_chance(60))
 							DoCastSelf(SPELL_OVERPOWER);
 						mortal_strike.Repeat(1s);
 						break;

@@ -196,7 +196,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					break;
 				case NPC_DEAD_ROKNAH_TROOP:
                     FeignDeath(creature);
-					if (roll_chance_i(50))
+					if (roll_chance(50))
 						creature->AddAura(RAND(SPELL_GLACIAL_SPIKE_COSMETIC, SPELL_BURNING), creature);
 					break;
 				case NPC_GENERAL_TIRAS_ALAN:

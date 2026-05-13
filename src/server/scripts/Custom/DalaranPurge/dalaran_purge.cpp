@@ -318,7 +318,7 @@ public:
         if (!victim || !me->IsValidAttackTarget(victim))
             return;
 
-        if (spellInfo->HasOnlyDamageEffects() && roll_chance_i(60))
+        if (spellInfo->HasOnlyDamageEffects() && roll_chance(60))
             DoCast(victim, SPELL_SCORCHING_DETONATION, true);
     }
 

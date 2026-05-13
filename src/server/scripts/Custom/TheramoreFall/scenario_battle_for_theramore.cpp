@@ -1,10 +1,7 @@
 #include "CriteriaHandler.h"
 #include "EventMap.h"
-#include "Containers.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
-#include "KillRewarder.h"
-#include "Log.h"
 #include "Map.h"
 #include "MotionMaster.h"
 #include "MiscPackets.h"
@@ -12,13 +9,11 @@
 #include "PhasingHandler.h"
 #include "Player.h"
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "TemporarySummon.h"
 #include "Weather.h"
-#include "WorldPacket.h"
 #include "battle_for_theramore.h"
 
-#define EVENT_CREATURE_DATA_SIZE 14
+uint8 const eventCreatureDataCount = 14;
 
 const ObjectData creatureData[] =
 {
@@ -37,7 +32,6 @@ const ObjectData creatureData[] =
 	{ NPC_AMARA_LEESON,         DATA_AMARA_LEESON           },
 	{ NPC_THADER_WINDERMERE,    DATA_THADER_WINDERMERE      },
 	{ NPC_KALECGOS_DRAGON,      DATA_KALECGOS_DRAGON        },
-	{ NPC_ADMIRAL_AUBREY,       DATA_ADMIRAL_AUBREY         },
 	{ NPC_CAPTAIN_DROK,         DATA_CAPTAIN_DROK           },
 	{ NPC_WAVE_CALLER_GRUHTA,   DATA_WAVE_CALLER_GRUHTA     },
 	{ 0,                        0                           }   // END
@@ -488,7 +482,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							rhonin->SummonGameObject(GOB_ENERGY_BARRIER_TOWER, TowerBarriers[i].position, TowerBarriers[i].quaternion, 0s);
 						}
 					}
-					for (uint8 i = 0; i < EVENT_CREATURE_DATA_SIZE; i++)
+					for (uint8 i = 0; i < eventCreatureDataCount; i++)
 					{
 						if (Creature* creature = GetCreature(creatureData[i].type))
 							creature->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
@@ -521,6 +515,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		{
 			InstanceScript::OnCreatureCreate(creature);
 
+            if (creature->IsCivilian() || creature->GetEntry() == NPC_TRAINING_DUMMY)
+            {
+                creature->PauseMovement();
+                creature->SetPvP(false);
+                creature->SetImmuneToNPC(true);
+                citizens.push_back(creature->GetGUID());
+            }
+
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
 			creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
 			creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
@@ -529,24 +531,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			{
 				case NPC_ARCHMAGE_TERVOSH:
 					creature->SetEmoteState(EMOTE_STATE_READ_BOOK_AND_TALK);
-					break;
-				case NPC_THERAMORE_CITIZEN_FEMALE:
-				case NPC_THERAMORE_CITIZEN_MALE:
-				case NPC_TRAINING_DUMMY:
-					creature->PauseMovement();
-					creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
-					creature->RemoveUnitFlag(UNIT_FLAG_PVP_ENABLING);
-					citizens.push_back(creature->GetGUID());
-					break;
-				case NPC_BISHOP_DELAVEY:
-					creature->SetImmuneToNPC(true);
-					citizens.push_back(creature->GetGUID());
-					break;
-				case NPC_ALLIANCE_PEASANT:
-					creature->RemovePvpFlag(UNIT_BYTE2_FLAG_PVP);
-					creature->RemoveUnitFlag(UNIT_FLAG_PVP_ENABLING);
-					creature->SetImmuneToNPC(true);
-					citizens.push_back(creature->GetGUID());
 					break;
 				case NPC_UNMANNED_TANK:
 					creature->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
@@ -561,7 +545,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						break;
 					troops.push_back(creature->GetGUID());
 					break;
-				case NPC_ADMIRAL_AUBREY:
 				case NPC_CAPTAIN_DROK:
 				case NPC_WAVE_CALLER_GRUHTA:
 				case NPC_KALECGOS_DRAGON:
@@ -575,7 +558,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		{
 			InstanceScript::OnGameObjectCreate(go);
 
-			go->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
+			go->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
 
 			switch (go->GetEntry())
 			{
@@ -1036,7 +1019,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* hedric = GetHedric())
 					{
 						hedric->SetWalk(true);
-						hedric->GetMotionMaster()->MoveBackward(MOVEMENT_INFO_POINT_01, HedricPoint02, nullptr, 1.12f);
+						hedric->GetMotionMaster()->MoveBackward(MOVEMENT_INFO_POINT_01, HedricPoint02, nullptr, 1.3f);
 					}
 					Next(500ms);
 					break;
@@ -1734,7 +1717,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		void SetTarget(Unit* unit)
 		{
 			ObjectGuid guid = unit->GetGUID();
-			for (uint8 i = 0; i < EVENT_CREATURE_DATA_SIZE; i++)
+			for (uint8 i = 0; i < eventCreatureDataCount; i++)
 			{
 				if (Creature* creature = GetCreature(creatureData[i].type))
 				{
@@ -1757,7 +1740,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 		void ClearTarget()
 		{
-			for (uint8 i = 0; i < EVENT_CREATURE_DATA_SIZE; i++)
+			for (uint8 i = 0; i < eventCreatureDataCount; i++)
 			{
 				if (Creature* creature = GetCreature(creatureData[i].type))
 					creature->SetTarget(ObjectGuid::Empty);
@@ -1903,7 +1886,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				if (!troop || troop->isDead())
 					continue;
 
-				if (roll_chance_i(80))
+				if (roll_chance(80))
 				{
 					troop->SetVisible(false);
 					if (Creature* wounded = troop->SummonCreature(NPC_THERAMORE_WOUNDED_TROOP, troop->GetPosition(), TempSummonType::TEMPSUMMON_MANUAL_DESPAWN))

@@ -459,7 +459,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					creature->SetEmoteState(EMOTE_STATE_LOOT_BITE_SOUND);
 					break;
 				case NPC_DALARAN_CITIZEN:
-					if (roll_chance_i(30))
+					if (roll_chance(30))
 						creature->SetEmoteState(EMOTE_STATE_COWER);
 					citizens.push_back(creature->GetGUID());
 					break;
@@ -521,7 +521,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					break;
 				case NPC_SUNREAVER_EXTRACTION_TROOP:
 					FeignDeath(creature);
-					if (roll_chance_i(50))
+					if (roll_chance(50))
 						creature->AddAura(RAND(SPELL_FROZEN_SOLID, SPELL_BURNING), creature);
 					extraction.push_back(creature->GetGUID());
 					break;

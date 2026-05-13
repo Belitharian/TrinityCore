@@ -3,16 +3,9 @@
 
 #include "Custom/FakeParty/FakeParty.h"
 #include "Creature.h"
-#include "CreatureAI.h"
 #include "ScriptedCreature.h"
-#include "DBCEnums.h"
 #include "TaskScheduler.h"
-#include "ScriptMgr.h"
-#include "SpellHistory.h"
 #include "SpellInfo.h"
-#include "SpellMgr.h"
-
-#define NPC_TRAINING_DUMMY 87318
 
 enum class AI_Type
 {

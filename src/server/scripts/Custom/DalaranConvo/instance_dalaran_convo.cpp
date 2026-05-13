@@ -3,24 +3,25 @@
 #include "InstanceScript.h"
 #include "Map.h"
 #include "MotionMaster.h"
-#include "ObjectMgr.h"
 #include "Player.h"
-#include "TemporarySummon.h"
 #include "dalaran_convo.h"
 
 const ObjectData creatureData[] =
 {
 	{ NPC_JAINA_PROUDMOORE,             DATA_JAINA_PROUDMOORE           },
-	{ NPC_ANDUIN,                       DATA_ANDUIN                     },
+	{ NPC_ANDUIN_WRYNN,                 DATA_ANDUIN                     },
 	{ NPC_KAELTHAS,                     DATA_KAELTHAS                   },
 	{ NPC_KELTHUZAD,                    DATA_KELTHUZAD                  },
 	{ NPC_KALECGOS,                     DATA_KALECGOS                   },
 	{ NPC_SHANNON_NOEL,                 DATA_SHANNON_NOEL               },
+	{ NPC_JAINA_PROUDMOORE_VISION,      DATA_JAINA_PROUDMOORE_VISION    },
+	{ NPC_ARCANIST_ALEC,                DATA_ARCANIST_ALEC              },
 	{ 0,                                0                               }   // END
 };
 
 const ObjectData gameobjectData[] =
 {
+	{ GOB_FEL_BARRIER,                  DATA_FEL_BARRIER                },
 	{ 0,                                0                               }   // END
 };
 
@@ -34,39 +35,81 @@ class instance_dalaran_convo : public InstanceMapScript
 	struct instance_dalaran_convo_InstanceScript : public InstanceScript
 	{
 		instance_dalaran_convo_InstanceScript(InstanceMap* map) : InstanceScript(map),
-            eventId(1), eventIndex(EVENT_VISION_01), phase(Phases::None)
+			eventId(EVENT_NONE), phase(Phases::None)
 		{
 			SetHeaders(DataHeader);
 			LoadObjectData(creatureData, gameobjectData);
 		}
 
-        void SetData(uint32 dataId, uint32 value) override
-        {
-            if (dataId == PHASE_TYPE)
-            {
-                phase = (Phases)value;
+		void SetData(uint32 dataId, uint32 value) override
+		{
+			if (dataId == DATA_PHASE)
+			{
+				phase = (Phases)value;
 
                 switch (phase)
                 {
                     case Phases::Introduction:
-                        events.ScheduleEvent(1, 5ms);
+                        StartConversation(CONVERSATION_INTRODUCTION);
                         break;
-                    case Phases::Conversation:
-                        events.ScheduleEvent(6, 1s);
+                    case Phases::Kalecgos:
+                        StartConversation(CONVERSATION_KALECGOS);
                         break;
-                    case Phases::Event:
-                        events.ScheduleEvent(eventIndex, 2s);
+                    case Phases::KelThuzad:
+                        StartConversation(CONVERSATION_KELTHUZAD);
+                        break;
+                    case Phases::KelThuzad_Combat:
+                        StartKelThuzadCombat();
+                        break;
+                    case Phases::KelThuzad_CanTeleport:
+                        OpenFelBarrier();
+                        DespawnVision(VISION_KEL_THUZAD);
+                        break;
+                    default:
                         break;
                 }
-            }
-        }
+			}
+		}
 
-        uint32 GetData(uint32 dataId) const override
-        {
-            if (dataId == PHASE_TYPE)
-                return (uint32)phase;
-            return 0;
-        }
+		uint32 GetData(uint32 dataId) const override
+		{
+			if (dataId == DATA_PHASE)
+				return (uint32)phase;
+			return 0;
+		}
+
+		void OnCompletedCriteriaTree(CriteriaTree const* tree) override
+		{
+			switch (tree->ID)
+			{
+				// Find Lady Jaina Proudmoore
+				case CRITERIA_TREE_INTRODUCTION_FIND_JAINA:
+                    SetData(DATA_PHASE, (uint32)Phases::Introduction);
+					break;
+				// Discuss the fate of the Kirin Tor
+				case CRITERIA_TREE_INTRODUCTION_DISCUSS:
+                    SetData(DATA_PHASE, (uint32)Phases::Start);
+                    events.ScheduleEvent(EVENT_START_01, 1s);
+                    break;
+                // Assist Lady Jaina Proudmoore
+                case CRITERIA_TREE_KALECGOS_ASSIST_JAINA:
+                    SetData(DATA_PHASE, (uint32)Phases::Kalecgos_CanTeleport);
+                    DespawnVision(VISION_KALECGOS);
+                    break;
+                // Speak to Arcanist Alec
+                case CRITERIA_TREE_KALECGOS_SPEAK_TO_ALEC:
+                    // Phase transition handled by areatrigger_dalaran_kelthuzad
+                    break;
+                // Witness Kel'Thuzad vision
+                case CRITERIA_TREE_KELTHUZAD_WITNESS:
+                    // Phase transition handled by AT / conversation
+                    break;
+                // Defeat Kel'Thuzad vision
+                case CRITERIA_TREE_KELTHUZAD_DEFEAT:
+                    // Phase transition handled by npc_kelthuzad_vision::JustDied
+                    break;
+			}
+		}
 
 		void OnCreatureCreate(Creature* creature) override
 		{
@@ -77,215 +120,147 @@ class instance_dalaran_convo : public InstanceMapScript
 
 			switch (creature->GetEntry())
 			{
+				// Generic
+				case NPC_JAINA_PROUDMOORE:
+				case NPC_ARCANIST_ALEC:
+					creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+					break;
+
+				// Visions
+				case NPC_KALECGOS:
+				case NPC_JAINA_PROUDMOORE_VISION:
+                    visions[VISION_KALECGOS].push_back(creature->GetGUID());
+                    ApplyHauntingMemoryAura(creature);
+                    break;
+
+				case NPC_KELTHUZAD:
+				case NPC_SHANNON_NOEL:
+				case NPC_MR_BIGGLESWORTH:
+                    visions[VISION_KEL_THUZAD].push_back(creature->GetGUID());
+                    ApplyHauntingMemoryAura(creature);
+                    break;
+
                 case NPC_KAELTHAS:
-                    creature->AIM_Destroy();
-                    creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                    creature->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-                    creature->CastSpell(creature, SPELL_DISSOLVE, true);
-                    creature->SetObjectScale(0.38f);
+				case NPC_BLOOD_ELF_NOBLE:
+                    visions[VISION_KAEL_THAS].push_back(creature->GetGUID());
+                    ApplyHauntingMemoryAura(creature);
                     break;
-                case NPC_KELTHUZAD:
-                case NPC_SHANNON_NOEL:
-                    creature->AIM_Destroy();
-                    creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                    creature->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-                    creature->CastSpell(creature, SPELL_DISSOLVE, true);
+
+                case NPC_AETHAS_SUNREAVER:
+				case NPC_SUNREAVER_CITIZEN:
+				case NPC_SUNREAVER_LIEUTENANT:
+				case NPC_SUNREAVER_BATTLEMAGE:
+				case NPC_SUNREAVER_MAGE:
+                    visions[VISION_SUNREAVERS].push_back(creature->GetGUID());
+                    ApplyHauntingMemoryAura(creature);
                     break;
-                case NPC_JAINA_PROUDMOORE:
-                    creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+
+                case NPC_ARCHMAGE_ANTONIDAS:
+				case NPC_DALARAN_CITIZEN_01:
+				case NPC_DALARAN_CITIZEN_02:
+				case NPC_DALARAN_CITIZEN_03:
+                    visions[VISION_ANTONIDAS].push_back(creature->GetGUID());
+                    ApplyHauntingMemoryAura(creature);
+					break;
+
+				default:
+					break;
+			}
+		}
+
+		void OnGameObjectCreate(GameObject* go) override
+		{
+			InstanceScript::OnGameObjectCreate(go);
+
+			switch (go->GetEntry())
+			{
+				case GOB_PORTAL_TO_DALARAN:
+					go->SetLootState(GO_READY);
+					go->UseDoorOrButton();
+					go->SetFlag(GO_FLAG_NOT_SELECTABLE);
+					break;
+                case GOB_TOME_OF_POWER:
+                    visions[VISION_KALECGOS].push_back(go->GetGUID());
+                    break;
+                case GOB_FEL_BARRIER:
+                    OpenFelBarrier();
+                    go->SetFlag(GO_FLAG_NOT_SELECTABLE);
                     break;
 				default:
 					break;
 			}
 		}
 
-        void OnGameObjectCreate(GameObject* go) override
-        {
-            InstanceScript::OnGameObjectCreate(go);
-
-            switch (go->GetEntry())
-            {
-                case GOB_PORTAL_TO_DALARAN:
-                    go->SetLootState(GO_READY);
-                    go->UseDoorOrButton();
-                    go->SetFlag(GO_FLAG_NOT_SELECTABLE);
-                    break;
-                default:
-                    break;
-            }
-        }
-
 		void Update(uint32 diff) override
 		{
 			events.Update(diff);
 			switch (eventId = events.ExecuteEvent())
 			{
-                // Part I
-                case 1:
-                    GetAnduin()->SetFacingToObject(GetJaina());
-                    GetJaina()->SetFacingToObject(GetAnduin());
-                    Next(2s);
-                    break;
-                case 2:
-                    GetAnduin()->AI()->Talk(SAY_ANDUIN_INTRO_01);
-                    Next(6s);
-                    break;
-                case 3:
-                    GetJaina()->AI()->Talk(SAY_JAINA_INTRO_02);
-                    Next(4s);
-                    break;
-                case 4:
-                    GetAnduin()->SetFacingToObject(GetPlayer());
-                    GetJaina()->SetFacingToObject(GetPlayer());
-                    Next(1s);
-                    break;
-                case 5:
-                    if (Creature* jaina = GetJaina())
-                    {
-                        jaina->AI()->SetData(PHASE_TYPE, (uint32)Phases::Introduction);
-                        jaina->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                    }
-                    break;
+				case EVENT_START_01:
+                    StartConversation(CONVERSATION_START);
+					break;
 
-                // Part II
-                case 6:
-                    //if (Creature* jaina = GetJaina())
-                    //{
-                    //    Talk(jaina, SAY_JAINA_CONVO_01);
-                    //    jaina->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, ActorsPath01, ACTORS_PATH_01, true);
-                    //}
-                    Next(1s);
-                    break;
-                case 7:
-                    //GetAnduin()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_01, ActorsPath01, ACTORS_PATH_01, true);;
-                    break;
-
-                // Visions
-                #pragma region VISIONS
-
-                case EVENT_VISION_01:
-                    //if (Creature* jaina = GetJaina())
-                    //{
-                    //    Talk(jaina, SAY_JAINA_CONVO_02);
-                    //    jaina->RemoveAurasDueToSpell(SPELL_SIT_CHAIR_MED);
-                    //    jaina->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, JainaPath02, ACTORS_PATH_02, true);
-                    //}
-                    Next(5s);
-                    break;
-                case EVENT_VISION_02:
-                    //GetAnduin()->GetMotionMaster()->MoveSmoothPath(MOVEMENT_INFO_POINT_02, AnduinPath02, ACTORS_PATH_02, true);
-                    Talk(GetJaina(), SAY_JAINA_CONVO_03);
-                    Next(9s);
-                    break;
-                case EVENT_VISION_03:
-                    Talk(GetJaina(), SAY_JAINA_CONVO_04);
-                    eventIndex = EVENT_VISION_04;
-                    break;
-                case EVENT_VISION_04:
-                    Talk(GetJaina(), SAY_JAINA_CONVO_05);
-                    Next(4s);
-                    break;
-                case EVENT_VISION_05:
-                    if (Creature* shannon = GetShannon())
-                    {
-                        shannon->RemoveAurasDueToSpell(SPELL_DISSOLVE);
-                        shannon->CastSpell(shannon, SPELL_READING_BOOK_SITTING);
-                    }
-                    if (Creature* kelThuzad = GetKelThuzad())
-                    {
-                        kelThuzad->RemoveAurasDueToSpell(SPELL_DISSOLVE);
-                        kelThuzad->CastSpell(kelThuzad, SPELL_VOID_CHANNELING);
-                    }
-                    Next(8s);
-                    break;
-                case EVENT_VISION_06:
-                    if (Creature* shannon = GetShannon())
-                    {
-                        shannon->CastSpell(shannon, SPELL_FEIGN_DEATH);
-
-                        if (Creature* ghoul = instance->SummonCreature(NPC_GHOUL, shannon->GetPosition()))
-                        {
-                            tempGUID = ghoul->GetGUID();
-
-                            ghoul->SetWalk(true);
-                            ghoul->DespawnOrUnsummon(15s);
-                            ghoul->SetFaction(FACTION_FRIENDLY);
-                            ghoul->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-                        }
-                    }
-                    Next(4s);
-                    break;
-                case EVENT_VISION_07:
-                    if (Creature* ghoul = instance->GetCreature(tempGUID))
-                        ghoul->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, GhoulPos01);
-                    if (Creature* kelThuzad = GetKelThuzad())
-                    {
-                        kelThuzad->RemoveAurasDueToSpell(SPELL_VOID_CHANNELING);
-                        kelThuzad->HandleEmoteCommand(EMOTE_ONESHOT_LAUGH);
-                    }
-                    Next(3s);
-                    break;
-                case EVENT_VISION_08:
-                    if (Creature* kelThuzad = GetKelThuzad())
-                    {
-                        kelThuzad->HandleEmoteCommand(EMOTE_ONESHOT_NONE);
-                        kelThuzad->CastSpell(kelThuzad, SPELL_TAKING_NOTES);
-                    }
-                    Next(5s);
-                    break;
-                case EVENT_VISION_09:
-                    if (Creature* kelThuzad = GetKelThuzad())
-                        kelThuzad->CastSpell(kelThuzad, SPELL_DISSOLVE);
-                    if (Creature* shannon = GetShannon())
-                        shannon->AddAura(SPELL_DISSOLVE, shannon);
-                    if (Creature* ghoul = instance->GetCreature(tempGUID))
-                        ghoul->CastSpell(ghoul, SPELL_DISSOLVE);
-                    Next(5s);
-                    break;
-                case EVENT_VISION_10:
-                    GetAnduin()->SetFacingTo(6.022f);
-                    if (Creature* jaina = GetJaina())
-                    {
-                        Talk(jaina, SAY_JAINA_CONVO_06);
-                        jaina->SetWalk(true);
-                        jaina->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, JainaPos02, true, JainaPos02.GetOrientation());
-                    }
-                    Next(2s);
-                    break;
-                case EVENT_VISION_11:
-                    if (Creature* kael = GetKaelThas())
-                        kael->RemoveAurasDueToSpell(SPELL_DISSOLVE);
-                    Next(5s);
-                    break;
-                case EVENT_VISION_12:
-                    if (Creature* kael = GetKaelThas())
-                    {
-                        kael->SetFacingTo(2.52f);
-                        kael->CastSpell(FirestrikePos01, SPELL_FIRESTRIKE, true);
-                    }
-                    break;
-
-                #pragma endregion
-
-                default:
+				default:
 					break;
 			}
 		}
 
 		EventMap events;
 		uint32 eventId;
-		uint32 eventIndex;
-        Phases phase;
-        ObjectGuid tempGUID;
+		Phases phase;
+        std::unordered_map<uint32, std::vector<ObjectGuid>> visions;
 
 		// Accesseurs
 		#pragma region ACCESSORS
 		
-		Creature* GetJaina() { return GetCreature(DATA_JAINA_PROUDMOORE); }
-		Creature* GetAnduin() { return GetCreature(DATA_ANDUIN); }
-		Creature* GetKelThuzad() { return GetCreature(DATA_KELTHUZAD); }
-		Creature* GetShannon() { return GetCreature(DATA_SHANNON_NOEL); }
-		Creature* GetKaelThas() { return GetCreature(DATA_KAELTHAS); }
+		Creature* GetJaina()
+		{
+			Creature* creature = GetCreature(DATA_JAINA_PROUDMOORE);
+			ASSERT(creature);
+			return creature;
+		}
+
+		Creature* GetJainaVision()
+		{
+			Creature* creature = GetCreature(DATA_JAINA_PROUDMOORE_VISION);
+			ASSERT(creature);
+			return creature;
+		}
+
+		Creature* GetKalecgos()
+		{
+			Creature* creature = GetCreature(DATA_KALECGOS);
+			ASSERT(creature);
+			return creature;
+		}
+
+		Creature* GetAnduin()
+		{
+			Creature* creature = GetCreature(DATA_ANDUIN);
+			ASSERT(creature);
+			return creature;
+		}
+
+		Creature* GetKelThuzad()
+		{
+			Creature* creature = GetCreature(DATA_KELTHUZAD);
+			ASSERT(creature);
+			return creature;
+		}
+
+		Creature* GetShannon()
+		{
+			Creature* creature = GetCreature(DATA_SHANNON_NOEL);
+			ASSERT(creature);
+			return creature;
+		}
+
+		Creature* GetKaelThas()
+		{
+			Creature* creature = GetCreature(DATA_KAELTHAS);
+			ASSERT(creature);
+			return creature;
+		}
 
 		#pragma endregion
 
@@ -303,11 +278,74 @@ class instance_dalaran_convo : public InstanceMapScript
 			events.ScheduleEvent(eventId, time);
 		}
 
-        Player* GetPlayer()
+		Player* GetPlayer()
+		{
+			Map::PlayerList const& players = instance->GetPlayers();
+			if (players.empty())
+				return nullptr;
+
+			return players.begin()->GetSource();
+		}
+
+        void DespawnVision(Visions type)
         {
-            if (Player* player = instance->GetPlayers().begin()->GetSource())
-                return player;
-            return nullptr;
+            Player* player = GetPlayer();
+            if (!player)
+                return;
+
+            for (auto& guid : visions[type])
+            {
+                if (guid.IsCreature())
+                {
+                    if (Creature* creature = ObjectAccessor::GetCreature(*player, guid))
+                    {
+                        creature->SetVisible(false);
+                        creature->DespawnOrUnsummon(2s);
+                    }
+                }
+                else if (guid.IsGameObject())
+                {
+                    if (GameObject* gob = ObjectAccessor::GetGameObject(*player, guid))
+                        gob->Delete();
+                }
+            }
+
+            visions[type].clear();
+        }
+
+		void OpenFelBarrier()
+		{
+			if (GameObject* barrier = GetGameObject(DATA_FEL_BARRIER))
+				barrier->UseDoorOrButton();
+		}
+
+		void CloseFelBarrier()
+		{
+			if (GameObject* barrier = GetGameObject(DATA_FEL_BARRIER))
+				barrier->ResetDoorOrButton();
+		}
+
+		void StartKelThuzadCombat()
+		{
+			CloseFelBarrier();
+
+            if (Creature* kelthuzad = GetCreature(DATA_KELTHUZAD))
+                kelthuzad->AI()->DoAction(ACTION_KELTHUZAD_COMBAT_READY);
+		}
+
+		void ApplyHauntingMemoryAura(Creature* const creature)
+		{
+			creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+			creature->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+			creature->CastSpell(creature, SPELL_HAUNTING_MEMORY, true);
+		}
+
+        void StartConversation(uint32 entry)
+        {
+            Player* player = GetPlayer();
+            ASSERT(player);
+
+            Conversation::CreateConversation(entry, player, *player, player->GetGUID());
         }
 
 		#pragma endregion

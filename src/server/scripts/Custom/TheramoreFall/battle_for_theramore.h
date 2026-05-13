@@ -3,9 +3,6 @@
 
 #include "CreatureAIImpl.h"
 #include "Position.h"
-#include "Totem.h"
-#include "TotemAI.h"
-#include "Custom/CustomAI/CustomAI.h"
 
 #define BFTScriptName "scenario_battle_for_theramore"
 #define DataHeader "BFT"
@@ -69,7 +66,6 @@ enum BFTData
 	DATA_ROKNAH_HAG,
 	DATA_CAPTAIN_DROK,
 	DATA_WAVE_CALLER_GRUHTA,
-	DATA_ADMIRAL_AUBREY,
 
 	DATA_SCENARIO_PHASE,
 	DATA_WOUNDED_TROOPS,
@@ -100,6 +96,8 @@ enum BFTData
 
 enum BFTCreatures
 {
+    NPC_TRAINING_DUMMY                  = 87318,
+
 	NPC_JAINA_PROUDMOORE                = 64560,
 	NPC_RHONIN                          = 64564,
 	NPC_KALECGOS                        = 64565,
@@ -116,8 +114,6 @@ enum BFTCreatures
 	NPC_THERAMORE_FOOTMAN               = 58612,
 	NPC_THERAMORE_CITIZEN_MALE          = 143773,
 	NPC_THERAMORE_CITIZEN_FEMALE        = 143776,
-	NPC_BISHOP_DELAVEY                  = 500022,
-	NPC_ADMIRAL_AUBREY                  = 121953,
 
 	NPC_ROKNAH_GRUNT                    = 64732,
 	NPC_ROKNAH_LOA_SINGER               = 64733,

@@ -1,16 +1,12 @@
 #include "GameObject.h"
-#include "Containers.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
 #include "MotionMaster.h"
-#include "ObjectAccessor.h"
-#include "PassiveAI.h"
-#include "Scenario.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
-#include "SpellMgr.h"
 #include "TemporarySummon.h"
+#include "CustomAI.h"
 #include "battle_for_theramore.h"
 
 struct npc_jaina_theramore : public CustomAI
@@ -258,7 +254,7 @@ struct npc_archmage_tervosh : public CustomAI
 			case SPELL_SCORCH:
 			{
 				Unit* victim = target->ToUnit();
-				if (victim && !victim->HasAura(SPELL_CONFLAGRATION) && roll_chance_i(40))
+				if (victim && !victim->HasAura(SPELL_CONFLAGRATION) && roll_chance(40))
 					DoCast(victim, SPELL_CONFLAGRATION, true);
 			}
 			break;
@@ -451,7 +447,7 @@ struct npc_rhonin : public CustomAI
 		{
 			case SPELL_ARCANE_BLAST:
 				arcaneCharges++;
-				if (roll_chance_i(40) && !me->HasAura(SPELL_TEMPORAL_DISPLACEMENT))
+				if (roll_chance(40) && !me->HasAura(SPELL_TEMPORAL_DISPLACEMENT))
 				{
 					CastStop();
 					me->AddAura(SPELL_TIME_WARP, me);
@@ -862,7 +858,7 @@ struct npc_kalecgos_dragon : public CustomAI
 			{
 				scheduler.Schedule(8s, 12s, [this](TaskContext talk_combat)
 				{
-					if (roll_chance_i(30))
+					if (roll_chance(30))
                         TalkInCombat(SAY_KALECGOS_SPELL_01);
                     talk_combat.Repeat(8s, 12s);
 				});

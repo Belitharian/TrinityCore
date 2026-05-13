@@ -1,23 +1,16 @@
-ï»¿#include "AreaTrigger.h"
+#include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
-#include "Containers.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
-#include "PassiveAI.h"
 #include "Player.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
-#include "SpellAuraEffects.h"
-#include "TemporarySummon.h"
-#include "World.h"
+#include "CustomAI.h"
 #include "battle_for_theramore.h"
-#include <algorithm>
-#include <array>
-#include <queue>
 
 ///
 ///     ALLIANCE NPC
@@ -556,7 +549,7 @@ struct npc_theramore_officier : public npc_theramore_troop
             {
                 scheduler.Schedule(2s, 3s, [this](TaskContext /*context*/)
                 {
-                    // Verifie si une cible est lÃ , sinon on fait rien
+                    // Verifie si une cible est là, sinon on fait rien
                     if (Unit* target = FindLowestHealthFriend(me, WORD_OF_GLORY_RANGE))
                     {
                         if (Aura* afterimage = me->GetAura(SPELL_AFTERIMAGE))
@@ -602,7 +595,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 		if (me->GetSpellHistory()->HasCooldown(SPELL_DIVINE_SHIELD))
 			return;
 
-		if (me->HealthBelowPctDamaged(DIVINE_SHIELD_HP_PCT, damage) && roll_chance_i(DIVINE_SHIELD_CHANCE))
+		if (me->HealthBelowPctDamaged(DIVINE_SHIELD_HP_PCT, damage) && roll_chance(DIVINE_SHIELD_CHANCE))
 		{
 			DoCastSelf(SPELL_DIVINE_SHIELD);
 
@@ -636,7 +629,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			.Schedule(1s, GROUP_NORMAL, [this](TaskContext avenging_wrath)
 			{
 				// Avenging Wrath en boucle sur son CD reel (~2min) pour les combats longs.
-				if (roll_chance_i(60))
+				if (roll_chance(60))
 					DoCastSelf(SPELL_AVENGING_WRATH);
 				avenging_wrath.Repeat(2min, 3min);
 			})
@@ -703,7 +696,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 				// Holy Shock est hybride : heal sur allie blesse en priorite, sinon damage sur la victime.
 				CastStop();
 				if (Unit* target = DoSelectBelowHpPctFriendly(HOLY_SHOCK_HP_PCT, HOLY_SHOCK_RANGE);
-					target && roll_chance_i(HOLY_SHOCK_HEAL_CHANCE))
+					target && roll_chance(HOLY_SHOCK_HEAL_CHANCE))
 					DoCast(target, SPELL_HOLY_SHOCK);
 				else
 					DoCastVictim(SPELL_HOLY_SHOCK);
@@ -897,7 +890,7 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 		{
 			arcaneCharges++;
 
-			if (roll_chance_i(CLEARCASTING_PROC_CHANCE))
+			if (roll_chance(CLEARCASTING_PROC_CHANCE))
 			{
 				DoCastSelf(SPELL_CLEARCASTING);
 
@@ -1188,15 +1181,15 @@ struct npc_theramore_faithful : public npc_theramore_troop
 			});
 	}
 
-	// En backpedal : trois branches mutuellement exclusives selon roll_chance_i sequentiel.
+	// En backpedal : trois branches mutuellement exclusives selon roll_chance sequentiel.
 	// Probabilites finales : 25% self-heal, 37.5% Shadow Word Death, 37.5% Shadow Word Pain.
 	void OnBackpedStart(Unit* victim) override
 	{
-		if (roll_chance_i(25))
+		if (roll_chance(25))
 		{
 			DoCastSelf(RAND(SPELL_RENEW, SPELL_PLEA, SPELL_POWER_WORD_SHIELD));
 		}
-		else if (roll_chance_i(50))
+		else if (roll_chance(50))
 		{
 			DoCast(victim, SPELL_SHADOW_WORD_DEATH);
 		}
@@ -1467,7 +1460,7 @@ struct npc_roknah_hag : public npc_theramore_horde
 		// 60% de ralentir la cible.
 		if (spell->Id == SPELL_FROSTBOLT || spell->Id == SPELL_FLURRY || spell->Id == SPELL_ICE_LANCE)
 		{
-			if (roll_chance_i(60))
+			if (roll_chance(60))
 			{
 				DoCast(victim, SPELL_CHILLED, INTERNAL_CAST);
 			}
@@ -1565,7 +1558,7 @@ struct npc_roknah_hag : public npc_theramore_horde
 		npc_theramore_horde::JustEngagedWith(who);
 
 		// 30% de chance de se buffer Ice Barrier au pull.
-		if (roll_chance_i(30))
+		if (roll_chance(30))
 			DoCastSelf(SPELL_ICE_BARRIER);
 
 		// Premier Frostbolt immediat sur l'agresseur (sinon il faut attendre 2s).
@@ -2179,7 +2172,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 
 	static constexpr float   DOT_RANGE              = 30.0f;            // Portee de selection pour les DoTs
 	static constexpr float   IMP_SPAWN_DISTANCE     = 2.0f;             // Rayon du cercle de spawn autour du lanceur
-	static constexpr float   IMP_ANGLE_SPACING      = 2 * M_PI / 12.0f; // Espacement angulaire entre slots : 30Â° (360 / 12)
+	static constexpr float   IMP_ANGLE_SPACING      = 2 * M_PI / 12.0f; // Espacement angulaire entre slots : 30° (360 / 12)
 	static constexpr uint8   IMP_MAX_COUNT          = 12;               // Nombre de slots / Imps simultanes max
 	static constexpr uint8   IMP_HOG_COUNT          = 3;                // Imps invoques par Main de Gul'dan
 	static constexpr uint8   SOUL_SHARDS_MAX        = 3;                // Seuil de fragments d'ame avant Main de Gul'dan
@@ -2198,7 +2191,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 		std::queue<uint8>().swap(pendingImpSlots);
 
 		// Traqueur des Tenebres au pull : 60% de chance.
-		if (roll_chance_i(FELHUNTER_CHANCE))
+		if (roll_chance(FELHUNTER_CHANCE))
 			DoCastSelf(SPELL_SUMMON_FELHUNTER, TRIGGERED_CAST_DIRECTLY);
 	}
 
@@ -2281,7 +2274,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 				me->CastSpell(spawnPos, SPELL_WILD_IMP, true);
 			}
 
-			if (roll_chance_i(60) && !me->HasAura(SPELL_INFERNAL_BOLT_BUFF))
+			if (roll_chance(60) && !me->HasAura(SPELL_INFERNAL_BOLT_BUFF))
 				DoCastSelf(SPELL_INFERNAL_BOLT_BUFF, true);
 		}
 		else if (spell->Id == SPELL_INFERNAL_BOLT)
@@ -2361,7 +2354,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 				if (soulShardsCount >= SOUL_SHARDS_MAX)
 				{
 					CastStop(SPELL_DRAIN_LIFE);
-					if (roll_chance_i(30))
+					if (roll_chance(30))
 						DoCastVictim(SPELL_DEMONBOLT, TRIGGERED_CAST_DIRECTLY);
 					else
 						DoCastVictim(SPELL_HAND_OF_GULDAN);
@@ -2395,7 +2388,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 	}
 
 	/// Calcule la prochaine position de spawn pour un Imp.
-	/// Reserve le premier slot libre (0..11) sur le cercle, espacement de 30Â°.
+	/// Reserve le premier slot libre (0..11) sur le cercle, espacement de 30°.
 	Position CalcImpSpawnPosition(Unit const* center)
 	{
 		if (!center)
@@ -2566,13 +2559,13 @@ struct npc_wave_caller_gruhta : public CustomAI
 
 		if (Aura* elementalProtection = me->GetAura(SPELL_ELEMENTAL_PROTECTION))
 		{
-			// Rï¿½cupï¿½re le nombre de protections activent
+			// R?cup?re le nombre de protections activent
 			uint32 stack = elementalProtection->GetStackAmount();
 
-			// Supprime une protection lors des dï¿½gï¿½ts
+			// Supprime une protection lors des d?g?ts
 			elementalProtection->SetStackAmount(stack - 1);
 
-			// Si le stack est ï¿½ zï¿½ro, la tempï¿½te s'annule
+			// Si le stack est ? z?ro, la temp?te s'annule
 			if (stack <= 0)
 			{
 				scheduler.CancelGroup(GROUP_TEMPEST);
@@ -2897,15 +2890,15 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 						uint32 spellId = SPELL_ARCANE_BLAST;
                         bool triggered = false;
 
-						if (roll_chance_i(20))
+						if (roll_chance(20))
 						{
 							spellId = SPELL_ARCANE_SURGE;
 						}
-						else if (roll_chance_i(30))
+						else if (roll_chance(30))
 						{
 							spellId = SPELL_ARCANE_BARRAGE;
 						}
-						else if (roll_chance_i(15))
+						else if (roll_chance(15))
 						{
 							spellId = SPELL_SUPERNOVA;
 						}
@@ -2920,7 +2913,7 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 						if (info->IsChanneled())
 							ms = Milliseconds(info->CalcDuration(me));
 
-                        if (roll_chance_i(80))
+                        if (roll_chance(80))
                             me->CastSpell(me, SPELL_CLEARCASTING, true);
 					}
 
@@ -3015,7 +3008,7 @@ class spell_theramore_throw_bucket : public SpellScript
 		const WorldLocation* destination = GetHitDest();
 		if (caster && destination)
 		{
-			float radius = GetSpellInfo()->GetEffect(effIndex).CalcRadius();
+			SpellRange radius = GetSpellInfo()->GetEffect(effIndex).CalcRadius();
 
 			#ifdef CUSTOM_DEBUG
 				for (uint8 i = 0; i < NUMBER_OF_FIRES; ++i)
@@ -3027,7 +3020,7 @@ class spell_theramore_throw_bucket : public SpellScript
 				if (Creature* trigger = caster->SummonCreature(WORLD_TRIGGER, destination->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 5s))
 				{
 					std::list<Creature*> fires;
-					trigger->GetCreatureListWithEntryInGrid(fires, NPC_THERAMORE_FIRE_CREDIT, radius);
+					trigger->GetCreatureListWithEntryInGrid(fires, NPC_THERAMORE_FIRE_CREDIT, radius.Max);
 
 					for (Creature* fire : fires)
 					{
@@ -3117,7 +3110,7 @@ public:
 
 			case 2:
 			{
-				if (!townCrier) // sï¿½curitï¿½
+				if (!townCrier) // s?curit?
 					return true;
 
 				townCrier->AI()->Talk(0);
@@ -3165,7 +3158,7 @@ public:
 						citizen->ResumeMovement();
 						citizen->DespawnOrUnsummon(10s);
 
-						if (roll_chance_i(20))
+						if (roll_chance(20))
 							citizen->AI()->Talk(0);
 
 						KillRewarder::Reward(owner, citizen, NPC_THERAMORE_CITIZEN_CREDIT);
@@ -3533,7 +3526,7 @@ struct at_divine_word_sanctuary : AreaTriggerAI
 	{
 		_scheduler.Schedule(1s, [this](TaskContext task)
 		{
-			// Rï¿½cupï¿½ration du lanceur du sort
+			// R?cup?ration du lanceur du sort
 			if (Unit* caster = at->GetCaster())
 			{
 				for (const ObjectGuid& unitGuid : at->GetInsideUnits())
@@ -3709,15 +3702,15 @@ struct at_blessed_hammer : AreaTriggerAI
 	}
 
 private:
-	// AreaTrigger 29807 dure 5 s : on Ã©tale la spirale sur toute la durÃ©e.
-	static constexpr std::size_t POINTS = 200;    // DensitÃ© totale (40 pts/seconde)
+	// AreaTrigger 29807 dure 5 s : on étale la spirale sur toute la durée.
+	static constexpr std::size_t POINTS = 200;    // Densité totale (40 pts/seconde)
 	static constexpr float TURNS        = 10.0f;  // 10 tours sur 5 s = 2 tours/s
-	static constexpr float R0           = 2.0f;   // Rayon de dÃ©part
-	static constexpr float GROWTH       = 0.35f;  // Expansion par radian (spirale d'ArchimÃ¨de)
+	static constexpr float R0           = 2.0f;   // Rayon de départ
+	static constexpr float GROWTH       = 0.35f;  // Expansion par radian (spirale d'Archimède)
 	static constexpr float Z_OFFSET     = 1.5f;   // Hauteur du marteau au-dessus du sol
 };
 
-// AreaTriggerID - 25183
+// AreaTriggerID World - areatrigger table
 struct areatrigger_theramore_citizens : AreaTriggerAI
 {
 	using AreaTriggerAI::AreaTriggerAI;
