@@ -231,6 +231,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				// Step 5 : Evacuation
 				case CRITERIA_TREE_EVACUATION:
 				{
+                    for (ObjectGuid guid : citizens)
+                    {
+                        if (Creature* citizen = instance->GetCreature(guid))
+                        {
+                            citizen->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+                            citizen->SetVignette(VIGNETTE_NONE);
+                        }
+                    }
 					if (Creature* jaina = GetJaina())
 					{
                         jaina->SetVignette(VIGNETTE_LADY_JAINA_PROUDMOORE);
@@ -476,14 +484,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						kalecgos->SetVisible(true);
 						kalecgos->GetMotionMaster()->Clear();
 						kalecgos->GetMotionMaster()->MoveIdle();
-						kalecgos->SetSpeedRate(MOVE_WALK, 0.85f);
-						kalecgos->SetSpeedRate(MOVE_RUN, 0.85f);
 						kalecgos->NearTeleportTo(KalecPath02.Nodes[0].X, KalecPath02.Nodes[0].Y, KalecPath02.Nodes[0].Z, *KalecPath02.Nodes[0].Orientation);
 					}
 					if (Creature* rhonin = GetRhonin())
 					{
-						rhonin->SetSpeedRate(MOVE_RUN, 0.85f);
-						rhonin->SetSpeedRate(MOVE_WALK, 0.85f);
 						rhonin->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RhoninPoint01, true, RhoninPoint01.GetOrientation());
 
 						for (uint8 i = 0; i < TOWER_BARRIERS_LOCATION; i++)
@@ -506,12 +510,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				// Step 12 : Retrieve Rhonin - Parent
 				case CRITERIA_TREE_RETRIEVE_RHONIN:
-                    GetRhonin()->SetVignette(VIGNETTE_NONE);
 					DoCastSpellOnPlayers(SPELL_THERAMORE_EXPLOSION_SCENE);
 					break;
 				// Step 12 : Retrieve Rhonin - Retrieve Rhonin at the top of the tower
 				case CRITERIA_TREE_RETRIEVE:
-					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin_JoinRhonin);
+                    GetRhonin()->SetVignette(VIGNETTE_NONE);
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin_JoinRhonin);
 					events.ScheduleEvent(161, 1s);
 					break;
 				// Step 12 : Retrieve Rhonin - Localize the bomb
@@ -1323,17 +1327,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					//#ifdef CUSTOM_DEBUG
-					//	for (uint8 i = 0; i < HORDE_WAVES_COUNT; i++)
-					//	{
-					//		DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
-					//		events.ScheduleEvent(WAVE_BREAKER, 1s);
-					//	}
-					//#else
+					#ifdef CUSTOM_DEBUG
+						for (uint8 i = 0; i < HORDE_WAVES_COUNT; i++)
+						{
+							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
+							events.ScheduleEvent(WAVE_BREAKER, 1s);
+						}
+					#else
 						HordeMembersInvoker(Waves[waves]);
 						waves++;
 						events.ScheduleEvent(++wavesInvoker, 1s);
-					//#endif
+					#endif
 					break;
 
 				case WAVE_01_CHECK:
@@ -1506,8 +1510,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 				// Part I
 				case 142:
-					GetKalec()->GetMotionMaster()->MovePath(KalecPath02, false);
-					Next(6s);
+					GetKalec()->GetMotionMaster()->MovePath(KalecPath02, false, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+					Next(8s);
 					break;
 				case 143:
 					SetTarget(GetKalec());
@@ -1555,26 +1559,22 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 152:
 					ClearTarget();
-					GetKalec()->GetMotionMaster()->MovePath(KalecPath03, false);
-					Next(2s);
+					GetKalec()->GetMotionMaster()->MovePath(KalecPath03, false, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+					Next(3s);
 					break;
 				case 153:
-					GetRhonin()->GetMotionMaster()->MovePath(RhoninPath01, false);
-					Next(2s);
+                    GetRhonin()->GetMotionMaster()->MovePath(RhoninPath01, false, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+					Next(3s);
 					break;
 				case 154:
-					if (Creature* amara = GetAmara())
-					{
-						amara->SetSpeedRate(MOVE_RUN, 0.85f);
-						amara->GetMotionMaster()->MovePath(AmaraPath01, false);
-					}
+                    GetAmara()->GetMotionMaster()->MovePath(AmaraPath01, false, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
 					Next(10s);
 					break;
 				case 155:
 					if (Creature* amara = GetAmara())
 					{
 						amara->SetVisible(true);
-						amara->GetMotionMaster()->MovePath(KalecPath02, false);
+						amara->GetMotionMaster()->MovePath(KalecPath02, false, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
 					}
 					break;
 
@@ -1600,11 +1600,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 159:
 					ClearTarget();
-					GetAmara()->GetMotionMaster()->MovePath(KalecPath03, false);
-					Next(2s);
+					GetAmara()->GetMotionMaster()->MovePath(KalecPath03, false, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+					Next(4s);
 					break;
 				case 160:
-					GetJaina()->GetMotionMaster()->MovePath(JainaPath02, false);
+					GetJaina()->GetMotionMaster()->MovePath(JainaPath02, false, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
 					break;
 
 				#pragma endregion
