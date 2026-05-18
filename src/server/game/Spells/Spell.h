@@ -559,7 +559,7 @@ class TC_GAME_API Spell
         void CheckSrc();
         void CheckDst();
 
-        static void SendCastResult(Player* caster, SpellInfo const* spellInfo, SpellCastVisual spellVisual, ObjectGuid cast_count, SpellCastResult result, SpellCustomErrors customError = SPELL_CUSTOM_ERROR_NONE, int32* param1 = nullptr, int32* param2 = nullptr);
+        static void SendCastResult(Player const* caster, SpellInfo const* spellInfo, SpellCastVisual spellVisual, ObjectGuid cast_count, SpellCastResult result, SpellCustomErrors customError = SPELL_CUSTOM_ERROR_NONE, int32* param1 = nullptr, int32* param2 = nullptr);
         void SendCastResult(SpellCastResult result, int32* param1 = nullptr, int32* param2 = nullptr) const;
         void SendPetCastResult(SpellCastResult result, int32* param1 = nullptr, int32* param2 = nullptr) const;
         void SendMountResult(MountResult result);
@@ -567,9 +567,9 @@ class TC_GAME_API Spell
         void SendSpellGo();
         void SendSpellCooldown();
         void SendSpellExecuteLog();
-        SpellLogEffect& GetExecuteLogEffect(SpellEffectName effect);
+        SpellLogEffect& GetExecuteLogEffect(SpellEffects effect);
         template<typename T>
-        std::vector<T>& GetExecuteLogEffectTargets(SpellEffectName effect, Optional<std::vector<T>> SpellLogEffect::* member)
+        std::vector<T>& GetExecuteLogEffectTargets(SpellEffects effect, Optional<std::vector<T>> SpellLogEffect::* member)
         {
             Optional<std::vector<T>>& opt = GetExecuteLogEffect(effect).*member;
             if (!opt)
@@ -577,15 +577,15 @@ class TC_GAME_API Spell
 
             return *opt;
         }
-        void ExecuteLogEffectTakeTargetPower(SpellEffectName effect, Unit* target, Powers powerType, uint32 points, float amplitude);
-        void ExecuteLogEffectExtraAttacks(SpellEffectName effect, Unit* victim, uint32 numAttacks);
-        void ExecuteLogEffectDurabilityDamage(SpellEffectName effect, Unit* victim, int32 itemId, int32 amount);
-        void ExecuteLogEffectOpenLock(SpellEffectName effect, Object* obj);
-        void ExecuteLogEffectCreateItem(SpellEffectName effect, uint32 entry);
-        void ExecuteLogEffectDestroyItem(SpellEffectName effect, uint32 entry);
-        void ExecuteLogEffectSummonObject(SpellEffectName effect, WorldObject* obj);
-        void ExecuteLogEffectUnsummonObject(SpellEffectName effect, WorldObject* obj);
-        void ExecuteLogEffectResurrect(SpellEffectName effect, Unit* target);
+        void ExecuteLogEffectTakeTargetPower(SpellEffects effect, Unit* target, Powers powerType, uint32 points, float amplitude);
+        void ExecuteLogEffectExtraAttacks(SpellEffects effect, Unit* victim, uint32 numAttacks);
+        void ExecuteLogEffectDurabilityDamage(SpellEffects effect, Unit* victim, int32 itemId, int32 amount);
+        void ExecuteLogEffectOpenLock(SpellEffects effect, Object* obj);
+        void ExecuteLogEffectCreateItem(SpellEffects effect, uint32 entry);
+        void ExecuteLogEffectDestroyItem(SpellEffects effect, uint32 entry);
+        void ExecuteLogEffectSummonObject(SpellEffects effect, WorldObject* obj);
+        void ExecuteLogEffectUnsummonObject(SpellEffects effect, WorldObject* obj);
+        void ExecuteLogEffectResurrect(SpellEffects effect, Unit* target);
         void SendSpellInterruptLog(Unit* victim, uint32 spellId);
         void SendInterrupted(uint8 result);
         void SendChannelUpdate(uint32 time, Optional<SpellCastResult> result = {});
