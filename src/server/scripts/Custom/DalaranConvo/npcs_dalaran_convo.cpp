@@ -11,15 +11,15 @@ struct npc_jaina_proudmoore_convo : public CustomAI
 {
 	enum Misc
 	{
-		// Spells
-		SPELL_TELEPORT              = 134634,
-
 		// Gossips
 		GOSSIP_MENU_INTROCUTION     = 65006,
 	};
 
 	npc_jaina_proudmoore_convo(Creature* creature) : CustomAI(creature),
-		instance(creature->GetInstanceScript()) { }
+		instance(creature->GetInstanceScript())
+    {
+        SetCanRandomMovement(false);
+    }
 
 	bool OnGossipHello(Player* player) override
 	{
@@ -44,22 +44,32 @@ struct npc_jaina_proudmoore_convo : public CustomAI
 		return true;
 	}
 
+    void WaypointReached(uint32 waypointId, uint32 pathId) override
+    {
+        if (pathId == 2 && waypointId == 2)
+        {
+            if (Creature* alec = instance->GetCreature(DATA_ARCANIST_ALEC))
+            {
+                alec->SetNpcFlag(NPCFlags(UNIT_NPC_FLAG_GOSSIP));
+                alec->CastSpell(alec, SPELL_SPLOTLIGHT, true);
+                instance->TriggerGameEvent(EVENT_FIND_KALECGOS_ASSIST_JAINA);
+            }
+        }
+    }
+
 	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
 	{
 		switch (pathId)
 		{
 			case 1:
-				ProcTeleportVisual(me);
-				me->NearTeleportTo(JainaPos01);
-				me->SetHomePosition(JainaPos01);
+				ProcTeleportVisual(me, JainaPos01);
 				break;
             case 2:
-                ProcTeleportVisual(me);
-                me->NearTeleportTo(JainaPos02);
-                me->SetHomePosition(JainaPos02);
+                ProcTeleportVisual(me, JainaPos02);
                 break;
             case 3:
-                me->SetFacingTo(4.5525f);
+                me->SetFacingTo(1.489f);
+                instance->SetData(DATA_PHASE, (uint32)Phases::KelThuzad_Combat_Ready);
                 break;
 		}
 	}
@@ -70,7 +80,8 @@ struct npc_jaina_proudmoore_convo : public CustomAI
 
 struct npc_anduin_wrynn_convo : public CustomAI
 {
-	npc_anduin_wrynn_convo(Creature* creature) : CustomAI(creature) { }
+	npc_anduin_wrynn_convo(Creature* creature) : CustomAI(creature),
+        instance(creature->GetInstanceScript()) { }
 
     void WaypointReached(uint32 waypointId, uint32 pathId) override
     {
@@ -83,20 +94,20 @@ struct npc_anduin_wrynn_convo : public CustomAI
 		switch (pathId)
 		{
 			case 1:
-				ProcTeleportVisual(me);
-				me->NearTeleportTo(AnduinPos01);
-				me->SetHomePosition(AnduinPos01);
-				break;
+				ProcTeleportVisual(me, AnduinPos01);
+                instance->SetData(DATA_PHASE, (uint32)Phases::Start_CanTeleport);
+                break;
             case 2:
-                ProcTeleportVisual(me);
-                me->NearTeleportTo(AnduinPos02);
-                me->SetHomePosition(AnduinPos02);
+                ProcTeleportVisual(me, AnduinPos02);
                 break;
             case 3:
-                me->SetFacingTo(4.5525f);
+                me->SetFacingTo(1.021f);
                 break;
 		}
 	}
+
+    private:
+    InstanceScript* instance;
 };
 
 struct npc_arcanist_alec_convo : public CustomAI
@@ -105,9 +116,6 @@ struct npc_arcanist_alec_convo : public CustomAI
 
 	enum Misc
 	{
-		// Spells
-		SPELL_TELEPORT              = 134634,
-
 		// Gossips
 		GOSSIP_MENU_INTROCUTION     = 65008,
 	};
@@ -126,6 +134,7 @@ struct npc_arcanist_alec_convo : public CustomAI
 		switch (gossipListId)
 		{
 			case 0:
+                player->CastSpell(PlayerPos02, SPELL_TELEPORT);
 				instance->TriggerGameEvent(EVENT_FIND_KALECGOS_SPEAK_TO_ALEC);
 				break;
 		}
@@ -140,42 +149,151 @@ struct npc_arcanist_alec_convo : public CustomAI
 
 struct npc_kelthuzad_vision : public CustomAI
 {
-    npc_kelthuzad_vision(Creature* creature) : CustomAI(creature), instance(creature->GetInstanceScript()) {}
+    npc_kelthuzad_vision(Creature* creature) : CustomAI(creature, AI_Type::Stay),
+        instance(creature->GetInstanceScript()) {}
 
-    enum Texts
+    enum Spells
     {
-        KELTHUZAD_SAYS_01 = 0, // Encore une interruption !
-        KELTHUZAD_SAYS_02 = 1, // Je refuse...
-        KELTHUZAD_SAYS_03 = 2, // Ne voyez vous pas...
-        KELTHUZAD_SAYS_04 = 3, // Vous ne comprendriez pas...
+        SPELL_DARKSPEAKER_BLESSING  = 328507,
+        SPELL_FREEZING_BLAST        = 352379,
+        SPELL_DEEP_FREEZE           = 354638,
+        SPELL_GLACIAL_WINDS         = 355055,
+        SPELL_FROSTBOLT             = 371383,
+        SPELL_FROST_BLAST           = 464527,
+        SPELL_COMMAND_THE_DEAD      = 464563,
+        SPELL_DEATH_BOLT            = 324589,
     };
+
+    enum Groups
+    {
+        GROUP_NORMAL,
+        GROUP_NECROMANCER
+    };
+
+    enum NPCs
+    {
+        NPC_SOUL_WEAVER             = 230685,
+        NPC_GHOUL_FROZEN_WASTES     = 230682
+    };
+
+    bool deepDreeze = false;
+    bool darkspeakerBlessing = false;
+    uint8 commandTheDead = 0;
+
+    // Constantes
+    const uint8 COMMAND_THE_DEAD_COUNT = 2;
+
+    float GetDistance() override
+    {
+        return 3.f;
+    };
+
+    void Reset() override
+    {
+        CustomAI::Reset();
+
+        me->AddAura(SPELL_HAUNTING_MEMORY, me);
+    }
+
+    void MovementInform(uint32 type, uint32 id) override
+    {
+        CustomAI::MovementInform(type, id);
+
+        switch (id)
+        {
+            case MOVEMENT_INFO_POINT_01:
+                me->SetHomePosition(KelThuzadPos01);
+                me->SetImmuneToAll(false);
+                break;
+        }
+    }
+
+    void SummonedCreatureDies(Creature* summon, Unit* killer) override
+    {
+        CustomAI::SummonedCreatureDies(summon, killer);
+
+        switch (summon->GetEntry())
+        {
+            case NPC_SOUL_WEAVER:
+            case NPC_GHOUL_FROZEN_WASTES:
+                commandTheDead++;
+                break;
+        }
+
+        if (commandTheDead >= COMMAND_THE_DEAD_COUNT)
+            me->RemoveAurasDueToSpell(SPELL_DARKSPEAKER_BLESSING);
+    }
 
     void DoAction(int32 param) override
     {
         if (param != ACTION_KELTHUZAD_COMBAT_READY)
             return;
 
-        me->NearTeleportTo(KelThuzadPos01);
-        me->SetHomePosition(KelThuzadPos01);
-        me->AI()->Talk(KELTHUZAD_SAYS_01);
-        me->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
-        me->SetFaction(FACTION_KELTHUZAD_HOSTILE);
-        me->SetImmuneToAll(true);
+        if (Player* player = me->SelectNearestPlayer(40.f))
+            Conversation::CreateConversation(CONVERSATION_KELTHUZAD_COMBAT, player, *player, player->GetGUID());
+    }
 
-        scheduler.Schedule(2s, [this](TaskContext context)
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    {
+        if (!deepDreeze && me->HealthBelowPctDamaged(50, damage))
         {
-            switch (context.GetRepeatCounter())
+            deepDreeze = true;
+            for (uint8 i = 0; i < 20; ++i)
+                DoCastSelf(SPELL_DEEP_FREEZE, true);
+        }
+
+        if (!darkspeakerBlessing && me->HealthBelowPctDamaged(30, damage))
+        {
+            darkspeakerBlessing = true;
+
+            CastStop();
+            DoCastSelf(SPELL_DARKSPEAKER_BLESSING, true);
+
+            scheduler.CancelGroup(GROUP_NORMAL);
+
+            scheduler
+                .Schedule(1s, [this](TaskContext /*context*/)
+                {
+                    CastStop();
+                    DoCastSelf(SPELL_COMMAND_THE_DEAD);
+                })
+                .Schedule(2s, [this](TaskContext death_bolt)
+                {
+                    DoCastVictim(SPELL_DEATH_BOLT);
+                    death_bolt.Repeat(4s);
+                });
+        }
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        DoCast(who, SPELL_FROSTBOLT);
+
+        scheduler
+            .Schedule(2s, GROUP_NORMAL, [this](TaskContext frostbolt)
             {
-                case 0:
-                    me->AI()->Talk(KELTHUZAD_SAYS_02);
-                    context.Repeat(2s);
-                    break;
-                case 1:
-                    me->SetImmuneToAll(false);
-                    context.CancelAll();
-                    return;
-            }
-        });
+                DoCastVictim(SPELL_FROSTBOLT);
+                frostbolt.Repeat(2s, 3s);
+            })
+            .Schedule(4s, 8s, GROUP_NORMAL, [this](TaskContext frost_blast)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random))
+                    DoCast(target, SPELL_FROST_BLAST);
+                frost_blast.Repeat(6s, 8s);
+            })
+            .Schedule(10s, GROUP_NORMAL, [this](TaskContext freezing_blast)
+            {
+                if (Unit* target = me->GetVictim())
+                    me->SetFacingToObject(target);
+
+                DoCastAOE(SPELL_FREEZING_BLAST);
+                freezing_blast.Repeat(18s, 22s);
+            })
+            .Schedule(20s, GROUP_NORMAL, [this](TaskContext glacial_winds)
+            {
+                DoCastSelf(SPELL_GLACIAL_WINDS);
+                glacial_winds.Repeat(35s, 45s);
+            });
     }
 
     void JustDied(Unit* /*killer*/) override
@@ -184,9 +302,139 @@ struct npc_kelthuzad_vision : public CustomAI
         instance->SetData(DATA_PHASE, (uint32)Phases::KelThuzad_CanTeleport);
     }
 
-private:
+    private:
     InstanceScript* instance;
 };
+
+/*****
+*
+* Spells
+*
+*****/
+
+// Glacial Winds - 355055
+class spell_glacial_winds : public SpellScript
+{
+    void HandleLaunch(SpellEffIndex effIndex)
+    {
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        uint32 spellId = GetSpellInfo()->GetEffect(effIndex).BasePoints;
+        caster->CastSpell(caster, spellId, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
+    }
+
+    void Register() override
+    {
+        OnEffectLaunch += SpellEffectFn(spell_glacial_winds::HandleLaunch, EFFECT_0, SPELL_EFFECT_DUMMY);
+        OnEffectLaunch += SpellEffectFn(spell_glacial_winds::HandleLaunch, EFFECT_1, SPELL_EFFECT_DUMMY);
+        OnEffectLaunch += SpellEffectFn(spell_glacial_winds::HandleLaunch, EFFECT_2, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// Glacial Winds - 355058
+// AT@29665
+struct at_glacial_winds : AreaTriggerAI
+{
+    enum Spells
+    {
+        SPELL_GLACIAL_WINDS = 355058
+    };
+
+    at_glacial_winds(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger) {}
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        Unit* caster = at->GetCaster();
+        if (!caster)
+            return;
+
+        if (!caster->IsValidAttackTarget(unit))
+            return;
+
+        caster->CastSpell(unit, SPELL_GLACIAL_WINDS, true);
+    }
+};
+
+// Deep Freeze - 354638
+// AT@23187
+struct at_deep_freeze : AreaTriggerAI
+{
+    enum Spells
+    {
+        SPELL_DEEP_FREEZE = 354639
+    };
+
+    at_deep_freeze(AreaTrigger* areatrigger) : AreaTriggerAI(areatrigger) {}
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        Unit* caster = at->GetCaster();
+        if (!caster)
+            return;
+
+        if (!caster->IsValidAttackTarget(unit))
+            return;
+
+        caster->CastSpell(unit, SPELL_DEEP_FREEZE, true);
+    }
+
+    void OnUnitExit(Unit* unit, AreaTriggerExitReason /*reason*/) override
+    {
+        unit->RemoveAurasDueToSpell(SPELL_DEEP_FREEZE);
+    }
+};
+
+// Freezing Blast - 352381
+class spell_freezing_blast : public SpellScript
+{
+    enum Spells
+    {
+        SPELL_FREEZING_BLAST_MISSILE = 352380
+    };
+
+    void HandleDamage(SpellEffIndex /*effIndex*/) const
+    {
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        // Orientation du caster en radians
+        float orientation = caster->GetOrientation();
+
+        // 3 positions en ligne droite devant, espacées de 6y
+        for (int i = 1; i <= 3; ++i)
+        {
+            float dist = 6.0f * i;
+
+            Position dest;
+            dest.m_positionX = caster->GetPositionX() + dist * std::cos(orientation);
+            dest.m_positionY = caster->GetPositionY() + dist * std::sin(orientation);
+            dest.m_positionZ = caster->GetPositionZ();
+            dest.SetOrientation(orientation);
+
+            // Ajuster le Z au sol
+            caster->UpdateAllowedPositionZ(dest.m_positionX, dest.m_positionY, dest.m_positionZ);
+
+            CastSpellExtraArgs args(TRIGGERED_DONT_REPORT_CAST_ERROR | TRIGGERED_IGNORE_CAST_IN_PROGRESS);
+            args.SetOriginalCaster(caster->GetGUID());
+
+            caster->CastSpell(dest, SPELL_FREEZING_BLAST_MISSILE, args);
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectLaunchTarget += SpellEffectFn(spell_freezing_blast::HandleDamage, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+/*****
+*
+* CONVERSATIONS
+*
+*****/
 
 // 60000 - Kirin Tor Fate
 class conversation_dalaran_introduction : public ConversationAI
@@ -294,7 +542,7 @@ public:
 
 			jaina->GetMotionMaster()->MovePath(ActorsPath01, false);
 
-		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_START_01) + 2s);
+		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_START_01) + 3s);
 
 		conversation->m_Events.AddEvent([conversationAI = this, conversation = conversation]()
 		{
@@ -304,13 +552,7 @@ public:
 
 			anduin->GetMotionMaster()->MovePath(ActorsPath01, false);
 
-		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_START_02) + 2s);
-
-        conversation->m_Events.AddEvent([conversationAI = this, conversation = conversation]()
-		{
-            conversationAI->instance->SetData(DATA_PHASE, (uint32)Phases::Start_CanTeleport);
-
-		}, conversation->GetLastLineEndTime(privateOwnerLocale) + 2s);
+		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_START_02));
 	}
 
 private:
@@ -334,10 +576,7 @@ public:
 		// Actors
         CONVERSATION_ACTOR_IDX_JAINA_POUDMOORE  = 0,
         CONVERSATION_ACTOR_IDX_ANDUIN_WRYNN     = 1,
-        CONVERSATION_ACTOR_IDX_ARCANIST_ALEC    = 2,
-
-        // Spells
-        SPELL_SPLOTLIGHT                        = 437208,
+        CONVERSATION_ACTOR_IDX_ARCANIST_ALEC    = 2
 	};
 
 	void OnCreate(Unit* creator) override
@@ -413,19 +652,6 @@ public:
             anduin->GetMotionMaster()->MovePath(AnduinPath01, false);
 
 		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_KALECGOS_03) + 5s);
-
-        conversation->m_Events.AddEvent([conversationAI = this, conversation = conversation]()
-		{
-            Creature* alec = conversation->GetActorCreature(CONVERSATION_ACTOR_IDX_ARCANIST_ALEC);
-			if (!alec)
-				return;
-
-            alec->SetNpcFlag(NPCFlags(UNIT_NPC_FLAG_GOSSIP));
-            alec->CastSpell(alec, SPELL_SPLOTLIGHT, true);
-
-            conversationAI->instance->TriggerGameEvent(EVENT_FIND_KALECGOS_ASSIST_JAINA);
-
-		}, conversation->GetLastLineEndTime(privateOwnerLocale) + 2s);
 	}
 
     void SetTarget(Creature* creature, Creature* target)
@@ -444,52 +670,58 @@ private:
     InstanceScript* instance;
 };
 
-// 60003 - Kirin Tor Fate Kel'Thuzad
-class conversation_dalaran_kelthuzad : public ConversationAI
+// 60004 - Kel'thuzad Combat Intro
+class conversation_dalaran_kelthuzad_combat : public ConversationAI
 {
 public:
-    conversation_dalaran_kelthuzad(Conversation* conversation) : ConversationAI(conversation), instance(nullptr) { }
+    conversation_dalaran_kelthuzad_combat(Conversation* conversation) : ConversationAI(conversation) { }
 
-    enum TheKirinTorFate
-    {
-        // Actors
-        CONVERSATION_ACTOR_IDX_JAINA_POUDMOORE  = 0,
-    };
+	enum TheKirinTorFate
+	{
+		// Actors
+        CONVERSATION_ACTOR_IDX_KELTHUZAD        = 0,
+	};
 
-    void OnCreate(Unit* creator) override
-    {
-        instance = creator->GetInstanceScript();
-
-        Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE);
-        if (!jaina)
+	void OnCreate(Unit* creator) override
+	{
+        Creature* kelthuzad = creator->FindNearestCreatureWithOptions(50.0f, { .CreatureId = NPC_KELTHUZAD, .IgnorePhases = true });
+        if (!kelthuzad)
             return;
 
-        conversation->AddActor(CONVERSATION_KELTHUZAD, CONVERSATION_ACTOR_IDX_JAINA_POUDMOORE, jaina->GetGUID());
-        conversation->Start();
-    }
+        Player* player = ObjectAccessor::GetPlayer(*conversation, conversation->GetPrivateObjectOwner());
+        if (!player)
+            return;
 
-    void OnStart() override
-    {
-        LocaleConstant privateOwnerLocale = conversation->GetPrivateObjectOwnerLocale();
+        kelthuzad->SetFacingToObject(player);
+        kelthuzad->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+        kelthuzad->SetFaction(FACTION_KELTHUZAD_HOSTILE);
+        kelthuzad->SetImmuneToAll(true);
 
-        conversation->m_Events.AddEvent([conversationAI = this, conversation = conversation]()
-        {
-            Creature* jaina = conversation->GetActorCreature(CONVERSATION_ACTOR_IDX_JAINA_POUDMOORE);
-            Creature* anduin = conversationAI->instance->GetCreature(DATA_ANDUIN);
-            if (!jaina || !anduin)
+		conversation->AddActor(CONVERSATION_START, CONVERSATION_ACTOR_IDX_KELTHUZAD, kelthuzad->GetGUID());
+		conversation->Start();
+	}
+
+	void OnStart() override
+	{
+		LocaleConstant privateOwnerLocale = conversation->GetPrivateObjectOwnerLocale();
+
+        conversation->m_Events.AddEvent([conversation = conversation]()
+		{
+            Creature* kelthuzad = conversation->GetActorCreature(CONVERSATION_ACTOR_IDX_KELTHUZAD);
+            if (!kelthuzad)
                 return;
 
-            jaina->GetMotionMaster()->MovePath(JainaPath02, false);
-            anduin->GetMotionMaster()->MovePath(AnduinPath02, false);
+            kelthuzad->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, KelThuzadPos01, true, kelthuzad->GetOrientation(), {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
 
-            conversationAI->instance->SetData(DATA_PHASE, (uint32)Phases::KelThuzad_Combat_Ready);
-
-        }, conversation->GetLastLineEndTime(privateOwnerLocale) + 2s);
-    }
-
-private:
-    InstanceScript* instance;
+		}, conversation->GetLastLineEndTime(privateOwnerLocale));
+	}
 };
+
+/*****
+*
+* Area Triggers
+*
+*****/
 
 struct areatrigger_dalaran : public AreaTriggerAI
 {
@@ -511,7 +743,7 @@ struct areatrigger_dalaran : public AreaTriggerAI
         return Phases::None;
     }
 
-    virtual void Process(Player* player) { }
+    virtual void Process(Player* /*player*/) { }
 
     void OnUnitEnter(Unit* unit) override
     {
@@ -642,13 +874,21 @@ void AddSC_npcs_dalaran_convo()
 	RegisterConvoAI(npc_jaina_proudmoore_convo);
 	RegisterConvoAI(npc_anduin_wrynn_convo);
 	RegisterConvoAI(npc_arcanist_alec_convo);
-	RegisterConvoAI(npc_kelthuzad_vision);
+    RegisterConvoAI(npc_kelthuzad_vision);
 
+    // Spells
+    RegisterSpellScript(spell_glacial_winds);
+    RegisterAreaTriggerAI(at_glacial_winds);
+    RegisterAreaTriggerAI(at_deep_freeze);
+    RegisterSpellScript(spell_freezing_blast);
+
+    // Conversations
 	RegisterConversationAI(conversation_dalaran_introduction);
 	RegisterConversationAI(conversation_dalaran_start);
 	RegisterConversationAI(conversation_dalaran_kalecgos);
-	RegisterConversationAI(conversation_dalaran_kelthuzad);
+	RegisterConversationAI(conversation_dalaran_kelthuzad_combat);
 
+    // Events
 	RegisterAreaTriggerAI(areatrigger_dalaran_introduction);
 	RegisterAreaTriggerAI(areatrigger_dalaran_kalecgos);
 	RegisterAreaTriggerAI(areatrigger_dalaran_kelthuzad);

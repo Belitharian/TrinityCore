@@ -4,8 +4,8 @@
 #include "CreatureAIImpl.h"
 #include "Position.h"
 
-#define DLCScriptName       "instance_dalaran_convo"
-#define DataHeader          "DLC"
+constexpr char const* DLCScriptName = "scenario_dalaran_convo";
+constexpr char const* DataHeader    = "DLC";
 
 enum class Phases : uint32
 {
@@ -21,9 +21,29 @@ enum class Phases : uint32
 	KelThuzad_CanTeleport,
 };
 
-enum NPCs
+enum PortalDataTypes
+{
+    // Portals
+    DATA_PORTAL_PORTRAITS_ROOM = 0,
+    DATA_PORTAL_VIOLET_PARLOR,
+    DATA_PORTAL_VIOLET_CITADEL,
+    DATA_PORTAL_VARGOTH_RETREAT,
+    MAX_PORTAL_DATA,
+};
+
+enum Visions
+{
+    VISION_KALECGOS,
+    VISION_KEL_THUZAD,
+    VISION_KAEL_THAS,
+    VISION_SUNREAVERS,
+    VISION_ANTONIDAS,
+};
+
+enum DalaranFateNPCs
 {
 	NPC_INVISIBLE_STALKER           = 32780,
+	NPC_CAULDRON_BUNNY              = 41505,
 	NPC_ANDUIN_WRYNN		        = 68106,
 	NPC_JAINA_PROUDMOORE	        = 68108,
 	NPC_ARCANIST_ALEC               = 500030,
@@ -33,8 +53,7 @@ enum NPCs
 	NPC_JAINA_PROUDMOORE_VISION     = 500029,
 
 	// Vision 2 - Kel Thuzad
-	NPC_SHANNON_NOEL                = 99350,
-	NPC_KELTHUZAD			        = 230131,
+	NPC_KELTHUZAD			        = 500031,
     NPC_MR_BIGGLESWORTH             = 206009,
 
 	// Vision 3 - Kael'thas
@@ -55,22 +74,29 @@ enum NPCs
 	NPC_DALARAN_CITIZEN_03          = 113319,
 };
 
-enum Datas
+enum DalaranFateDataTypes
 {
-	DATA_ANDUIN,
+    // NPCs
+    DATA_ANDUIN                     = 0,
 	DATA_JAINA_PROUDMOORE,
 	DATA_KAELTHAS,
 	DATA_KALECGOS,
 	DATA_KELTHUZAD,
-	DATA_SHANNON_NOEL,
 	DATA_JAINA_PROUDMOORE_VISION,
 	DATA_ARCANIST_ALEC,
-	DATA_FEL_BARRIER,
+    DATA_CAULDRON_BUNNY,
 
-	DATA_PHASE = 255
+    // GameObjects
+    DATA_FEL_BARRIER,
+    DATA_ALCHEMICAL_SOLUTION,
+    DATA_SKULL,
+    DATA_ESSENCE_OF_DEATH,
+
+    // Misc
+	DATA_PHASE                      = 255
 };
 
-enum Spells
+enum DalaranFateSpells
 {
 	SPELL_TELEPORT_DUMMY                    = 51347,
 	SPELL_SIT_CHAIR_MED                     = 123161,
@@ -82,28 +108,23 @@ enum Spells
 	SPELL_FEIGN_DEATH                       = 265448,
 	SPELL_FIRESTRIKE                        = 330347,
 	SPELL_TELEPORT                          = 357601,
-	SPELL_HAUNTING_MEMORY                   = 432892,
-	SPELL_FEL_CANALISATION                  = 1281476
+    SPELL_SKYBOX                            = 389962,
+    SPELL_SPLOTLIGHT                        = 437208,
+	SPELL_HAUNTING_MEMORY                   = 1220632,
+    SPELL_SLIME_BURST                       = 1263874,
 };
 
-enum Events
+enum DalaranFateEvents
 {
 	EVENT_NONE                              = 0,
 
 	// Events
-	EVENT_START_01,
+	EVENT_START,
+    EVENT_KELTHUZAD_01,
+    EVENT_KELTHUZAD_02,
 };
 
-enum Visions
-{
-	VISION_KALECGOS,
-	VISION_KEL_THUZAD,
-	VISION_KAEL_THAS,
-	VISION_SUNREAVERS,
-	VISION_ANTONIDAS,
-};
-
-enum DLPCriteriaTrees
+enum DalaranFateCriteriaTrees
 {
 	CRITERIA_TREE_INTRODUCTION_PARENT       = 1000076,
 	CRITERIA_TREE_INTRODUCTION_FIND_JAINA   = 1000077,
@@ -116,9 +137,10 @@ enum DLPCriteriaTrees
 	CRITERIA_TREE_KELTHUZAD_PARENT          = 1000082,
 	CRITERIA_TREE_KELTHUZAD_WITNESS         = 1000083,
 	CRITERIA_TREE_KELTHUZAD_DEFEAT          = 1000084,
+	CRITERIA_TREE_KELTHUZAD_CAULDRON        = 1000085,
 };
 
-enum DLPGameEvents
+enum DalaranFateGameEvents
 {
 	EVENT_FIND_INTRODUCTION_FIND_JAINA      = 68108,
 	EVENT_FIND_INTRODUCTION_DISCUSS         = 650060,
@@ -130,15 +152,22 @@ enum DLPGameEvents
 	EVENT_FIND_KELTHUZAD_DEFEATED           = 650064,
 };
 
-enum DLPMisc
+enum DalaranFateMisc
 {
 	// AnimKits
 	ANIMKIT_BEGGING                         = 626,
 
+    // VisualKit
+    VIGNETTE_USABLE_INGREDIENTS             = 7456,
+
 	// GameObjects
+    GOB_LAMP_POST                           = 192854,
+	GOB_FEL_BARRIER                         = 269122,
 	GOB_PORTAL_TO_DALARAN                   = 323842,
 	GOB_TOME_OF_POWER                       = 1550008,
-	GOB_FEL_BARRIER                         = 269122,
+    GOB_ALCHEMICAL_SOLUTION                 = 1550010,
+    GOB_SKULL                               = 1550011,
+    GOB_ESSENCE_OF_DEATH                    = 1550014,
 
 	// Point Id
 	MOVEMENT_INFO_POINT_NONE                = 0,
@@ -151,6 +180,7 @@ enum DLPMisc
 	CONVERSATION_START                      = 60001,    // Nobody dislikes Garrosh more than me [...]
 	CONVERSATION_KALECGOS                   = 60002,    // In the aftermath of Theramore, my first in [...]
 	CONVERSATION_KELTHUZAD                  = 60003,    // The Kirin-Tor has a legacy of abuse [...]
+	CONVERSATION_KELTHUZAD_COMBAT           = 60004,    // Another interruption?
 
     // Misc
     FACTION_KELTHUZAD_HOSTILE               = 14,
@@ -159,16 +189,30 @@ enum DLPMisc
     ACTION_KELTHUZAD_COMBAT_READY           = 1,
 };
 
+// StringId
+namespace Portals
+{
+    struct Entry
+    {
+        PortalDataTypes dataId;
+        ObjectGuid guid;
+    };
+
+    static constexpr std::string_view PortraitsRoom  = "PortraitsRoom";
+    static constexpr std::string_view VioletParlor   = "VioletParlor";
+    static constexpr std::string_view VioletCitadel  = "VioletCitadel";
+}
+
 // Event - Kalecgos
 const Position PlayerPos01                  = { -797.41f, 4487.83f, 735.01f, 4.03f };
 const Position JainaPos01                   = { -797.39f, 4472.69f, 735.01f, 2.61f };
 const Position AnduinPos01                  = { -796.07f, 4474.83f, 735.01f, 2.86f };
 
 // Event - Kel'thuzad
-const Position KelThuzadPos01               = { -912.34f, 4365.91f, 694.24f, 1.41f};
-const Position JainaPos02                   = { -925.76f, 4361.27f, 694.24f, 5.07f };
-const Position AnduinPos02                  = { -923.70f, 4361.99f, 694.24f, 4.85f };
-const Position PlayerPos02                  = { 0.f, 0.f, 0.f, 0.f };
+const Position PlayerPos02                  = { -891.66f, 4669.54f, 955.91f, 1.19f };
+const Position JainaPos02                   = { -882.00f, 4683.99f, 952.80f, 1.86f };
+const Position AnduinPos02                  = { -884.11f, 4683.72f, 952.80f, 1.77f };
+const Position KelThuzadPos01               = { -884.16f, 4690.30f, 952.79f, 1.18f };
 
 // Generic Path
 WaypointPath const ActorsPath01 =
@@ -203,11 +247,12 @@ WaypointPath const JainaPath02 =
 {
 	3,
 	{
-        { 0, -924.609f, 4365.01f, 694.24f, 1.07f },
-        { 1, -921.145f, 4368.89f, 694.24f, 0.63f },
-        { 2, -916.189f, 4372.24f, 694.24f, 0.65f },
-        { 3, -912.826f, 4375.97f, 694.24f, 1.17f },
-        { 4, -910.717f, 4384.62f, 695.60f, 4.58f }
+        { 0, -882.06f, 4685.40f, 952.80f, 1.616f },
+        { 1, -884.43f, 4687.77f, 952.79f, 3.707f },
+        { 2, -886.18f, 4684.79f, 952.80f, 4.331f },
+        { 3, -888.21f, 4680.19f, 953.33f, 4.390f },
+        { 4, -890.11f, 4674.24f, 955.91f, 4.443f },
+        { 5, -890.37f, 4668.26f, 955.91f, 1.530f }
 	},
 	WaypointMoveType::Walk,
 	WaypointPathFlags::ExactSplinePath
@@ -233,19 +278,23 @@ WaypointPath const AnduinPath02 =
 {
 	3,
 	{
-        { 0, -919.345f, 4365.83f, 694.24f, 0.67f },
-        { 1, -914.201f, 4369.41f, 694.24f, 0.50f },
-        { 2, -910.371f, 4373.97f, 694.24f, 1.16f },
-        { 3, -908.221f, 4384.82f, 695.60f, 1.25f }
+        { 0, -884.43f, 4687.77f, 952.79f, 3.707f },
+        { 1, -886.18f, 4684.79f, 952.80f, 4.331f },
+        { 2, -888.21f, 4680.19f, 953.33f, 4.390f },
+        { 3, -890.11f, 4674.24f, 955.91f, 4.443f },
+        { 4, -892.53f, 4669.60f, 955.91f, 1.106f }
 	},
 	WaypointMoveType::Walk,
 	WaypointPathFlags::ExactSplinePath
 };
 
-inline void ProcTeleportVisual(Unit* const unit)
+inline void ProcTeleportVisual(Creature* const creature, Position const position)
 {
-	if (Creature* trigger = unit->SummonCreature(NPC_INVISIBLE_STALKER, unit->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 5s))
+	if (Creature* trigger = creature->SummonCreature(NPC_INVISIBLE_STALKER, *creature, TEMPSUMMON_TIMED_DESPAWN, 5s))
 		trigger->CastSpell(trigger, SPELL_TELEPORT_DUMMY);
+
+    creature->NearTeleportTo(position);
+    creature->SetHomePosition(position);
 }
 
 template <class AI>

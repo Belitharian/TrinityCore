@@ -309,7 +309,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case 14:
 					if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, GetJaina()->GetPosition(), nullptr, 10s))
 						trigger->CastSpell(trigger, SPELL_ECHO_OF_ALUNETH_SPAWN, true);
-					Next(8s);
+                    GetJaina()->GetMotionMaster()->MoveBackward(MOVEMENT_INFO_POINT_NONE, JainaPointBack, GetKalecgos(), 1.3f);
+					Next(3s);
 					break;
 				case 15:
 					GetKalecgos()->SetTarget(ObjectGuid::Empty);
@@ -317,6 +318,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					{
 						jaina->SetTarget(ObjectGuid::Empty);
 						jaina->CastSpell(jaina, SPELL_COSMETIC_ARCANE_DISSOLVE, true);
+                        jaina->GetMotionMaster()->MoveIdle();
+
 						if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, GetJaina()->GetPosition(), nullptr, 5s))
 							trigger->CastSpell(trigger, SPELL_ALUNETH_FREED_EXPLOSION, true);
 					}
@@ -328,7 +331,11 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					Next(2s);
 					break;
 				case 17:
-					GetJaina()->NearTeleportTo(JainaPoint02);
+                    if (Creature* jaina = GetJaina())
+                    {
+                        jaina->NearTeleportTo(JainaPoint02);
+                        jaina->SetHomePosition(JainaPoint02);
+                    }
 					if (Creature* kalecgos = GetKalecgos())
 					{
 						Talk(kalecgos, SAY_AFTER_BATTLE_KALECGOS_13);

@@ -204,10 +204,11 @@ WaypointPath const KalecgosPath01 =
 
 const Position PlayerPoint01    = { -3878.20f, -4589.90f,   8.67f, 0.78f };
 const Position JainaPoint01     = { -3012.72f, -4340.22f,   6.64f, 1.70f };
+const Position JainaPointBack   = { -3012.06f, -4346.65f,   6.60f, 1.69f };
 const Position JainaPoint02     = { -3698.21f, -4457.47f, -20.88f, 1.27f };
 const Position JainaPoint03     = { -3711.41f, -4467.89f, -20.54f, 0.02f };
 const Position JainaPoint04     = { -3825.77f, -4537.44f,   9.21f, 0.73f };
-const Position KalecgosPoint01  = { -3044.71f, -4328.60f, 7.38f, 0.64f };
+const Position KalecgosPoint01  = { -3044.71f, -4328.60f,   7.38f, 0.64f };
 const Position KalecgosPoint02  = { -3013.10f, -4336.91f,   6.77f, 4.82f };
 const Position DummyPoint01     = { -3698.69f, -4467.94f, -20.87f, 3.55f };
 

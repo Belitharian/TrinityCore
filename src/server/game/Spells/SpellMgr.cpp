@@ -5312,6 +5312,82 @@ void SpellMgr::LoadSpellInfoCorrections()
         });
     });
 
+    // Toss ingredients
+    ApplySpellFix({ 460834, 460832, 460484 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TargetA = TARGET_UNIT_NEARBY_ENTRY;
+        });
+    });
+
+    // Glacial Winds
+    ApplySpellFix({ 355056 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TargetA = TARGET_DEST_CASTER_FRONT;
+            spellEffectInfo->TargetARadiusEntry = sSpellRadiusStore.LookupEntry(EFFECT_RADIUS_7_YARDS);;
+        });
+    });
+
+    // Glacial Winds
+    ApplySpellFix({ 355059 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TargetA = TARGET_DEST_CASTER_BACK_LEFT;
+            spellEffectInfo->TargetARadiusEntry = sSpellRadiusStore.LookupEntry(EFFECT_RADIUS_7_YARDS);;
+        });
+    });
+
+    // Glacial Winds
+    ApplySpellFix({ 355061 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TargetA = TARGET_DEST_CASTER_BACK_RIGHT;
+            spellEffectInfo->TargetARadiusEntry = sSpellRadiusStore.LookupEntry(EFFECT_RADIUS_7_YARDS);;
+        });
+    });
+
+    // Glacial Winds
+    ApplySpellFix({ 355058 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TargetA = TARGET_UNIT_TARGET_ENEMY;
+        });
+
+        ApplySpellEffectFix(spellInfo, EFFECT_1, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TargetA = TARGET_UNIT_TARGET_ENEMY;
+        });
+    });
+    
+    // Deep Freeze
+    ApplySpellFix({ 354639 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TargetA = TARGET_UNIT_TARGET_ENEMY;
+        });
+
+        ApplySpellEffectFix(spellInfo, EFFECT_1, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TargetA = TARGET_UNIT_TARGET_ENEMY;
+        });
+    });
+
+    // Ascendance
+    ApplySpellFix({ 173160 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_1 , [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->BasePoints = 100;
+        });
+    });
+
     for (SpellInfo const& s : mSpellInfoMap)
     {
         SpellInfo* spellInfo = &const_cast<SpellInfo&>(s);

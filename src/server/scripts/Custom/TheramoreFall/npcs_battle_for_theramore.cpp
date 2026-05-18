@@ -6,6 +6,7 @@
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "PassiveAI.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
@@ -16,98 +17,98 @@
 ///     ALLIANCE NPC
 ///
 
-struct npc_theramore_citizen : public ScriptedAI
+struct npc_theramore_citizen : public CustomAI
 {
 	enum Misc
 	{
+		// Spells
+		SPELL_AFRAID                    = 123263,
+
+		// Gossip
 		GOSSIP_MENU_DEFAULT             = 65000,
+
+		// Credits
 		NPC_THERAMORE_CITIZEN_CREDIT    = 500005
 	};
 
-	npc_theramore_citizen(Creature* creature) : ScriptedAI(creature)
+	enum Talks
 	{
-	}
+		SAY_THERAMORE_CITIZEN_FLEE      = 0,
+		SAY_THERAMORE_CITIZEN_CRY       = 1,
+		SAY_THERAMORE_CITIZEN_FEARED    = 2,
+	};
 
-	TaskScheduler scheduler;
-
-	void MovementInform(uint32 type, uint32 id) override
+	enum Path : uint32
 	{
-		if (type != POINT_MOTION_TYPE)
+		WAYPOINT_PATH_01                = 4000031921,
+		WAYPOINT_PATH_02                = 4000031922,
+		WAYPOINT_PATH_03                = 4000031924,
+		WAYPOINT_PATH_04                = 4000031923
+	};
+
+	npc_theramore_citizen(Creature* creature) : CustomAI(creature, AI_Type::Stay) { }
+
+	void OnSpellClick(Unit* clicker, bool spellClickHandled) override
+	{
+		if (!spellClickHandled)
 			return;
 
-		if (id == MOVEMENT_INFO_POINT_01)
+		Player* player = clicker->ToPlayer();
+		if (!player)
+			return;
+
+		#ifdef CUSTOM_DEBUG
+			for (uint8 i = 0; i < NUMBER_OF_CITIZENS; ++i)
+				KillRewarder::Reward(player, me, NPC_THERAMORE_CITIZEN_CREDIT);
+		#endif
+
+		KillRewarder::Reward(player, me, NPC_THERAMORE_CITIZEN_CREDIT);
+
+		me->SetVignette(VIGNETTE_NONE);
+		me->SetEmoteState(EMOTE_STATE_NONE);
+		me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+
+		scheduler.Schedule(780ms, 1500ms, [this, player](TaskContext context)
 		{
-			me->SetVisible(false);
-		}
-	}
-
-	bool OnGossipHello(Player* player) override
-	{
-		player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
-		player->SendPreparedGossip(me);
-		return true;
-	}
-
-	bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
-	{
-		ClearGossipMenuFor(player);
-
-		switch (gossipListId)
-		{
-			case 0:
+			switch (context.GetRepeatCounter())
 			{
-				#ifdef CUSTOM_DEBUG
-					for (uint8 i = 0; i < NUMBER_OF_CITIZENS; ++i)
-					{
-						KillRewarder::Reward(player, me, NPC_THERAMORE_CITIZEN_CREDIT);
-					}
-				#else
-					KillRewarder::Reward(player, me, NPC_THERAMORE_CITIZEN_CREDIT);
-				#endif
-
-				me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-				me->SetEmoteState(EMOTE_STATE_NONE);
-
-				scheduler.Schedule(5ms, [this, player](TaskContext context)
+				case 0:
 				{
-					switch (context.GetRepeatCounter())
+					me->SetFacingToObject(player);
+					if (CreatureAddon const* creatureAddon = me->GetCreatureAddon())
 					{
-						case 0:
-							me->SetTarget(player->GetGUID());
-							me->SetWalk(false);
-							context.Repeat(1s);
-							break;
-						case 1:
-							Talk(0);
-							context.Repeat(5s);
-							break;
-						case 2:
-							me->SetTarget(ObjectGuid::Empty);
-							if (Creature* stalker = GetClosestCreatureWithEntry(me, NPC_INVISIBLE_STALKER, 35.f))
-								me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, stalker->GetPosition());
-							break;
-						default:
-							break;
+						if (!creatureAddon->auras.empty())
+						{
+							for (auto aura : creatureAddon->auras)
+								me->RemoveAurasDueToSpell(aura);
+						}
 					}
-				});
-
-				break;
+					context.Repeat(780ms, 1500ms);
+					break;
+				}
+				case 1:
+				{
+                    if (me->GetWaypointPathId())
+					{
+						me->SetWalk(false);
+						me->ResumeMovement();
+                        me->DespawnOrUnsummon(10s);
+                        me->AI()->Talk(SAY_THERAMORE_CITIZEN_FLEE);
+					}
+					else if (roll_chance(60))
+					{
+						me->HandleEmoteCommand(RAND(EMOTE_STATE_CRY, EMOTE_STATE_COWER));
+						me->AI()->Talk(SAY_THERAMORE_CITIZEN_CRY);
+					}
+					else
+					{
+						me->HandleEmoteCommand(RAND(EMOTE_ONESHOT_WAVE, EMOTE_ONESHOT_NO));
+						me->AI()->Talk(SAY_THERAMORE_CITIZEN_FEARED);
+					}
+					break;
+				}
 			}
-		}
-
-		CloseGossipMenuFor(player);
-		return true;
-	}
-
-	void Reset() override
-	{
-		me->SetVisible(true);
-		scheduler.CancelAll();
-	}
-
-	void UpdateAI(uint32 diff) override
-	{
-		scheduler.Update(diff);
+		});
 	}
 };
 
@@ -128,6 +129,7 @@ struct npc_unmanned_tank : public CustomAI
 			return;
 
 		me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+		me->SetVignette(VIGNETTE_NONE);
 	}
 
 	void JustEngagedWith(Unit* /*who*/) override
@@ -345,6 +347,7 @@ struct npc_thader_windermere : public CustomAI
 		switch (gossipListId)
 		{
 			case 0:
+				me->SetVignette(VIGNETTE_NONE);
 				me->RemoveAurasDueToSpell(SPELL_CHAT_BUBBLE);
 				me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 				KillRewarder::Reward(player, me);
@@ -462,9 +465,9 @@ struct npc_hedric_evencane : public CustomAI
 struct npc_theramore_officier : public npc_theramore_troop
 {
 	npc_theramore_officier(Creature* creature) : npc_theramore_troop(creature, AI_Type::Melee),
-        shieldCount(0)
-    {
-    }
+		shieldCount(0)
+	{
+	}
 
 	// Groupes de tasks : permet de retarder en bloc les routines DPS/Heal
 	// quand l'officier passe sous Divine Shield pour caster un Holy Light d'urgence.
@@ -497,7 +500,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 		SPELL_AFTERIMAGE            = 400745
 	};
 
-    uint8 shieldCount;
+	uint8 shieldCount;
 
 	static constexpr uint8  DIVINE_SHIELD_HP_PCT      = 25;     // HP sous lequel on tente la bulle
 	static constexpr int32  DIVINE_SHIELD_CHANCE      = 30;     // % de chance de proc sur le tick de degats
@@ -518,51 +521,51 @@ struct npc_theramore_officier : public npc_theramore_troop
 	static constexpr uint8  STACK_AMOUNT_AFTERIMAGE   = 15;
 	static constexpr float  WORD_OF_GLORY_RANGE       = 35;
 
-    void Reset() override
-    {
-        npc_theramore_troop::Reset();
+	void Reset() override
+	{
+		npc_theramore_troop::Reset();
 
-        shieldCount = 0;
-    }
+		shieldCount = 0;
+	}
 
 	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
 	{
-        if (spell->Id == SPELL_SHINING_LIGHT)
-        {
-            scheduler.Schedule(2s, 5s, [this](TaskContext /*context*/)
-            {
-                if (Aura* aura = me->GetAura(SPELL_SHINING_LIGHT))
-                {
-                    aura->ModStackAmount(-1);
-                }
+		if (spell->Id == SPELL_SHINING_LIGHT)
+		{
+			scheduler.Schedule(2s, 5s, [this](TaskContext /*context*/)
+			{
+				if (Aura* aura = me->GetAura(SPELL_SHINING_LIGHT))
+				{
+					aura->ModStackAmount(-1);
+				}
 
-                CastStop();
-                DoCastSelf(SPELL_WORD_OF_GLORY, true);
-            });
-        }
+				CastStop();
+				DoCastSelf(SPELL_WORD_OF_GLORY, true);
+			});
+		}
 
 		// Proc Afterimage : double WoG (soi + allie blesse) gratuit
-        if (spell->Id == SPELL_AFTERIMAGE)
-        {
-            Aura* aura = me->GetAura(SPELL_AFTERIMAGE);
-            if (aura && aura->GetStackAmount() >= STACK_AMOUNT_AFTERIMAGE)
-            {
-                scheduler.Schedule(2s, 3s, [this](TaskContext /*context*/)
-                {
-                    // Verifie si une cible est là, sinon on fait rien
-                    if (Unit* target = FindLowestHealthFriend(me, WORD_OF_GLORY_RANGE))
-                    {
-                        if (Aura* afterimage = me->GetAura(SPELL_AFTERIMAGE))
-                        {
-                            CastStop();
-                            DoCastSelf(SPELL_WORD_OF_GLORY, true);
-                            DoCast(target, SPELL_WORD_OF_GLORY, true);
-                            afterimage->ModStackAmount(-STACK_AMOUNT_AFTERIMAGE);
-                        }
-                    }
-                });
-            }
-        }
+		if (spell->Id == SPELL_AFTERIMAGE)
+		{
+			Aura* aura = me->GetAura(SPELL_AFTERIMAGE);
+			if (aura && aura->GetStackAmount() >= STACK_AMOUNT_AFTERIMAGE)
+			{
+				scheduler.Schedule(2s, 3s, [this](TaskContext /*context*/)
+				{
+					// Verifie si une cible est là, sinon on fait rien
+					if (Unit* target = FindLowestHealthFriend(me, WORD_OF_GLORY_RANGE))
+					{
+						if (Aura* afterimage = me->GetAura(SPELL_AFTERIMAGE))
+						{
+							CastStop();
+							DoCastSelf(SPELL_WORD_OF_GLORY, true);
+							DoCast(target, SPELL_WORD_OF_GLORY, true);
+							afterimage->ModStackAmount(-STACK_AMOUNT_AFTERIMAGE);
+						}
+					}
+				});
+			}
+		}
 
 		// Anti-kite : Blessing of Freedom sur root/snare
 		if (HasMechanic(spell, MECHANIC_ROOT) || HasMechanic(spell, MECHANIC_SNARE))
@@ -714,35 +717,35 @@ struct npc_theramore_officier : public npc_theramore_troop
 				else
 					divine_storm.Repeat(1s);
 			})
-            .Schedule(14s, 22s, GROUP_NORMAL, [this](TaskContext blessed_hammer)
-            {
-                for (uint8 i = 0; i < 3; ++i)
-                {
-                    scheduler.Schedule(i * 1s, [this](TaskContext /*context*/)
-                    {
-                        CastBlessedHammer();
-                    });
-                }
+			.Schedule(14s, 22s, GROUP_NORMAL, [this](TaskContext blessed_hammer)
+			{
+				for (uint8 i = 0; i < 3; ++i)
+				{
+					scheduler.Schedule(i * 1s, [this](TaskContext /*context*/)
+					{
+						CastBlessedHammer();
+					});
+				}
 
-                blessed_hammer.Repeat(8s, 14s);
-            })
+				blessed_hammer.Repeat(8s, 14s);
+			})
 			.Schedule(2s, 8s, GROUP_NORMAL, [this](TaskContext shield_righteous)
 			{
-                DoCastVictim(SPELL_SHIELD_RIGHTEOUS);
-                ++shieldCount;
+				DoCastVictim(SPELL_SHIELD_RIGHTEOUS);
+				++shieldCount;
 
-                if (shieldCount >= 3)
-                {
-                    Aura const* aura = me->GetAura(SPELL_SHINING_LIGHT);
-                    if (!aura || aura->GetStackAmount() < STACK_AMOUNT_SL)
-                    {
-                        DoCastSelf(SPELL_SHINING_LIGHT, true);
-                    }
+				if (shieldCount >= 3)
+				{
+					Aura const* aura = me->GetAura(SPELL_SHINING_LIGHT);
+					if (!aura || aura->GetStackAmount() < STACK_AMOUNT_SL)
+					{
+						DoCastSelf(SPELL_SHINING_LIGHT, true);
+					}
 
-                    shieldCount = 0;
-                }
+					shieldCount = 0;
+				}
 
-                shield_righteous.Repeat(2s, 5s);
+				shield_righteous.Repeat(2s, 5s);
 			})
 			.Schedule(2s, 8s, GROUP_NORMAL, [this](TaskContext judgment)
 			{
@@ -810,7 +813,7 @@ struct npc_theramore_footman : public npc_theramore_troop
 
 struct npc_theramore_arcanist : public npc_theramore_troop
 {
-	npc_theramore_arcanist(Creature* creature) : npc_theramore_troop(creature, AI_Type::Distance), arcaneCharges(0)
+	npc_theramore_arcanist(Creature* creature, AI_Type type = AI_Type::Distance) : npc_theramore_troop(creature, type), arcaneCharges(0)
 	{
 		arcaneBlastInfo = sSpellMgr->AssertSpellInfo(SPELL_ARCANE_BLAST, DIFFICULTY_NONE);
 		// Arcane Tempo doit payer son cout en charges -> on retire les flags qui ignorent le cout.
@@ -1090,7 +1093,8 @@ struct npc_theramore_faithful : public npc_theramore_troop
 		SPELL_FLASH_HEAL            = 314655,
 		SPELL_POWER_WORD_SHIELD     = 318158,
 		SPELL_SMITE                 = 332705,
-		SPELL_SHADOW_WORD_PAIN      = 435397
+        SPELL_GREATER_HEAL          = 342797,
+        SPELL_SHADOW_WORD_PAIN      = 435397
 	};
 
 	static constexpr uint8 PAIN_SUPPRESSION_HP_PCT      = 10;       // PV qui declenche la sequence defensive
@@ -1276,7 +1280,7 @@ struct npc_theramore_faithful : public npc_theramore_troop
 					CastStop(SPELL_PRAYER_OF_HEALING);
 					DoCast(target, SPELL_FLASH_HEAL);
 				}
-                flash_heal.Repeat(2s, 8s);
+				flash_heal.Repeat(2s, 8s);
 			});
 	}
 };
@@ -1911,8 +1915,8 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 	enum Spells
 	{
 		SPELL_HEALING_RAIN      = 73920,
-		SPELL_ASCENDANCE        = 114052,
 		SPELL_EARTHQUAKE        = 160162,
+		SPELL_ASCENDANCE        = 173160,
 		SPELL_GUST_OF_WIND      = 204853,
 		SPELL_LAVA_BURST        = 290423,
 		SPELL_HEALING_SURGE     = 290435,
@@ -1947,7 +1951,7 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 	const SpellInfo* flameShockInfo;
 	const SpellInfo* frostShockInfo;
 
-	bool ascending;     // True une fois la sequence Ascendance declenchee (one-shot par combat)
+	bool ascending; // True une fois la sequence Ascendance declenchee (one-shot par combat)
 
 	void Reset() override
 	{
@@ -1976,29 +1980,21 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 		ascending = true;
 
 		// Gel la rotation offensive pendant toute la duree d'Ascendance.
-		scheduler.DelayGroup(GROUP_NORMAL, 15s);
+		scheduler.DelayGroup(GROUP_NORMAL, 30s);
 
 		scheduler.Schedule(1ms, GROUP_ASCENDANCE, [this](TaskContext ascendance)
-		{
-			switch (ascendance.GetRepeatCounter())
-			{
-				case 0: // Reduction de degats immediate
-					DoCastSelf(SPELL_ASTRAL_SHIFT);
-					ascendance.Repeat(400ms);
-					break;
-				case 1: // Forme Ascendance (heals deviennent instants)
-					DoCastSelf(SPELL_ASCENDANCE);
-					ascendance.Repeat(350ms);
-					break;
-				case 2: // Chain Heal d'urgence sur l'allie le plus bas
-					if (Unit* target = DoSelectBelowHpPctFriendly(CHAIN_HEAL_FRIENDLY_RANGE, CHAIN_HEAL_PCT))
-					{
-						CastStop();
-						DoCast(target, SPELL_CHAIN_HEAL);
-					}
-					break;
-			}
-		});
+	    {
+		    switch (ascendance.GetRepeatCounter())
+		    {
+			    case 0: // Reduction de degats immediate
+				    DoCastSelf(SPELL_ASTRAL_SHIFT);
+				    ascendance.Repeat(400ms);
+				    break;
+			    case 1: // Forme Ascendance (heals deviennent instants)
+				    DoCastSelf(SPELL_ASCENDANCE);
+				    break;
+		    }
+	    });
 	}
 
 	// Shock instant en sortie de backpedal.
@@ -2676,250 +2672,245 @@ const Position LookAtPos = { -3669.20f, -4504.08f, 10.33f, 1.60f };
 
 struct npc_faithful_training : public npc_theramore_faithful
 {
-	npc_faithful_training(Creature* creature) : npc_theramore_faithful(creature),
-		soldierA(nullptr), soldierB(nullptr)
-	{
-	}
+    npc_faithful_training(Creature* creature) : npc_theramore_faithful(creature) { }
 
-	enum Misc
-	{
-		// Cosmetic
-		COSMETIC_GROUP,
+    enum Misc
+    {
+        COSMETIC_GROUP      = 0,
+    };
 
-		// Spells
-		SPELL_POWER_WORD_SHIELD         = 318158,
-		SPELL_FLASH_HEAL                = 314655,
-		SPELL_HEAL                      = 332706,
-	};
+    ObjectGuid soldierAGuid;
+    ObjectGuid soldierBGuid;
 
-	Creature* soldierA;
-	Creature* soldierB;
+    // Prépare un soldat pour le combat cosmétique (emote, état, cible, HP réduits).
+    void SetSoldierState(Creature* creature, Emote emote, Creature* target)
+    {
+        if (!creature || !target)
+            return;
 
-	void SetState(Creature* creature, Emote emote, Creature* target)
-	{
-		creature->SetEmoteState(emote);
+        creature->SetEmoteState(emote);
+        creature->SetReactState(REACT_PASSIVE);
+        creature->SetUnitFlag(UNIT_FLAG_PACIFIED);
+        creature->SetRegenerateHealth(false);
 
-		uint64 health = static_cast<uint64>(creature->GetMaxHealth()) * 0.3f;
-		creature->SetRegenerateHealth(false);
-		creature->SetHealth(health);
-		creature->SetTarget(target ? target->GetGUID() : ObjectGuid::Empty);
-	}
+        uint32 health = static_cast<uint32>(creature->GetMaxHealth() * 0.3f);
+        creature->SetHealth(health);
+        creature->SetTarget(target->GetGUID());
+    }
 
-	void ClearState(Creature* creature)
-	{
-		creature->SetRegenerateHealth(true);
-		creature->SetHealth(creature->GetMaxHealth());
-		creature->SetTarget(ObjectGuid::Empty);
+    // Prépare le healer (emote idle, passif, pas de cible, HP non modifiés).
+    void SetHealerState(Creature* creature)
+    {
+        if (!creature)
+            return;
 
-		float angle = creature->GetAbsoluteAngle(LookAtPos);
-		creature->SetOrientation(angle);
-		creature->SetFacingToPoint(LookAtPos);
-	}
+        creature->SetEmoteState(EMOTE_STATE_NONE);
+        creature->SetReactState(REACT_PASSIVE);
+        creature->SetUnitFlag(UNIT_FLAG_PACIFIED);
+    }
 
-	void Reset() override
-	{
-		npc_theramore_faithful::Reset();
+    // Restaure l'état normal d'une créature après la phase cosmétique.
+    void ClearState(Creature* creature)
+    {
+        if (!creature)
+            return;
 
-		BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-		if (phase > BFTPhases::Preparation)
-			return;
+        creature->SetRegenerateHealth(true);
+        creature->SetHealth(creature->GetMaxHealth());
+        creature->SetTarget(ObjectGuid::Empty);
 
-		std::vector<Creature*> soldiers;
-		me->GetCreatureListWithEntryInGrid(soldiers, NPC_THERAMORE_FOOTMAN, 15.0f);
-		if (soldiers.size() <= 0)
-			return;
+        float angle = creature->GetAbsoluteAngle(LookAtPos);
+        creature->SetOrientation(angle);
+        creature->SetFacingToPoint(LookAtPos);
+        creature->SetReactState(REACT_AGGRESSIVE);
+        creature->RemoveUnitFlag(UNIT_FLAG_PACIFIED);
+    }
 
-		soldierA = soldiers[0];
-		soldierB = soldiers[1];
+    void Reset() override
+    {
+        npc_theramore_faithful::Reset();
 
-		if (!soldierA && !soldierB)
-			return;
+        if ((BFTPhases)instance->GetData(DATA_SCENARIO_PHASE) > BFTPhases::Preparation)
+            return;
 
-		SetState(soldierA, EMOTE_STATE_ATTACK1H, soldierB);
-		SetState(soldierB, EMOTE_STATE_BLOCK_SHIELD, soldierA);
+        std::vector<Creature*> soldiers;
+        me->GetCreatureListWithEntryInGrid(soldiers, NPC_THERAMORE_FOOTMAN, 15.0f);
 
-		soldierA->SetReactState(REACT_PASSIVE);
-		soldierB->SetReactState(REACT_PASSIVE);
+        if (soldiers.size() < 2)
+            return;
 
-		me->SetReactState(REACT_PASSIVE);
+        Creature* soldierA = soldiers[0];
+        Creature* soldierB = soldiers[1];
 
-		scheduler
-			.Schedule(5s, COSMETIC_GROUP, [this](TaskContext check_phase)
-			{
-				BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-				if (phase >= BFTPhases::Preparation)
-				{
-					ClearState(soldierA);
-					ClearState(soldierB);
+        if (!soldierA || !soldierB)
+            return;
 
-					soldierA->SetReactState(REACT_AGGRESSIVE);
-					soldierB->SetReactState(REACT_AGGRESSIVE);
+        soldierAGuid = soldierA->GetGUID();
+        soldierBGuid = soldierB->GetGUID();
 
-					float angle = me->GetAbsoluteAngle(LookAtPos);
-					me->SetOrientation(angle);
-					me->SetFacingToPoint(LookAtPos);
-					me->SetReactState(REACT_AGGRESSIVE);
+        SetHealerState(me);
+        SetSoldierState(soldierA, EMOTE_STATE_ATTACK1H, soldierB);
+        SetSoldierState(soldierB, EMOTE_STATE_BLOCK_SHIELD, soldierA);
 
-					scheduler.CancelGroup(COSMETIC_GROUP);
-				}
-				else
-					check_phase.Repeat(2s);
-			})
-			.Schedule(5s, 8s, COSMETIC_GROUP, [this](TaskContext heal)
-			{
-				if (Creature* victim = RAND(soldierA, soldierB))
-					me->CastSpell(victim, RAND(SPELL_FLASH_HEAL, SPELL_HEAL, SPELL_POWER_WORD_SHIELD));
-				heal.Repeat(5s, 15s);
-			})
-			.Schedule(5s, 8s, COSMETIC_GROUP,[this](TaskContext soldiers)
-			{
-				if (!soldierA->HasAura(SPELL_POWER_WORD_SHIELD))
-				{
-					soldierB->DealDamage(soldierA, soldierB, urand(1000, 1500));
-				}
+        scheduler
+            .Schedule(2s, COSMETIC_GROUP, [this](TaskContext checkPhase)
+            {
+                BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+                if (phase >= BFTPhases::Preparation)
+                {
+                    ClearState(me);
 
-				if (!soldierB->HasAura(SPELL_POWER_WORD_SHIELD))
-				{
-					soldierA->DealDamage(soldierB, soldierA, urand(1000, 1500));
-				}
+                    if (Creature* soldierA = ObjectAccessor::GetCreature(*me, soldierAGuid))
+                        ClearState(soldierA);
 
-				soldiers.Repeat(2s);
-			});
-	}
+                    if (Creature* soldierB = ObjectAccessor::GetCreature(*me, soldierBGuid))
+                        ClearState(soldierB);
+
+                    scheduler.CancelGroup(COSMETIC_GROUP);
+                }
+                else
+                    checkPhase.Repeat(2s);
+            })
+            .Schedule(2s, COSMETIC_GROUP, [this](TaskContext heal)
+            {
+                Creature* soldierA = ObjectAccessor::GetCreature(*me, soldierAGuid);
+                Creature* soldierB = ObjectAccessor::GetCreature(*me, soldierBGuid);
+
+                if (!soldierA || !soldierB)
+                    return;
+
+                if (Creature* victim = RAND(soldierA, soldierB))
+                    me->CastSpell(victim, RAND(SPELL_FLASH_HEAL, SPELL_GREATER_HEAL, SPELL_POWER_WORD_SHIELD));
+
+                heal.Repeat(3s, 5s);
+            })
+            .Schedule(2s, 8s, COSMETIC_GROUP, [this](TaskContext soldiers)
+            {
+                Creature* soldierA = ObjectAccessor::GetCreature(*me, soldierAGuid);
+                Creature* soldierB = ObjectAccessor::GetCreature(*me, soldierBGuid);
+
+                if (!soldierA || !soldierB)
+                    return;
+
+                uint32 damage = urand(1000, 2000);
+                soldierA->DealDamage(soldierB, soldierA, damage);
+                soldierB->DealDamage(soldierA, soldierB, damage);
+
+                soldiers.Repeat(2s, 5s);
+            });
+    }
 };
 
 struct npc_arcanist_training : public npc_theramore_arcanist
 {
-	npc_arcanist_training(Creature* creature) : npc_theramore_arcanist(creature)
-	{
-	}
+    npc_arcanist_training(Creature* creature) : npc_theramore_arcanist(creature, AI_Type::Stay)
+    {
+        SetCanRandomMovement(false);
 
-	enum Misc
-	{
-		// Group
-		COSMETIC_GROUP_NORMAL,
-		COSMETIC_GROUP_MISSILES,
+        SpellInfo const* evocationInfo = sSpellMgr->GetSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
+        m_evocationDuration = evocationInfo
+            ? Milliseconds(evocationInfo->CalcDuration(creature))
+            : 8s;
+    }
 
+    enum Groups
+    {
+        COSMETIC_GROUP_NORMAL   = 0,
+        COSMETIC_GROUP_MISSILES = 1,
+    };
 
-		// Spells
-		SPELL_ARCANE_PROJECTILES        = 5143,
-		SPELL_ARCANE_BARRAGE            = 44425,
-		SPELL_SUPERNOVA                 = 157980,
-		SPELL_EVOCATION                 = 243070,
-		SPELL_CLEARCASTING              = 263725,
-		SPELL_ARCANE_BLAST              = 291336,
-		SPELL_ARCANE_SURGE              = 365350,
-	};
+    enum Spells
+    {
+        SPELL_EVOCATION = 243070,
+    };
+
+    Milliseconds m_evocationDuration;
 
     void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
     {
-        if (spell->Id == SPELL_CLEARCASTING)
+        if (spell->Id != SPELL_CLEARCASTING)
+            return;
+
+        scheduler.Schedule(1s, 3s, COSMETIC_GROUP_MISSILES, [this](TaskContext /*context*/)
         {
-            scheduler.Schedule(1s, 3s, COSMETIC_GROUP_MISSILES, [this](TaskContext /*context*/)
+            Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
+            if (!training)
+                return;
+
+            scheduler.DelayGroup(COSMETIC_GROUP_NORMAL, 3s);
+
+            CastStop();
+            me->GetSpellHistory()->ResetCooldown(SPELL_ARCANE_MISSILES, true);
+            me->CastSpell(training, SPELL_ARCANE_MISSILES, true);
+            me->RemoveAurasDueToSpell(SPELL_CLEARCASTING);
+        });
+    }
+
+    void SpellHitTarget(WorldObject* object, SpellInfo const* spell) override
+    {
+        npc_theramore_arcanist::SpellHitTarget(object, spell);
+
+        if (spell->Id == SPELL_ARCANE_BLAST && roll_chance(60))
+            DoCastSelf(SPELL_CLEARCASTING);
+    }
+
+    void Reset() override
+    {
+        npc_theramore_arcanist::Reset();
+
+        if ((BFTPhases)instance->GetData(DATA_SCENARIO_PHASE) > BFTPhases::Preparation)
+            return;
+
+        scheduler
+            .Schedule(2s, COSMETIC_GROUP_NORMAL, [this](TaskContext checkPhase)
             {
+                BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+                if (phase >= BFTPhases::Preparation)
+                {
+                    me->CombatStop();
+                    me->SetOrientation(me->GetAbsoluteAngle(LookAtPos));
+                    me->SetFacingToPoint(LookAtPos);
+
+                    scheduler.CancelGroup(COSMETIC_GROUP_NORMAL);
+                    scheduler.CancelGroup(COSMETIC_GROUP_MISSILES);
+                }
+                else
+                    checkPhase.Repeat(2s);
+            })
+            .Schedule(2s, COSMETIC_GROUP_NORMAL, [this](TaskContext context)
+            {
+                int32 manaPct = me->GetPowerPct(Powers::POWER_MANA);
+                if (manaPct > 0 && manaPct <= 5) // Percent
+                {
+                    scheduler.DelayGroup(COSMETIC_GROUP_NORMAL,   m_evocationDuration);
+                    scheduler.DelayGroup(COSMETIC_GROUP_MISSILES, m_evocationDuration);
+                    DoCast(SPELL_EVOCATION);
+                }
+
+                context.Repeat(2s);
+            })
+            .Schedule(2s, COSMETIC_GROUP_NORMAL, [this](TaskContext context)
+            {
+                if (me->GetVictim())
+                    return;
+
                 Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
                 if (!training)
                     return;
 
-                scheduler.DelayGroup(COSMETIC_GROUP_NORMAL, 3s);
-
-                CastStop();
-
-                me->GetSpellHistory()->ResetAllCooldowns();
-                me->CastSpell(training, SPELL_ARCANE_PROJECTILES, true);
-                me->RemoveAurasDueToSpell(SPELL_CLEARCASTING);
+                me->Attack(training, false);
+                context.Repeat(2s);
             });
-        }
     }
+};
 
-	void Reset() override
+struct npc_dummy_training : NullCreatureAI
+{
+	npc_dummy_training(Creature* creature) : NullCreatureAI(creature) {}
+
+	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-		npc_theramore_arcanist::Reset();
-
-		BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-		if (phase > BFTPhases::Preparation)
-			return;
-
-		scheduler
-			.Schedule(5s, COSMETIC_GROUP_NORMAL, [this](TaskContext check_phase)
-			{
-				BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-				if (phase >= BFTPhases::Preparation)
-				{
-					float angle = me->GetAbsoluteAngle(LookAtPos);
-					me->SetOrientation(angle);
-					me->SetFacingToPoint(LookAtPos);
-					scheduler.CancelGroup(COSMETIC_GROUP_NORMAL);
-					scheduler.CancelGroup(COSMETIC_GROUP_MISSILES);
-				}
-
-				check_phase.Repeat(2s);
-			})
-			.Schedule(5s, 8s, COSMETIC_GROUP_NORMAL, [this](TaskContext context)
-			{
-				Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
-				if (!training)
-					return;
-
-				if (me->GetPowerPct(POWER_MANA) <= 20)
-				{
-					if (Spell* spell = me->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
-					{
-						if (spell->getState() != SPELL_STATE_FINISHED && spell->IsChannelActive())
-						{
-							context.Repeat(2s);
-						}
-					}
-					else
-					{
-						const SpellInfo* info = sSpellMgr->AssertSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
-						Milliseconds ms = Milliseconds(info->CalcDuration());
-						CastSpellExtraArgs args(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD);
-
-						me->CastSpell(me, SPELL_EVOCATION, args);
-						me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
-
-						context.Repeat(ms + 800ms);
-					}
-				}
-				else
-				{
-					Milliseconds ms = 50ms;
-					if (!me->HasUnitState(UNIT_STATE_CASTING))
-					{
-						uint32 spellId = SPELL_ARCANE_BLAST;
-                        bool triggered = false;
-
-						if (roll_chance(20))
-						{
-							spellId = SPELL_ARCANE_SURGE;
-						}
-						else if (roll_chance(30))
-						{
-							spellId = SPELL_ARCANE_BARRAGE;
-						}
-						else if (roll_chance(15))
-						{
-							spellId = SPELL_SUPERNOVA;
-						}
-
-						const SpellInfo* info = sSpellMgr->AssertSpellInfo(spellId, DIFFICULTY_NONE);
-						ms = Milliseconds(info->CalcCastTime());
-
-                        me->GetSpellHistory()->ResetAllCooldowns();
-                        me->CastSpell(training, spellId, triggered);
-						me->GetSpellHistory()->RestoreCharge(info->ChargeCategoryId);
-
-						if (info->IsChanneled())
-							ms = Milliseconds(info->CalcDuration(me));
-
-                        if (roll_chance(80))
-                            me->CastSpell(me, SPELL_CLEARCASTING, true);
-					}
-
-					context.Repeat(ms + 500ms);
-				}
-			});
+		damage = 0;
 	}
 };
 
@@ -3039,218 +3030,6 @@ class spell_theramore_throw_bucket : public SpellScript
 	void Register() override
 	{
 		OnEffectHitTarget += SpellEffectFn(spell_theramore_throw_bucket::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
-	}
-};
-
-// YellAtCitizensEvent - BasicEvent
-class YellAtCitizensEvent : public BasicEvent
-{
-	enum Event
-	{
-		// NPC
-		NPC_THERAMORE_CRIER = 500025,
-		NPC_THERAMORE_CITIZEN_CREDIT = 500005,
-
-		// Spells
-		SPELL_CRIER_HOLDING_BELL_SCROLL = 246022,
-		SPELL_AFRAID = 123263,
-
-		// OBjects
-		GOB_PORTAL = 554586
-	};
-
-public:
-	YellAtCitizensEvent(Player* owner, Creature* stalker, std::vector<Creature*> citizens)
-		: stage(0), index(0), owner(owner), portal(nullptr), townCrier(nullptr),
-		stalker(stalker), citizens(citizens)
-	{
-	}
-
-	bool Execute(uint64 timer, uint32 /*updateTime*/) override
-	{
-		switch (stage)
-		{
-			case 0:
-			{
-				portal = owner->SummonGameObject(
-					GOB_PORTAL,
-					stalker->GetPosition(),
-					QuaternionData::QuaternionData(),
-					0s);
-
-				if (portal)
-				{
-					portal->SetFlag(GO_FLAG_NOT_SELECTABLE);
-				}
-
-				Next(timer, 1s);
-				return false;
-			}
-
-			case 1:
-			{
-				townCrier = owner->SummonCreature(
-					NPC_THERAMORE_CRIER,
-					GetRandomPosition(stalker->GetPosition(), 5.0f),
-					TEMPSUMMON_MANUAL_DESPAWN);
-
-				if (townCrier)
-				{
-					// Oriente le crier dos au stalker
-					float angle = townCrier->GetAbsoluteAngle(stalker);
-					townCrier->SetFacingTo(angle + static_cast<float>(M_PI));
-
-					townCrier->CastSpell(townCrier, SPELL_TELEPORT_DUMMY, true);
-					townCrier->AddAura(SPELL_CRIER_HOLDING_BELL_SCROLL, townCrier);
-				}
-
-				Next(timer, 2s);
-				return false;
-			}
-
-			case 2:
-			{
-				if (!townCrier) // s?curit?
-					return true;
-
-				townCrier->AI()->Talk(0);
-				townCrier->HandleEmoteCommand(EMOTE_ONESHOT_WACRIERTALK);
-
-				for (Creature* citizen : citizens)
-				{
-					citizen->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-					citizen->SetEmoteState(EMOTE_STATE_NONE);
-					citizen->SetFacingToObject(townCrier);
-
-					if (CreatureAddon const* creatureAddon = citizen->GetCreatureAddon())
-					{
-						if (!creatureAddon->auras.empty())
-						{
-							for (auto aura : creatureAddon->auras)
-								citizen->RemoveAurasDueToSpell(aura);
-						}
-					}
-				}
-
-				Next(timer, 2s);
-				return false;
-			}
-
-			case 3:
-			{
-				if (Creature* citizen = citizens[index])
-				{
-					if (citizen->HasAura(SPELL_AFRAID))
-					{
-						citizen->HandleEmoteCommand(RAND(EMOTE_ONESHOT_WAVE, EMOTE_ONESHOT_NO));
-						citizen->AI()->Talk(2);
-					}
-					else if (!citizen->GetWaypointPathId())
-					{
-						citizen->HandleEmoteCommand(RAND(EMOTE_STATE_CRY, EMOTE_STATE_COWER));
-						citizen->AI()->Talk(1);
-
-						KillRewarder::Reward(owner, citizen, NPC_THERAMORE_CITIZEN_CREDIT);
-					}
-					else
-					{
-						citizen->SetWalk(false);
-						citizen->ResumeMovement();
-						citizen->DespawnOrUnsummon(10s);
-
-						if (roll_chance(20))
-							citizen->AI()->Talk(0);
-
-						KillRewarder::Reward(owner, citizen, NPC_THERAMORE_CITIZEN_CREDIT);
-					}
-
-					citizen->AddAura(SPELL_AFRAID, citizen);
-				}
-
-				index++;
-
-				if (index >= citizens.size())
-				{
-					Next(timer, 2s);
-					return false;
-				}
-
-				owner->m_Events.AddEvent(this, Milliseconds(timer) + Milliseconds(urand(480, 650)));
-				return false;
-			}
-
-			case 4:
-			{
-				if (Creature* trigger = townCrier->SummonCreature(WORLD_TRIGGER,
-					townCrier->GetPosition(),
-					TEMPSUMMON_TIMED_DESPAWN, 3s))
-				{
-					trigger->CastSpell(trigger, SPELL_TELEPORT_DUMMY, true);
-				}
-
-				townCrier->DespawnOrUnsummon();
-
-				Next(timer, 5s);
-				return false;
-			}
-
-			case 5:
-				portal->Delete();
-				return true;
-
-			default:
-				break;
-		}
-
-		return true;
-	}
-
-	void Next(uint64 timer, Milliseconds delay)
-	{
-		++stage;
-		owner->m_Events.AddEvent(this, Milliseconds(timer) + delay);
-	}
-
-private:
-	uint8 stage;
-	size_t index;
-	Player* owner;
-	Creature* townCrier;
-	Creature* stalker;
-	GameObject* portal;
-	std::vector<Creature*> citizens;
-};
-
-// 	Yell - 427586
-class spell_yell_at_citizens : public SpellScript
-{
-	void HandleDummy(SpellEffIndex effIndex)
-	{
-		// Cast en Player*
-		Player* player = GetCaster()->ToPlayer();
-		if (!player)
-			return;
-
-		// Recherche du centre du AreaTrigger
-		Creature* stalker = player->FindNearestCreature(NPC_INVISIBLE_STALKER, 30.0f);
-		if (!stalker)
-			return;
-
-		float radius = GetSpellInfo()->GetEffect(effIndex).MiscValue;
-
-		std::vector<Creature*> citizens;
-		stalker->GetCreatureListWithEntryInGrid(citizens, NPC_THERAMORE_CITIZEN_FEMALE, radius);
-		stalker->GetCreatureListWithEntryInGrid(citizens, NPC_THERAMORE_CITIZEN_MALE, radius);
-
-		if (citizens.empty())
-			return;
-
-		stalker->m_Events.AddEvent(new YellAtCitizensEvent(player, stalker, citizens), stalker->m_Events.CalculateTime(2s));
-	}
-
-	void Register() override
-	{
-		OnEffectHitTarget += SpellEffectFn(spell_yell_at_citizens::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
 	}
 };
 
@@ -3710,48 +3489,6 @@ private:
 	static constexpr float Z_OFFSET     = 1.5f;   // Hauteur du marteau au-dessus du sol
 };
 
-// AreaTriggerID World - areatrigger table
-struct areatrigger_theramore_citizens : AreaTriggerAI
-{
-	using AreaTriggerAI::AreaTriggerAI;
-
-	enum Spells
-	{
-		SPELL_YELL = 427587
-	};
-
-	void OnInitialize() override
-	{
-		instance = at->GetInstanceScript();
-	}
-
-	void OnUnitEnter(Unit* unit) override
-	{
-		Player* player = unit->ToPlayer();
-		if (!player)
-			return;
-
-		if (player->IsGameMaster())
-		{
-			player->AddAura(SPELL_YELL, player);
-		}
-		else
-		{
-			BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-			if (phase == BFTPhases::Evacuation)
-				player->AddAura(SPELL_YELL, player);
-		}
-	}
-
-	void OnUnitExit(Unit* unit, AreaTriggerExitReason /*reason*/) override
-	{
-		unit->RemoveAurasDueToSpell(SPELL_YELL);
-	}
-
-private:
-	InstanceScript* instance;
-};
-
 void AddSC_npcs_battle_for_theramore()
 {
 	RegisterTheramoreAI(npc_theramore_citizen);
@@ -3766,6 +3503,7 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterTheramoreAI(npc_wounded_theramore_troop);
 	RegisterTheramoreAI(npc_faithful_training);
 	RegisterTheramoreAI(npc_arcanist_training);
+	RegisterTheramoreAI(npc_dummy_training);
 	RegisterTheramoreAI(npc_wave_caller_gruhta);
 
 	// Utilisables dans les Ruines de Theramore
@@ -3788,8 +3526,4 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterAreaTriggerAI(at_scorched_earth);
 	RegisterAreaTriggerAI(at_arcane_orb);
 	RegisterAreaTriggerAI(at_blessed_hammer);
-
-	// Custom AT
-	RegisterSpellScript(spell_yell_at_citizens);
-	RegisterAreaTriggerAI(areatrigger_theramore_citizens);
 }

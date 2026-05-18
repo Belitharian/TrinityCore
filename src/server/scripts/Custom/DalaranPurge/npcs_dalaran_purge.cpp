@@ -186,10 +186,7 @@ struct npc_guardian_mage_dalaran : public CustomAI
 
 struct npc_assassin_dalaran : public CustomAI
 {
-	npc_assassin_dalaran(Creature* creature) : CustomAI(creature, AI_Type::Melee)
-	{
-		Initialize();
-	}
+	npc_assassin_dalaran(Creature* creature) : CustomAI(creature, AI_Type::Melee) { }
 
 	enum Spells
 	{

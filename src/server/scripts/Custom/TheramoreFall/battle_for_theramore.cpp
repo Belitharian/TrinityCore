@@ -185,9 +185,13 @@ struct npc_jaina_theramore : public CustomAI
 
 			if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 4.f))
 			{
+                me->SetVignette(VIGNETTE_NONE);
+
 				switch (phase)
 				{
 					case BFTPhases::FindJaina:
+                        me->SetSheath(SHEATH_STATE_UNARMED);
+                        me->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						instance->TriggerGameEvent(EVENT_FIND_JAINA_01);
 						break;
 					case BFTPhases::ALittleHelp:
@@ -429,6 +433,7 @@ struct npc_rhonin : public CustomAI
 		switch (gossipListId)
 		{
 			case 0:
+                me->SetVignette(VIGNETTE_NONE);
 				me->RemoveAurasDueToSpell(SPELL_CHAT_BUBBLE);
 				me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 				instance->DoCastSpellOnPlayers(SPELL_RUNIC_SHIELD);
@@ -529,6 +534,7 @@ struct npc_rhonin : public CustomAI
 			{
 				me->SetVisible(true);
 				me->NearTeleportTo(RhoninPoint02);
+                me->SetVignette(VIGNETTE_RHONIN);
 				DoCastSelf(SPELL_PORTAL_CHANNELING_03);
 			});
 		}

@@ -28,7 +28,7 @@ void AddSC_dalaran_purge();
 void AddSC_scenario_dalaran_purge();
 void AddSC_npcs_dalaran_purge();
 
-void AddSC_instance_dalaran_convo();
+void AddSC_scenario_dalaran_convo();
 void AddSC_npcs_dalaran_convo();
 
 void AddSC_instance_amirdrassil_the_fallen_dream();
@@ -50,7 +50,7 @@ void AddCustomScripts()
     AddSC_scenario_dalaran_purge();
     AddSC_npcs_dalaran_purge();
 
-    AddSC_instance_dalaran_convo();
+    AddSC_scenario_dalaran_convo();
     AddSC_npcs_dalaran_convo();
 
     AddSC_instance_amirdrassil_the_fallen_dream();
