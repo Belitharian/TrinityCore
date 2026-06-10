@@ -5364,7 +5364,16 @@ void SpellMgr::LoadSpellInfoCorrections()
             spellEffectInfo->TargetA = TARGET_UNIT_TARGET_ENEMY;
         });
     });
-    
+
+    // Deep Freeze
+    ApplySpellFix({ 354638 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_1, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TargetARadiusEntry = sSpellRadiusStore.LookupEntry(396);
+        });
+    });
+
     // Deep Freeze
     ApplySpellFix({ 354639 }, [](SpellInfo* spellInfo)
     {
@@ -5378,7 +5387,7 @@ void SpellMgr::LoadSpellInfoCorrections()
             spellEffectInfo->TargetA = TARGET_UNIT_TARGET_ENEMY;
         });
     });
-
+    
     // Ascendance
     ApplySpellFix({ 173160 }, [](SpellInfo* spellInfo)
     {
@@ -5386,6 +5395,13 @@ void SpellMgr::LoadSpellInfoCorrections()
         {
             spellEffectInfo->BasePoints = 100;
         });
+    });
+
+    // Frostbolt Volley
+    ApplySpellFix({ 457334 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->AttributesEx2 &= ~SPELL_ATTR2_IGNORE_LINE_OF_SIGHT;
+        spellInfo->AttributesEx4 &= ~SPELL_ATTR4_OBSOLETE;
     });
 
     for (SpellInfo const& s : mSpellInfoMap)

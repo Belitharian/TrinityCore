@@ -9,109 +9,105 @@ constexpr char const* DataHeader    = "DLC";
 
 enum class Phases : uint32
 {
-	None,
+    None,
+
 	Introduction,
+
 	Start,
 	Start_CanTeleport,
-	Kalecgos,
-	Kalecgos_CanTeleport,
-	KelThuzad,
-	KelThuzad_Combat_Ready,
-	KelThuzad_Combat,
-	KelThuzad_CanTeleport,
-};
 
-enum PortalDataTypes
-{
-    // Portals
-    DATA_PORTAL_PORTRAITS_ROOM = 0,
-    DATA_PORTAL_VIOLET_PARLOR,
-    DATA_PORTAL_VIOLET_CITADEL,
-    DATA_PORTAL_VARGOTH_RETREAT,
-    MAX_PORTAL_DATA,
-};
+	Visions,
+	Visions_Jaina,
+	Visions_KalecgosJaina,
+	Visions_KelThuzad,
+	Visions_KelThuzad_Combat,
 
-enum Visions
-{
-    VISION_KALECGOS,
-    VISION_KEL_THUZAD,
-    VISION_KAEL_THAS,
-    VISION_SUNREAVERS,
-    VISION_ANTONIDAS,
+	Outro
 };
 
 enum DalaranFateNPCs
 {
-	NPC_INVISIBLE_STALKER           = 32780,
-	NPC_CAULDRON_BUNNY              = 41505,
-	NPC_ANDUIN_WRYNN		        = 68106,
-	NPC_JAINA_PROUDMOORE	        = 68108,
-	NPC_ARCANIST_ALEC               = 500030,
+	NPC_INVISIBLE_STALKER                   = 32780,
+	NPC_ANDUIN_WRYNN		                = 68106,
+	NPC_JAINA_PROUDMOORE	                = 68108,
 
 	// Vision 1 - Kalecgos
-	NPC_KALECGOS 			        = 35867,
-	NPC_JAINA_PROUDMOORE_VISION     = 500029,
+	NPC_KALECGOS 			                = 35867,
+	NPC_JAINA_PROUDMOORE_VISION             = 500029,
 
 	// Vision 2 - Kel Thuzad
-	NPC_KELTHUZAD			        = 500031,
-    NPC_MR_BIGGLESWORTH             = 206009,
+	NPC_KELTHUZAD			                = 500031,
+	NPC_MR_BIGGLESWORTH                     = 206009,
+	NPC_CAULDRON_BUNNY                      = 41505,
 
 	// Vision 3 - Kael'thas
-	NPC_KAELTHAS                    = 500026,
-	NPC_BLOOD_ELF_NOBLE             = 500028,
+	NPC_KAELTHAS                            = 500026,
+	NPC_BLOOD_ELF_NOBLE                     = 500028,
 
 	// Vision 4 - Dalaran
-	NPC_AETHAS_SUNREAVER            = 68086,
-	NPC_SUNREAVER_CITIZEN           = 68052,
-	NPC_SUNREAVER_LIEUTENANT        = 217480,
-	NPC_SUNREAVER_BATTLEMAGE        = 218340,
-	NPC_SUNREAVER_MAGE              = 223395,
+	NPC_AETHAS_SUNREAVER                    = 68086,
+	NPC_SUNREAVER_CITIZEN                   = 68052,
+	NPC_SUNREAVER_LIEUTENANT                = 217480,
+	NPC_SUNREAVER_BATTLEMAGE                = 218340,
+	NPC_SUNREAVER_MAGE                      = 223395,
 	 
 	// Vision 5 - Dalaran
-	NPC_ARCHMAGE_ANTONIDAS          = 500027,
-	NPC_DALARAN_CITIZEN_01          = 113317,
-	NPC_DALARAN_CITIZEN_02          = 113318,
-	NPC_DALARAN_CITIZEN_03          = 113319,
+	NPC_ARCHMAGE_ANTONIDAS                  = 500027,
+	NPC_DALARAN_CITIZEN_01                  = 113317,
+	NPC_DALARAN_CITIZEN_02                  = 113318,
+	NPC_DALARAN_CITIZEN_03                  = 113319,
 };
 
 enum DalaranFateDataTypes
 {
-    // NPCs
-    DATA_ANDUIN                     = 0,
+	// NPCs
+	DATA_ANDUIN                             = 0,
 	DATA_JAINA_PROUDMOORE,
 	DATA_KAELTHAS,
 	DATA_KALECGOS,
 	DATA_KELTHUZAD,
 	DATA_JAINA_PROUDMOORE_VISION,
-	DATA_ARCANIST_ALEC,
-    DATA_CAULDRON_BUNNY,
+	DATA_CAULDRON_BUNNY,
 
-    // GameObjects
-    DATA_FEL_BARRIER,
-    DATA_ALCHEMICAL_SOLUTION,
-    DATA_SKULL,
-    DATA_ESSENCE_OF_DEATH,
+	// GameObjects
+	DATA_ALCHEMICAL_SOLUTION,
+	DATA_SKULL,
+	DATA_ESSENCE_OF_DEATH,
 
-    // Misc
-	DATA_PHASE                      = 255
+	// Misc
+	DATA_PHASE                              = 255
 };
 
 enum DalaranFateSpells
 {
+	// Generic
 	SPELL_TELEPORT_DUMMY                    = 51347,
+	SPELL_TELEPORT                          = 357601,
+	SPELL_SKYBOX                            = 389962,
+
+	// Memories
+	SPELL_SPOTLIGHT                         = 437208,
+	SPELL_FREEZE_ANIMATION                  = 118319,
+	SPELL_SPAWN                             = 1291696,
+	SPELL_HAUNTING_MEMORY                   = 1220632,
+
+	// Jaina
+	SPELL_WATER_WAVE                        = 421222,
+	SPELL_WATER_CHANNELING                  = 395307,
+	SPELL_LIGHTNING_AURA                    = 427264,
+
+	// Kalecgos
 	SPELL_SIT_CHAIR_MED                     = 123161,
+
+	// Kel Thuzad
+	SPELL_SLEEPING                          = 1247226,
+	SPELL_SLIME_BURST                       = 1263874,
+
+	// ??
+	SPELL_FIRESTRIKE                        = 330347,
 	SPELL_READING_BOOK_SITTING              = 223977,
 	SPELL_READING_BOOK_STANDING             = 258793,
 	SPELL_DISSOLVE                          = 237075,
-	SPELL_VOID_CHANNELING                   = 286909,
-	SPELL_TAKING_NOTES                      = 164999,
-	SPELL_FEIGN_DEATH                       = 265448,
-	SPELL_FIRESTRIKE                        = 330347,
-	SPELL_TELEPORT                          = 357601,
-    SPELL_SKYBOX                            = 389962,
-    SPELL_SPLOTLIGHT                        = 437208,
-	SPELL_HAUNTING_MEMORY                   = 1220632,
-    SPELL_SLIME_BURST                       = 1263874,
 };
 
 enum DalaranFateEvents
@@ -120,54 +116,76 @@ enum DalaranFateEvents
 
 	// Events
 	EVENT_START,
-    EVENT_KELTHUZAD_01,
-    EVENT_KELTHUZAD_02,
+
+    // Jaina Kalecgos
+	EVENT_KALECGOS_01,
+	EVENT_KALECGOS_02,
+	EVENT_KALECGOS_03,
+	EVENT_KALECGOS_04,
+	EVENT_KALECGOS_05,
+
+    // Kel Thuzad
+	EVENT_KELTHUZAD_01,
+	EVENT_KELTHUZAD_02,
+	EVENT_KELTHUZAD_03,
 };
 
 enum DalaranFateCriteriaTrees
 {
-	CRITERIA_TREE_INTRODUCTION_PARENT       = 1000076,
-	CRITERIA_TREE_INTRODUCTION_FIND_JAINA   = 1000077,
-	CRITERIA_TREE_INTRODUCTION_DISCUSS      = 1000078,
+	// Introducion
+	CRITERIA_TREE_01_PARENT                 = 1000076,
+	CRITERIA_TREE_01_FIND_JAINA             = 1000077,
+	CRITERIA_TREE_01_DISCUSS                = 1000078,
 
-	CRITERIA_TREE_KALECGOS_PARENT           = 1000079,
-	CRITERIA_TREE_KALECGOS_ASSIST_JAINA     = 1000080,
-	CRITERIA_TREE_KALECGOS_SPEAK_TO_ALEC    = 1000081,
+	// Guardian's Room
+	CRITERIA_TREE_02_PARENT                 = 1000084,
+	CRITERIA_TREE_02_FIND_JAINA             = 1000085,
 
-	CRITERIA_TREE_KELTHUZAD_PARENT          = 1000082,
-	CRITERIA_TREE_KELTHUZAD_WITNESS         = 1000083,
-	CRITERIA_TREE_KELTHUZAD_DEFEAT          = 1000084,
-	CRITERIA_TREE_KELTHUZAD_CAULDRON        = 1000085,
+	// Kalecgos
+	CRITERIA_TREE_03_PARENT                 = 1000079,
+	CRITERIA_TREE_03_ASSIST_JAINA           = 1000080,
+
+	// Kel Thuzad
+	CRITERIA_TREE_04_PARENT                 = 1000081,
+	CRITERIA_TREE_04_CAULDRON               = 1000082,
+	CRITERIA_TREE_04_DEFEAT                 = 1000083,
 };
 
 enum DalaranFateGameEvents
 {
-	EVENT_FIND_INTRODUCTION_FIND_JAINA      = 68108,
-	EVENT_FIND_INTRODUCTION_DISCUSS         = 650060,
+	// Introducion
+	EVENT_FIND_INTRODUCTION_FIND_JAINA      = 50030,
+	EVENT_FIND_INTRODUCTION_DISCUSS         = 50031,
 
-	EVENT_FIND_KALECGOS_ASSIST_JAINA        = 650061,
-	EVENT_FIND_KALECGOS_SPEAK_TO_ALEC       = 650062,
+	// Guardian's Room
+	EVENT_FIND_GUARDIAN_FIND_JAINA          = 50033,
 
-	EVENT_FIND_KELTHUZAD_WITNESS            = 650063,
-	EVENT_FIND_KELTHUZAD_DEFEATED           = 650064,
+	// Kalecgos
+	EVENT_FIND_KALECGOS_ASSIST_JAINA        = 50032,
 };
 
 enum DalaranFateMisc
 {
-	// AnimKits
-	ANIMKIT_BEGGING                         = 626,
-
-    // VisualKit
-    VIGNETTE_USABLE_INGREDIENTS             = 7456,
+	// VisualKit
+	VIGNETTE_NONE                           = 0,
+	VIGNETTE_YELLOW                         = 50001,
+	VIGNETTE_PURPLE                         = 50002,
 
 	// GameObjects
-    GOB_LAMP_POST                           = 192854,
-	GOB_FEL_BARRIER                         = 269122,
 	GOB_PORTAL_TO_DALARAN                   = 323842,
+
+	// Kalecgos
+	GOB_DALARAN_COUCH                       = 417908,
+	GOB_DALARAN_TABLE                       = 1550015,
 	GOB_TOME_OF_POWER                       = 1550008,
-    GOB_ALCHEMICAL_SOLUTION                 = 1550010,
-    GOB_SKULL                               = 1550011,
-    GOB_ESSENCE_OF_DEATH                    = 1550014,
+
+	// Kel Thuzad
+	GOB_CAULDRON                            = 1550009,
+	GOB_ALCHEMICAL_SOLUTION                 = 1550010,
+	GOB_SKULL                               = 1550011,
+	GOB_PUISUIT_TERNAL_LIFE                 = 1550012,
+	GOB_BAG_OF_GRAIN                        = 1550013,
+	GOB_ESSENCE_OF_DEATH                    = 1550014,
 
 	// Point Id
 	MOVEMENT_INFO_POINT_NONE                = 0,
@@ -178,43 +196,27 @@ enum DalaranFateMisc
 	// Conversations
 	CONVERSATION_INTRODUCTION               = 60000,    // My father isn't asking you to pledge the [...]
 	CONVERSATION_START                      = 60001,    // Nobody dislikes Garrosh more than me [...]
-	CONVERSATION_KALECGOS                   = 60002,    // In the aftermath of Theramore, my first in [...]
-	CONVERSATION_KELTHUZAD                  = 60003,    // The Kirin-Tor has a legacy of abuse [...]
-	CONVERSATION_KELTHUZAD_COMBAT           = 60004,    // Another interruption?
+	CONVERSATION_VISIONS                    = 60002,    // In the aftermath of Theramore, my first in [...]
+	CONVERSATION_KELTHUZAD_COMBAT           = 60003,
 
-    // Misc
-    FACTION_KELTHUZAD_HOSTILE               = 14,
+	// Misc
+	FACTION_KELTHUZAD_HOSTILE               = 14,
 
-    // DoAction
-    ACTION_KELTHUZAD_COMBAT_READY           = 1,
+	// DoAction
+	ACTION_KELTHUZAD_COMBAT_READY           = 1,
 };
 
-// StringId
-namespace Portals
-{
-    struct Entry
-    {
-        PortalDataTypes dataId;
-        ObjectGuid guid;
-    };
+// Position d'Anduin apres l'introduction
+const Position AnduinPos01                  = { -836.36f, 4458.15f, 588.77f, 2.37f };
+const Position JainaPos01                   = { -833.39f, 4461.56f, 588.77f, 2.60f };
 
-    static constexpr std::string_view PortraitsRoom  = "PortraitsRoom";
-    static constexpr std::string_view VioletParlor   = "VioletParlor";
-    static constexpr std::string_view VioletCitadel  = "VioletCitadel";
-}
+// Position des joueurs apres l'introduction
+const Position PlayerPos01                  = { -806.74f, 4436.83f, 598.49f, 2.48f };
 
-// Event - Kalecgos
-const Position PlayerPos01                  = { -797.41f, 4487.83f, 735.01f, 4.03f };
-const Position JainaPos01                   = { -797.39f, 4472.69f, 735.01f, 2.61f };
-const Position AnduinPos01                  = { -796.07f, 4474.83f, 735.01f, 2.86f };
+// Room Center
+const Position RoomCenter                   = { -844.71f, 4467.60f, 588.84f, 5.57f };
 
-// Event - Kel'thuzad
-const Position PlayerPos02                  = { -891.66f, 4669.54f, 955.91f, 1.19f };
-const Position JainaPos02                   = { -882.00f, 4683.99f, 952.80f, 1.86f };
-const Position AnduinPos02                  = { -884.11f, 4683.72f, 952.80f, 1.77f };
-const Position KelThuzadPos01               = { -884.16f, 4690.30f, 952.79f, 1.18f };
-
-// Generic Path
+// Start Path (Jaina et Anduin)
 WaypointPath const ActorsPath01 =
 {
 	1,
@@ -227,74 +229,65 @@ WaypointPath const ActorsPath01 =
 	WaypointPathFlags::ExactSplinePath
 };
 
-// Kalecgos
-WaypointPath const JainaPath01 =
+/*****
+* VISIONS
+*****/
+
+enum VisionType
 {
-	2,
-	{
-		{ 0, -799.31f, 4474.20f, 735.01f, 1.686f },
-		{ 1, -800.02f, 4481.98f, 735.01f, 1.725f },
-		{ 2, -796.43f, 4489.03f, 735.01f, 0.842f },
-		{ 3, -792.35f, 4495.00f, 735.01f, 0.930f },
-		{ 4, -785.21f, 4488.92f, 733.13f, 5.271f }
-	},
-	WaypointMoveType::Walk,
-	WaypointPathFlags::ExactSplinePath
+	VISION_TYPE_JAINA,
+	VISION_TYPE_KALECGOS,
+	VISION_TYPE_KEL_THUZAD,
+	VISION_TYPE_KAEL_THAS,
+	VISION_TYPE_SUNREAVERS,
+	VISION_TYPE_ANTONIDAS,
 };
 
-// Kel'Thuzad
-WaypointPath const JainaPath02 =
+enum VisionFlag : uint32
 {
-	3,
-	{
-        { 0, -882.06f, 4685.40f, 952.80f, 1.616f },
-        { 1, -884.43f, 4687.77f, 952.79f, 3.707f },
-        { 2, -886.18f, 4684.79f, 952.80f, 4.331f },
-        { 3, -888.21f, 4680.19f, 953.33f, 4.390f },
-        { 4, -890.11f, 4674.24f, 955.91f, 4.443f },
-        { 5, -890.37f, 4668.26f, 955.91f, 1.530f }
-	},
-	WaypointMoveType::Walk,
-	WaypointPathFlags::ExactSplinePath
+	None        = 0x000,
+	NoDespawn   = 0x001
 };
 
-// Kalecgos
-WaypointPath const AnduinPath01 =
+/// <summary>
+/// Definition des visions
+/// </summary>
+struct VisionData
 {
-	2,
+	uint32 EntryOrData;
+	VisionFlag Flags = None;
+	HighGuid Type;
+	Position Position;
+	std::unordered_set<uint32> Emotes;
+	std::unordered_set<uint32> Auras;
+
+	bool HasFlags(VisionFlag flag) const
 	{
-		{ 0, -797.04f, 4478.37f, 735.01f, 1.686f },
-		{ 1, -795.87f, 4485.03f, 735.01f, 1.330f }, // Pause
-		{ 2, -796.43f, 4489.03f, 735.01f, 0.842f },
-		{ 3, -792.35f, 4495.00f, 735.01f, 0.930f },
-		{ 4, -785.21f, 4488.92f, 733.13f, 5.271f }
-	},
-	WaypointMoveType::Walk,
-	WaypointPathFlags::ExactSplinePath
+		return (Flags & flag) != 0;
+	}
 };
 
-// Kel'Thuzad
-WaypointPath const AnduinPath02 =
+/// <summary>
+/// Stocke les visions
+/// </summary>
+struct VisionGuid
 {
-	3,
-	{
-        { 0, -884.43f, 4687.77f, 952.79f, 3.707f },
-        { 1, -886.18f, 4684.79f, 952.80f, 4.331f },
-        { 2, -888.21f, 4680.19f, 953.33f, 4.390f },
-        { 3, -890.11f, 4674.24f, 955.91f, 4.443f },
-        { 4, -892.53f, 4669.60f, 955.91f, 1.106f }
-	},
-	WaypointMoveType::Walk,
-	WaypointPathFlags::ExactSplinePath
+	const VisionData* Data;
+	ObjectGuid Guid;
 };
+
+inline void ProcTeleportVisual(Creature* const creature, Position const position, uint32 visual)
+{
+	if (Creature* trigger = creature->SummonCreature(NPC_INVISIBLE_STALKER, *creature, TEMPSUMMON_TIMED_DESPAWN, 5s))
+		trigger->CastSpell(trigger, visual);
+
+	creature->NearTeleportTo(position);
+}
 
 inline void ProcTeleportVisual(Creature* const creature, Position const position)
 {
-	if (Creature* trigger = creature->SummonCreature(NPC_INVISIBLE_STALKER, *creature, TEMPSUMMON_TIMED_DESPAWN, 5s))
-		trigger->CastSpell(trigger, SPELL_TELEPORT_DUMMY);
-
-    creature->NearTeleportTo(position);
-    creature->SetHomePosition(position);
+	ProcTeleportVisual(creature, position, SPELL_TELEPORT_DUMMY);
+	creature->SetHomePosition(position);
 }
 
 template <class AI>

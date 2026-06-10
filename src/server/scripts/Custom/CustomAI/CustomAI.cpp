@@ -168,7 +168,7 @@ void CustomAI::AttackStart(Unit* who)
 		}
 		case AI_Type::Hybrid:
 		{
-			// Pas d'auto-attaque m?l?e, mais on suit ? distance
+			// Pas d'auto-attaque melee, mais on suit a distance
 			if (me->Attack(who, false))
 			{
 				me->SetCanMelee(false, true);
@@ -178,47 +178,66 @@ void CustomAI::AttackStart(Unit* who)
 			}
 			break;
 		}
-		case AI_Type::Melee:
-		{
-			// Auto-attaque melee + poursuite rapproch?e
-			if (me->Attack(who, true))
-			{
-				// Repartit tous les melee CustomAI autour de la cible pour qu'ils
-				// ne se superposent pas. On recolte les attaquants melee CustomAI
-				// (self inclus, vu que Unit::Attack a deja insere me dans m_attackers)
-				// puis on leur assigne a chacun un slot angulaire equireparti.
-				std::vector<Creature*> meleeBots;
-				for (Unit* a : who->getAttackers())
-				{
-					Creature* c = a->ToCreature();
-					if (!c || !c->IsAlive())
-						continue;
-					CustomAI* cai = dynamic_cast<CustomAI*>(c->AI());
-					if (!cai || cai->type != AI_Type::Melee)
-						continue;
-					meleeBots.push_back(c);
-				}
+        case AI_Type::Melee:
+        {
+            if (me->Attack(who, true))
+            {
+                me->GetMotionMaster()->MoveChase(who);
 
-				// Filet de securite : si pour une raison X self n'est pas dans la liste
-				if (std::find(meleeBots.begin(), meleeBots.end(), me) == meleeBots.end())
-					meleeBots.push_back(me);
+                ObjectGuid const targetGuid = who->GetGUID();
+                scheduler.Schedule(500ms, [this, targetGuid](TaskContext ctx)
+                {
+                    Unit* target = ObjectAccessor::GetUnit(*me, targetGuid);
+                    if (!target || !target->IsAlive() || !me->IsInCombat())
+                        return;
 
-				// Tri stable par GUID pour que chaque bot retombe toujours sur le meme slot
-				std::sort(meleeBots.begin(), meleeBots.end(), [](Creature* lhs, Creature* rhs)
-				{
-					return lhs->GetGUID() < rhs->GetGUID();
-				});
+                    std::vector<Creature*> meleeBots;
+                    for (Unit* a : target->getAttackers())
+                    {
+                        Creature* c = a->ToCreature();
+                        if (!c || !c->IsAlive())
+                            continue;
+                        CustomAI* cai = dynamic_cast<CustomAI*>(c->AI());
+                        if (!cai || cai->type != AI_Type::Melee)
+                            continue;
+                        meleeBots.push_back(c);
+                    }
 
-				uint32 const total = uint32(meleeBots.size());
-				float const tolerance = float(M_PI) / float(std::max<uint32>(total, 2u));
-				for (uint32 i = 0; i < total; ++i)
-				{
-					float const angle = (2.f * float(M_PI) * float(i)) / float(total);
-					meleeBots[i]->GetMotionMaster()->MoveChase(who, me->GetBoundingRadius(), ChaseAngle(angle, tolerance));
-				}
-			}
-			break;
-		}
+                    if (std::find(meleeBots.begin(), meleeBots.end(), me) == meleeBots.end())
+                        meleeBots.push_back(me);
+
+                    std::sort(meleeBots.begin(), meleeBots.end(), [](Creature* lhs, Creature* rhs)
+                    {
+                        return lhs->GetGUID() < rhs->GetGUID();
+                    });
+
+                    uint32 const total = uint32(meleeBots.size());
+                    float const meleeRange = me->GetCombatReach();
+
+                    // Arc total centre sur M_PI (face au joueur, relatif a son orientation)
+                    float const maxArc = 2.f * float(M_PI) / 3.f;
+                    float const totalArc = (total == 1)
+                        ? 0.f
+                        : std::min(maxArc, float(M_PI) / 4.f * float(total - 1));
+                    float const tolerance = (total == 1)
+                        ? float(M_PI) / 2.f
+                        : totalArc / float(total - 1) / 2.f;
+
+                    auto it = std::find(meleeBots.begin(), meleeBots.end(), me);
+                    uint32 const myIndex = uint32(std::distance(meleeBots.begin(), it));
+
+                    // 0 = face au joueur (dans sa direction de regard)
+                    // M_PI = dans son dos
+                    float const t = (total == 1) ? 0.f : (float(myIndex) / float(total - 1) - 0.5f);
+                    float const angle = 0.f + t * totalArc;
+
+                    me->GetMotionMaster()->MoveChase(target, meleeRange, ChaseAngle(angle, tolerance));
+
+                    ctx.Repeat(500ms);
+                });
+            }
+            break;
+        }
 		default:
 			break;
 	}

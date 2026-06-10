@@ -3989,6 +3989,18 @@ void Unit::RemoveAurasDueToSpell(uint32 spellId, ObjectGuid casterGUID, uint32 r
     }
 }
 
+void Unit::RemoveAllAurasException(const std::unordered_set<uint32>& exceptions, AuraRemoveMode removeMode)
+{
+    for (AuraApplicationMap::iterator iter = m_appliedAuras.begin(); iter != m_appliedAuras.end();)
+    {
+        Aura const* aura = iter->second->GetBase();
+        if (exceptions.count(aura->GetId()) == 0)
+            RemoveAura(iter, removeMode);
+        else
+            ++iter;
+    }
+}
+
 void Unit::RemoveAuraFromStack(uint32 spellId, ObjectGuid casterGUID, AuraRemoveMode removeMode, uint16 num)
 {
     AuraMapBoundsNonConst range = m_ownedAuras.equal_range(spellId);

@@ -162,6 +162,7 @@ enum BFTMisc
 	SPELL_COSMETIC_LARGE_FIRE           = 414772,
 	SPELL_COSMETIC_EAT_SOUP             = 364139,
 	SPELL_COSMETIC_DRINK                = 162443,
+    SPELL_COSMETIC_DEATH                = 387851,
 	SPELL_THROW_BOMB                    = 414422,
 
 	// GameObjects

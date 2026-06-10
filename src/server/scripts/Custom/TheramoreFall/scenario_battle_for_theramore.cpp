@@ -1924,9 +1924,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						wounded->SetRegenerateHealth(false);
 						wounded->SetMaxHealth(health);
 						wounded->SetHealth(health * frand(0.15f, 0.20f));
-						wounded->SetStandState(UNIT_STAND_STATE_DEAD);
 						wounded->SetDisplayId(troop->GetDisplayId());
 						wounded->SetImmuneToNPC(true);
+                        wounded->AddAura(SPELL_COSMETIC_DEATH, wounded);
 						wounded->SetVignette(VIGNETTE_ALLIANCE_TROOPS);
 					}
 				}

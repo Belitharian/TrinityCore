@@ -486,15 +486,10 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		// Jaina recule pour laisser place a l'effet visuel.
 		void HandleIsleEchoOfAluneth()
 		{
-			Creature* jaina = GetJaina();
-			Creature* kalecgos = GetKalecgos();
-			if (jaina)
+			if (Creature* jaina = GetJaina())
 			{
 				if (TempSummon* trigger = instance->SummonCreature(WORLD_TRIGGER, jaina->GetPosition(), nullptr, 10s))
 					trigger->CastSpell(trigger, SPELL_ECHO_OF_ALUNETH_SPAWN, true);
-
-				if (kalecgos)
-					jaina->GetMotionMaster()->MoveBackward(MOVEMENT_INFO_POINT_NONE, JainaPointBack, kalecgos, JAINA_KNEEL_APPROACH_DIST);
 			}
 			Next(6s);
 		}
