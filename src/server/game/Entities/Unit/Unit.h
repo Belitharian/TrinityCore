@@ -26,6 +26,7 @@
 #include "Timer.h"
 #include "UnitDefines.h"
 #include "Util.h"
+#include <algorithm>
 #include <array>
 #include <forward_list>
 #include <map>
@@ -1516,6 +1517,8 @@ class TC_GAME_API Unit : public WorldObject
         float m_modRangedHitChance;
         float m_modSpellHitChance;
         float m_baseSpellCritChance;
+        void SetBaseSpellCritChance(float chance) { m_baseSpellCritChance = std::clamp(chance, 0.0f, 100.0f); }
+        float GetBaseSpellCritChance() const { return m_baseSpellCritChance; }
 
         std::array<uint32, MAX_ATTACK> m_baseAttackSpeed;
         std::array<float, MAX_ATTACK> m_modAttackSpeedPct;

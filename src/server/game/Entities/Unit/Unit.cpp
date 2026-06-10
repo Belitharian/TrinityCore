@@ -1,4 +1,4 @@
-ï»¿/*
+/*
  * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -7131,8 +7131,8 @@ int32 Unit::SpellBaseDamageBonusDone(SpellSchoolMask schoolMask) const
     }
     else if (Creature const* creature = ToCreature())
     {
-        // SÃ©lection du type d'attaque et du modificateur d'unitÃ© selon la classe de la crÃ©ature.
-        // Les crÃ©atures de classe MAGE utilisent l'attaque Ã  distance (heuristique caster).
+        // Sélection du type d'attaque et du modificateur d'unité selon la classe de la créature.
+        // Les créatures de classe MAGE utilisent l'attaque à distance (heuristique caster).
         float variance = creature->GetCreatureTemplate()->BaseVariance;
         UnitMods unitMod = UNIT_MOD_DAMAGE_MAINHAND;
         WeaponAttackType attackType = BASE_ATTACK;
@@ -7144,34 +7144,34 @@ int32 Unit::SpellBaseDamageBonusDone(SpellSchoolMask schoolMask) const
             unitMod = UNIT_MOD_DAMAGE_RANGED;
         }
 
-        // Vitesse d'attaque rÃ©elle en secondes (GetAttackTime retourne des millisecondes).
-        // Plancher Ã  1000 ms pour Ã©viter une division par zÃ©ro ou une vitesse absurde.
+        // Vitesse d'attaque réelle en secondes (GetAttackTime retourne des millisecondes).
+        // Plancher à 1000 ms pour éviter une division par zéro ou une vitesse absurde.
         constexpr float MIN_ATTACK_TIME_MS = 1000.0f;
         float const attackTimeSec = std::max(
             static_cast<float>(getAttackTimer(attackType)),
             MIN_ATTACK_TIME_MS) / 1000.0f;
 
-        // Moyenne des dÃ©gÃ¢ts arme â€” plus reprÃ©sentative que MAXDAMAGE seul.
+        // Moyenne des dégâts arme ? plus représentative que MAXDAMAGE seul.
         float const weaponMinDamage = GetWeaponDamageRange(attackType, MINDAMAGE);
         float const weaponMaxDamage = GetWeaponDamageRange(attackType, MAXDAMAGE);
         float const weaponAvgDamage = (weaponMinDamage + weaponMaxDamage) * 0.5f;
 
-        // Contribution de l'attack power ramenÃ©e au DPS rÃ©el de la crÃ©ature,
-        // puis mise Ã  l'Ã©chelle par la variance du template.
-        // Formule : (AP / vitesse_arme) * variance â€” cohÃ©rent avec le modÃ¨le TrinityCore joueur.
+        // Contribution de l'attack power ramenée au DPS réel de la créature,
+        // puis mise à l'échelle par la variance du template.
+        // Formule : (AP / vitesse_arme) * variance ? cohérent avec le modèle TrinityCore joueur.
         float const attackPower = GetTotalAttackPowerValue(attackType, false);
         float const apContribution = (attackPower / attackTimeSec) * variance;
 
         // Modificateurs du stat system (UNIT_MOD).
         // BASE_PCT et TOTAL_PCT restent de purs multiplicateurs de stat,
-        // sans mÃ©lange avec attackSpeedMulti.
+        // sans mélange avec attackSpeedMulti.
         float const baseValue = GetFlatModifierValue(unitMod, BASE_VALUE) + apContribution;
         float const basePct = GetPctModifierValue(unitMod, BASE_PCT);
         float const totalValue = GetFlatModifierValue(unitMod, TOTAL_VALUE);
         float const totalPct = GetPctModifierValue(unitMod, TOTAL_PCT);
 
-        // Modificateur de dÃ©gÃ¢ts liÃ© Ã  la difficultÃ© (DamageModifier).
-        // AppliquÃ© sur l'ensemble du calcul pour cohÃ©rence â€” totalValue inclus.
+        // Modificateur de dégâts lié à la difficulté (DamageModifier).
+        // Appliqué sur l'ensemble du calcul pour cohérence ? totalValue inclus.
         float const dmgMultiplier = creature->GetCreatureDifficulty()->DamageModifier;
 
         DoneAdvertisedBenefit +=
@@ -7186,9 +7186,13 @@ int32 Unit::SpellBaseDamageBonusDone(SpellSchoolMask schoolMask) const
 float Unit::SpellCritChanceDone(Spell* spell, AuraEffect const* aurEff, SpellSchoolMask schoolMask, WeaponAttackType attackType /*= BASE_ATTACK*/) const
 {
     SpellInfo const* spellInfo = spell ? spell->GetSpellInfo() : aurEff->GetSpellInfo();
-    //! Mobs can't crit with spells. (Except player controlled)
+
     if (GetTypeId() == TYPEID_UNIT && !GetSpellModOwner())
-        return 0.0f;
+    {
+        Creature const* creature = ToCreature();
+        if (!creature || !creature->HasStringId("can_spell_crit"))
+            return 0.0f;
+    }
 
     // not critting spell
     if (spell && !spellInfo->HasAttribute(SPELL_ATTR0_CU_CAN_CRIT))

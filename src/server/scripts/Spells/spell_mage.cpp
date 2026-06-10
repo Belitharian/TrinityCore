@@ -123,7 +123,11 @@ enum MageSpells
     SPELL_MAGE_CHAIN_REACTION                    = 278310,
     SPELL_MAGE_TOUCH_OF_THE_MAGI_EXPLODE         = 210833,
     SPELL_MAGE_WILDFIRE_TALENT                   = 383489,
-    SPELL_MAGE_WINTERS_CHILL                     = 228358
+    SPELL_MAGE_WINTERS_CHILL                     = 228358,
+    SPELL_MAGE_FROSTBOLT                         = 116,
+    SPELL_MAGE_SHATTER                           = 1246769,
+    SPELL_MAGE_FROZEN                            = 1221389,
+    SPELL_MAGE_SHATTER_DAMAGE                    = 1246949
 };
 
 // 110909 - Alter Time Aura
@@ -1285,6 +1289,68 @@ class spell_mage_ice_lance_damage : public SpellScript
     void Register() override
     {
         OnEffectHitTarget += SpellEffectFn(spell_mage_ice_lance_damage::ApplyDamageMultiplier, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
+    }
+};
+
+// 1246769 - Shatter
+class spell_mage_shatter : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_MAGE_FROZEN, SPELL_MAGE_SHATTER_DAMAGE });
+    }
+
+    static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
+    {
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        if (!spellInfo || !eventInfo.GetDamageInfo())
+            return false;
+
+        switch (spellInfo->Id)
+        {
+            case SPELL_MAGE_FROSTBOLT:
+            case SPELL_MAGE_ICE_LANCE_TRIGGER:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    static void HandleProc(AuraScript const&, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
+    {
+        Unit* caster = eventInfo.GetActor();
+        Unit* target = eventInfo.GetActionTarget();
+        if (!caster || !target)
+            return;
+
+        if (eventInfo.GetSpellInfo()->Id == SPELL_MAGE_FROSTBOLT)
+        {
+            caster->CastSpell(target, SPELL_MAGE_FROZEN, aurEff);
+            return;
+        }
+
+        Aura* frozen = target->GetAura(SPELL_MAGE_FROZEN, caster->GetGUID());
+        if (!frozen)
+            return;
+
+        uint8 const stacks = frozen->GetStackAmount();
+        uint8 const toConsume = std::min<uint8>(4, stacks);
+        if (!toConsume)
+            return;
+
+        for (uint8 i = 0; i < toConsume; ++i)
+            caster->CastSpell(target, SPELL_MAGE_SHATTER_DAMAGE, aurEff);
+
+        if (stacks > toConsume)
+            frozen->SetStackAmount(stacks - toConsume);
+        else
+            frozen->Remove();
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_mage_shatter::CheckProc);
+        OnEffectProc += AuraEffectProcFn(spell_mage_shatter::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
     }
 };
 

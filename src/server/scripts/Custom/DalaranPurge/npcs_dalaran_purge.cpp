@@ -510,7 +510,6 @@ struct npc_stormwind_cleric : public CustomAI
         SPELL_POWER_WORD_BARRIER        = 62618,
         SPELL_PURGE_THE_WICKED          = 451738,
         SPELL_PURGE_THE_WICKED_DEBUFF   = 451740,
-        SPELL_POWER_WORD_AEGIS          = 222403,
         SPELL_POWER_WORD_FORTITUDE      = 284466,
 		SPELL_SMITE                     = 419880,
         SPELL_ULTIMATE_PENITENCE        = 421453,
@@ -525,6 +524,12 @@ struct npc_stormwind_cleric : public CustomAI
     };
 
     bool ultimatePenitence;
+
+    // Modify Crit Chance
+    void JustAppeared() override
+    {
+        me->SetBaseSpellCritChance(30.f);
+    }
 
     void Reset() override
     {
@@ -541,6 +546,8 @@ struct npc_stormwind_cleric : public CustomAI
 
         ultimatePenitence = false;
     }
+
+
 
     void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
