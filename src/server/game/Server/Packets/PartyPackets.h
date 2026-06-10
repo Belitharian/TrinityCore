@@ -224,7 +224,7 @@ namespace WorldPackets
             MythicPlus::DungeonScoreSummary DungeonScore;
         };
 
-        class PartyMemberFullState final : public ServerPacket
+        class TC_GAME_API PartyMemberFullState final : public ServerPacket
         {
         public:
             explicit PartyMemberFullState() : ServerPacket(SMSG_PARTY_MEMBER_FULL_STATE, 80) { }
@@ -580,7 +580,7 @@ namespace WorldPackets
             bool CanVoteAbandon = false;
         };
 
-        class PartyUpdate final : public ServerPacket
+        class TC_GAME_API PartyUpdate final : public ServerPacket
         {
         public:
             explicit PartyUpdate() : ServerPacket(SMSG_PARTY_UPDATE, 200) { }

@@ -189,8 +189,6 @@ class scenario_dalaran_convo : public InstanceMapScript
                     case Phases::Visions_KelThuzad_Combat:
                         DespawnActors(VISION_TYPE_KEL_THUZAD);
                         StartKelThuzadCombat();
-                        if (Creature* summon = GetCreature(DATA_CAULDRON_BUNNY))
-                            summon->CastSpell(summon, SPELL_SLIME_BURST, true);
                         break;
                     default:
 						break;
@@ -221,6 +219,10 @@ class scenario_dalaran_convo : public InstanceMapScript
                 // Dalaran Fate - Jaina Guardian's Room (PARENT)
                 case CRITERIA_TREE_02_PARENT:
                     SetData(DATA_PHASE, (uint32)Phases::Visions);
+                    break;
+                // Dalaran Fate - Kalecgos (PARENT)
+                case CRITERIA_TREE_03_PARENT:
+                    SetData(DATA_PHASE, (uint32)Phases::Visions_KelThuzad);
                     break;
                 // Add the ingredients to the cauldron
                 case CRITERIA_TREE_04_CAULDRON:

@@ -5422,6 +5422,15 @@ void SpellMgr::LoadSpellInfoCorrections()
         spellInfo->AttributesEx4 &= ~SPELL_ATTR4_OBSOLETE;
     });
 
+    // Atonement
+    ApplySpellFix({ 292010 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0 , [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->BasePoints = 80;
+        });
+    });
+
     for (SpellInfo const& s : mSpellInfoMap)
     {
         SpellInfo* spellInfo = &const_cast<SpellInfo&>(s);

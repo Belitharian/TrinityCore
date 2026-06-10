@@ -133,6 +133,8 @@ struct npc_kelthuzad_vision : public CustomAI
 		{
 			case MOVEMENT_INFO_POINT_01:
 				me->SetHomePosition(RoomCenter);
+                me->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+                me->SetFaction(FACTION_MONSTER);
 				me->SetImmuneToAll(false);
 				break;
 		}
@@ -369,14 +371,20 @@ class spell_freezing_blast : public SpellScript
 		SPELL_FREEZING_BLAST_MISSILE = 352380
 	};
 
+    void OnPrecast() override
+    {
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        _orientation = caster->GetOrientation();
+    }
+
 	void HandleDamage(SpellEffIndex /*effIndex*/) const
 	{
 		Unit* caster = GetCaster();
 		if (!caster)
 			return;
-
-		// Orientation du caster en radians
-		float orientation = caster->GetOrientation();
 
 		// 3 positions en ligne droite devant, espacées de 6y
 		for (int i = 1; i <= 3; ++i)
@@ -384,10 +392,10 @@ class spell_freezing_blast : public SpellScript
 			float dist = 6.0f * i;
 
 			Position dest;
-			dest.m_positionX = caster->GetPositionX() + dist * std::cos(orientation);
-			dest.m_positionY = caster->GetPositionY() + dist * std::sin(orientation);
+			dest.m_positionX = caster->GetPositionX() + dist * std::cos(_orientation);
+			dest.m_positionY = caster->GetPositionY() + dist * std::sin(_orientation);
 			dest.m_positionZ = caster->GetPositionZ();
-			dest.SetOrientation(orientation);
+			dest.SetOrientation(_orientation);
 
 			// Ajuster le Z au sol
 			caster->UpdateAllowedPositionZ(dest.m_positionX, dest.m_positionY, dest.m_positionZ);
@@ -403,6 +411,9 @@ class spell_freezing_blast : public SpellScript
 	{
 		OnEffectLaunchTarget += SpellEffectFn(spell_freezing_blast::HandleDamage, EFFECT_0, SPELL_EFFECT_DUMMY);
 	}
+
+    private:
+    float _orientation = 0.f;
 };
 
 /*****
@@ -517,9 +528,9 @@ class conversation_dalaran_start : public ConversationAI
 
 		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_START_01) + 3s);
 
-		conversation->m_Events.AddEvent([conversationAI = this, conversation = conversation]()
+		conversation->m_Events.AddEvent([ai = this, conversation = conversation]()
 		{
-			Creature* anduin = conversationAI->instance->GetCreature(DATA_ANDUIN);
+			Creature* anduin = ai->instance->GetCreature(DATA_ANDUIN);
 			if (!anduin)
 				return;
 
@@ -595,8 +606,11 @@ class conversation_dalaran_kelthuzad : public ConversationAI
 
 	enum TheKirinTorFate
 	{
+        // Lines
+        CONVERSATION_LINE_20                = 20,
+
 		// Actors
-		CONVERSATION_ACTOR_IDX_KELTHUZAD  = 0,
+		CONVERSATION_ACTOR_IDX_KELTHUZAD    = 0,
 	};
 
 	void OnCreate(Unit* creator) override
@@ -615,9 +629,25 @@ class conversation_dalaran_kelthuzad : public ConversationAI
 	{
 		LocaleConstant privateOwnerLocale = conversation->GetPrivateObjectOwnerLocale();
 
-		conversation->m_Events.AddEvent([conversation = conversation]()
+        conversation->m_Events.AddEvent([ai = this, conversation = conversation]()
 		{
-			/* TODO */
+            Player* player = ObjectAccessor::GetPlayer(*conversation, conversation->GetPrivateObjectOwner());
+            Creature* kelthuzad = ai->instance->GetCreature(DATA_KELTHUZAD);
+
+            if (!player || !kelthuzad)
+                return;
+
+            kelthuzad->SetFacingToObject(player);
+
+		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_20));
+
+		conversation->m_Events.AddEvent([ai = this, conversation = conversation]()
+		{
+            Creature* kelthuzad = ai->instance->GetCreature(DATA_KELTHUZAD);
+            if (!kelthuzad)
+                return;
+
+            kelthuzad->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, RoomCenter, true, 5.61f, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
 
 		}, conversation->GetLastLineEndTime(privateOwnerLocale));
 	}
@@ -696,6 +726,9 @@ struct areatrigger_dalaran : public AreaTriggerAI
 
 	void OnUnitEnter(Unit* unit) override
 	{
+        if (consumed)
+            return;
+
 		Player* player = unit->ToPlayer();
 		if (!player || player->IsGameMaster())
 			return;

@@ -1,9 +1,8 @@
-﻿#ifndef FAKE_PARTY_H
+#ifndef FAKE_PARTY_H
 #define FAKE_PARTY_H
 
 #include "Group.h"
 #include "GroupMgr.h"
-#include "PartyPackets.h"
 
 class Player;
 class Unit;
@@ -37,7 +36,7 @@ public:
     /// Sends SMSG_PARTY_UPDATE with GROUP_FLAG_DESTROYED to remove the frame.
     void DestroyFakeParty(Player* player);
 
-    /// Periodic update — call from the AI's UpdateAI(uint32 diff).
+    /// Periodic update ? call from the AI's UpdateAI(uint32 diff).
     /// Sends MemberState at fixed interval to keep the frame in sync.
     void Update(uint32 diff, Player* player);
 
