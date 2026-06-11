@@ -72,7 +72,7 @@ enum MageSpells
     SPELL_MAGE_FLAME_PATCH_AREATRIGGER           = 205470,
     SPELL_MAGE_FLAME_PATCH_DAMAGE                = 205472,
     SPELL_MAGE_FLAME_PATCH_TALENT                = 205037,
-    SPELL_MAGE_FLURRY_DAMAGE                     = 228596,
+    SPELL_MAGE_FLURRY_TRIGGERED_DAMAGE           = 228596,
     SPELL_MAGE_FRENETIC_SPEED                    = 236060,
     SPELL_MAGE_FROST_NOVA                        = 122,
     SPELL_MAGE_GIRAFFE_FORM                      = 32816,
@@ -125,9 +125,35 @@ enum MageSpells
     SPELL_MAGE_WILDFIRE_TALENT                   = 383489,
     SPELL_MAGE_WINTERS_CHILL                     = 228358,
     SPELL_MAGE_FROSTBOLT                         = 116,
+    SPELL_MAGE_FLURRY                            = 44614,
+    SPELL_MAGE_FLURRY_DAMAGE                     = 228354,
     SPELL_MAGE_SHATTER                           = 1246769,
-    SPELL_MAGE_FROZEN                            = 1221389,
-    SPELL_MAGE_SHATTER_DAMAGE                    = 1246949
+    SPELL_MAGE_FREEZING                          = 1221389,
+    SPELL_MAGE_SHATTER_DAMAGE                    = 1246949,
+    SPELL_MAGE_FROST_SPLINTER                    = 443722,
+    SPELL_MAGE_SPLINTERING_SORCERY               = 443739,
+    SPELL_MAGE_AUGURY_ABOUNDS                    = 1280165,
+    SPELL_MAGE_CONTROLLED_INSTINCTS              = 444483,
+    SPELL_MAGE_CONTROLLED_INSTINCTS_DAMAGE       = 444487,
+    SPELL_MAGE_CONTROLLED_INSTINCTS_DEBUFF       = 463192,
+
+    SPELL_MAGE_ICICLE_TALENT                     = 1246832,
+    SPELL_MAGE_ICICLES_BUFF                      = 205473,
+    SPELL_MAGE_GLACIAL_SPIKE                     = 199786,
+    SPELL_MAGE_GLACIAL_SPIKE_BUFF                = 199844,
+
+    // NPC
+    SPELL_MAGE_FLURRY_NPC                        = 284858,
+    SPELL_MAGE_ICE_LANCE_NPC                     = 284871,
+    SPELL_MAGE_ICE_LANCE_TRIGGER_NPC             = 284874,
+    SPELL_MAGE_GLACIAL_SPIKE_NPC                 = 284840
+};
+
+// Visuels des glacons flottant autour du mage (1 par stack d'Icicles).
+static constexpr uint8 MAX_ICICLES = 5;
+static constexpr uint32 IcicleVisuals[MAX_ICICLES] =
+{
+    214124, 214125, 214126, 214127, 214130
 };
 
 // 110909 - Alter Time Aura
@@ -927,7 +953,7 @@ class spell_mage_flurry : public SpellScript
             if (!target)
                 return true;
 
-            _caster->CastSpell(target, SPELL_MAGE_FLURRY_DAMAGE, CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS).SetOriginalCastId(_originalCastId));
+            _caster->CastSpell(target, SPELL_MAGE_FLURRY_TRIGGERED_DAMAGE, CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS).SetOriginalCastId(_originalCastId));
 
             if (!--_count)
                 return true;
@@ -945,7 +971,7 @@ class spell_mage_flurry : public SpellScript
 
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        return ValidateSpellInfo({ SPELL_MAGE_FLURRY_DAMAGE });
+        return ValidateSpellInfo({ SPELL_MAGE_FLURRY_TRIGGERED_DAMAGE });
     }
 
     void EffectHit(SpellEffIndex /*effIndex*/) const
@@ -1297,7 +1323,7 @@ class spell_mage_shatter : public AuraScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        return ValidateSpellInfo({ SPELL_MAGE_FROZEN, SPELL_MAGE_SHATTER_DAMAGE });
+        return ValidateSpellInfo({ SPELL_MAGE_FREEZING, SPELL_MAGE_SHATTER_DAMAGE });
     }
 
     static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
@@ -1308,8 +1334,14 @@ class spell_mage_shatter : public AuraScript
 
         switch (spellInfo->Id)
         {
+            // Apply
             case SPELL_MAGE_FROSTBOLT:
+            case SPELL_MAGE_FLURRY:
+            case SPELL_MAGE_FLURRY_NPC:
+                return true;
+            // Consume
             case SPELL_MAGE_ICE_LANCE_TRIGGER:
+            case SPELL_MAGE_ICE_LANCE_TRIGGER_NPC:
                 return true;
             default:
                 return false;
@@ -1323,17 +1355,30 @@ class spell_mage_shatter : public AuraScript
         if (!caster || !target)
             return;
 
-        if (eventInfo.GetSpellInfo()->Id == SPELL_MAGE_FROSTBOLT)
+        switch (eventInfo.GetSpellInfo()->Id)
         {
-            caster->CastSpell(target, SPELL_MAGE_FROZEN, aurEff);
-            return;
+            case SPELL_MAGE_FROSTBOLT:
+            case SPELL_MAGE_FLURRY:
+            case SPELL_MAGE_FLURRY_NPC:
+                caster->CastSpell(target, SPELL_MAGE_FREEZING, aurEff);
+                break;
+
+            case SPELL_MAGE_ICE_LANCE_TRIGGER:
+            case SPELL_MAGE_ICE_LANCE_TRIGGER_NPC:
+                ShatterFreezing(caster, target, aurEff);
+                break;
+            default:
+                break;
         }
+    }
 
-        Aura* frozen = target->GetAura(SPELL_MAGE_FROZEN, caster->GetGUID());
-        if (!frozen)
+    static void ShatterFreezing(Unit* caster, Unit* target, AuraEffect const* aurEff)
+    {
+        Aura* freezing = target->GetAura(SPELL_MAGE_FREEZING, caster->GetGUID());
+        if (!freezing)
             return;
 
-        uint8 const stacks = frozen->GetStackAmount();
+        uint8 const stacks = freezing->GetStackAmount();
         uint8 const toConsume = std::min<uint8>(4, stacks);
         if (!toConsume)
             return;
@@ -1342,15 +1387,258 @@ class spell_mage_shatter : public AuraScript
             caster->CastSpell(target, SPELL_MAGE_SHATTER_DAMAGE, aurEff);
 
         if (stacks > toConsume)
-            frozen->SetStackAmount(stacks - toConsume);
+            freezing->SetStackAmount(stacks - toConsume);
         else
-            frozen->Remove();
+            freezing->Remove();
     }
 
     void Register() override
     {
         DoCheckProc += AuraCheckProcFn(spell_mage_shatter::CheckProc);
         OnEffectProc += AuraEffectProcFn(spell_mage_shatter::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
+// Etalonne `count` Frost Splinters dans une fenetre adaptee au nombre de tirs :
+// intervalle de base ~380-560ms par splinter, resserre quand le count est eleve
+// pour eviter une salve qui s'eternise. Les flags omettent DISALLOW_PROC_EVENTS
+// pour que Augury Abounds et Controlled Instincts puissent procer dessus.
+inline void ScheduleSplinterSalvo(Unit* caster, Unit* target, uint32 count)
+{
+    constexpr Milliseconds BASE_MIN = 380ms;
+    constexpr Milliseconds BASE_MAX = 560ms;
+    constexpr TriggerCastFlags SPLINTER_FLAGS = TriggerCastFlags(
+        TRIGGERED_FULL_MASK & ~TRIGGERED_DISALLOW_PROC_EVENTS);
+
+    Milliseconds const minStep = count > 4 ? BASE_MIN * 4 / count : BASE_MIN;
+    Milliseconds const maxStep = count > 4 ? BASE_MAX * 4 / count : BASE_MAX;
+
+    ObjectGuid const targetGuid = target->GetGUID();
+    Milliseconds offset = 0ms;
+
+    for (uint32 i = 0; i < count; ++i)
+    {
+        caster->m_Events.AddEventAtOffset([caster, targetGuid]
+        {
+            Unit* victim = ObjectAccessor::GetUnit(*caster, targetGuid);
+            if (victim && victim->IsAlive())
+                caster->CastSpell(victim, SPELL_MAGE_FROST_SPLINTER, SPLINTER_FLAGS);
+        }, offset);
+        offset += randtime(minStep, maxStep);
+    }
+}
+
+// 443739 - Splintering Sorcery
+class spell_mage_splintering_sorcery : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_MAGE_FROST_SPLINTER });
+    }
+
+    static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
+    {
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        if (!spellInfo)
+            return false;
+
+        switch (spellInfo->Id)
+        {
+            case SPELL_MAGE_FROSTBOLT:
+            case SPELL_MAGE_FLURRY:
+            case SPELL_MAGE_FLURRY_NPC:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    static void HandleProc(AuraScript const&, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
+    {
+        Unit* caster = eventInfo.GetActor();
+        Unit* target = eventInfo.GetActionTarget();
+        if (!caster || !target)
+            return;
+
+        Aura const* aura = aurEff->GetBase();
+        AuraEffect const* minEff = aura->GetEffect(EFFECT_1);
+        AuraEffect const* maxEff = aura->GetEffect(EFFECT_2);
+        if (!minEff || !maxEff)
+            return;
+
+        uint32 count = urand(uint32(minEff->GetAmount()), uint32(maxEff->GetAmount()));
+
+        ScheduleSplinterSalvo(caster, target, count);
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_mage_splintering_sorcery::CheckProc);
+        OnEffectProc += AuraEffectProcFn(spell_mage_splintering_sorcery::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
+// 1280165 - Augury Abounds
+class spell_mage_augury_abounds : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_MAGE_FROST_SPLINTER });
+    }
+
+    static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
+    {
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        return spellInfo && spellInfo->Id == SPELL_MAGE_FROST_SPLINTER;
+    }
+
+    static void HandleProc(AuraScript const&, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
+    {
+        Aura const* aura = aurEff->GetBase();
+        AuraEffect const* chanceEff = aura->GetEffect(EFFECT_0);
+        AuraEffect const* countEff = aura->GetEffect(EFFECT_1);
+        if (!chanceEff || !countEff)
+            return;
+
+        if (!roll_chance(chanceEff->GetAmount()))
+            return;
+
+        Unit* caster = eventInfo.GetActor();
+        Unit* target = eventInfo.GetActionTarget();
+        if (!caster || !target)
+            return;
+
+        ScheduleSplinterSalvo(caster, target, uint32(countEff->GetAmount()));
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_mage_augury_abounds::CheckProc);
+        OnEffectProc += AuraEffectProcFn(spell_mage_augury_abounds::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
+// 444483 - Controlled Instincts
+class spell_mage_controlled_instincts : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_MAGE_CONTROLLED_INSTINCTS_DAMAGE, SPELL_MAGE_CONTROLLED_INSTINCTS_DEBUFF });
+    }
+
+    static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
+    {
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        return spellInfo && spellInfo->Id == SPELL_MAGE_FROST_SPLINTER && eventInfo.GetDamageInfo();
+    }
+
+    static void HandleProc(AuraScript const&, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
+    {
+        Unit* caster = eventInfo.GetActor();
+        Unit* target = eventInfo.GetActionTarget();
+        if (!caster || !target)
+            return;
+
+        AuraEffect const* pctEff = aurEff->GetBase()->GetEffect(EFFECT_0);
+        if (!pctEff)
+            return;
+
+        int32 const cleaveDamage = CalculatePct(eventInfo.GetDamageInfo()->GetDamage(), pctEff->GetAmount());
+        if (cleaveDamage <= 0)
+            return;
+
+        caster->CastSpell(target, SPELL_MAGE_CONTROLLED_INSTINCTS_DEBUFF, aurEff);
+
+        CastSpellExtraArgs args(aurEff);
+        args.AddSpellMod(SPELLVALUE_BASE_POINT0, cleaveDamage);
+        args.SetTriggerFlags(TRIGGERED_DONT_REPORT_CAST_ERROR | TRIGGERED_IGNORE_CAST_IN_PROGRESS);
+
+        caster->CastSpell(target, SPELL_MAGE_CONTROLLED_INSTINCTS_DAMAGE, args);
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_mage_controlled_instincts::CheckProc);
+        OnEffectProc += AuraEffectProcFn(spell_mage_controlled_instincts::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
+// 199786 - Glacial Spike (Pointe glaciaire)
+// Consomme tous les Icicles, le buff de disponibilite et les visuels au moment
+// du cast. Sur impact, applique 3 stacks de Freezing sur la cible.
+class spell_mage_glacial_spike : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_MAGE_ICICLES_BUFF, SPELL_MAGE_GLACIAL_SPIKE_BUFF, SPELL_MAGE_FREEZING });
+    }
+
+    void ConsumeIcicles()
+    {
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        caster->RemoveAurasDueToSpell(SPELL_MAGE_ICICLES_BUFF);
+        caster->RemoveAurasDueToSpell(SPELL_MAGE_GLACIAL_SPIKE_BUFF);
+        for (uint32 visual : IcicleVisuals)
+            caster->RemoveAurasDueToSpell(visual);
+    }
+
+    void ApplyFreezing(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetHitUnit();
+        if (!caster || !target)
+            return;
+
+        // Applique 3 stacks de Freezing en un seul cast (les stacks viennent
+        // d'une regle de StackAmount sur l'aura, donc on cast 3 fois).
+        for (uint8 i = 0; i < 3; ++i)
+            caster->CastSpell(target, SPELL_MAGE_FREEZING, TRIGGERED_FULL_MASK);
+    }
+
+    void Register() override
+    {
+        AfterCast += SpellCastFn(spell_mage_glacial_spike::ConsumeIcicles);
+        OnEffectHitTarget += SpellEffectFn(spell_mage_glacial_spike::ApplyFreezing, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 1246832 - Icicles (Glacons) - talent passif
+// Tick toutes les 6s : en combat, ajoute un visuel d'icicle et empile le buff
+// Icicles. Au 5e stack, applique le buff Glacial Spike pour rendre Pointe
+// glaciaire disponible.
+class spell_mage_icicle : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_MAGE_ICICLES_BUFF, SPELL_MAGE_GLACIAL_SPIKE_BUFF });
+    }
+
+    void HandlePeriodic(AuraEffect const* /*aurEff*/)
+    {
+        Unit* target = GetTarget();
+        if (!target->IsInCombat())
+            return;
+
+        Aura const* icicles = target->GetAura(SPELL_MAGE_ICICLES_BUFF);
+        uint8 const stacks = icicles ? icicles->GetStackAmount() : 0;
+
+        // Cap atteint : le buff Glacial Spike est deja la, on attend la conso.
+        if (stacks >= MAX_ICICLES)
+            return;
+
+        target->CastSpell(target, IcicleVisuals[stacks], TRIGGERED_FULL_MASK);
+        target->CastSpell(target, SPELL_MAGE_ICICLES_BUFF, TRIGGERED_FULL_MASK);
+
+        if (stacks + 1 == MAX_ICICLES)
+            target->CastSpell(target, SPELL_MAGE_GLACIAL_SPIKE_BUFF, TRIGGERED_FULL_MASK);
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_mage_icicle::HandlePeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
     }
 };
 
@@ -2353,6 +2641,7 @@ void AddSC_mage_spell_scripts()
     RegisterSpellScript(spell_mage_arcane_barrage);
     RegisterSpellScript(spell_mage_arcane_charge_clear);
     RegisterSpellScript(spell_mage_arcane_explosion);
+    RegisterSpellScript(spell_mage_augury_abounds);
     RegisterSpellScript(spell_mage_blazing_barrier);
     RegisterAreaTriggerAI(areatrigger_mage_blizzard);
     RegisterSpellScript(spell_mage_blizzard_damage);
@@ -2363,6 +2652,7 @@ void AddSC_mage_spell_scripts()
     RegisterSpellScript(spell_mage_comet_storm_damage);
     RegisterSpellScript(spell_mage_cone_of_cold);
     RegisterSpellScript(spell_mage_conjure_refreshment);
+    RegisterSpellScript(spell_mage_controlled_instincts);
     RegisterSpellScript(spell_mage_ethereal_blink);
     RegisterSpellScript(spell_mage_ethereal_blink_triggered);
     RegisterSpellScript(spell_mage_feel_the_burn);
@@ -2378,6 +2668,7 @@ void AddSC_mage_spell_scripts()
     RegisterSpellScript(spell_mage_flurry);
     RegisterSpellScript(spell_mage_flurry_damage);
     RegisterSpellScript(spell_mage_frostbolt);
+    RegisterSpellScript(spell_mage_glacial_spike);
     RegisterSpellScript(spell_mage_heat_shimmer);
     RegisterSpellScript(spell_mage_heat_shimmer_remove);
     RegisterSpellScript(spell_mage_hot_streak);
@@ -2387,6 +2678,7 @@ void AddSC_mage_spell_scripts()
     RegisterSpellScript(spell_mage_ice_block);
     RegisterSpellScript(spell_mage_ice_lance);
     RegisterSpellScript(spell_mage_ice_lance_damage);
+    RegisterSpellScript(spell_mage_icicle);
     RegisterSpellScript(spell_mage_ignite);
     RegisterSpellScript(spell_mage_ignition_burst);
     RegisterSpellScript(spell_mage_imp_mana_gems);
@@ -2410,6 +2702,8 @@ void AddSC_mage_spell_scripts()
     RegisterSpellAndAuraScriptPair(spell_mage_ring_of_frost_freeze, spell_mage_ring_of_frost_freeze_AuraScript);
     RegisterSpellScript(spell_mage_scald);
     RegisterSpellScript(spell_mage_scorch);
+    RegisterSpellScript(spell_mage_shatter);
+    RegisterSpellScript(spell_mage_splintering_sorcery);
     RegisterSpellScript(spell_mage_spontaneous_combustion);
     RegisterSpellScript(spell_mage_supernova);
     RegisterSpellScript(spell_mage_tempest_barrier);

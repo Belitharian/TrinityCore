@@ -5431,6 +5431,31 @@ void SpellMgr::LoadSpellInfoCorrections()
         });
     });
 
+    // Healing Wave
+    ApplySpellFix({ 271029 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->CastTimeEntry = sSpellCastTimesStore.LookupEntry(5); // 2s
+    });
+
+    // Call of the Ancestors (aura)
+    ApplySpellFix({ 447206 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_1 , [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->ApplyAuraPeriod = 300;
+        });
+    });
+
+    // Ancestral Vigor
+    ApplySpellFix({ 207400 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0 , [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->BasePoints = 5;
+        });
+    });
+
+    
     for (SpellInfo const& s : mSpellInfoMap)
     {
         SpellInfo* spellInfo = &const_cast<SpellInfo&>(s);

@@ -24,6 +24,7 @@
 #include "ScriptMgr.h"
 #include "AreaTriggerAI.h"
 #include "CellImpl.h"
+#include "Custom/CustomAI/CustomAI.h"
 #include "Containers.h"
 #include "GridNotifiersImpl.h"
 #include "Item.h"
@@ -38,13 +39,19 @@
 enum ShamanSpells
 {
     SPELL_SHAMAN_AFTERSHOCK_ENERGIZE            = 210712,
+    SPELL_SHAMAN_ANCESTOR_SPAWN_VISUAL          = 451031,
+    SPELL_SHAMAN_ANCESTOR_STATE_1               = 449468,
+    SPELL_SHAMAN_ANCESTOR_STATE_2               = 450511,
     SPELL_SHAMAN_ANCESTRAL_GUIDANCE             = 108281,
     SPELL_SHAMAN_ANCESTRAL_GUIDANCE_HEAL        = 114911,
+    SPELL_SHAMAN_ANCESTRAL_VIGOR_BUFF           = 207400,
     SPELL_SHAMAN_ARCTIC_SNOWSTORM_AREATRIGGER   = 462767,
     SPELL_SHAMAN_ARCTIC_SNOWSTORM_SLOW          = 462765,
     SPELL_SHAMAN_ASCENDANCE_ELEMENTAL           = 114050,
     SPELL_SHAMAN_ASCENDANCE_ENHANCEMENT         = 114051,
     SPELL_SHAMAN_ASCENDANCE_RESTORATION         = 114052,
+    SPELL_SHAMAN_CALL_OF_THE_ANCESTORS          = 1238269,
+    SPELL_SHAMAN_CALL_OF_THE_ANCESTORS_AURA     = 447206,
     SPELL_SHAMAN_CHAIN_LIGHTNING                = 188443,
     SPELL_SHAMAN_CHAIN_LIGHTNING_ENERGIZE       = 195897,
     SPELL_SHAMAN_CHAIN_LIGHTNING_OVERLOAD       = 45297,
@@ -97,6 +104,8 @@ enum ShamanSpells
     SPELL_SHAMAN_HEALING_RAIN_VISUAL            = 147490,
     SPELL_SHAMAN_HEALING_RAIN                   = 73920,
     SPELL_SHAMAN_HEALING_RAIN_HEAL              = 73921,
+    SPELL_SHAMAN_HEALING_SURGE                  = 8004,
+    SPELL_SHAMAN_HEALING_WAVE                   = 77472,
     SPELL_SHAMAN_ICE_STRIKE_OVERRIDE_AURA       = 466469,
     SPELL_SHAMAN_ICE_STRIKE_PROC                = 466467,
     SPELL_SHAMAN_ICEFURY                        = 210714,
@@ -157,6 +166,7 @@ enum ShamanSpells
     SPELL_SHAMAN_TOTEMIC_POWER_MP5              = 28824,
     SPELL_SHAMAN_TOTEMIC_POWER_SPELL_POWER      = 28825,
     SPELL_SHAMAN_UNDULATION_PROC                = 216251,
+    SPELL_SHAMAN_UNLEASH_LIFE                   = 73685,
     SPELL_SHAMAN_UNLIMITED_POWER_BUFF           = 272737,
     SPELL_SHAMAN_UNRELENTING_STORMS_REDUCTION   = 470491,
     SPELL_SHAMAN_UNRELENTING_STORMS_TALENT      = 470490,
@@ -181,7 +191,13 @@ enum ShamanSpellLabels
 
 enum MiscNpcs
 {
-    NPC_HEALING_RAIN_INVISIBLE_STALKER          = 73400
+    NPC_HEALING_RAIN_INVISIBLE_STALKER          = 73400,
+    NPC_SHAMAN_ANCESTOR                         = 221177
+};
+
+enum ShamanDisplay
+{
+    DISPLAY_SHAMAN_ANCESTOR_TROLL_HEAL          = 123137,
 };
 
 struct spell_sha_maelstrom_weapon_base
@@ -307,6 +323,59 @@ class spell_sha_ancestral_guidance_heal : public SpellScript
     void Register() override
     {
         OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_sha_ancestral_guidance_heal::ResizeTargets, EFFECT_0, TARGET_UNIT_CASTER_AREA_RAID);
+    }
+};
+
+// 207401 - Ancestral Vigor
+class spell_sha_ancestral_vigor : public AuraScript
+{
+    enum NpcSpells
+	{
+        SPELL_SHA_NPC_RIPTIDE           = 241892,
+		SPELL_SHA_NPC_CHAIN_HEAL        = 258099,
+        SPELL_SHA_NPC_HEALING_WAVE      = 271029,
+	};
+
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellInfo({
+            // Player
+            SPELL_SHAMAN_ANCESTRAL_VIGOR_BUFF,
+            // NPC
+            SPELL_SHA_NPC_RIPTIDE,
+            SPELL_SHA_NPC_CHAIN_HEAL,
+            SPELL_SHA_NPC_HEALING_WAVE,
+        }) && ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } });
+    }
+
+    static bool CheckProc(AuraScript const&, ProcEventInfo const& procInfo)
+    {
+        SpellInfo const* info = procInfo.GetSpellInfo();
+        if (!info)
+            return false;
+
+        return info->Id == SPELL_SHA_NPC_RIPTIDE
+            || info->Id == SPELL_SHA_NPC_CHAIN_HEAL
+            || info->Id == SPELL_SHA_NPC_HEALING_WAVE;
+    }
+
+    void HandleProc(AuraEffect* aurEff, ProcEventInfo& procInfo)
+    {
+        PreventDefaultAction();
+
+        HealInfo* healInfo = procInfo.GetHealInfo();
+        if (!healInfo || !healInfo->GetTarget())
+            return;
+
+        procInfo.GetActor()->CastSpell(healInfo->GetTarget(), SPELL_SHAMAN_ANCESTRAL_VIGOR_BUFF,
+            CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR)
+            .SetTriggeringAura(aurEff));
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_sha_ancestral_vigor::CheckProc);
+        OnEffectProc += AuraEffectProcFn(spell_sha_ancestral_vigor::HandleProc, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
     }
 };
 
@@ -559,6 +628,114 @@ class spell_sha_delayed_stormstrike_mod_charge_drop_proc : public AuraScript
     void Register() override
     {
         AfterProc += AuraProcFn(spell_sha_delayed_stormstrike_mod_charge_drop_proc::DropAura);
+    }
+};
+
+// 445624 - Call of the Ancestors
+// 1238269 - Call of the Ancestors
+class spell_sha_call_of_the_ancestors : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({
+            SPELL_SHAMAN_ANCESTOR_SPAWN_VISUAL,
+            SPELL_SHAMAN_ANCESTOR_STATE_1,
+            SPELL_SHAMAN_ANCESTOR_STATE_2,
+            SPELL_SHAMAN_CALL_OF_THE_ANCESTORS_AURA
+        });
+    }
+
+    void HandleSummon(SpellEffIndex effIndex)
+    {
+        PreventHitDefaultEffect(effIndex);
+
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        SpellEffectInfo const& effInfo = GetEffectInfo();
+        SummonPropertiesEntry const* properties = sSummonPropertiesStore.LookupEntry(uint32(effInfo.MiscValueB));
+        Milliseconds duration = Milliseconds(GetSpellInfo()->CalcDuration(caster));
+        float const radius = effInfo.CalcRadius(caster).Max;
+
+        Position pos = caster->GetRandomNearPosition(radius);
+
+        TempSummon* summon = caster->GetMap()->SummonCreature(NPC_SHAMAN_ANCESTOR, pos, properties, duration, caster, GetSpellInfo()->Id);
+        if (!summon)
+            return;
+
+        summon->SetDisplayId(DISPLAY_SHAMAN_ANCESTOR_TROLL_HEAL);
+        summon->GetMotionMaster()->MoveFollow(caster, radius, PET_FOLLOW_ANGLE);
+
+        CastSpellExtraArgs triggered(TRIGGERED_FULL_MASK);
+        summon->CastSpell(summon, SPELL_SHAMAN_ANCESTOR_SPAWN_VISUAL, triggered);
+        summon->CastSpell(summon, SPELL_SHAMAN_ANCESTOR_STATE_1, triggered);
+        summon->CastSpell(summon, SPELL_SHAMAN_ANCESTOR_STATE_2, triggered);
+
+        caster->CastSpell(caster, SPELL_SHAMAN_CALL_OF_THE_ANCESTORS_AURA, triggered);
+    }
+
+    void Register() override
+    {
+        OnEffectLaunch += SpellEffectFn(spell_sha_call_of_the_ancestors::HandleSummon, EFFECT_0, SPELL_EFFECT_SUMMON);
+    }
+};
+
+// 447206 - Call of the Ancestors (proc aura)
+class spell_sha_call_of_the_ancestors_aura : public AuraScript
+{
+    static bool CheckProc(AuraScript const&, ProcEventInfo const& procInfo)
+    {
+        Spell const* procSpell = procInfo.GetProcSpell();
+        if (!procSpell)
+            return false;
+
+        SpellInfo const* spellInfo = procInfo.GetSpellInfo();
+        if (!spellInfo)
+            return false;
+
+        if (spellInfo->HasAura(SPELL_AURA_PERIODIC_DAMAGE))
+            return false;
+
+        if (spellInfo->HasAura(SPELL_AURA_PERIODIC_HEAL))
+            return true;
+
+        if (spellInfo->HasEffect(SPELL_EFFECT_SCHOOL_DAMAGE) || spellInfo->HasEffect(SPELL_EFFECT_HEAL) || spellInfo->HasEffect(SPELL_EFFECT_HEAL_PCT))
+            return true;
+
+        return false;
+    }
+
+    static void HandleProc(AuraScript const&, AuraEffect* aurEff, ProcEventInfo& procInfo)
+    {
+        Unit* owner = procInfo.GetActor();
+        if (!owner)
+            return;
+
+        Spell const* procSpell = procInfo.GetProcSpell();
+        if (!procSpell)
+            return;
+
+        uint32 const spellId = procInfo.GetSpellInfo()->Id;
+
+        printf("%s\n", (*procInfo.GetSpellInfo()->SpellName)[sWorld->GetDefaultDbcLocale()]);
+
+        for (Unit* controlled : owner->m_Controlled)
+        {
+            if (controlled->GetEntry() != NPC_SHAMAN_ANCESTOR)
+                continue;
+
+            controlled->CastSpell(SpellCastTargets(procSpell->m_targets), spellId, CastSpellExtraArgsInit{
+                .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR | TRIGGERED_IGNORE_GCD | TRIGGERED_IGNORE_POWER_COST,
+                .TriggeringAura = aurEff
+            });
+        }
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_sha_call_of_the_ancestors_aura::CheckProc);
+        OnEffectProc += AuraEffectProcFn(spell_sha_call_of_the_ancestors_aura::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
     }
 };
 
@@ -3180,6 +3357,28 @@ class spell_sha_undulation_passive : public AuraScript
     uint8 _castCounter = 1; // first proc happens after two casts, then one every 3 casts
 };
 
+// 73685 - Unleash Life
+class spell_sha_unleash_life : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_SHAMAN_CALL_OF_THE_ANCESTORS });
+    }
+
+    void TriggerCallOfTheAncestors() const
+    {
+        Unit* caster = GetCaster();
+        caster->CastSpell(caster, SPELL_SHAMAN_CALL_OF_THE_ANCESTORS,
+            CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR).SetOriginalCaster(caster->GetGUID())
+        );
+    }
+
+    void Register() override
+    {
+        AfterCast += SpellCastFn(spell_sha_unleash_life::TriggerCallOfTheAncestors);
+    }
+};
+
 // 470490 - Unrelenting Storms
 class spell_sha_unrelenting_storms : public SpellScript
 {
@@ -3474,10 +3673,13 @@ void AddSC_shaman_spell_scripts()
     RegisterSpellScript(spell_sha_aftershock);
     RegisterSpellScript(spell_sha_ancestral_guidance);
     RegisterSpellScript(spell_sha_ancestral_guidance_heal);
+    RegisterSpellScript(spell_sha_ancestral_vigor);
     RegisterSpellScript(spell_sha_arctic_snowstorm);
     RegisterSpellScript(spell_sha_artifact_gathering_storms);
     RegisterSpellScript(spell_sha_ascendance_restoration);
     RegisterSpellScript(spell_sha_ashen_catalyst);
+    RegisterSpellScript(spell_sha_call_of_the_ancestors);
+    RegisterSpellScript(spell_sha_call_of_the_ancestors_aura);
     RegisterSpellScript(spell_sha_chain_lightning_crash_lightning);
     RegisterSpellScript(spell_sha_chain_lightning_energize);
     RegisterSpellScript(spell_sha_chain_lightning_overload);
@@ -3567,6 +3769,7 @@ void AddSC_shaman_spell_scripts()
     RegisterSpellScript(spell_sha_thorims_invocation_trigger);
     RegisterSpellScript(spell_sha_unlimited_power);
     RegisterSpellScript(spell_sha_undulation_passive);
+    RegisterSpellScript(spell_sha_unleash_life);
     RegisterSpellScript(spell_sha_unrelenting_storms);
     RegisterSpellScript(spell_sha_voltaic_blaze);
     RegisterSpellScript(spell_sha_voltaic_blaze_aura);

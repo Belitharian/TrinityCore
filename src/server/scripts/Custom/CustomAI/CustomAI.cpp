@@ -140,11 +140,18 @@ void CustomAI::AttackStart(Unit* who)
 	if (!who)
 		return;
 
+    if (me->HasUnitState(UNIT_STATE_DISTRACTED))
+    {
+        me->ClearUnitState(UNIT_STATE_DISTRACTED);
+        me->GetMotionMaster()->Clear();
+    }
+
 	switch (type)
 	{
+		case AI_Type::None:
 		case AI_Type::Stay:
 		{
-			// Pas d'auto-attaque m?l?e, pas de d?placement
+			// Pas d'auto-attaque melee, pas de déplacement
 			if (me->Attack(who, false))
 			{
 				me->SetCanMelee(false, false);
@@ -155,7 +162,7 @@ void CustomAI::AttackStart(Unit* who)
 		}
 		case AI_Type::Distance:
 		{
-			// Pas d'auto-attaque m?l?e, mais on suit ? distance
+			// Pas d'auto-attaque melee, mais on suit a distance
 			if (me->Attack(who, false))
 			{
 				me->SetCanMelee(false, true);

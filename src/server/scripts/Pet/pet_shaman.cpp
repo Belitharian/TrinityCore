@@ -20,15 +20,18 @@
  * Scriptnames of files in this file should be prefixed with "npc_pet_sha_".
  */
 
+#include "PassiveAI.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 
 enum ShamanSpells
 {
-    SPELL_SHAMAN_ANGEREDEARTH   = 36213,
-    SPELL_SHAMAN_FIREBLAST      = 57984,
-    SPELL_SHAMAN_FIRENOVA       = 12470,
-    SPELL_SHAMAN_FIRESHIELD     = 13376
+    SPELL_SHAMAN_ANGEREDEARTH           = 36213,
+    SPELL_SHAMAN_FIREBLAST              = 57984,
+    SPELL_SHAMAN_FIRENOVA               = 12470,
+    SPELL_SHAMAN_FIRESHIELD             = 13376,
+
+    SPELL_SHAMAN_CALL_ANCESTORS_BUFF    = 447244,
 };
 
 enum ShamanEvents
@@ -117,8 +120,33 @@ private:
     EventMap _events;
 };
 
+// 221177 - Ancestor
+struct npc_pet_sha_ancestor : public PassiveAI
+{
+    npc_pet_sha_ancestor(Creature* creature) : PassiveAI(creature) { }
+
+    void IsSummonedBy(WorldObject* summoner) override
+    {
+        Unit* caster = summoner->ToUnit();
+        if (!caster)
+            return;
+
+        caster->CastSpell(caster, SPELL_SHAMAN_CALL_ANCESTORS_BUFF);
+
+        if (me->ToTempSummon()->IsGuardian())
+            static_cast<Guardian*>(me)->SetBonusDamage(caster->SpellBaseHealingBonusDone(SPELL_SCHOOL_MASK_HOLY));
+    }
+
+    void OnDespawn() override
+    {
+        if (Unit* owner = me->GetOwner())
+            owner->RemoveAura(SPELL_SHAMAN_CALL_ANCESTORS_BUFF);
+    }
+};
+
 void AddSC_shaman_pet_scripts()
 {
     RegisterCreatureAI(npc_pet_shaman_earth_elemental);
     RegisterCreatureAI(npc_pet_shaman_fire_elemental);
+    RegisterCreatureAI(npc_pet_sha_ancestor);
 }
