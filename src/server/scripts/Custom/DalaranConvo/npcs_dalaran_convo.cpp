@@ -1,4 +1,4 @@
-#include "AreaTriggerAI.h"
+﻿#include "AreaTriggerAI.h"
 #include "Conversation.h"
 #include "ConversationAI.h"
 #include "Object.h"
@@ -386,7 +386,7 @@ class spell_freezing_blast : public SpellScript
 		if (!caster)
 			return;
 
-		// 3 positions en ligne droite devant, espac�es de 6y
+		// 3 positions en ligne droite devant, espacées de 6y
 		for (int i = 1; i <= 3; ++i)
 		{
 			float dist = 6.0f * i;

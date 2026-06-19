@@ -718,8 +718,6 @@ class spell_sha_call_of_the_ancestors_aura : public AuraScript
 
         uint32 const spellId = procInfo.GetSpellInfo()->Id;
 
-        printf("%s\n", (*procInfo.GetSpellInfo()->SpellName)[sWorld->GetDefaultDbcLocale()]);
-
         for (Unit* controlled : owner->m_Controlled)
         {
             if (controlled->GetEntry() != NPC_SHAMAN_ANCESTOR)

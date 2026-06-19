@@ -1,13 +1,13 @@
-#ifndef BATTLE_FOR_THERAMORE_H_
+ï»¿#ifndef BATTLE_FOR_THERAMORE_H_
 #define BATTLE_FOR_THERAMORE_H_
 
 #include "CreatureAIImpl.h"
 #include "Position.h"
 
-#define BFTScriptName "scenario_battle_for_theramore"
-#define DataHeader "BFT"
-
 //#define CUSTOM_DEBUG
+
+constexpr char const* BFTScriptName             = "scenario_battle_for_theramore";
+constexpr char const* DataHeader                = "BFT";
 
 static constexpr uint8 PERITH_LOCATION          = 3;
 static constexpr uint8 ARCHMAGES_LOCATION       = 6;
@@ -829,7 +829,7 @@ Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };
 Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f };
 Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f };
 
-/// Cherche l'ami avec le moins de PV dans la portée donnée
+/// Cherche l'ami avec le moins de PV dans la portÃ©e donnÃ©e
 inline Unit* FindLowestHealthFriend(Unit const* obj, float range)
 {
 	Unit* lowest = nullptr;

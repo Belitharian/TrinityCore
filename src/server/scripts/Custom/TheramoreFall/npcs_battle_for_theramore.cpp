@@ -88,12 +88,12 @@ struct npc_theramore_citizen : public CustomAI
 				}
 				case 1:
 				{
-                    if (me->GetWaypointPathId())
+					if (me->GetWaypointPathId())
 					{
 						me->SetWalk(false);
 						me->ResumeMovement();
-                        me->DespawnOrUnsummon(10s);
-                        me->AI()->Talk(SAY_THERAMORE_CITIZEN_FLEE);
+						me->DespawnOrUnsummon(10s);
+						me->AI()->Talk(SAY_THERAMORE_CITIZEN_FLEE);
 					}
 					else if (roll_chance(60))
 					{
@@ -552,7 +552,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			{
 				scheduler.Schedule(2s, 3s, [this](TaskContext /*context*/)
 				{
-					// Verifie si une cible est l�, sinon on fait rien
+					// Verifie si une cible est l?, sinon on fait rien
 					if (Unit* target = FindLowestHealthFriend(me, WORD_OF_GLORY_RANGE))
 					{
 						if (Aura* afterimage = me->GetAura(SPELL_AFTERIMAGE))
@@ -1093,8 +1093,8 @@ struct npc_theramore_faithful : public npc_theramore_troop
 		SPELL_FLASH_HEAL            = 314655,
 		SPELL_POWER_WORD_SHIELD     = 318158,
 		SPELL_SMITE                 = 332705,
-        SPELL_GREATER_HEAL          = 342797,
-        SPELL_SHADOW_WORD_PAIN      = 435397
+		SPELL_GREATER_HEAL          = 342797,
+		SPELL_SHADOW_WORD_PAIN      = 435397
 	};
 
 	static constexpr uint8 PAIN_SUPPRESSION_HP_PCT      = 10;       // PV qui declenche la sequence defensive
@@ -1612,7 +1612,7 @@ struct npc_roknah_hag : public npc_theramore_horde
 			{
 				if (!me->HasUnitState(UNIT_STATE_CASTING) && me->HasAura(SPELL_GLACIAL_SPIKE_BUFF))
 					TryCastGlacialSpike();
-                glacial_spike.Repeat(2s);
+				glacial_spike.Repeat(2s);
 			})
 			// --- Cone of Cold ---
 			// Quand 3+ ennemis sont au corps a corps : interrompt Glacial Spike et lance Cone of Cold.
@@ -1707,122 +1707,35 @@ struct npc_roknah_hag : public npc_theramore_horde
 
 struct npc_roknah_grunt : public npc_theramore_horde
 {
-	npc_roknah_grunt(Creature* creature) : npc_theramore_horde(creature, AI_Type::Melee),
-		commandingShout(false), slayerStrikeCount(0)
-	{
-	}
+    // https://www.wowhead.com/fr/npc=144522/marco-le-malodorant#abilities
+	npc_roknah_grunt(Creature* creature) : npc_theramore_horde(creature, AI_Type::Melee) {}
 
 	enum Spells
 	{
-		SPELL_CHARGE            = 100,
-		SPELL_MORTAL_STRIKE     = 32736,
-		SPELL_HEROIC_STRIKE     = 57846,
-		SPELL_BATTLE_SHOUT      = 81219,
-		SPELL_COMMANDING_SHOUT  = 82061,
-		SPELL_EXECUTE           = 260798,
-		SPELL_SUDDEN_DEATH      = 280776,
-		SPELL_SLAYER_STRIKE     = 445579,
-		SPELL_PLUMMEL           = 457982,
-		SPELL_DEEP_WOUNDS       = 458010,
-		SPELL_SLAM              = 458028,
-		SPELL_WHIRLWIND         = 1217875,
+        SPELL_BLOODTHIRST   = 23881,
+        SPELL_RAGING_BLOW   = 85288,
 	};
 
-	bool commandingShout;
-	uint8 slayerStrikeCount;
-
-	void Reset() override
-	{
-		npc_theramore_horde::Reset();
-
-		commandingShout = false;
-		slayerStrikeCount = 0;
-	}
-
-	void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
-	{
-		if (!commandingShout && HealthBelowPct(50))
-		{
-			DoCast(SPELL_COMMANDING_SHOUT);
-
-			commandingShout = true;
-			scheduler.Schedule(3min, [this](TaskContext /*context*/)
-			{
-				commandingShout = false;
-			});
-		}
-	}
+    void InitializeAI() override
+    {
+        me->SetOverrideDisplayPowerId(237);
+        ScriptedAI::InitializeAI();
+    }
 
 	void JustEngagedWith(Unit* who) override
 	{
 		npc_theramore_horde::JustEngagedWith(who);
 
-		DoCast(SPELL_BATTLE_SHOUT);
-
 		scheduler
-			.Schedule(1ms, [this](TaskContext charge)
+			.Schedule(1ms, [this](TaskContext bloodthirst)
 			{
-				Unit* victim = me->GetVictim();
-				if (victim && victim->IsWithinDist(me, 25.0f, false))
-				{
-					CastStop();
-					DoCast(victim, SPELL_CHARGE);
-					charge.Repeat(1min);
-				}
-				else
-				{
-					charge.Repeat(5s, 10s);
-				}
+                DoCastVictim(SPELL_BLOODTHIRST);
+                bloodthirst.Repeat(5s, 8s);
 			})
-			.Schedule(2s, [this](TaskContext plummel)
+			.Schedule(2s, [this](TaskContext raging_blow)
 			{
-				if (Unit* target = DoSelectCastingUnit(SPELL_PLUMMEL, 5.0f))
-				{
-					DoCast(target, SPELL_PLUMMEL);
-					plummel.Repeat(25s, 40s);
-				}
-				else
-				{
-					plummel.Repeat(1s);
-				}
-			})
-			.Schedule(3s, 5s, [this](TaskContext slam)
-			{
-				DoCastVictim(SPELL_SLAM);
-				slam.Repeat(15s, 28s);
-			})
-			.Schedule(8s, 24s, [this](TaskContext whirlwind)
-			{
-				DoCastSelf(SPELL_WHIRLWIND);
-				whirlwind.Repeat(8s, 12s);
-			})
-			.Schedule(10s, 21s, [this](TaskContext slayer_strike)
-			{
-				if (slayerStrikeCount < 3)
-				{
-					DoCastVictim(SPELL_SLAYER_STRIKE);
-					DoCastSelf(SPELL_SUDDEN_DEATH);
-					slayerStrikeCount++;
-					slayer_strike.Repeat(8s, 12s);
-				}
-				else
-				{
-					DoCastVictim(SPELL_EXECUTE);
-					slayerStrikeCount = 0;
-					slayer_strike.Repeat(3s, 5s);
-				}
-			})
-			.Schedule(5s, 15s, [this](TaskContext strikes)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-					DoCast(target, RAND(SPELL_MORTAL_STRIKE, SPELL_HEROIC_STRIKE));
-				strikes.Repeat(8s, 25s);
-			})
-			.Schedule(14s, 22s, [this](TaskContext deep_wounds)
-			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-					DoCast(target, SPELL_DEEP_WOUNDS);
-				deep_wounds.Repeat(24s, 32s);
+                DoCastVictim(SPELL_RAGING_BLOW);
+                raging_blow.Repeat(1s, 3s);
 			});
 	}
 };
@@ -1847,8 +1760,8 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 	enum Spells
 	{
 		SPELL_HEALING_RAIN      = 73920,
-        SPELL_UNLEASH_LIFE      = 73685,
-        SPELL_HEALING_WAVE      = 77472,
+		SPELL_UNLEASH_LIFE      = 73685,
+		SPELL_HEALING_WAVE      = 77472,
 		SPELL_EARTHQUAKE        = 160162,
 		SPELL_ASCENDANCE        = 173160,
 		SPELL_GUST_OF_WIND      = 204853,
@@ -1860,7 +1773,7 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 		SPELL_FROST_SHOCK       = 290441,
 		SPELL_RIPTIDE           = 241892,
 		SPELL_CHAIN_HEAL        = 258099,
-        SPELL_WATER_BLAST       = 450908,
+		SPELL_WATER_BLAST       = 450908,
 		SPELL_HEALING_TIDE      = 127945,
 		SPELL_LIGHTNING_BOLT    = 1246687,
 	};
@@ -1917,18 +1830,18 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 		scheduler.DelayGroup(GROUP_NORMAL, 30s);
 
 		scheduler.Schedule(1ms, GROUP_ASCENDANCE, [this](TaskContext ascendance)
-	    {
-		    switch (ascendance.GetRepeatCounter())
-		    {
-			    case 0: // Reduction de degats immediate
-				    DoCastSelf(SPELL_ASTRAL_SHIFT);
-				    ascendance.Repeat(400ms);
-				    break;
-			    case 1: // Forme Ascendance (heals deviennent instants)
-				    DoCastSelf(SPELL_ASCENDANCE);
-				    break;
-		    }
-	    });
+		{
+			switch (ascendance.GetRepeatCounter())
+			{
+				case 0: // Reduction de degats immediate
+					DoCastSelf(SPELL_ASTRAL_SHIFT);
+					ascendance.Repeat(400ms);
+					break;
+				case 1: // Forme Ascendance (heals deviennent instants)
+					DoCastSelf(SPELL_ASCENDANCE);
+					break;
+			}
+		});
 	}
 
 	// Shock instant en sortie de backpedal.
@@ -1950,14 +1863,14 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 
 		scheduler
 
-            // === BUFF ===
+			// === BUFF ===
 
-            .Schedule(5s, GROUP_NORMAL, [this](TaskContext unleash_life)
-            {
-                CastStop();
-                DoCastSelf(SPELL_UNLEASH_LIFE);
-                unleash_life.Repeat(23s, 34s);
-            })
+			.Schedule(5s, GROUP_NORMAL, [this](TaskContext unleash_life)
+			{
+				CastStop();
+				DoCastSelf(SPELL_UNLEASH_LIFE);
+				unleash_life.Repeat(23s, 34s);
+			})
 
 			// === DPS ===
 
@@ -2029,7 +1942,7 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 					CastStop(SPELL_HEALING_WAVE);
 					DoCast(target, SPELL_HEALING_WAVE);
 				}
-                healing_wave.Repeat(3s);
+				healing_wave.Repeat(3s);
 			})
 			// Riptide : HoT preventif sur allie sous 60% PV qui n'a pas deja le HoT.
 			.Schedule(1s, GROUP_HEALING, [this](TaskContext riptide)
@@ -2076,15 +1989,9 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 		corruptionInfo = sSpellMgr->AssertSpellInfo(SPELL_CORRUPTION, DIFFICULTY_NONE);
 	}
 
-	enum Misc
-	{
-		NPC_WILD_IMP = 143622
-	};
-
 	enum Groups
 	{
 		GROUP_NORMAL,       // Rotation offensive (Trait de l'ombre / Bolt infernal, Main de Gul'dan)
-		GROUP_DOTS,         // Application des DoTs (Corruption)
 		GROUP_DEFENSIVE     // Drain de vie / Etreinte mortelle declenches sur seuil PV
 	};
 
@@ -2092,151 +1999,103 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 	{
 		SPELL_SHADOWBOLT            = 686,
 		SPELL_MORTAL_COIL           = 6789,
+		SPELL_DARK_PACT             = 108416,
 		SPELL_DRAIN_LIFE            = 149992,
 		SPELL_SUMMON_FELHUNTER      = 285232,
 		SPELL_CORRUPTION            = 251406,
 		SPELL_DEMONBOLT             = 264178,
+        SPELL_DEMONIC_CORE_BUFF     = 270176,
+		SPELL_CALL_DREADSTALKERS    = 464874,
 		SPELL_HAND_OF_GULDAN        = 464895,
 		SPELL_INFERNAL_BOLT         = 434506,
 		SPELL_INFERNAL_BOLT_BUFF    = 433891,
-		SPELL_WILD_IMP              = 279910,
+		SPELL_RUINATION             = 434635,
+		SPELL_RUINATION_BUFF        = 433885,
 		SPELL_SHARDS                = 1279442,
 	};
 
 	const SpellInfo* corruptionInfo;
 
 	uint8 soulShardsCount = 0;
-	std::array<ObjectGuid, 12> impSlots{};
-	std::array<bool, 12> impSlotReserved{};
-	std::queue<uint8> pendingImpSlots;
 
 	static constexpr float   DOT_RANGE              = 30.0f;            // Portee de selection pour les DoTs
-	static constexpr float   IMP_SPAWN_DISTANCE     = 2.0f;             // Rayon du cercle de spawn autour du lanceur
-	static constexpr float   IMP_ANGLE_SPACING      = 2 * M_PI / 12.0f; // Espacement angulaire entre slots : 30� (360 / 12)
-	static constexpr uint8   IMP_MAX_COUNT          = 12;               // Nombre de slots / Imps simultanes max
-	static constexpr uint8   IMP_HOG_COUNT          = 3;                // Imps invoques par Main de Gul'dan
 	static constexpr uint8   SOUL_SHARDS_MAX        = 3;                // Seuil de fragments d'ame avant Main de Gul'dan
 	static constexpr uint8   DRAIN_LIFE_HP_PCT      = 30;               // Drain de vie sous N% PV
-	static constexpr uint8   MORTAL_COIL_HP_PCT     = 50;               // Etreinte mortelle sous N% PV
+	static constexpr uint8   MORTAL_COIL_HP_PCT     = 40;               // Etreinte mortelle sous N% PV
 	static constexpr uint32  FELHUNTER_CHANCE       = 60;               // % de chance d'invoquer un Traqueur des Tenebres au pull
 	static constexpr Seconds DRAIN_LIFE_CHANNEL     = 6s;               // Duree du channel de Drain de vie (gel la rotation)
+
+	void InitializeAI() override
+	{
+		me->SetOverrideDisplayPowerId(217);
+		ScriptedAI::InitializeAI();
+	}
 
 	void Reset() override
 	{
 		npc_theramore_horde::Reset();
 
 		soulShardsCount = 0;
-		impSlots.fill(ObjectGuid::Empty);
-		impSlotReserved.fill(false);
-		std::queue<uint8>().swap(pendingImpSlots);
 
 		// Traqueur des Tenebres au pull : 60% de chance.
 		if (roll_chance(FELHUNTER_CHANCE))
 			DoCastSelf(SPELL_SUMMON_FELHUNTER, TRIGGERED_CAST_DIRECTLY);
 	}
 
-	void JustSummoned(Creature* summon) override
+	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
 	{
-		npc_theramore_horde::JustSummoned(summon);
-
-		if (summon->GetEntry() == NPC_WILD_IMP)
+		if (me->HealthBelowPctDamaged(60, damage)
+			&& !me->HasAura(SPELL_DARK_PACT)
+			&& !me->GetSpellHistory()->HasCooldown(SPELL_DARK_PACT))
 		{
-			// Assigne le slot reserve par CalcImpSpawnPosition.
-			if (!pendingImpSlots.empty())
-			{
-				uint8 slot = pendingImpSlots.front();
-				pendingImpSlots.pop();
-				impSlots[slot] = summon->GetGUID();
-			}
-
-			if (Unit* target = me->GetVictim())
-				summon->Attack(target, false);
+			CastStop(SPELL_DRAIN_LIFE);
+			DoCastSelf(SPELL_DARK_PACT);
 		}
 	}
 
-	void SummonedCreatureDespawn(Creature* summon) override
+    void OnAuraApplied(AuraApplication const* aurApp) override
+    {
+        // On ne s'interesse qu'aux buffs procs auto-appliques.
+        if (aurApp->GetBase()->GetCasterGUID() != me->GetGUID())
+            return;
+
+        SpellInfo const* spellInfo = aurApp->GetBase()->GetSpellInfo();
+
+        DoCastSpellWithBuff(spellInfo, SPELL_DEMONIC_CORE_BUFF, SPELL_DEMONBOLT);
+        DoCastSpellWithBuff(spellInfo, SPELL_RUINATION_BUFF, SPELL_RUINATION);
+    }
+
+	// Le cumul de shards se fait a la fin du cast (avant l'impact) pour rester aligne
+	// avec le rythme de la rotation : Repeat(2300ms) doit pouvoir s'enchainer sans attendre le projectile.
+	void OnSpellCast(SpellInfo const* spell) override
 	{
-		npc_theramore_horde::SummonedCreatureDespawn(summon);
-
-		if (summon->GetEntry() == NPC_WILD_IMP)
-			ReleaseImpSlot(summon->GetGUID());
-	}
-
-	void SummonedCreatureDies(Creature* summon, Unit* killer) override
-	{
-		npc_theramore_horde::SummonedCreatureDies(summon, killer);
-
-		if (summon->GetEntry() == NPC_WILD_IMP)
-			ReleaseImpSlot(summon->GetGUID());
-	}
-
-	void ReleaseImpSlot(ObjectGuid guid)
-	{
-		for (uint8 i = 0; i < IMP_MAX_COUNT; ++i)
-			if (impSlots[i] == guid)
-			{
-				impSlots[i].Clear();
-				impSlotReserved[i] = false;
-				return;
-			}
-	}
-
-	uint8 ImpCount() const
-	{
-		return static_cast<uint8>(std::count(impSlotReserved.begin(), impSlotReserved.end(), true));
-	}
-
-	/// Trouve le premier slot libre et le reserve.
-	uint8 ReserveImpSlot()
-	{
-		for (uint8 i = 0; i < IMP_MAX_COUNT; ++i)
-			if (!impSlotReserved[i])
-			{
-				impSlotReserved[i] = true;
-				return i;
-			}
-		return 0;
-	}
-
-	void SpellHitTarget(WorldObject* object, SpellInfo const* spell) override
-	{
-		Unit* victim = object->ToUnit();
-		if (!victim)
-			return;
-
-		if (spell->Id == SPELL_SHADOWBOLT || spell->Id == SPELL_DEMONBOLT)
+		if (spell->Id == SPELL_SHADOWBOLT)
 		{
-			soulShardsCount++;
-
-			if (ImpCount() < IMP_MAX_COUNT)
-			{
-				Position spawnPos = CalcImpSpawnPosition(me);
-				me->CastSpell(spawnPos, SPELL_WILD_IMP, true);
-			}
-
-			if (roll_chance(60) && !me->HasAura(SPELL_INFERNAL_BOLT_BUFF))
-				DoCastSelf(SPELL_INFERNAL_BOLT_BUFF, true);
+			if (soulShardsCount < SOUL_SHARDS_MAX)
+				soulShardsCount++;
+		}
+		else if (spell->Id == SPELL_DEMONBOLT)
+		{
+			// Demonbolt genere 2 fragments d'ame (consomme Demonic Core).
+			soulShardsCount = std::min<uint8>(SOUL_SHARDS_MAX, soulShardsCount + 2);
 		}
 		else if (spell->Id == SPELL_INFERNAL_BOLT)
 		{
-			soulShardsCount = 3;
-
+			soulShardsCount = SOUL_SHARDS_MAX;
 			me->RemoveAurasDueToSpell(SPELL_INFERNAL_BOLT_BUFF);
 		}
-		else if (spell->Id == SPELL_HAND_OF_GULDAN)
+		else if (spell->Id == SPELL_RUINATION)
 		{
 			soulShardsCount = 0;
-
-			for (uint8 i = 0; i < IMP_HOG_COUNT; i++)
-			{
-				if (ImpCount() >= IMP_MAX_COUNT)
-					break;
-
-				Position spawnPos = CalcImpSpawnPosition(me);
-				me->CastSpell(spawnPos, SPELL_WILD_IMP, true);
-			}
+			me->RemoveAurasDueToSpell(SPELL_RUINATION_BUFF);
 		}
+		else if (spell->Id == SPELL_HAND_OF_GULDAN)
+			soulShardsCount = 0;
+
+		// Main de Gul'dan : obligatoire quand 3 fragments d'ame sont accumules, interrompt tout sauf Drain de vie.
+		DoCastHandOfGuldan();
 	}
+
 
 	// -------------------------------------------------------------------------
 	// Rotation
@@ -2254,14 +2113,13 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 			// === DEFENSIVE (GROUP_DEFENSIVE) ===
 
 			// Drain de vie : channel 6s sous 30% PV, gel toute la rotation pendant ce temps.
-			.Schedule(3s, 5s, GROUP_DEFENSIVE, [this](TaskContext drain_life)
+			.Schedule(1s, GROUP_DEFENSIVE, [this](TaskContext drain_life)
 			{
 				if (HealthBelowPct(DRAIN_LIFE_HP_PCT))
 				{
 					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 					{
 						scheduler.DelayAll(DRAIN_LIFE_CHANNEL);
-
 						CastStop();
 						DoCast(target, SPELL_DRAIN_LIFE);
 					}
@@ -2270,16 +2128,15 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 				drain_life.Repeat(1s);
 			})
 			// Etreinte mortelle : peur sur cible la plus eloignee, sous 50% PV.
-			.Schedule(8s, 10s, GROUP_DEFENSIVE, [this](TaskContext mortal_coil)
+			.Schedule(1s, GROUP_DEFENSIVE, [this](TaskContext mortal_coil)
 			{
-				if (HealthBelowPct(MORTAL_COIL_HP_PCT))
+				if (HealthBelowPct(MORTAL_COIL_HP_PCT)
+                    && !me->GetSpellHistory()->HasCooldown(SPELL_MORTAL_COIL))
 				{
 					if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 					{
 						CastStop();
 						DoCast(target, SPELL_MORTAL_COIL);
-						mortal_coil.Repeat(25s, 45s);
-						return;
 					}
 				}
 
@@ -2288,21 +2145,6 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 
 			// === DPS (GROUP_NORMAL) ===
 
-			// Main de Gul'dan : declenchee quand 3 fragments d'ame sont accumules (5-8s entre cycles).
-			.Schedule(3s, 5s, GROUP_NORMAL, [this](TaskContext hand_of_guldan)
-			{
-				if (soulShardsCount >= SOUL_SHARDS_MAX)
-				{
-					CastStop(SPELL_DRAIN_LIFE);
-					if (roll_chance(30))
-						DoCastVictim(SPELL_DEMONBOLT, TRIGGERED_CAST_DIRECTLY);
-					else
-						DoCastVictim(SPELL_HAND_OF_GULDAN);
-					hand_of_guldan.Repeat(5s, 8s);
-				}
-				else
-					hand_of_guldan.Repeat(2s, 5s);
-			})
 			// Trait de l'ombre en filler (toutes les 4s) ; remplace par Bolt infernal si le buff est actif.
 			.Schedule(3s, GROUP_NORMAL, [this](TaskContext shadowbolt)
 			{
@@ -2313,13 +2155,20 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 				else
 					DoCastVictim(SPELL_SHADOWBOLT);
 
-				shadowbolt.Repeat(4s);
+				shadowbolt.Repeat(2300ms);
+			})
+            // Invocation de demons supplementaires pour declencher Demonic Core.
+			.Schedule(5s, GROUP_NORMAL, [this](TaskContext call_dreadstalkers)
+			{
+				CastStop({ SPELL_HAND_OF_GULDAN, SPELL_INFERNAL_BOLT });
+                DoCastVictim(SPELL_CALL_DREADSTALKERS);
+                call_dreadstalkers.Repeat(20s, 25s);
 			})
 
-			// === DoTs (GROUP_DOTS) ===
+			// === DoTs ===
 
 			// Corruption : applique le DoT toutes les 3s sur les cibles qui ne l'ont pas.
-			.Schedule(1s, GROUP_DOTS, [this](TaskContext corruption)
+			.Schedule(1s, GROUP_NORMAL, [this](TaskContext corruption)
 			{
 				if (Unit* target = DoFindEnemyMissingDot(corruptionInfo))
 					DoCast(target, SPELL_CORRUPTION);
@@ -2327,23 +2176,36 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 			});
 	}
 
-	/// Calcule la prochaine position de spawn pour un Imp.
-	/// Reserve le premier slot libre (0..11) sur le cercle, espacement de 30�.
-	Position CalcImpSpawnPosition(Unit const* center)
-	{
-		if (!center)
-			return Position();
+    // -------------------------------------------------------------------------
+	// Helpers
+	// -------------------------------------------------------------------------
 
-		uint8 slot = ReserveImpSlot();
-		pendingImpSlots.push(slot);
+    void DoCastSpellWithBuff(SpellInfo const* spellInfo, uint32 buff, uint32 spell, Optional<SelectTargetMethod> selectTargetMethod = {})
+    {
+        if (spellInfo->Id != buff)
+            return;
 
-		float angle = M_PI_2 + (slot * IMP_ANGLE_SPACING);
-		float x = center->GetPositionX() + IMP_SPAWN_DISTANCE * std::cos(angle);
-		float y = center->GetPositionY() + IMP_SPAWN_DISTANCE * std::sin(angle);
-		float z = center->GetPositionZ();
+        scheduler.Schedule(1s, 3s, [this, spell, selectTargetMethod](TaskContext /*context*/)
+        {
+            CastStop(SPELL_DRAIN_LIFE);
 
-		return Position(x, y, z, center->GetOrientation());
-	}
+            // Recherche une cible en fonction du predicat
+            Unit* target = me->GetVictim();
+            if (selectTargetMethod)
+                target = SelectTarget(*selectTargetMethod);
+
+            DoCast(target, spell);
+        });
+    }
+
+    void DoCastHandOfGuldan()
+    {
+        if (soulShardsCount >= SOUL_SHARDS_MAX)
+        {
+            CastStop(SPELL_DRAIN_LIFE);
+            DoCastVictim(SPELL_HAND_OF_GULDAN);
+        }
+    }
 };
 
 struct npc_wave_caller_gruhta : public CustomAI
@@ -2616,243 +2478,243 @@ const Position LookAtPos = { -3669.20f, -4504.08f, 10.33f, 1.60f };
 
 struct npc_faithful_training : public npc_theramore_faithful
 {
-    npc_faithful_training(Creature* creature) : npc_theramore_faithful(creature) { }
+	npc_faithful_training(Creature* creature) : npc_theramore_faithful(creature) { }
 
-    enum Misc
-    {
-        COSMETIC_GROUP      = 0,
-    };
+	enum Misc
+	{
+		COSMETIC_GROUP      = 0,
+	};
 
-    ObjectGuid soldierAGuid;
-    ObjectGuid soldierBGuid;
+	ObjectGuid soldierAGuid;
+	ObjectGuid soldierBGuid;
 
-    // Pr�pare un soldat pour le combat cosm�tique (emote, �tat, cible, HP r�duits).
-    void SetSoldierState(Creature* creature, Emote emote, Creature* target)
-    {
-        if (!creature || !target)
-            return;
+	// Pr?pare un soldat pour le combat cosm?tique (emote, ?tat, cible, HP r?duits).
+	void SetSoldierState(Creature* creature, Emote emote, Creature* target)
+	{
+		if (!creature || !target)
+			return;
 
-        creature->SetEmoteState(emote);
-        creature->SetReactState(REACT_PASSIVE);
-        creature->SetUnitFlag(UNIT_FLAG_PACIFIED);
-        creature->SetRegenerateHealth(false);
+		creature->SetEmoteState(emote);
+		creature->SetReactState(REACT_PASSIVE);
+		creature->SetUnitFlag(UNIT_FLAG_PACIFIED);
+		creature->SetRegenerateHealth(false);
 
-        uint32 health = static_cast<uint32>(creature->GetMaxHealth() * 0.3f);
-        creature->SetHealth(health);
-        creature->SetTarget(target->GetGUID());
-    }
+		uint32 health = static_cast<uint32>(creature->GetMaxHealth() * 0.3f);
+		creature->SetHealth(health);
+		creature->SetTarget(target->GetGUID());
+	}
 
-    // Pr�pare le healer (emote idle, passif, pas de cible, HP non modifi�s).
-    void SetHealerState(Creature* creature)
-    {
-        if (!creature)
-            return;
+	// Pr?pare le healer (emote idle, passif, pas de cible, HP non modifi?s).
+	void SetHealerState(Creature* creature)
+	{
+		if (!creature)
+			return;
 
-        creature->SetEmoteState(EMOTE_STATE_NONE);
-        creature->SetReactState(REACT_PASSIVE);
-        creature->SetUnitFlag(UNIT_FLAG_PACIFIED);
-    }
+		creature->SetEmoteState(EMOTE_STATE_NONE);
+		creature->SetReactState(REACT_PASSIVE);
+		creature->SetUnitFlag(UNIT_FLAG_PACIFIED);
+	}
 
-    // Restaure l'�tat normal d'une cr�ature apr�s la phase cosm�tique.
-    void ClearState(Creature* creature)
-    {
-        if (!creature)
-            return;
+	// Restaure l'?tat normal d'une cr?ature apr?s la phase cosm?tique.
+	void ClearState(Creature* creature)
+	{
+		if (!creature)
+			return;
 
-        creature->SetRegenerateHealth(true);
-        creature->SetHealth(creature->GetMaxHealth());
-        creature->SetTarget(ObjectGuid::Empty);
+		creature->SetRegenerateHealth(true);
+		creature->SetHealth(creature->GetMaxHealth());
+		creature->SetTarget(ObjectGuid::Empty);
 
-        float angle = creature->GetAbsoluteAngle(LookAtPos);
-        creature->SetOrientation(angle);
-        creature->SetFacingToPoint(LookAtPos);
-        creature->SetReactState(REACT_AGGRESSIVE);
-        creature->RemoveUnitFlag(UNIT_FLAG_PACIFIED);
-    }
+		float angle = creature->GetAbsoluteAngle(LookAtPos);
+		creature->SetOrientation(angle);
+		creature->SetFacingToPoint(LookAtPos);
+		creature->SetReactState(REACT_AGGRESSIVE);
+		creature->RemoveUnitFlag(UNIT_FLAG_PACIFIED);
+	}
 
-    void Reset() override
-    {
-        npc_theramore_faithful::Reset();
+	void Reset() override
+	{
+		npc_theramore_faithful::Reset();
 
-        if ((BFTPhases)instance->GetData(DATA_SCENARIO_PHASE) > BFTPhases::Preparation)
-            return;
+		if ((BFTPhases)instance->GetData(DATA_SCENARIO_PHASE) > BFTPhases::Preparation)
+			return;
 
-        std::vector<Creature*> soldiers;
-        me->GetCreatureListWithEntryInGrid(soldiers, NPC_THERAMORE_FOOTMAN, 15.0f);
+		std::vector<Creature*> soldiers;
+		me->GetCreatureListWithEntryInGrid(soldiers, NPC_THERAMORE_FOOTMAN, 15.0f);
 
-        if (soldiers.size() < 2)
-            return;
+		if (soldiers.size() < 2)
+			return;
 
-        Creature* soldierA = soldiers[0];
-        Creature* soldierB = soldiers[1];
+		Creature* soldierA = soldiers[0];
+		Creature* soldierB = soldiers[1];
 
-        if (!soldierA || !soldierB)
-            return;
+		if (!soldierA || !soldierB)
+			return;
 
-        soldierAGuid = soldierA->GetGUID();
-        soldierBGuid = soldierB->GetGUID();
+		soldierAGuid = soldierA->GetGUID();
+		soldierBGuid = soldierB->GetGUID();
 
-        SetHealerState(me);
-        SetSoldierState(soldierA, EMOTE_STATE_ATTACK1H, soldierB);
-        SetSoldierState(soldierB, EMOTE_STATE_BLOCK_SHIELD, soldierA);
+		SetHealerState(me);
+		SetSoldierState(soldierA, EMOTE_STATE_ATTACK1H, soldierB);
+		SetSoldierState(soldierB, EMOTE_STATE_BLOCK_SHIELD, soldierA);
 
-        scheduler
-            .Schedule(2s, COSMETIC_GROUP, [this](TaskContext checkPhase)
-            {
-                BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-                if (phase >= BFTPhases::Preparation)
-                {
-                    ClearState(me);
+		scheduler
+			.Schedule(2s, COSMETIC_GROUP, [this](TaskContext checkPhase)
+			{
+				BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+				if (phase >= BFTPhases::Preparation)
+				{
+					ClearState(me);
 
-                    if (Creature* soldierA = ObjectAccessor::GetCreature(*me, soldierAGuid))
-                        ClearState(soldierA);
+					if (Creature* soldierA = ObjectAccessor::GetCreature(*me, soldierAGuid))
+						ClearState(soldierA);
 
-                    if (Creature* soldierB = ObjectAccessor::GetCreature(*me, soldierBGuid))
-                        ClearState(soldierB);
+					if (Creature* soldierB = ObjectAccessor::GetCreature(*me, soldierBGuid))
+						ClearState(soldierB);
 
-                    scheduler.CancelGroup(COSMETIC_GROUP);
-                }
-                else
-                    checkPhase.Repeat(2s);
-            })
-            .Schedule(2s, COSMETIC_GROUP, [this](TaskContext heal)
-            {
-                Creature* soldierA = ObjectAccessor::GetCreature(*me, soldierAGuid);
-                Creature* soldierB = ObjectAccessor::GetCreature(*me, soldierBGuid);
+					scheduler.CancelGroup(COSMETIC_GROUP);
+				}
+				else
+					checkPhase.Repeat(2s);
+			})
+			.Schedule(2s, COSMETIC_GROUP, [this](TaskContext heal)
+			{
+				Creature* soldierA = ObjectAccessor::GetCreature(*me, soldierAGuid);
+				Creature* soldierB = ObjectAccessor::GetCreature(*me, soldierBGuid);
 
-                if (!soldierA || !soldierB)
-                    return;
+				if (!soldierA || !soldierB)
+					return;
 
-                if (Creature* victim = RAND(soldierA, soldierB))
-                    me->CastSpell(victim, RAND(SPELL_FLASH_HEAL, SPELL_GREATER_HEAL, SPELL_POWER_WORD_SHIELD));
+				if (Creature* victim = RAND(soldierA, soldierB))
+					me->CastSpell(victim, RAND(SPELL_FLASH_HEAL, SPELL_GREATER_HEAL, SPELL_POWER_WORD_SHIELD));
 
-                heal.Repeat(3s, 5s);
-            })
-            .Schedule(2s, 8s, COSMETIC_GROUP, [this](TaskContext soldiers)
-            {
-                Creature* soldierA = ObjectAccessor::GetCreature(*me, soldierAGuid);
-                Creature* soldierB = ObjectAccessor::GetCreature(*me, soldierBGuid);
+				heal.Repeat(3s, 5s);
+			})
+			.Schedule(2s, 8s, COSMETIC_GROUP, [this](TaskContext soldiers)
+			{
+				Creature* soldierA = ObjectAccessor::GetCreature(*me, soldierAGuid);
+				Creature* soldierB = ObjectAccessor::GetCreature(*me, soldierBGuid);
 
-                if (!soldierA || !soldierB)
-                    return;
+				if (!soldierA || !soldierB)
+					return;
 
-                uint32 damage = urand(1000, 2000);
-                soldierA->DealDamage(soldierB, soldierA, damage);
-                soldierB->DealDamage(soldierA, soldierB, damage);
+				uint32 damage = urand(1000, 2000);
+				soldierA->DealDamage(soldierB, soldierA, damage);
+				soldierB->DealDamage(soldierA, soldierB, damage);
 
-                soldiers.Repeat(2s, 5s);
-            });
-    }
+				soldiers.Repeat(2s, 5s);
+			});
+	}
 };
 
 struct npc_arcanist_training : public npc_theramore_arcanist
 {
-    npc_arcanist_training(Creature* creature) : npc_theramore_arcanist(creature, AI_Type::Stay)
-    {
-        SetCanRandomMovement(false);
+	npc_arcanist_training(Creature* creature) : npc_theramore_arcanist(creature, AI_Type::Stay)
+	{
+		SetCanRandomMovement(false);
 
-        SpellInfo const* evocationInfo = sSpellMgr->GetSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
-        m_evocationDuration = evocationInfo
-            ? Milliseconds(evocationInfo->CalcDuration(creature))
-            : 8s;
-    }
+		SpellInfo const* evocationInfo = sSpellMgr->GetSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
+		m_evocationDuration = evocationInfo
+			? Milliseconds(evocationInfo->CalcDuration(creature))
+			: 8s;
+	}
 
-    enum Groups
-    {
-        COSMETIC_GROUP_NORMAL   = 0,
-        COSMETIC_GROUP_MISSILES = 1,
-    };
+	enum Groups
+	{
+		COSMETIC_GROUP_NORMAL   = 0,
+		COSMETIC_GROUP_MISSILES = 1,
+	};
 
-    enum Spells
-    {
-        SPELL_EVOCATION = 243070,
-    };
+	enum Spells
+	{
+		SPELL_EVOCATION = 243070,
+	};
 
-    Milliseconds m_evocationDuration;
+	Milliseconds m_evocationDuration;
 
-    void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
-    {
-        if (spell->Id != SPELL_CLEARCASTING)
-            return;
+	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
+	{
+		if (spell->Id != SPELL_CLEARCASTING)
+			return;
 
-        scheduler.Schedule(1s, 3s, COSMETIC_GROUP_MISSILES, [this](TaskContext /*context*/)
-        {
-            Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
-            if (!training)
-                return;
+		scheduler.Schedule(1s, 3s, COSMETIC_GROUP_MISSILES, [this](TaskContext /*context*/)
+		{
+			Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
+			if (!training)
+				return;
 
-            scheduler.DelayGroup(COSMETIC_GROUP_NORMAL, 3s);
+			scheduler.DelayGroup(COSMETIC_GROUP_NORMAL, 3s);
 
-            CastStop();
-            me->GetSpellHistory()->ResetCooldown(SPELL_ARCANE_MISSILES, true);
-            me->CastSpell(training, SPELL_ARCANE_MISSILES, true);
-            me->RemoveAurasDueToSpell(SPELL_CLEARCASTING);
-        });
-    }
+			CastStop();
+			me->GetSpellHistory()->ResetCooldown(SPELL_ARCANE_MISSILES, true);
+			me->CastSpell(training, SPELL_ARCANE_MISSILES, true);
+			me->RemoveAurasDueToSpell(SPELL_CLEARCASTING);
+		});
+	}
 
-    void SpellHitTarget(WorldObject* object, SpellInfo const* spell) override
-    {
-        npc_theramore_arcanist::SpellHitTarget(object, spell);
+	void SpellHitTarget(WorldObject* object, SpellInfo const* spell) override
+	{
+		npc_theramore_arcanist::SpellHitTarget(object, spell);
 
-        if (spell->Id == SPELL_ARCANE_BLAST && roll_chance(60))
-            DoCastSelf(SPELL_CLEARCASTING);
-    }
+		if (spell->Id == SPELL_ARCANE_BLAST && roll_chance(60))
+			DoCastSelf(SPELL_CLEARCASTING);
+	}
 
-    void Reset() override
-    {
-        npc_theramore_arcanist::Reset();
+	void Reset() override
+	{
+		npc_theramore_arcanist::Reset();
 
-        if ((BFTPhases)instance->GetData(DATA_SCENARIO_PHASE) > BFTPhases::Preparation)
-            return;
+		if ((BFTPhases)instance->GetData(DATA_SCENARIO_PHASE) > BFTPhases::Preparation)
+			return;
 
-        scheduler
-            .Schedule(2s, COSMETIC_GROUP_NORMAL, [this](TaskContext checkPhase)
-            {
-                BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-                if (phase >= BFTPhases::Preparation)
-                {
-                    me->CombatStop();
-                    me->SetOrientation(me->GetAbsoluteAngle(LookAtPos));
-                    me->SetFacingToPoint(LookAtPos);
+		scheduler
+			.Schedule(2s, COSMETIC_GROUP_NORMAL, [this](TaskContext checkPhase)
+			{
+				BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
+				if (phase >= BFTPhases::Preparation)
+				{
+					me->CombatStop();
+					me->SetOrientation(me->GetAbsoluteAngle(LookAtPos));
+					me->SetFacingToPoint(LookAtPos);
 
-                    scheduler.CancelGroup(COSMETIC_GROUP_NORMAL);
-                    scheduler.CancelGroup(COSMETIC_GROUP_MISSILES);
-                }
-                else
-                    checkPhase.Repeat(2s);
-            })
-            .Schedule(2s, COSMETIC_GROUP_NORMAL, [this](TaskContext context)
-            {
-                int32 manaPct = me->GetPowerPct(Powers::POWER_MANA);
-                if (manaPct > 0 && manaPct <= 5) // Percent
-                {
-                    scheduler.DelayGroup(COSMETIC_GROUP_NORMAL,   m_evocationDuration);
-                    scheduler.DelayGroup(COSMETIC_GROUP_MISSILES, m_evocationDuration);
-                    DoCast(SPELL_EVOCATION);
-                }
+					scheduler.CancelGroup(COSMETIC_GROUP_NORMAL);
+					scheduler.CancelGroup(COSMETIC_GROUP_MISSILES);
+				}
+				else
+					checkPhase.Repeat(2s);
+			})
+			.Schedule(2s, COSMETIC_GROUP_NORMAL, [this](TaskContext context)
+			{
+				int32 manaPct = me->GetPowerPct(Powers::POWER_MANA);
+				if (manaPct > 0 && manaPct <= 5) // Percent
+				{
+					scheduler.DelayGroup(COSMETIC_GROUP_NORMAL,   m_evocationDuration);
+					scheduler.DelayGroup(COSMETIC_GROUP_MISSILES, m_evocationDuration);
+					DoCast(SPELL_EVOCATION);
+				}
 
-                context.Repeat(2s);
-            })
-            .Schedule(2s, COSMETIC_GROUP_NORMAL, [this](TaskContext context)
-            {
-                if (me->GetVictim())
-                    return;
+				context.Repeat(2s);
+			})
+			.Schedule(2s, COSMETIC_GROUP_NORMAL, [this](TaskContext context)
+			{
+				if (me->GetVictim())
+					return;
 
-                Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
-                if (!training)
-                    return;
+				Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
+				if (!training)
+					return;
 
-                me->Attack(training, false);
-                context.Repeat(2s);
-            });
-    }
+				me->Attack(training, false);
+				context.Repeat(2s);
+			});
+	}
 };
 
 struct npc_dummy_training : NullCreatureAI
 {
 	npc_dummy_training(Creature* creature) : NullCreatureAI(creature) {}
 
-	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType damageType, SpellInfo const* /*spellInfo = nullptr*/) override
+	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
 		damage = 0;
 	}
@@ -3079,21 +2941,138 @@ class spell_powder_keg : public SpellScript
 	}
 };
 
+// 279910 - Wild Imp
+class spell_wild_imp : public SpellScript
+{
+	struct SlotDef
+	{
+		float radius;
+		float angleFromBehind; // 0 = pile derriere ; positif = gauche du caster, negatif = droite
+	};
+
+	static constexpr uint8 IMP_MAX_COUNT = 12;
+
+	// 5 imps sur l'arc interieur (R = 2.0m) + 7 sur l'arc exterieur (R = 3.5m),
+	// repartis sur le demi-cercle exact derriere le lanceur (180�, d'epaule a epaule).
+	static constexpr std::array<SlotDef, IMP_MAX_COUNT> SLOTS = { {
+		// Inner ring : 5 slots, pas de pi/4
+		{ 2.0f, -float(M_PI_2) },
+		{ 2.0f, -float(M_PI_4) },
+		{ 2.0f,  0.f },
+		{ 2.0f,  float(M_PI_4) },
+		{ 2.0f,  float(M_PI_2) },
+		// Outer ring : 7 slots, pas de pi/6
+		{ 3.5f, -float(M_PI_2) },
+		{ 3.5f, -float(M_PI) / 3.f },
+		{ 3.5f, -float(M_PI) / 6.f },
+		{ 3.5f,  0.f },
+		{ 3.5f,  float(M_PI) / 6.f },
+		{ 3.5f,  float(M_PI) / 3.f },
+		{ 3.5f,  float(M_PI_2) },
+	} };
+
+	static Position SlotToWorld(Unit const* caster, SlotDef const& def)
+	{
+		float worldAngle = caster->GetOrientation() + float(M_PI) + def.angleFromBehind;
+		float x = caster->GetPositionX() + def.radius * std::cos(worldAngle);
+		float y = caster->GetPositionY() + def.radius * std::sin(worldAngle);
+		return Position(x, y, caster->GetPositionZ(), caster->GetOrientation());
+	}
+
+	void HandleSummon(SpellEffIndex effIndex)
+	{
+		PreventHitDefaultEffect(effIndex);
+
+		Unit* caster = GetCaster();
+		if (!caster)
+			return;
+
+        SpellEffectInfo const& effInfo = GetEffectInfo();
+        const uint32 wildImpEntry = effInfo.MiscValue;
+
+		// Pre-calcul des 12 positions de slot dans la frame actuelle du caster.
+		std::array<Position, IMP_MAX_COUNT> slotPositions;
+		for (uint8 s = 0; s < IMP_MAX_COUNT; ++s)
+			slotPositions[s] = SlotToWorld(caster, SLOTS[s]);
+
+		// Derive les slots occupes via "nearest slot" : chaque imp est rattache au slot le plus proche.
+		std::array<bool, IMP_MAX_COUNT> occupied{};
+		uint8 count = 0;
+		for (Unit* controlled : caster->m_Controlled)
+		{
+			if (!controlled || controlled->GetEntry() != wildImpEntry)
+				continue;
+
+			++count;
+
+			uint8 bestSlot = 0;
+			float bestDistSq = std::numeric_limits<float>::max();
+			for (uint8 s = 0; s < IMP_MAX_COUNT; ++s)
+			{
+				float d2 = controlled->GetExactDist2dSq(&slotPositions[s]);
+				if (d2 < bestDistSq)
+				{
+					bestDistSq = d2;
+					bestSlot = s;
+				}
+			}
+			ASSERT(bestSlot < IMP_MAX_COUNT);
+			occupied[bestSlot] = true;
+		}
+
+		// Au-dela de la limite : le sort se cast quand meme, mais aucun summon.
+		if (count >= IMP_MAX_COUNT)
+			return;
+
+		uint8 freeSlot = 0;
+		for (; freeSlot < IMP_MAX_COUNT; ++freeSlot)
+			if (!occupied[freeSlot])
+				break;
+
+		// Garde-fou : si la derivation "nearest slot" a sature tous les slots alors que count < 12 (theoriquement impossible), on abandonne.
+		if (freeSlot >= IMP_MAX_COUNT)
+			return;
+
+		SummonPropertiesEntry const* properties = sSummonPropertiesStore.LookupEntry(uint32(effInfo.MiscValueB));
+		Milliseconds duration = Milliseconds(GetSpellInfo()->CalcDuration(caster));
+
+		TempSummon* summon = caster->GetMap()->SummonCreature(wildImpEntry, slotPositions[freeSlot], properties, duration, caster, GetSpellInfo()->Id);
+		if (!summon)
+			return;
+
+        if (caster->IsInCombat())
+        {
+            Unit* victim = caster->GetVictim();
+            if (victim)
+                summon->Attack(victim, true);
+        }
+
+		// Chaque imp suit le lanceur dans son slot relatif : la formation se maintient meme si le caster bouge ou tourne.
+		summon->GetMotionMaster()->MoveFollow(caster, SLOTS[freeSlot].radius, ChaseAngle(float(M_PI) + SLOTS[freeSlot].angleFromBehind));
+	}
+
+	void Register() override
+	{
+		OnEffectLaunch += SpellEffectFn(spell_wild_imp::HandleSummon, EFFECT_0, SPELL_EFFECT_SUMMON);
+	}
+};
+
 // 464895 - Hand of Gul'dan
 class spell_hand_of_guldan : public SpellScript
 {
 	enum Spells
 	{
-		SPELL_HAND_OF_GULDAN = 464895,
-		SPELL_HAND_OF_GULDAN_DAMAGE = 464890,
+		SPELL_HAND_OF_GULDAN            = 464895,
+		SPELL_HAND_OF_GULDAN_DAMAGE     = 464890,
+		SPELL_WILD_IMP                  = 279910,
 	};
 
 	bool Validate(SpellInfo const* /*spellInfo*/) override
 	{
-		return ValidateSpellInfo ({ SPELL_HAND_OF_GULDAN });
+		return ValidateSpellInfo({ SPELL_HAND_OF_GULDAN_DAMAGE, SPELL_WILD_IMP });
 	}
 
-	void HandleDummy(SpellEffIndex /*effIndex*/)
+	void HandleDummy(SpellEffIndex effIndex)
 	{
 		Unit* caster = GetCaster();
 		Unit* target = GetHitUnit();
@@ -3101,8 +3080,15 @@ class spell_hand_of_guldan : public SpellScript
 		if (!caster || !target)
 			return;
 
-		const Position dest = target->GetPosition();
-		caster->CastSpell(dest, SPELL_HAND_OF_GULDAN_DAMAGE, true);
+		caster->CastSpell(target->GetPosition(), SPELL_HAND_OF_GULDAN_DAMAGE, CastSpellExtraArgsInit{
+			.TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+		});
+
+		const uint8 wildImp = GetEffectInfo(effIndex).BasePoints;
+		for (uint8 i = 0; i < wildImp; ++i)
+			caster->CastSpell(caster, SPELL_WILD_IMP, CastSpellExtraArgsInit{
+			.TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+		});
 	}
 
 	void Register() override
@@ -3425,11 +3411,11 @@ struct at_blessed_hammer : AreaTriggerAI
 	}
 
 private:
-	// AreaTrigger 29807 dure 5 s : on �tale la spirale sur toute la dur�e.
-	static constexpr std::size_t POINTS = 200;    // Densit� totale (40 pts/seconde)
+	// AreaTrigger 29807 dure 5 s : on ?tale la spirale sur toute la dur?e.
+	static constexpr std::size_t POINTS = 200;    // Densit? totale (40 pts/seconde)
 	static constexpr float TURNS        = 10.0f;  // 10 tours sur 5 s = 2 tours/s
-	static constexpr float R0           = 2.0f;   // Rayon de d�part
-	static constexpr float GROWTH       = 0.35f;  // Expansion par radian (spirale d'Archim�de)
+	static constexpr float R0           = 2.0f;   // Rayon de d?part
+	static constexpr float GROWTH       = 0.35f;  // Expansion par radian (spirale d'Archim?de)
 	static constexpr float Z_OFFSET     = 1.5f;   // Hauteur du marteau au-dessus du sol
 };
 
@@ -3460,6 +3446,7 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterSpellScript(spell_theramore_light_of_dawn);
 	RegisterSpellScript(spell_theramore_throw_bucket);
 	RegisterSpellScript(spell_powder_keg);
+	RegisterSpellScript(spell_wild_imp);
 	RegisterSpellScript(spell_hand_of_guldan);
 	RegisterSpellScript(spell_light_of_dawn);
 

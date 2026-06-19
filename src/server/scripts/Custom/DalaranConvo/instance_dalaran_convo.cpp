@@ -1,4 +1,4 @@
-#include "EventMap.h"
+﻿#include "EventMap.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
 #include "Map.h"
@@ -392,7 +392,7 @@ class scenario_dalaran_convo : public InstanceMapScript
                 onSpawn(actors[type]);
         }
 
-        // Retourne le GUID de l'acteur spawn�, ou Empty si non applicable.
+        // Retourne le GUID de l'acteur spawné, ou Empty si non applicable.
         ObjectGuid SpawnActor(Creature* jaina, const VisionData& data)
         {
             switch (data.Type)

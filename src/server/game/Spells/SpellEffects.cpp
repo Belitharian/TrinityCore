@@ -5054,6 +5054,14 @@ void Spell::SummonGuardian(SpellEffectInfo const* effect, uint32 entry, SummonPr
                     if (proto->GetRequiredSkill() == SKILL_ENGINEERING)
                         if (uint16 skill202 = unitCaster->ToPlayer()->GetSkillValue(SKILL_ENGINEERING))
                             static_cast<Guardian*>(summon)->InitStatsForLevel(skill202 / 5);
+
+            if (properties->GetFlags().HasFlag(SummonPropertiesFlags::HelpWhenSummonedInCombat))
+                if (unitCaster->IsInCombat())
+                {
+                    Unit* victim = unitCaster->GetVictim();
+                    if (victim)
+                        summon->Attack(victim, true);
+                }
         }
 
         if (summon->HasUnitTypeMask(UNIT_MASK_MINION) && m_targets.HasDst())

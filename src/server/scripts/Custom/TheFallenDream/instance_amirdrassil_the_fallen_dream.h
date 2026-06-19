@@ -1,4 +1,4 @@
-#ifndef DEF_THE_FALLEN_DREAM_H
+﻿#ifndef DEF_THE_FALLEN_DREAM_H
 #define DEF_THE_FALLEN_DREAM_H
 
 #include "CreatureAIImpl.h"

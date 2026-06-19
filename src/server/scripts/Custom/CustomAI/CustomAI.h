@@ -1,4 +1,4 @@
-#ifndef CUSTOM_CUSTOMAI_H
+﻿#ifndef CUSTOM_CUSTOMAI_H
 #define CUSTOM_CUSTOMAI_H
 
 #include "Custom/FakeParty/FakeParty.h"
@@ -138,7 +138,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         virtual uint32 GetEncircleMinEnemies() const { return 3; }
 
         // Vrai si >= GetEncircleMinEnemies() ennemis dans le radius ET qu'il
-        // n'existe aucun arc libre de >= minClearArc radians (par defaut 150�).
+        // n'existe aucun arc libre de >= minClearArc radians (par defaut 150°).
         bool IsEncircled(float minClearArc = float(5.0 * M_PI / 6.0)) const;
 
         // Centre du plus grand arc vide d'ennemis, projete a `distance` via

@@ -1,4 +1,4 @@
-#ifndef DALARAN_PURGE_H_
+﻿#ifndef DALARAN_PURGE_H_
 #define DALARAN_PURGE_H_
 
 #include "CreatureAIImpl.h"

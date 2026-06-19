@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Ruins of Theramore - AI de Jaina Proudmoore (npc_jaina_ruins)
  *
  * Cette AI gere :

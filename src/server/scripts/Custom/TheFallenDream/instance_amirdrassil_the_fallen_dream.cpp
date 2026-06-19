@@ -42,24 +42,24 @@ public:
             LoadDungeonEncounterData(encounters);
         }
 
-        uint32 GetData(uint32 dataId) const override
-        {
-            switch (dataId)
-            {
-                default:
-                    break;
-            }
-            return 0;
-        }
+        //uint32 GetData(uint32 dataId) const override
+        //{
+        //    switch (dataId)
+        //    {
+        //        default:
+        //            break;
+        //    }
+        //    return 0;
+        //}
 
-        void SetData(uint32 dataId, uint32 /*value*/) override
-        {
-            switch (dataId)
-            {
-                default:
-                    break;
-            }
-        }
+        //void SetData(uint32 dataId, uint32 /*value*/) override
+        //{
+        //    switch (dataId)
+        //    {
+        //        default:
+        //            break;
+        //    }
+        //}
 
         void OnCreatureCreate(Creature* creature) override
         {

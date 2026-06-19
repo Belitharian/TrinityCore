@@ -1,4 +1,4 @@
-#include "Custom/CustomAI/CustomAI.h"
+Ôªø#include "Custom/CustomAI/CustomAI.h"
 #include "Custom/FakeParty/FakeParty.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
@@ -270,7 +270,7 @@ public:
 
                 if (m_instance)
                 {
-                    // Capture le GUID de l'instance pour Èviter un dangling this
+                    // Capture le GUID de l'instance pour √©viter un dangling this
                     ObjectGuid instanceCreatureGuid = me->GetGUID();
                     scheduler.Schedule(5s, [this](TaskContext /*context*/)
                     {
@@ -333,7 +333,7 @@ public:
         if (!me->HealthBelowPctDamaged(10, damage))
             return;
 
-        // Toujours annuler les dÈg‚ts sous 10%, que l'evocation soit en cours ou non
+        // Toujours annuler les d√©g√¢ts sous 10%, que l'evocation soit en cours ou non
         damage = 0;
 
         if (m_evocating)

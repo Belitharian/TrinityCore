@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Ruins of Theramore - InstanceScript principal
  *
  * Gere le flow complet du scenario "Les Ruines de Theramore" :

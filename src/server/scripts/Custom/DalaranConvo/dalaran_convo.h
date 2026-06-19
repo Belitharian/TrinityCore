@@ -1,4 +1,4 @@
-#ifndef DALARAN_CONVO_H_
+﻿#ifndef DALARAN_CONVO_H_
 #define DALARAN_CONVO_H_
 
 #include "CreatureAIImpl.h"

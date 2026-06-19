@@ -1,4 +1,4 @@
-#include "CriteriaHandler.h"
+ï»¿#include "CriteriaHandler.h"
 #include "EventMap.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
@@ -1362,7 +1362,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						}
 					}
 						
-					// Quand le nombre de membres vivants est inférieur ou égal au nombre de membres morts
+					// Quand le nombre de membres vivants est infÃ©rieur ou Ã©gal au nombre de membres morts
 					if (deadCounter >= HORDE_WAVES_COUNT)
 					{
 						DoCastSpellOnPlayers(SPELL_KILL_CREDIT);

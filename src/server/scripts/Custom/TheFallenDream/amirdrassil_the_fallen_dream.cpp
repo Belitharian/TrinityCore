@@ -1,4 +1,4 @@
-#include "AreaTrigger.h"
+﻿#include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
 #include "Creature.h"
 #include "InstanceScript.h"

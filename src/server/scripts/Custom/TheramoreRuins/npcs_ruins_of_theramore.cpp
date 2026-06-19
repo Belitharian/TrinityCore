@@ -1,4 +1,4 @@
-#include "GameObject.h"
+﻿#include "GameObject.h"
 #include "GameObjectAI.h"
 #include "InstanceScript.h"
 #include "Player.h"

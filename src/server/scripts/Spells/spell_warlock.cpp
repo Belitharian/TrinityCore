@@ -58,14 +58,26 @@ enum WarlockSpells
     SPELL_WARLOCK_CURSE_OF_EXHAUSTION               = 334275,
     SPELL_WARLOCK_DEATHS_EMBRACE                    = 453189,
     SPELL_WARLOCK_DEMONBOLT_ENERGIZE                = 280127,
+    SPELL_WARLOCK_DEMONIC_CORE_TALENT               = 267102,
+    SPELL_WARLOCK_DEMONIC_CORE_CHARGE               = 264173,
+    SPELL_WARLOCK_DEMONIC_CORE_BUFF                 = 270176,
+    SPELL_WARLOCK_CALL_DREADSTALKERS_SUMMON_1       = 193331,
+    SPELL_WARLOCK_CALL_DREADSTALKERS_SUMMON_2       = 193332,
     SPELL_WARLOCK_DEMONIC_CIRCLE_ALLOW_CAST         = 62388,
     SPELL_WARLOCK_DEMONIC_CIRCLE_SUMMON             = 48018,
     SPELL_WARLOCK_DEMONIC_CIRCLE_TELEPORT           = 48020,
+    SPELL_WARLOCK_DEMONIC_ART_MOTHER_OF_CHAOS       = 432794,
+    SPELL_WARLOCK_DEMONIC_ART_OVERLORD              = 428524,
+    SPELL_WARLOCK_DEMONIC_ART_PIT_LORD              = 432795,
     SPELL_WARLOCK_DEVOUR_MAGIC_HEAL                 = 19658,
+    SPELL_WARLOCK_DIABOLIC_RITUAL_MOTHER_OF_CHAOS   = 432815,
+    SPELL_WARLOCK_DIABOLIC_RITUAL_OVERLORD          = 431944,
+    SPELL_WARLOCK_DIABOLIC_RITUAL_PIT_LORD          = 432816,
     SPELL_WARLOCK_DOOM_ENERGIZE                     = 193318,
     SPELL_WARLOCK_DRAIN_SOUL_ENERGIZE               = 205292,
     SPELL_WARLOCK_FLAMESHADOW                       = 37379,
     SPELL_WARLOCK_GLYPH_OF_DEMON_TRAINING           = 56249,
+    SPELL_WARLOCK_HAND_OF_GULDAN                    = 105174,
     SPELL_WARLOCK_GLYPH_OF_SOUL_SWAP                = 56226,
     SPELL_WARLOCK_GLYPH_OF_SUCCUBUS                 = 56250,
     SPELL_WARLOCK_IMMOLATE_PERIODIC                 = 157736,
@@ -97,6 +109,9 @@ enum WarlockSpells
     SPELL_WARLOCK_STRENGTHEN_PACT_SUCCUBUS          = 366323,
     SPELL_WARLOCK_SUCCUBUS_PACT                     = 365360,
     SPELL_WARLOCK_SUMMON_INCUBUS                    = 365349,
+    SPELL_WARLOCK_SUMMON_MOTHER_OF_CHAOS            = 428565,
+    SPELL_WARLOCK_SUMMON_OVERLORD                   = 428571,
+    SPELL_WARLOCK_SUMMON_PIT_LORD                   = 434400,
     SPELL_WARLOCK_SUMMON_SUCCUBUS                   = 712,
     SPELL_WARLOCK_UNSTABLE_AFFLICTION_DAMAGE        = 196364,
     SPELL_WARLOCK_UNSTABLE_AFFLICTION_ENERGIZE      = 31117,
@@ -333,6 +348,35 @@ class spell_warl_cataclysm : public SpellScript
     void Register() override
     {
         OnEffectHitTarget += SpellEffectFn(spell_warl_cataclysm::HandleHit, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
+    }
+};
+
+// 104316 - Call Dreadstalkers
+// 464874 - Call Dreadstalkers
+class spell_warl_call_dreadstalkers : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({
+            SPELL_WARLOCK_CALL_DREADSTALKERS_SUMMON_1,
+            SPELL_WARLOCK_CALL_DREADSTALKERS_SUMMON_2
+        });
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/) const
+    {
+        Unit* caster = GetCaster();
+        for (uint32 summonSpell : { SPELL_WARLOCK_CALL_DREADSTALKERS_SUMMON_1, SPELL_WARLOCK_CALL_DREADSTALKERS_SUMMON_2 })
+            caster->CastSpell(caster, summonSpell, CastSpellExtraArgsInit
+                {
+                    .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+                    .TriggeringSpell = GetSpell()
+                });
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_warl_call_dreadstalkers::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
     }
 };
 
@@ -637,15 +681,20 @@ class spell_warl_demonbolt : public SpellScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        return ValidateSpellInfo ({ SPELL_WARLOCK_DEMONBOLT_ENERGIZE });
+        return ValidateSpellInfo ({ SPELL_WARLOCK_DEMONBOLT_ENERGIZE, SPELL_WARLOCK_DEMONIC_CORE_CHARGE });
     }
 
     void HandleAfterCast() const
     {
-        GetCaster()->CastSpell(GetCaster(), SPELL_WARLOCK_DEMONBOLT_ENERGIZE, CastSpellExtraArgsInit{
+        Unit* caster = GetCaster();
+
+        caster->CastSpell(caster, SPELL_WARLOCK_DEMONBOLT_ENERGIZE, CastSpellExtraArgsInit{
             .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
             .TriggeringSpell = GetSpell()
         });
+
+        if (Aura* core = caster->GetAura(SPELL_WARLOCK_DEMONIC_CORE_CHARGE))
+            core->ModStackAmount(-1);
     }
 
     void Register() override
@@ -741,6 +790,191 @@ class spell_warl_devour_magic : public SpellScript
     void Register() override
     {
         OnEffectSuccessfulDispel += SpellEffectFn(spell_warl_devour_magic::OnSuccessfulDispel, EFFECT_0, SPELL_EFFECT_DISPEL);
+    }
+};
+
+// 470479 - Diabolic Ritual
+class spell_warl_diabolic_ritual : public AuraScript
+{
+    enum Npc
+    {
+        SPELL_NPC_HAND_OF_GULDAN = 464895,
+    };
+
+    static constexpr std::array<uint32, 3> RitualVariants =
+    {
+        SPELL_WARLOCK_DIABOLIC_RITUAL_MOTHER_OF_CHAOS,
+        SPELL_WARLOCK_DIABOLIC_RITUAL_OVERLORD,
+        SPELL_WARLOCK_DIABOLIC_RITUAL_PIT_LORD
+    };
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({
+            SPELL_WARLOCK_DIABOLIC_RITUAL_MOTHER_OF_CHAOS,
+            SPELL_WARLOCK_DIABOLIC_RITUAL_OVERLORD,
+            SPELL_WARLOCK_DIABOLIC_RITUAL_PIT_LORD
+        });
+    }
+
+    static constexpr int32 NpcProcChance = 25;
+
+    bool CheckProc(ProcEventInfo const& eventInfo) const
+    {
+        Spell const* procSpell = eventInfo.GetProcSpell();
+        if (!procSpell)
+            return false;
+
+        if (GetTarget()->IsPlayer())
+            return procSpell->HasPowerTypeCost(POWER_SOUL_SHARDS);
+
+        if (GetTarget()->IsCreature())
+            return procSpell->GetSpellInfo()->Id == SPELL_NPC_HAND_OF_GULDAN;
+
+        return false;
+    }
+
+    void HandleProc(ProcEventInfo const& /*eventInfo*/) const
+    {
+        Unit* caster = GetTarget();
+
+        for (uint32 variant : RitualVariants)
+        {
+            if (Aura* active = caster->GetAura(variant))
+            {
+                int32 newDuration = active->GetDuration() - 1 * IN_MILLISECONDS;
+                if (newDuration <= 0)
+                    active->SetDuration(0);
+                else
+                    active->SetDuration(newDuration);
+                return;
+            }
+        }
+
+        uint32 chosen = Trinity::Containers::SelectRandomContainerElement(RitualVariants);
+        caster->CastSpell(caster, chosen, true);
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_warl_diabolic_ritual::CheckProc);
+        OnProc += AuraProcFn(spell_warl_diabolic_ritual::HandleProc);
+    }
+};
+
+// 432815 - Diabolic Ritual: Mother of Chaos
+// 431944 - Diabolic Ritual: Overlord
+// 432816 - Diabolic Ritual: Pit Lord
+class spell_warl_diabolic_ritual_variant : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({
+            SPELL_WARLOCK_DEMONIC_ART_MOTHER_OF_CHAOS,
+            SPELL_WARLOCK_DEMONIC_ART_OVERLORD,
+            SPELL_WARLOCK_DEMONIC_ART_PIT_LORD
+        });
+    }
+
+    void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/) const
+    {
+        if (GetTargetApplication()->GetRemoveMode() != AURA_REMOVE_BY_EXPIRE)
+            return;
+
+        Unit* target = GetTarget();
+        uint32 demonicArt = 0;
+        switch (GetId())
+        {
+            case SPELL_WARLOCK_DIABOLIC_RITUAL_MOTHER_OF_CHAOS:
+                demonicArt = SPELL_WARLOCK_DEMONIC_ART_MOTHER_OF_CHAOS;
+                break;
+            case SPELL_WARLOCK_DIABOLIC_RITUAL_OVERLORD:
+                demonicArt = SPELL_WARLOCK_DEMONIC_ART_OVERLORD;
+                break;
+            case SPELL_WARLOCK_DIABOLIC_RITUAL_PIT_LORD:
+                demonicArt = SPELL_WARLOCK_DEMONIC_ART_PIT_LORD;
+                break;
+            default:
+                return;
+        }
+
+        target->CastSpell(target, demonicArt, true);
+    }
+
+    void Register() override
+    {
+        OnEffectRemove += AuraEffectRemoveFn(spell_warl_diabolic_ritual_variant::HandleRemove, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// 428524 - Demonic Art: Overlord
+// 432794 - Demonic Art: Mother of Chaos
+// 432795 - Demonic Art: Pit Lord
+class spell_warl_demonic_art : public AuraScript
+{
+    enum Npc
+    {
+        SPELL_INFERNAL_BOLT_BUFF    = 433891,
+        SPELL_RUINATION_BUFF        = 433885,
+        SPELL_NPC_HAND_OF_GULDAN    = 464895,
+    };
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({
+            SPELL_WARLOCK_HAND_OF_GULDAN,
+            SPELL_NPC_HAND_OF_GULDAN,
+            SPELL_WARLOCK_SUMMON_MOTHER_OF_CHAOS,
+            SPELL_WARLOCK_SUMMON_OVERLORD,
+            SPELL_WARLOCK_SUMMON_PIT_LORD
+        });
+    }
+
+    bool CheckProc(ProcEventInfo const& eventInfo) const
+    {
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        if (!spellInfo)
+            return false;
+
+        if (GetTarget()->IsPlayer())
+            return spellInfo->Id == SPELL_WARLOCK_HAND_OF_GULDAN;
+
+        if (GetTarget()->IsCreature())
+            return spellInfo->Id == SPELL_NPC_HAND_OF_GULDAN;
+
+        return false;
+    }
+
+    void HandleProc(ProcEventInfo const& /*eventInfo*/)
+    {
+        Unit* target = GetTarget();
+        uint32 summonSpell = 0;
+        switch (GetId())
+        {
+            case SPELL_WARLOCK_DEMONIC_ART_MOTHER_OF_CHAOS:
+                summonSpell = SPELL_WARLOCK_SUMMON_MOTHER_OF_CHAOS;
+                target->CastSpell(target, SPELL_INFERNAL_BOLT_BUFF, true);
+                break;
+            case SPELL_WARLOCK_DEMONIC_ART_OVERLORD:
+                summonSpell = SPELL_WARLOCK_SUMMON_OVERLORD;
+                break;
+            case SPELL_WARLOCK_DEMONIC_ART_PIT_LORD:
+                summonSpell = SPELL_WARLOCK_SUMMON_PIT_LORD;
+                target->CastSpell(target, SPELL_RUINATION_BUFF, true);
+                break;
+            default:
+                return;
+        }
+
+        target->CastSpell(target, summonSpell, true);
+
+        Remove();
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_warl_demonic_art::CheckProc);
+        OnProc += AuraProcFn(spell_warl_demonic_art::HandleProc);
     }
 };
 
@@ -1797,6 +2031,7 @@ void AddSC_warlock_spell_scripts()
     RegisterSpellScript(spell_warl_bilescourge_bombers);
     RegisterAreaTriggerAI(at_warl_bilescourge_bombers);
     RegisterSpellAndAuraScriptPair(spell_warl_burning_rush, spell_warl_burning_rush_aura);
+    RegisterSpellScript(spell_warl_call_dreadstalkers);
     RegisterSpellScript(spell_warl_cataclysm);
     RegisterSpellScript(spell_warl_channel_demonfire_activator);
     RegisterSpellScript(spell_warl_channel_demonfire_periodic);
@@ -1810,9 +2045,12 @@ void AddSC_warlock_spell_scripts()
     RegisterSpellScript(spell_warl_deaths_embrace_dots);
     RegisterSpellScript(spell_warl_deaths_embrace_drain_life);
     RegisterSpellScript(spell_warl_demonbolt);
+    RegisterSpellScript(spell_warl_demonic_art);
     RegisterSpellScript(spell_warl_demonic_circle_summon);
     RegisterSpellScript(spell_warl_demonic_circle_teleport);
     RegisterSpellScript(spell_warl_devour_magic);
+    RegisterSpellScript(spell_warl_diabolic_ritual);
+    RegisterSpellScript(spell_warl_diabolic_ritual_variant);
     RegisterSpellScript(spell_warl_doom);
     RegisterSpellScript(spell_warl_drain_soul);
     RegisterSpellScript(spell_warl_haunt);

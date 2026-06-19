@@ -1,4 +1,4 @@
-#include "CustomAI.h"
+ï»¿#include "CustomAI.h"
 #include "CellImpl.h"
 #include "Containers.h"
 #include "GridNotifiers.h"
@@ -127,7 +127,7 @@ void CustomAI::Reset()
 	summons.DespawnAll();
 	scheduler.CancelAll();
 
-	// Si un joueur était lié, on détruit le frame avant de reset
+	// Si un joueur Ã©tait liÃ©, on dÃ©truit le frame avant de reset
 	if (linkedPlayer)
 	{
 		fakeParty.DestroyFakeParty(linkedPlayer);
@@ -151,7 +151,7 @@ void CustomAI::AttackStart(Unit* who)
 		case AI_Type::None:
 		case AI_Type::Stay:
 		{
-			// Pas d'auto-attaque melee, pas de déplacement
+			// Pas d'auto-attaque melee, pas de dÃ©placement
 			if (me->Attack(who, false))
 			{
 				me->SetCanMelee(false, false);
@@ -262,10 +262,10 @@ void CustomAI::JustDied(Unit* killer)
 
 void CustomAI::UpdateAI(uint32 diff)
 {
-	// Mise à jour périodique du party frame (santé, mana, position)
+	// Mise Ã  jour pÃ©riodique du party frame (santÃ©, mana, position)
 	if (fakeParty.IsActive())
 	{
-		// Vérifier que le joueur est toujours valide et en range
+		// VÃ©rifier que le joueur est toujours valide et en range
 		if (!linkedPlayer
 			|| !linkedPlayer->IsInWorld()
 			|| !linkedPlayer->IsWithinDistInMap(me, 100.0f))
@@ -428,7 +428,7 @@ void CustomAI::MovementInform(uint32 type, uint32 id)
 	if (type != EFFECT_MOTION_TYPE && type != POINT_MOTION_TYPE)
 		return;
 
-	// Vérifie que l'unité à bien une cible
+	// VÃ©rifie que l'unitÃ© Ã  bien une cible
 	Unit* victim = me->GetVictim();
 	if (!victim)
 		return;
@@ -591,7 +591,7 @@ Position CustomAI::GetRandomMovementsPosition()
 	// Direction actuelle (victim -> me)
 	float baseAngle = victim->GetAbsoluteAngle(me);
 
-	// Incrementer l'angle de circle kiting (40-70° par step)
+	// Incrementer l'angle de circle kiting (40-70Â° par step)
 	float step = frand(float(M_PI / 4.5f), float(M_PI / 2.5f));
 	circleAngle += circleClockwise ? step : -step;
 

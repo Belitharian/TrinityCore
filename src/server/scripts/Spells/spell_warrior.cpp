@@ -57,6 +57,7 @@ enum WarriorSpells
     SPELL_WARRIOR_CRITICAL_THINKING_ENERGIZE        = 392776,
     SPELL_WARRIOR_DEFT_EXPERIENCE                   = 383295,
     SPELL_WARRIOR_ENRAGE                            = 184362,
+    SPELL_WARRIOR_ENRAGE_NPC                        = 18501,
     SPELL_WARRIOR_EXECUTE                           = 20647,
     SPELL_WARRIOR_FRENZIED_ENRAGE                   = 383848,
     SPELL_WARRIOR_FRESH_MEAT_DEBUFF                 = 316044,
@@ -383,8 +384,9 @@ class spell_warr_bloodthirst_enrage : public SpellScript
             return;
 
         Unit* caster = GetCaster();
+        uint32 spell = caster->IsCreature() ? SPELL_WARRIOR_ENRAGE_NPC : SPELL_WARRIOR_ENRAGE;
 
-        caster->CastSpell(nullptr, SPELL_WARRIOR_ENRAGE, CastSpellExtraArgsInit{
+        caster->CastSpell(nullptr, spell, CastSpellExtraArgsInit{
             .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
             .TriggeringSpell = GetSpell()
         });
@@ -671,7 +673,16 @@ class spell_warr_deft_experience : public SpellScript
             return;
 
         Unit const* caster = GetCaster();
-        if (Aura* enrageAura = caster->GetAura(SPELL_WARRIOR_ENRAGE))
+
+        if (caster->IsCreature())
+            SetDuration(caster, SPELL_WARRIOR_ENRAGE_NPC);
+        else
+            SetDuration(caster, SPELL_WARRIOR_ENRAGE);
+    }
+
+    void SetDuration(Unit const* caster, uint32 spell) const
+    {
+        if (Aura* enrageAura = caster->GetAura(spell))
             if (AuraEffect const* aurEff = caster->GetAuraEffect(SPELL_WARRIOR_DEFT_EXPERIENCE, EFFECT_1))
                 enrageAura->SetDuration(enrageAura->GetDuration() + (aurEff->GetAmountAsInt() * (IsHitCrit() ? 2 : 1)));
     }
@@ -725,8 +736,9 @@ class spell_warr_enrage_proc : public AuraScript
         PreventDefaultAction();
 
         Unit* auraTarget = GetTarget();
+        uint32 spell = auraTarget->IsCreature() ? SPELL_WARRIOR_ENRAGE_NPC : SPELL_WARRIOR_ENRAGE;
 
-        auraTarget->CastSpell(nullptr, SPELL_WARRIOR_ENRAGE, CastSpellExtraArgsInit{
+        auraTarget->CastSpell(nullptr, spell, CastSpellExtraArgsInit{
             .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
             .TriggeringSpell = eventInfo.GetProcSpell()
         });

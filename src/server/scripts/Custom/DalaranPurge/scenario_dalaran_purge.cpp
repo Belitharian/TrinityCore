@@ -1,4 +1,4 @@
-#include "CreatureGroups.h"
+﻿#include "CreatureGroups.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"

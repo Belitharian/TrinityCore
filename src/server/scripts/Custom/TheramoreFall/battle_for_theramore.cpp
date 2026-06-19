@@ -1,4 +1,4 @@
-#include "GameObject.h"
+﻿#include "GameObject.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
 #include "MotionMaster.h"
@@ -58,7 +58,7 @@ struct npc_jaina_theramore : public CustomAI
 			case DATA_WAVE_WEST:
 				me->AI()->Talk(SAY_BATTLE_WEST);
 				break;
-			// Ne rien faire par d�faut
+			// Ne rien faire par défaut
 			default:
 				break;
 		}
