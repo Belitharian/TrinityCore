@@ -5466,6 +5466,15 @@ void SpellMgr::LoadSpellInfoCorrections()
         });
     });
 
+    // Power Word: Shield
+    ApplySpellFix({ 318158 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0 , [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->BasePoints = 40;
+        });
+    });
+
     for (SpellInfo const& s : mSpellInfoMap)
     {
         SpellInfo* spellInfo = &const_cast<SpellInfo&>(s);

@@ -994,14 +994,17 @@ class spell_warr_overpowering_finish : public SpellScript
 // 382551 - Pain and Gain (heal)
 class spell_warr_pain_and_gain_heal : public SpellScript
 {
-    static void CalculateHeal(SpellScript const&, SpellEffectInfo const& /*effInfo*/, Unit const* /*victim*/, int32& /*healing*/, int32& /*flatMod*/, float& pctMod)
+    void CalculateHealing(SpellEffectInfo const& /*effectInfo*/, Unit const* victim, int32& /*healing*/, int32& /*flatMod*/, float& pctMod) const
     {
+        if (GetCaster()->IsCreature())
+            return;
+
         pctMod *= 0.1f;
     }
 
     void Register() override
     {
-        CalcHealing += SpellCalcDamageFn(spell_warr_pain_and_gain_heal::CalculateHeal);
+        CalcHealing += SpellCalcHealingFn(spell_warr_pain_and_gain_heal::CalculateHealing);
     }
 };
 

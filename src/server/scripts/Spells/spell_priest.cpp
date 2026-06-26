@@ -1,4 +1,4 @@
-/*
+﻿/*
  * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -105,6 +105,8 @@ enum PriestSpells
     SPELL_PRIEST_DIVINE_WRATH                       = 40441,
     SPELL_PRIEST_DIVINITY                           = 1215241,
     SPELL_PRIEST_DIVINITY_AURA                      = 1216314,
+    SPELL_PRIEST_ECHO_OF_LIGHT                      = 77485,
+    SPELL_PRIEST_ECHO_OF_LIGHT_HEAL                 = 77489,
     SPELL_PRIEST_EMPOWERED_RENEW                    = 391339,
     SPELL_PRIEST_EMPOWERED_RENEW_HEAL               = 391359,
     SPELL_PRIEST_EMPYREAL_BLAZE                     = 372616,
@@ -270,7 +272,18 @@ enum PriestSpells
     SPELL_PRIEST_WEAKENED_SOUL                      = 6788,
     SPELL_PRIEST_WHISPERING_SHADOWS                 = 406777,
     SPELL_PRIEST_WHISPERING_SHADOWS_DUMMY           = 391286,
-    SPELL_PVP_RULES_ENABLED_HARDCODED               = 134735
+    SPELL_PVP_RULES_ENABLED_HARDCODED               = 134735,
+
+    // NEW
+    SPELL_PRIEST_PLEA                               = 200829,
+
+    // NPCs
+    SPELL_PRIEST_RENEW_NPC                          = 294342,
+    SPELL_PRIEST_FLASH_HEAL_NPC                     = 314655,
+    SPELL_PRIEST_POWER_WORD_SHIELD_NPC              = 318158,
+    SPELL_PRIEST_SMITE_NPC                          = 332705,
+    SPELL_PRIEST_GREATER_HEAL_NPC                   = 342797,
+    SPELL_PRIEST_HOLY_WORD_SERENITY_NPC             = 430546,
 };
 
 enum PriestSpellLabels
@@ -1164,15 +1177,21 @@ Optional<uint32> GetSpellToCast(uint32 spellId)
 {
     switch (spellId)
     {
+        case SPELL_PRIEST_PLEA:
         case SPELL_PRIEST_RENEW:
+        case SPELL_PRIEST_RENEW_NPC:
             return SPELL_PRIEST_TRANQUIL_LIGHT;
         case SPELL_PRIEST_POWER_WORD_SHIELD:
         case SPELL_PRIEST_POWER_WORD_LIFE:
         case SPELL_PRIEST_FLASH_HEAL:
+        case SPELL_PRIEST_FLASH_HEAL_NPC:
         case SPELL_PRIEST_HEAL:
         case SPELL_PRIEST_GREATER_HEAL:
+        case SPELL_PRIEST_GREATER_HEAL_NPC:
         case SPELL_PRIEST_HOLY_WORD_SERENITY:
+        case SPELL_PRIEST_HOLY_WORD_SERENITY_NPC:
             return SPELL_PRIEST_HEALING_LIGHT;
+        case SPELL_PRIEST_POWER_WORD_SHIELD_NPC:
         case SPELL_PRIEST_PRAYER_OF_MENDING:
         case SPELL_PRIEST_PRAYER_OF_MENDING_HEAL:
             return SPELL_PRIEST_BLESSED_LIGHT;
@@ -1186,6 +1205,7 @@ Optional<uint32> GetSpellToCast(uint32 spellId)
             return SPELL_PRIEST_DAZZLING_LIGHT;
         case SPELL_PRIEST_SHADOW_WORD_PAIN:
         case SPELL_PRIEST_SMITE:
+        case SPELL_PRIEST_SMITE_NPC:
         case SPELL_PRIEST_HOLY_FIRE:
         case SPELL_PRIEST_SHADOW_WORD_DEATH:
         case SPELL_PRIEST_HOLY_WORD_CHASTISE:
@@ -1232,6 +1252,27 @@ class spell_pri_divine_image : public AuraScript
         });
     }
 
+    static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
+    {
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        if (!spellInfo)
+            return false;
+
+        // Sort de PNJ ajoute manuellement
+        if (spellInfo->Id == SPELL_PRIEST_HOLY_WORD_SERENITY_NPC
+            || spellInfo->Id == SPELL_PRIEST_FLASH_HEAL_NPC)
+            return true;
+
+        // Reproduction du filtre spell_proc original (famille 6, masques)
+        if (spellInfo->SpellFamilyName == SPELLFAMILY_PRIEST)
+        {
+            if (spellInfo->SpellFamilyFlags & flag128(270533632, 0, 32, 0))
+                return true;
+        }
+
+        return false;
+    }
+
     static void HandleProc(AuraScript const& script, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
     {
         Unit* target = eventInfo.GetActor();
@@ -1269,6 +1310,7 @@ class spell_pri_divine_image : public AuraScript
 
     void Register() override
     {
+        DoCheckProc += AuraCheckProcFn(spell_pri_divine_image::CheckProc);
         OnEffectProc += AuraEffectProcFn(spell_pri_divine_image::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
     }
 };
@@ -1281,10 +1323,17 @@ class spell_pri_divine_image_spell_triggered : public AuraScript
         return ValidateSpellInfo
         ({
             SPELL_PRIEST_RENEW,
+            SPELL_PRIEST_RENEW_NPC,
+            SPELL_PRIEST_PLEA,
             SPELL_PRIEST_POWER_WORD_SHIELD,
+            SPELL_PRIEST_POWER_WORD_SHIELD_NPC,
             SPELL_PRIEST_POWER_WORD_LIFE,
+            SPELL_PRIEST_GREATER_HEAL,
+            SPELL_PRIEST_GREATER_HEAL_NPC,
             SPELL_PRIEST_FLASH_HEAL,
+            SPELL_PRIEST_FLASH_HEAL_NPC,
             SPELL_PRIEST_HOLY_WORD_SERENITY,
+            SPELL_PRIEST_HOLY_WORD_SERENITY_NPC,
             SPELL_PRIEST_PRAYER_OF_MENDING,
             SPELL_PRIEST_PRAYER_OF_MENDING_HEAL,
             SPELL_PRIEST_PRAYER_OF_HEALING,
@@ -1314,7 +1363,32 @@ class spell_pri_divine_image_spell_triggered : public AuraScript
 
     static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
     {
-        return DivineImageHelpers::GetSummon(eventInfo.GetActor()) != nullptr;
+        if (!DivineImageHelpers::GetSummon(eventInfo.GetActor()))
+            return false;
+
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        if (!spellInfo)
+            return false;
+
+        // Sorts de PNJ autoris�s explicitement
+        if (eventInfo.GetActor()->IsCreature())
+        {
+            switch (spellInfo->Id)
+            {
+                case SPELL_PRIEST_PLEA:
+                case SPELL_PRIEST_RENEW_NPC:
+                case SPELL_PRIEST_FLASH_HEAL_NPC:
+                case SPELL_PRIEST_POWER_WORD_SHIELD_NPC:
+                case SPELL_PRIEST_SMITE_NPC:
+                case SPELL_PRIEST_HOLY_WORD_SERENITY_NPC:
+                case SPELL_PRIEST_PRAYER_OF_HEALING:
+                    return true;
+            }
+        }
+
+        // Reproduction du filtre spell_proc original (famille Priest, masques 405216)
+        static constexpr flag128 ProcMask(271621825, 131074, 5275684, 6422596);
+        return spellInfo->SpellFamilyName == SPELLFAMILY_PRIEST && (spellInfo->SpellFamilyFlags & ProcMask);
     }
 
     void HandleAfterRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/) const
@@ -1336,9 +1410,9 @@ class spell_pri_divine_image_stack_timer : public AuraScript
 {
     void TrackStackApplicationTime(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/) const
     {
-        GetUnitOwner()->m_Events.AddEventAtOffset([spelId = GetId(), owner = GetUnitOwner()]
+        GetUnitOwner()->m_Events.AddEventAtOffset([spellId = GetId(), owner = GetUnitOwner()]
         {
-            owner->RemoveAuraFromStack(spelId);
+            owner->RemoveAuraFromStack(spellId);
         }, Milliseconds(GetMaxDuration()));
     }
 
@@ -1631,6 +1705,68 @@ class spell_pri_divinity : public AuraScript
     {
         DoCheckProc += AuraCheckProcFn(spell_pri_divinity::CheckProc);
         OnEffectProc += AuraEffectProcFn(spell_pri_divinity::HandleProc, EFFECT_2, SPELL_AURA_PROC_TRIGGER_SPELL);
+    }
+};
+
+// 77485 - Mastery: Echo of Light
+class spell_pri_echo_of_light : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_PRIEST_ECHO_OF_LIGHT_HEAL });
+    }
+
+    static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
+    {
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        if (!spellInfo)
+            return false;
+
+        // Eviter la boucle infinie : le HoT Echo of Light ne doit pas se re-declencher
+        if (spellInfo->Id == SPELL_PRIEST_ECHO_OF_LIGHT_HEAL)
+            return false;
+
+        // Valable pour tous les NPC
+        if (eventInfo.GetActor()->IsCreature())
+            return true;
+
+        // Tous les sorts de soin directs de la famille Priest
+        if (spellInfo->SpellFamilyName == SPELLFAMILY_PRIEST)
+            return true;
+
+        return false;
+    }
+
+    static void HandleProc(AuraScript const& /*script*/, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
+    {
+        Unit* caster = eventInfo.GetActor();
+        Unit* target = eventInfo.GetActionTarget();
+        if (!target)
+            return;
+
+        uint32 heal = eventInfo.GetHealInfo()->GetHeal();
+        if (!heal)
+            return;
+
+        SpellEffectValue echoAmount = CalculatePct(SpellEffectValue(heal), 20.f);
+
+        // Carry over remaining amount from existing HoT
+        if (AuraEffect const* existingEcho = target->GetAuraEffect(SPELL_PRIEST_ECHO_OF_LIGHT_HEAL, EFFECT_0, caster->GetGUID()))
+            echoAmount += existingEcho->GetAmount() * double(existingEcho->GetRemainingTicks());
+
+        caster->CastSpell(target, SPELL_PRIEST_ECHO_OF_LIGHT_HEAL, CastSpellExtraArgsInit
+            {
+                .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+                .TriggeringSpell = eventInfo.GetProcSpell(),
+                .TriggeringAura = aurEff,
+                .SpellValueOverrides = { { SPELLVALUE_BASE_POINT0, echoAmount } }
+            });
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_pri_echo_of_light::CheckProc);
+        OnEffectProc += AuraEffectProcFn(spell_pri_echo_of_light::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
     }
 };
 
@@ -2514,6 +2650,8 @@ class spell_pri_holy_word_chastise : public SpellScript
 // 265202 - Holy Word: Salvation
 class spell_pri_holy_word_salvation : public SpellScript
 {
+    static constexpr uint8 HEALING_COEF = 50;
+
     bool Validate(SpellInfo const* spellInfo) override
     {
         return ValidateSpellInfo
@@ -2549,11 +2687,22 @@ class spell_pri_holy_word_salvation : public SpellScript
         caster->CastSpell(target, SPELL_PRIEST_PRAYER_OF_MENDING_AURA, args);
 
         // a full duration Renew is triggered.
-        caster->CastSpell(target, SPELL_PRIEST_RENEW, CastSpellExtraArgs(TRIGGERED_FULL_MASK).SetTriggeringSpell(GetSpell()));
+        uint32 renewId = caster->IsCreature() ? SPELL_PRIEST_RENEW_NPC : SPELL_PRIEST_RENEW;
+        caster->CastSpell(target, renewId, CastSpellExtraArgs(TRIGGERED_FULL_MASK).SetTriggeringSpell(GetSpell()));
+    }
+
+    void CalculateHealing(SpellEffectInfo const& /*spellEffectInfo*/, Unit* victim, int32& healing, int32& /*flatMod*/, float& /*pctMod*/) const
+    {
+        Unit* caster = GetCaster();
+        if (!caster || !caster->IsCreature())
+            return;
+
+        healing = victim->GetMaxHealth();
     }
 
     void Register() override
     {
+        CalcHealing += SpellCalcHealingFn(spell_pri_holy_word_salvation::CalculateHealing);
         OnEffectHitTarget += SpellEffectFn(spell_pri_holy_word_salvation::HandleApplyBuffs, EFFECT_1, SPELL_EFFECT_DUMMY);
     }
 
@@ -5473,6 +5622,7 @@ void AddSC_priest_spell_scripts()
     RegisterSpellScript(spell_pri_divine_word_sanctuary_heal);
     RegisterSpellScript(spell_pri_divinity);
     RegisterSpellScript(spell_pri_divine_procession);
+    RegisterSpellScript(spell_pri_echo_of_light);
     RegisterSpellScript(spell_pri_empowered_renew);
     RegisterSpellScript(spell_pri_empowered_renew_heal);
     RegisterSpellScript(spell_pri_empyreal_blaze);
