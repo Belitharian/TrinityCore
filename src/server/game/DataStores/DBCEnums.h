@@ -2755,7 +2755,7 @@ enum class SummonPropertiesFlags : uint32
 {
     None                              = 0x00000000,
     AttackSummoner                    = 0x00000001, // NYI
-    HelpWhenSummonedInCombat          = 0x00000002, // NYI
+    HelpWhenSummonedInCombat          = 0x00000002,
     UseLevelOffset                    = 0x00000004, // NYI
     DespawnOnSummonerDeath            = 0x00000008, // NYI
     OnlyVisibleToSummoner             = 0x00000010,

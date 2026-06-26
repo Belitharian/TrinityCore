@@ -5455,7 +5455,6 @@ void SpellMgr::LoadSpellInfoCorrections()
         });
     });
 
-    
     for (SpellInfo const& s : mSpellInfoMap)
     {
         SpellInfo* spellInfo = &const_cast<SpellInfo&>(s);

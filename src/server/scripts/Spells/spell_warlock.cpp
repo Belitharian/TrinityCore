@@ -31,6 +31,7 @@
 #include "GridNotifiersImpl.h"
 #include "ObjectAccessor.h"
 #include "Pet.h"
+#include "TemporarySummon.h"
 #include "Player.h"
 #include "Random.h"
 #include "SpellAuraEffects.h"
@@ -38,6 +39,7 @@
 #include "SpellHistory.h"
 #include "SpellMgr.h"
 #include "SpellScript.h"
+#include "spell_warlock.h"
 
 enum WarlockSpells
 {
@@ -81,6 +83,8 @@ enum WarlockSpells
     SPELL_WARLOCK_GLYPH_OF_SOUL_SWAP                = 56226,
     SPELL_WARLOCK_GLYPH_OF_SUCCUBUS                 = 56250,
     SPELL_WARLOCK_IMMOLATE_PERIODIC                 = 157736,
+    SPELL_WARLOCK_IMPLOSION                         = 196277,
+    SPELL_WARLOCK_IMPLOSION_DAMAGE                  = 205205,
     SPELL_WARLOCK_IMPROVED_HEALTH_FUNNEL_BUFF_R1    = 60955,
     SPELL_WARLOCK_IMPROVED_HEALTH_FUNNEL_BUFF_R2    = 60956,
     SPELL_WARLOCK_IMPROVED_HEALTH_FUNNEL_R1         = 18703,
@@ -1128,6 +1132,58 @@ class spell_warl_immolate : public SpellScript
     }
 };
 
+// 196277 - Implosion
+class spell_warl_implosion : public SpellScript
+{
+    static constexpr uint32 NPC_WARLOCK_WILD_IMP = 143622;
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_WARLOCK_IMPLOSION_DAMAGE });
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/) const
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetHitUnit();
+        if (!target)
+            return;
+
+        if (!caster->IsInCombat())
+            return;
+
+        Unit* victim = caster->GetVictim();
+        if (!victim)
+            return;
+
+        std::list<TempSummon*> imps;
+        caster->GetAllMinionsByEntry(imps, NPC_WARLOCK_WILD_IMP);
+        if (imps.empty())
+            return;
+
+        uint32 maxCount = uint32(std::max(0.0, GetEffectValue()));
+        uint32 remaining = maxCount;
+        if (!remaining)
+            return;
+
+        for (TempSummon* imp : imps)
+        {
+            if (!imp->IsAlive())
+                continue;
+
+            imp->CastSpell(victim, SPELL_WARLOCK_IMPLOSION_DAMAGE, TRIGGERED_IGNORE_CAST_IN_PROGRESS);
+
+            if (--remaining == 0)
+                break;
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_warl_implosion::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
 // Called by 316099 - Unstable Affliction
 // 459376 - Perpetual Unstability
 class spell_warl_perpetual_unstability : public SpellScript
@@ -2057,6 +2113,7 @@ void AddSC_warlock_spell_scripts()
     RegisterSpellScript(spell_warl_health_funnel);
     RegisterSpellScript(spell_warl_healthstone_heal);
     RegisterSpellScript(spell_warl_immolate);
+    RegisterSpellScript(spell_warl_implosion);
     RegisterSpellScript(spell_warl_perpetual_unstability);
     RegisterSpellScript(spell_warl_pyrogenics);
     RegisterSpellScript(spell_warl_rain_of_fire);

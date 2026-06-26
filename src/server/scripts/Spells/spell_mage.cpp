@@ -2625,7 +2625,7 @@ struct at_mage_froze_orb : AreaTriggerAI
         at->InitSplines(path.GetPath());
     }
 
-    void OnUpdate(uint32 diff) override
+    void OnUpdate(uint32 /*diff*/) override
     {
         _scheduler.Update();
     }

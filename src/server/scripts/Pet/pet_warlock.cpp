@@ -1,28 +1,22 @@
 #include "CombatAI.h"
-#include "ScriptMgr.h"
+#include "CustomAI.h"
 #include "PassiveAI.h"
+#include "ScriptMgr.h"
 #include "TemporarySummon.h"
+#include "spell_warlock.h"
 
 // Base commune des invocations demoniaques qui peuvent proc Demonic Core a leur despawn
 // et entretiennent un sort principal en boucle tant que le maitre est en combat.
-struct pet_warlock_demonic_summon : public ScriptedAI
+struct pet_warlock_demonic_summon : public CustomAI
 {
-    static constexpr uint32 SPELL_DEMONIC_CORE_TALENT = 267102;
-    static constexpr uint32 SPELL_DEMONIC_CORE_BUFF   = 270176;
-
-    enum Events
+    enum Spells
     {
-        EVENT_PRIMARY_CAST = 1
+        SPELL_DEMONIC_CORE_TALENT   = 267102,
+        SPELL_DEMONIC_CORE_BUFF     = 270171
     };
 
-    pet_warlock_demonic_summon(Creature* creature, uint32 primarySpell)
-        : ScriptedAI(creature), _primarySpell(primarySpell) {}
-
-    void Reset() override
-    {
-        _events.Reset();
-        _events.ScheduleEvent(EVENT_PRIMARY_CAST, 0s);
-    }
+    pet_warlock_demonic_summon(Creature* creature, AI_Type type)
+        : CustomAI(creature, type) {}
 
     void IsSummonedBy(WorldObject* summoner) override
     {
@@ -41,39 +35,14 @@ struct pet_warlock_demonic_summon : public ScriptedAI
 
     void OnDespawn() override
     {
-        Unit* owner = ObjectAccessor::GetUnit(*me, _owner);
-        if (!owner)
-            return;
-
-        AuraEffect const* talent = owner->GetAuraEffect(SPELL_DEMONIC_CORE_TALENT, EFFECT_0);
-        if (!talent || !roll_chance(talent->GetAmount()))
-            return;
-
-        owner->CastSpell(owner, SPELL_DEMONIC_CORE_BUFF, true);
+        BuffOwner();
+        OnDisappear();
     }
 
-    void UpdateAI(uint32 diff) override
+    void JustDied(Unit* /*killer*/) override
     {
-        if (!UpdateVictim())
-            return;
-
-        _events.Update(diff);
-
-        if (me->HasUnitState(UNIT_STATE_CASTING))
-            return;
-
-        while (uint32 eventId = _events.ExecuteEvent())
-        {
-            if (eventId == EVENT_PRIMARY_CAST)
-            {
-                DoCastVictim(_primarySpell);
-                auto [minCd, maxCd] = GetPrimaryCooldown();
-                _events.ScheduleEvent(EVENT_PRIMARY_CAST, minCd, maxCd);
-            }
-
-            if (me->HasUnitState(UNIT_STATE_CASTING))
-                return;
-        }
+        BuffOwner();
+        OnDisappear();
     }
 
     bool CanAIAttack(Unit const* target) const override
@@ -81,52 +50,93 @@ struct pet_warlock_demonic_summon : public ScriptedAI
         Unit* owner = me->GetOwner();
         if (owner && !target->IsInCombatWith(owner))
             return false;
-        return ScriptedAI::CanAIAttack(target);
+        return CustomAI::CanAIAttack(target);
     }
 
 protected:
     // Hook optionnel : action declenchee au moment ou le pet apparait (ex: Pursuit sur la cible du maitre).
-    virtual void OnOwnerSummon(Unit* /*owner*/) { }
+    virtual void OnOwnerSummon(Unit* /*owner*/) {}
 
-    // Plage de rechargement du sort principal. Min == Max pour un cooldown fixe.
-    virtual std::pair<Milliseconds, Milliseconds> GetPrimaryCooldown() const = 0;
+    // Event quand l'invocation disparait / meurt
+    virtual void OnDisappear() {};
 
-    EventMap _events;
+    // Retourne l'index a prendre en compte.
+    virtual SpellEffIndex GetEffIndex() const = 0;
+
     ObjectGuid _owner;
-    uint32 _primarySpell;
+
+private:
+    // Retourne la chance de proc de Demonic Core.
+    bool GetAuraEffect(Unit* const owner) const
+    {
+        AuraEffect const* talent = owner->GetAuraEffect(SPELL_DEMONIC_CORE_TALENT, GetEffIndex());
+        if (!talent || !roll_chance(talent->GetAmount()))
+            return false;
+
+        return true;
+    }
+
+    // Lance le buff Demonic Core.
+    void BuffOwner()
+    {
+        Unit* owner = ObjectAccessor::GetUnit(*me, _owner);
+        if (!owner)
+            return;
+
+        if (!GetAuraEffect(owner))
+            return;
+
+        owner->CastSpell(owner, SPELL_DEMONIC_CORE_BUFF, true);
+    }
 };
 
 struct pet_wild_imp : public pet_warlock_demonic_summon
 {
-    static constexpr uint32 SPELL_FEL_FIREBOLT = 104318;
-
-    pet_wild_imp(Creature* creature) : pet_warlock_demonic_summon(creature, SPELL_FEL_FIREBOLT) {}
-
-    std::pair<Milliseconds, Milliseconds> GetPrimaryCooldown() const override
+    enum Spells
     {
-        return { 2300ms, 2300ms };
+        SPELL_FEL_FIREBOLT          = 104318,
+        SPELL_IMPLOSION_DAMAGE      = 196278
+    };
+
+    pet_wild_imp(Creature* creature) : pet_warlock_demonic_summon(creature, AI_Type::Stay) {}
+
+    SpellEffIndex GetEffIndex() const override
+    {
+        return EFFECT_0;
+    }
+
+    void SpellHitTarget(WorldObject* /*object*/, SpellInfo const* spell) override
+    {
+        if (spell->Id == SPELL_IMPLOSION_DAMAGE)
+            me->DespawnOrUnsummon();
+    }
+
+    void OnDisappear() override
+    {
+        Unit* owner = ObjectAccessor::GetUnit(*me, _owner);
+        if (!owner)
+            return;
+
+        spell_wild_imp_aura::RemoveImp(owner, 1);
+    }
+
+    void JustEngagedWith(Unit* /*who*/) override
+    {
+        scheduler.Schedule(0s, [this](TaskContext primarySpell)
+        {
+            DoCastVictim(SPELL_FEL_FIREBOLT);
+            primarySpell.Repeat(2300ms, 2300ms);
+        });
     }
 };
 
 struct pet_dreadstalker : public pet_warlock_demonic_summon
 {
-    static constexpr uint32 SPELL_PURSUIT  = 334713;
-    static constexpr uint32 SPELL_DREADBITE = 205196;
+    pet_dreadstalker(Creature* creature) : pet_warlock_demonic_summon(creature, AI_Type::Melee) {}
 
-    pet_dreadstalker(Creature* creature) : pet_warlock_demonic_summon(creature, SPELL_DREADBITE) {}
-
-    void OnOwnerSummon(Unit* owner) override
+    SpellEffIndex GetEffIndex() const override
     {
-        if (!owner->IsInCombat())
-            return;
-
-        if (Unit* victim = owner->GetVictim())
-            DoCast(victim, SPELL_PURSUIT);
-    }
-
-    std::pair<Milliseconds, Milliseconds> GetPrimaryCooldown() const override
-    {
-        return { 2s, 8s };
+        return EFFECT_1;
     }
 };
 
@@ -246,7 +256,7 @@ class spell_chaos_salvo : public AuraScript
         return ValidateSpellInfo({ SPELL_CHAOS_SALVO_PERIODIC });
     }
 
-    void HandleEffectPeriodic(AuraEffect const* aurEff) const
+    void HandleEffectPeriodic(AuraEffect const* /*aurEff*/) const
     {
         if (Unit* target = GetTarget())
         {

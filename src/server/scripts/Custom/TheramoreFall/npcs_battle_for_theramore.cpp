@@ -11,6 +11,7 @@
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
 #include "CustomAI.h"
+#include "spell_warlock.h"
 #include "battle_for_theramore.h"
 
 ///
@@ -1712,8 +1713,11 @@ struct npc_roknah_grunt : public npc_theramore_horde
 
 	enum Spells
 	{
-        SPELL_BLOODTHIRST   = 23881,
-        SPELL_RAGING_BLOW   = 85288,
+        SPELL_BLOODTHIRST       = 23881,
+        SPELL_RAGING_BLOW       = 85288,
+        SPELL_MORTAL_STRIKE     = 283410,
+        SPELL_WHIRLWIND         = 283412,
+        SPELL_REND              = 283419,
 	};
 
     void InitializeAI() override
@@ -1992,7 +1996,8 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 	enum Groups
 	{
 		GROUP_NORMAL,       // Rotation offensive (Trait de l'ombre / Bolt infernal, Main de Gul'dan)
-		GROUP_DEFENSIVE     // Drain de vie / Etreinte mortelle declenches sur seuil PV
+		GROUP_DEFENSIVE,    // Drain de vie / Etreinte mortelle declenches sur seuil PV
+		GROUP_AURAS,        // Auras des talents
 	};
 
 	enum Spells
@@ -2001,10 +2006,12 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 		SPELL_MORTAL_COIL           = 6789,
 		SPELL_DARK_PACT             = 108416,
 		SPELL_DRAIN_LIFE            = 149992,
+        SPELL_IMPLOSION             = 196277,
 		SPELL_SUMMON_FELHUNTER      = 285232,
 		SPELL_CORRUPTION            = 251406,
 		SPELL_DEMONBOLT             = 264178,
-        SPELL_DEMONIC_CORE_BUFF     = 270176,
+        SPELL_DEMONIC_CORE_BUFF     = 264173,
+        SPELL_WILD_IMP_AURA_STACK   = 296553,
 		SPELL_CALL_DREADSTALKERS    = 464874,
 		SPELL_HAND_OF_GULDAN        = 464895,
 		SPELL_INFERNAL_BOLT         = 434506,
@@ -2053,16 +2060,10 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 		}
 	}
 
-    void OnAuraApplied(AuraApplication const* aurApp) override
+    void EnterEvadeMode(EvadeReason why = EvadeReason::Other) override
     {
-        // On ne s'interesse qu'aux buffs procs auto-appliques.
-        if (aurApp->GetBase()->GetCasterGUID() != me->GetGUID())
-            return;
-
-        SpellInfo const* spellInfo = aurApp->GetBase()->GetSpellInfo();
-
-        DoCastSpellWithBuff(spellInfo, SPELL_DEMONIC_CORE_BUFF, SPELL_DEMONBOLT);
-        DoCastSpellWithBuff(spellInfo, SPELL_RUINATION_BUFF, SPELL_RUINATION);
+        npc_theramore_horde::EnterEvadeMode(why);
+        spell_wild_imp_aura::RemoveImps(me);
     }
 
 	// Le cumul de shards se fait a la fin du cast (avant l'impact) pour rester aligne
@@ -2096,7 +2097,6 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 		DoCastHandOfGuldan();
 	}
 
-
 	// -------------------------------------------------------------------------
 	// Rotation
 	// -------------------------------------------------------------------------
@@ -2107,21 +2107,39 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 
 		npc_theramore_horde::JustEngagedWith(who);
 
-		DoCast(who, SPELL_SHADOWBOLT);
-
 		scheduler
+			// === AURAS ===
+			.Schedule(1s, GROUP_AURAS, [this](TaskContext auraCheck)
+			{
+				if (me->HasAura(SPELL_DEMONIC_CORE_BUFF))
+				{
+					CastStop(SPELL_DRAIN_LIFE);
+                    DoCastVictim(SPELL_DEMONBOLT, TRIGGERED_CAST_DIRECTLY);
+				}
+
+				if (me->HasAura(SPELL_RUINATION_BUFF))
+				{
+                    CastStop(SPELL_DRAIN_LIFE);
+                    DoCastVictim(SPELL_RUINATION);
+				}
+
+				auraCheck.Repeat(2s);
+			})
+
 			// === DEFENSIVE (GROUP_DEFENSIVE) ===
 
 			// Drain de vie : channel 6s sous 30% PV, gel toute la rotation pendant ce temps.
 			.Schedule(1s, GROUP_DEFENSIVE, [this](TaskContext drain_life)
 			{
-				if (HealthBelowPct(DRAIN_LIFE_HP_PCT))
+				if (HealthBelowPct(DRAIN_LIFE_HP_PCT) && !me->HasUnitState(UNIT_STATE_CASTING))
 				{
 					if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 					{
-						scheduler.DelayAll(DRAIN_LIFE_CHANNEL);
-						CastStop();
+						CastStop(SPELL_DRAIN_LIFE);
 						DoCast(target, SPELL_DRAIN_LIFE);
+						scheduler.DelayAll(DRAIN_LIFE_CHANNEL);
+						drain_life.Repeat(DRAIN_LIFE_CHANNEL);
+						return;
 					}
 				}
 
@@ -2135,7 +2153,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 				{
 					if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 					{
-						CastStop();
+						CastStop(SPELL_DRAIN_LIFE);
 						DoCast(target, SPELL_MORTAL_COIL);
 					}
 				}
@@ -2146,7 +2164,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 			// === DPS (GROUP_NORMAL) ===
 
 			// Trait de l'ombre en filler (toutes les 4s) ; remplace par Bolt infernal si le buff est actif.
-			.Schedule(3s, GROUP_NORMAL, [this](TaskContext shadowbolt)
+			.Schedule(0s, GROUP_NORMAL, [this](TaskContext shadowbolt)
 			{
 				CastStop({ SPELL_HAND_OF_GULDAN, SPELL_INFERNAL_BOLT });
 
@@ -2164,6 +2182,23 @@ struct npc_roknah_felcaster : public npc_theramore_horde
                 DoCastVictim(SPELL_CALL_DREADSTALKERS);
                 call_dreadstalkers.Repeat(20s, 25s);
 			})
+            // Explosion des demons
+            .Schedule(3s, GROUP_NORMAL, [this](TaskContext implosion)
+            {
+                if (Aura* wildImpCount = me->GetAura(SPELL_WILD_IMP_AURA_STACK))
+                {
+                    uint8 stack = wildImpCount->GetStackAmount();
+                    if (stack >= 6)
+                    {
+                        CastStop(SPELL_DRAIN_LIFE);
+                        DoCastVictim(SPELL_IMPLOSION);
+                        implosion.Repeat(5s, 10s);
+                        return;
+                    }
+                }
+
+                implosion.Repeat(2s);
+            })
 
 			// === DoTs ===
 
@@ -2179,24 +2214,6 @@ struct npc_roknah_felcaster : public npc_theramore_horde
     // -------------------------------------------------------------------------
 	// Helpers
 	// -------------------------------------------------------------------------
-
-    void DoCastSpellWithBuff(SpellInfo const* spellInfo, uint32 buff, uint32 spell, Optional<SelectTargetMethod> selectTargetMethod = {})
-    {
-        if (spellInfo->Id != buff)
-            return;
-
-        scheduler.Schedule(1s, 3s, [this, spell, selectTargetMethod](TaskContext /*context*/)
-        {
-            CastStop(SPELL_DRAIN_LIFE);
-
-            // Recherche une cible en fonction du predicat
-            Unit* target = me->GetVictim();
-            if (selectTargetMethod)
-                target = SelectTarget(*selectTargetMethod);
-
-            DoCast(target, spell);
-        });
-    }
 
     void DoCastHandOfGuldan()
     {
@@ -3042,6 +3059,8 @@ class spell_wild_imp : public SpellScript
 
         if (caster->IsInCombat())
         {
+            spell_wild_imp_aura::AddImp(caster);
+
             Unit* victim = caster->GetVictim();
             if (victim)
                 summon->Attack(victim, true);
