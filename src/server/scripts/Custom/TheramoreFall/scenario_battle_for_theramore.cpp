@@ -1,4 +1,4 @@
-ï»¿#include "CriteriaHandler.h"
+#include "CriteriaHandler.h"
 #include "EventMap.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
@@ -309,9 +309,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						if (Creature* troop = instance->GetCreature(guid))
 						{
-							troop->RemoveAllAuras();
 							troop->SetVignette(VIGNETTE_ALLIANCE_TROOPS);
-
 							switch (troop->GetCreatureTemplate()->unit_class)
 							{
 								case UNIT_CLASS_PALADIN:
@@ -543,6 +541,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 			switch (creature->GetEntry())
 			{
+                case NPC_TRAINING_DUMMY:
+                    citizens.push_back(creature->GetGUID());
+                    break;
 				case NPC_THERAMORE_CITIZEN_MALE:
 				case NPC_THERAMORE_CITIZEN_FEMALE:
 					creature->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
@@ -1327,17 +1328,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case WAVE_08:
 				case WAVE_09:
 				case WAVE_10:
-					#ifdef CUSTOM_DEBUG
-						for (uint8 i = 0; i < HORDE_WAVES_COUNT; i++)
-						{
-							DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
-							events.ScheduleEvent(WAVE_BREAKER, 1s);
-						}
-					#else
+					//#ifdef CUSTOM_DEBUG
+					//	for (uint8 i = 0; i < HORDE_WAVES_COUNT; i++)
+					//	{
+					//		DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
+					//		events.ScheduleEvent(WAVE_BREAKER, 1s);
+					//	}
+					//#else
 						HordeMembersInvoker(Waves[waves]);
 						waves++;
 						events.ScheduleEvent(++wavesInvoker, 1s);
-					#endif
+					//#endif
 					break;
 
 				case WAVE_01_CHECK:
@@ -1362,7 +1363,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						}
 					}
 						
-					// Quand le nombre de membres vivants est infÃ©rieur ou Ã©gal au nombre de membres morts
+					// Quand le nombre de membres vivants est inférieur ou égal au nombre de membres morts
 					if (deadCounter >= HORDE_WAVES_COUNT)
 					{
 						DoCastSpellOnPlayers(SPELL_KILL_CREDIT);

@@ -465,10 +465,11 @@ struct npc_hedric_evencane : public CustomAI
 
 struct npc_theramore_officier : public npc_theramore_troop
 {
-	npc_theramore_officier(Creature* creature) : npc_theramore_troop(creature, AI_Type::Melee),
-		shieldCount(0)
-	{
-	}
+	npc_theramore_officier(Creature* creature) : npc_theramore_troop(creature, AI_Type::Melee)
+    {
+        SpellInfo const* afterimageInfo = sSpellMgr->GetSpellInfo(SPELL_AFTERIMAGE, DIFFICULTY_NONE);
+        afterimageAmount = afterimageInfo->GetEffect(EFFECT_2).CalcValue(me);
+    }
 
 	// Groupes de tasks : permet de retarder en bloc les routines DPS/Heal
 	// quand l'officier passe sous Divine Shield pour caster un Holy Light d'urgence.
@@ -496,72 +497,42 @@ struct npc_theramore_officier : public npc_theramore_troop
 		SPELL_REBUKE                = 405397,
 		SPELL_BLESSED_HAMMER        = 420092,
 
-		// Passifs
-		SPELL_SHINING_LIGHT         = 327510,
-		SPELL_AFTERIMAGE            = 400745
+		SPELL_SHINING_LIGHT_BUFF    = 327510,
+
+		SPELL_AFTERIMAGE            = 385414,
+		SPELL_AFTERIMAGE_BUFF       = 400745
 	};
 
-	uint8 shieldCount;
+    uint8 afterimageAmount;
 
-	static constexpr uint8  DIVINE_SHIELD_HP_PCT      = 25;     // HP sous lequel on tente la bulle
-	static constexpr int32  DIVINE_SHIELD_CHANCE      = 30;     // % de chance de proc sur le tick de degats
-	static constexpr float  HOLY_LIGHT_HP_PCT         = 40.f;   // Allie sous ce % -> Holy Light prioritaire
-	static constexpr uint32 HOLY_LIGHT_RANGE          = 60;
-	static constexpr float  FLASH_OF_LIGHT_HP_PCT     = 40.f;
-	static constexpr uint32 FLASH_OF_LIGHT_RANGE      = 80;
-	static constexpr uint8  LIGHT_OF_DAWN_WOUNDED_HP  = 30;     // HP % considere comme "blesse"
-	static constexpr float  LIGHT_OF_DAWN_RANGE       = 15.f;
-	static constexpr uint32 LIGHT_OF_DAWN_MIN_FRIENDS = 3;      // Seuil pour lancer le cone AOE de heal
-	static constexpr float  HOLY_SHOCK_HP_PCT         = 40.f;
-	static constexpr uint32 HOLY_SHOCK_RANGE          = 90;
-	static constexpr int32  HOLY_SHOCK_HEAL_CHANCE    = 60;     // Si un allie est blesse, % de heal vs damage
-	static constexpr uint32 DIVINE_STORM_MIN_ENEMIES  = 3;
-	static constexpr float  DIVINE_STORM_RANGE        = 8.f;
-	static constexpr float  INTERRUPT_RANGE           = 30.f;
-	static constexpr uint8  STACK_AMOUNT_SL           = 2;
-	static constexpr uint8  STACK_AMOUNT_AFTERIMAGE   = 15;
-	static constexpr float  WORD_OF_GLORY_RANGE       = 35;
-
-	void Reset() override
-	{
-		npc_theramore_troop::Reset();
-
-		shieldCount = 0;
-	}
+    CastSpellExtraArgs WORD_OF_GLORY_FLAGS = CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_IGNORE_POWER_COST);
 
 	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
 	{
-		if (spell->Id == SPELL_SHINING_LIGHT)
+        // Passive
+		if (spell->Id == SPELL_SHINING_LIGHT_BUFF)
 		{
 			scheduler.Schedule(2s, 5s, [this](TaskContext /*context*/)
 			{
-				if (Aura* aura = me->GetAura(SPELL_SHINING_LIGHT))
-				{
-					aura->ModStackAmount(-1);
-				}
-
-				CastStop();
-				DoCastSelf(SPELL_WORD_OF_GLORY, true);
+				DoCastSelf(SPELL_WORD_OF_GLORY, WORD_OF_GLORY_FLAGS);
 			});
 		}
 
-		// Proc Afterimage : double WoG (soi + allie blesse) gratuit
-		if (spell->Id == SPELL_AFTERIMAGE)
+        // Passive
+		if (spell->Id == SPELL_AFTERIMAGE_BUFF)
 		{
-			Aura* aura = me->GetAura(SPELL_AFTERIMAGE);
-			if (aura && aura->GetStackAmount() >= STACK_AMOUNT_AFTERIMAGE)
+			Aura* aura = me->GetAura(SPELL_AFTERIMAGE_BUFF);
+			if (aura && aura->GetStackAmount() >= afterimageAmount)
 			{
 				scheduler.Schedule(2s, 3s, [this](TaskContext /*context*/)
 				{
-					// Verifie si une cible est l?, sinon on fait rien
-					if (Unit* target = FindLowestHealthFriend(me, WORD_OF_GLORY_RANGE))
+					// Verifie si une cible est la, sinon on fait rien
+					if (Unit* target = FindLowestHealthFriend(me, 30.f))
 					{
-						if (Aura* afterimage = me->GetAura(SPELL_AFTERIMAGE))
+						if (Aura* afterimage = me->GetAura(SPELL_AFTERIMAGE_BUFF))
 						{
-							CastStop();
-							DoCastSelf(SPELL_WORD_OF_GLORY, true);
-							DoCast(target, SPELL_WORD_OF_GLORY, true);
-							afterimage->ModStackAmount(-STACK_AMOUNT_AFTERIMAGE);
+							DoCast(target, SPELL_WORD_OF_GLORY, WORD_OF_GLORY_FLAGS);
+							DoCastSelf(SPELL_WORD_OF_GLORY, WORD_OF_GLORY_FLAGS);
 						}
 					}
 				});
@@ -578,28 +549,13 @@ struct npc_theramore_officier : public npc_theramore_troop
 		}
 	}
 
-	void OnSpellCast(SpellInfo const* spell) override
-	{
-		switch (spell->Id)
-		{
-			case SPELL_HOLY_LIGHT:
-			case SPELL_FLASH_OF_LIGHT:
-			case SPELL_LIGHT_OF_DAWN:
-			case SPELL_AVENGER_SHIELD:
-			case SPELL_DIVINE_STORM:
-			case SPELL_BLESSED_HAMMER:
-				DoCastSelf(SPELL_AFTERIMAGE, true);
-				break;
-		}
-	}
-
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
 	{
 		// HasCooldown attend un spellId - ici Divine Shield, pas l'enum de groupe.
 		if (me->GetSpellHistory()->HasCooldown(SPELL_DIVINE_SHIELD))
 			return;
 
-		if (me->HealthBelowPctDamaged(DIVINE_SHIELD_HP_PCT, damage) && roll_chance(DIVINE_SHIELD_CHANCE))
+		if (me->HealthBelowPctDamaged(25.f, damage) && roll_chance(30))
 		{
 			DoCastSelf(SPELL_DIVINE_SHIELD);
 
@@ -616,7 +572,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 				args.AddSpellBP0(me->GetMaxHealth());
 
 				CastStop();
-				DoCastSelf(SPELL_HOLY_LIGHT, args);
+                DoCastSelf(SPELL_HOLY_LIGHT, args);
 			});
 		}
 	}
@@ -640,7 +596,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			// -------- Heals --------
 			.Schedule(5s, 8s, GROUP_HEAL, [this](TaskContext holy_light)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(HOLY_LIGHT_HP_PCT, HOLY_LIGHT_RANGE))
+				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
 				{
 					CastStop(SPELL_FLASH_OF_LIGHT);
 					DoCast(target, SPELL_HOLY_LIGHT);
@@ -649,7 +605,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			})
 			.Schedule(1s, 2s, GROUP_HEAL, [this](TaskContext flash_of_light)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(FLASH_OF_LIGHT_HP_PCT, FLASH_OF_LIGHT_RANGE))
+				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 80))
 				{
 					CastStop(SPELL_HOLY_LIGHT);
 					DoCast(target, SPELL_FLASH_OF_LIGHT);
@@ -660,7 +616,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			{
 				// AOE heal en cone : on attend qu'au moins LIGHT_OF_DAWN_MIN_FRIENDS allies
 				// soient blesses devant pour rentabiliser le cast.
-				if (FriendsInFront(LIGHT_OF_DAWN_RANGE, LIGHT_OF_DAWN_WOUNDED_HP) >= LIGHT_OF_DAWN_MIN_FRIENDS)
+				if (FriendsInFront(15.f, 30) >= 3)
 				{
 					CastStop();
 					DoCastSelf(SPELL_LIGHT_OF_DAWN);
@@ -685,7 +641,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			.Schedule(5ms, GROUP_NORMAL, [this](TaskContext avenger_shield)
 			{
 				// Silence ranged : meme priorite que Rebuke sur les casters ennemis.
-				if (Unit* target = DoSelectCastingUnit(SPELL_AVENGER_SHIELD, INTERRUPT_RANGE))
+				if (Unit* target = DoSelectCastingUnit(SPELL_AVENGER_SHIELD, 30.f))
 				{
 					CastStop({ SPELL_HOLY_LIGHT, SPELL_FLASH_OF_LIGHT });
 					DoCast(target, SPELL_AVENGER_SHIELD);
@@ -699,8 +655,8 @@ struct npc_theramore_officier : public npc_theramore_troop
 			{
 				// Holy Shock est hybride : heal sur allie blesse en priorite, sinon damage sur la victime.
 				CastStop();
-				if (Unit* target = DoSelectBelowHpPctFriendly(HOLY_SHOCK_HP_PCT, HOLY_SHOCK_RANGE);
-					target && roll_chance(HOLY_SHOCK_HEAL_CHANCE))
+				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 90);
+					target && roll_chance(60))
 					DoCast(target, SPELL_HOLY_SHOCK);
 				else
 					DoCastVictim(SPELL_HOLY_SHOCK);
@@ -709,7 +665,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			})
 			.Schedule(8s, 14s, GROUP_NORMAL, [this](TaskContext divine_storm)
 			{
-				if (EnemiesInRange(DIVINE_STORM_RANGE) >= DIVINE_STORM_MIN_ENEMIES)
+				if (EnemiesInRange(8.f) >= 3)
 				{
 					CastStop({ SPELL_HOLY_LIGHT, SPELL_FLASH_OF_LIGHT });
 					DoCast(SPELL_DIVINE_STORM);
@@ -733,19 +689,6 @@ struct npc_theramore_officier : public npc_theramore_troop
 			.Schedule(2s, 8s, GROUP_NORMAL, [this](TaskContext shield_righteous)
 			{
 				DoCastVictim(SPELL_SHIELD_RIGHTEOUS);
-				++shieldCount;
-
-				if (shieldCount >= 3)
-				{
-					Aura const* aura = me->GetAura(SPELL_SHINING_LIGHT);
-					if (!aura || aura->GetStackAmount() < STACK_AMOUNT_SL)
-					{
-						DoCastSelf(SPELL_SHINING_LIGHT, true);
-					}
-
-					shieldCount = 0;
-				}
-
 				shield_righteous.Repeat(2s, 5s);
 			})
 			.Schedule(2s, 8s, GROUP_NORMAL, [this](TaskContext judgment)
@@ -770,44 +713,140 @@ private:
 
 struct npc_theramore_footman : public npc_theramore_troop
 {
-	npc_theramore_footman(Creature* creature) : npc_theramore_troop(creature, AI_Type::Melee)
-	{
-	}
+	npc_theramore_footman(Creature* creature) : npc_theramore_troop(creature, AI_Type::Melee) {}
 
 	enum Spells
 	{
-		SPELL_VIGILANT_STRIKE       = 260834,
-		SPELL_WHIRLWIND             = 17207,
-		SPELL_HAMMER_STUN           = 36138
+		SPELL_BLOODTHIRST       = 23881,    // Victim
+		SPELL_SPELL_REFLECTION  = 23920,    // UnitCasting (target Self)
+		SPELL_RECKLESSNESS      = 122354,   // Buff
+		SPELL_HAMSTRING         = 198374,   // Victim
+		SPELL_BLADESTORM        = 235661,   // Enemies in range > 3
+		SPELL_PUMMEL            = 265431,   // UnitCasting
+		SPELL_SUDDEN_DEATH_BUFF = 280721,   // Buff casted by talent (dont use)
+		SPELL_MORTAL_STRIKE     = 283410,   // MostMissingEnemy
+		SPELL_WHIRLWIND         = 283412,   // Enemies in range >= 2
+		SPELL_REND              = 283419,   // Victim
+		SPELL_EXECUTE           = 1231790,  // On Victim when SUDDEN_DEATH_BUFF is up (check 1s to 2s)
 	};
+
+	void InitializeAI() override
+	{
+		me->SetOverrideDisplayPowerId(237);
+		ScriptedAI::InitializeAI();
+	}
+
+	static constexpr uint32  BLADESTORM_MIN_ENEMIES = 3;
+	static constexpr uint32  WHIRLWIND_MIN_ENEMIES  = 2;
 
 	void JustEngagedWith(Unit* who) override
 	{
-		npc_theramore_troop::JustEngagedWith(who);
-
 		scheduler
-			.Schedule(5ms, [this](TaskContext hammer_stun)
+
+			// --- Recklessness ---
+			// Buff offensif d'ouverture, puis toutes les 45-60s.
+			.Schedule(1ms, [this](TaskContext recklessness)
 			{
-				if (Unit* target = DoSelectCastingUnit(SPELL_HAMMER_STUN, 35.f))
+				if (HealthBelowPct(30)
+					&& !me->HasAura(SPELL_RECKLESSNESS))
 				{
-					CastStop();
-					DoCast(target, SPELL_HAMMER_STUN);
-					hammer_stun.Repeat(25s, 40s);
+					DoCastSelf(SPELL_RECKLESSNESS);
+					return;
+				}
+				recklessness.Repeat(1s);
+			})
+
+			// --- Rend ---
+			// DoT sur la victime, toutes les 10-14s.
+			.Schedule(3s, 6s, [this](TaskContext rend)
+			{
+				DoCastVictim(SPELL_REND);
+				rend.Repeat(10s, 14s);
+			})
+
+			// --- Bloodthirst ---
+			// Frappe offensive de base, toutes les 5-8s.
+			.Schedule(1ms, [this](TaskContext bloodthirst)
+			{
+				DoCastVictim(SPELL_BLOODTHIRST);
+				bloodthirst.Repeat(5s, 8s);
+			})
+
+			// --- Hamstring ---
+			// Ralentit la cible, toutes les 8-12s.
+			.Schedule(5s, 9s, [this](TaskContext hamstring)
+			{
+				DoCastVictim(SPELL_HAMSTRING);
+				hamstring.Repeat(8s, 12s);
+			})
+
+			// --- Mortal Strike ---
+			// Frappe puissante sur la victime, toutes les 6-8s.
+			.Schedule(4s, 7s, [this](TaskContext mortal_strike)
+			{
+				DoCastVictim(SPELL_MORTAL_STRIKE);
+				mortal_strike.Repeat(6s, 8s);
+			})
+
+			// --- Whirlwind ---
+			// AOE melee si 2+ ennemis a portee, toutes les 10-15s.
+			.Schedule(10s, 15s, [this](TaskContext whirlwind)
+			{
+				if (EnemiesInRange(MELEE_RANGE) >= WHIRLWIND_MIN_ENEMIES)
+				{
+					DoCastSelf(SPELL_WHIRLWIND);
+					whirlwind.Repeat(10s, 15s);
 				}
 				else
+					whirlwind.Repeat(2s);
+			})
+
+			// --- Bladestorm ---
+			// Tourbillon devastateur si 3+ ennemis a portee, toutes les 30-45s.
+			.Schedule(20s, 30s, [this](TaskContext bladestorm)
+			{
+				if (EnemiesInRange(MELEE_RANGE) >= BLADESTORM_MIN_ENEMIES)
 				{
-					hammer_stun.Repeat(1s);
+					DoCastSelf(SPELL_BLADESTORM);
+					bladestorm.Repeat(30s, 45s);
 				}
+				else
+					bladestorm.Repeat(2s);
 			})
-			.Schedule(1s, 5s, [this](TaskContext vigilant_strike)
+
+			// --- Pummel ---
+			// Interrompt un ennemi qui cast a portee melee. Re-check toutes les 1s, puis 15-18s CD.
+			.Schedule(1s, [this](TaskContext pummel)
 			{
-				DoCastVictim(SPELL_VIGILANT_STRIKE);
-				vigilant_strike.Repeat(8s, 14s);
+				if (Unit* target = DoSelectCastingUnit(SPELL_PUMMEL, MELEE_RANGE))
+				{
+					DoCast(target, SPELL_PUMMEL);
+					pummel.Repeat(15s, 18s);
+				}
+				else
+					pummel.Repeat(1s);
 			})
-			.Schedule(15s, 25s, [this](TaskContext whirlwind)
+
+			// --- Spell Reflection ---
+			// Buff defensif pose sur soi-meme lorsqu'un ennemi cast a portee melee. Re-check toutes les 1s.
+			.Schedule(1s, [this](TaskContext spell_reflection)
 			{
-				DoCast(SPELL_WHIRLWIND);
-				whirlwind.Repeat(1min);
+				if (!me->HasAura(SPELL_SPELL_REFLECTION) && DoSelectCastingUnit(SPELL_SPELL_REFLECTION, MELEE_RANGE))
+				{
+					DoCastSelf(SPELL_SPELL_REFLECTION);
+					spell_reflection.Repeat(20s, 25s);
+				}
+				else
+					spell_reflection.Repeat(1s);
+			})
+
+			// --- Execute ---
+			// Consomme le buff Sudden Death sur la victime. Re-check toutes les 1-2s.
+			.Schedule(1s, [this](TaskContext execute)
+			{
+				if (me->HasAura(SPELL_SUDDEN_DEATH_BUFF))
+					DoCastVictim(SPELL_EXECUTE);
+				execute.Repeat(1s, 2s);
 			});
 	}
 };
@@ -816,7 +855,6 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 {
 	npc_theramore_arcanist(Creature* creature, AI_Type type = AI_Type::Distance) : npc_theramore_troop(creature, type), arcaneCharges(0)
 	{
-		arcaneBlastInfo = sSpellMgr->AssertSpellInfo(SPELL_ARCANE_BLAST, DIFFICULTY_NONE);
 	}
 
 	enum Spells
@@ -840,7 +878,6 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 	static constexpr uint32 ARCANE_EXPLOSION_THRESHOLD  = 2;        // Au-dela de N ennemis -> Explosion
 	static constexpr float  TARGET_RANGE                = 30.0f;    // Portee de selection des cibles a distance
 
-	const SpellInfo* arcaneBlastInfo;
 	uint32 arcaneCharges;
 
 	void Reset() override
@@ -879,7 +916,7 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 			.Schedule(2s, [this](TaskContext arcane_blast)
 			{
 				DoCastVictim(SPELL_ARCANE_BLAST);
-				arcane_blast.Repeat(Milliseconds(arcaneBlastInfo->CalcCastTime()));
+				arcane_blast.Repeat(1800ms);
 			})
 			// --- Arcane Missiles on Clearcasting ---
 			.Schedule(1s, 5s, [this](TaskContext clearcasting)
@@ -951,42 +988,30 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 
 struct npc_theramore_faithful : public npc_theramore_troop
 {
-	npc_theramore_faithful(Creature* creature) : npc_theramore_troop(creature, AI_Type::Distance)
-	{
-	}
+	npc_theramore_faithful(Creature* creature) : npc_theramore_troop(creature, AI_Type::Distance) {}
 
 	enum Groups
 	{
-		GROUP_NORMAL,           // Rotation offensive (Smite, Halo, Psychic Scream)
-		GROUP_HEALING,          // Routines de soin (Shield, Renew, Prayer, Flash Heal)
-		GROUP_PAIN_SUPPRESSION  // Sequence defensive a 10% PV
+		GROUP_NORMAL,               // Rotation offensive
+		GROUP_SPIRIT_OF_REDEMPTION, // Routines de soin et Spirit of Redemption
 	};
 
 	enum Spells
 	{
 		SPELL_PRAYER_OF_HEALING     = 596,
+        SPELL_GUARDIAN_SPIRIT       = 47788,
 		SPELL_SHADOW_WORD_DEATH     = 51818,
 		SPELL_PSYCHIC_SCREAM        = 65543,
-		SPELL_PAIN_SUPPRESSION      = 69910,
 		SPELL_PLEA                  = 200829,
-        SPELL_HOLY_WORD_SALVATION   = 265202,
 		SPELL_POWER_WORD_FORTITUDE  = 267528,
 		SPELL_RENEW                 = 294342,
 		SPELL_FLASH_HEAL            = 314655,
 		SPELL_POWER_WORD_SHIELD     = 318158,
-		SPELL_SMITE                 = 332705,
         SPELL_HOLY_WORD_SERENITY    = 430546,
 		SPELL_SHADOW_WORD_PAIN      = 435397,
     };
 
-	static constexpr uint8 PAIN_SUPPRESSION_HP_PCT          = 20;       // PV qui declenche la sequence defensive
-	static constexpr Milliseconds PAIN_SUPPRESSION_DELAY    = 2500ms;   // Duree pendant laquelle on bloque les autres routines
-
-	static constexpr uint32 PSYCHIC_SCREAM_THRESHOLD        = 2;        // Au-dela de N ennemis colles -> Psychic Scream
-
-	static constexpr float HEAL_FRIENDLY_RANGE              = 40.0f;    // Portee standard des soins cibles
-	static constexpr float MELEE_AOE_RANGE                  = 10.0f;    // Distance de detection AOE
-	static constexpr float SHADOW_RANGE                     = 30.0f;    // Portee du Shadow Word Pain en backpedal
+	static constexpr float  STANDARD_RANGE = 40.0f;
 
 	void Reset() override
 	{
@@ -1001,51 +1026,16 @@ struct npc_theramore_faithful : public npc_theramore_troop
 		});
 	}
 
-	// -------------------------------------------------------------------------
-	// Reactions
-	// -------------------------------------------------------------------------
-
-	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
-	{
-        // Sequence defensive declenchee une seule fois par fenetre de 12 min.
-        if (me->GetSpellHistory()->HasCooldown(SPELL_HOLY_WORD_SALVATION))
-            return;
-
-        // Si la vie est inferieure à 10
-		if (!me->HealthBelowPctDamaged(PAIN_SUPPRESSION_HP_PCT, damage))
-			return;
-
-		// Gel les rotations offensives ET de heal pendant la canalisation de Divine Hymn.
-		scheduler.DelayGroup(GROUP_NORMAL, PAIN_SUPPRESSION_DELAY);
-		scheduler.DelayGroup(GROUP_HEALING, PAIN_SUPPRESSION_DELAY);
-
-		CastStop();
-
-        DoCastSelf(SPELL_HOLY_WORD_SALVATION);
-		DoCastSelf(SPELL_PAIN_SUPPRESSION, TRIGGERED_IGNORE_GCD
-            | TRIGGERED_DONT_REPORT_CAST_ERROR
-            | TRIGGERED_IGNORE_CAST_IN_PROGRESS);
-
-        // Empeche le circle-kite et le MoveChase
-        NotifyTeleported(PAIN_SUPPRESSION_DELAY);
-	}
-
 	// En backpedal : trois branches mutuellement exclusives selon roll_chance sequentiel.
 	// Probabilites finales : 25% self-heal, 37.5% Shadow Word Death, 37.5% Shadow Word Pain.
 	void OnBackpedStart(Unit* victim) override
 	{
 		if (roll_chance(25))
-		{
 			DoCastSelf(RAND(SPELL_RENEW, SPELL_PLEA, SPELL_POWER_WORD_SHIELD));
-		}
 		else if (roll_chance(50))
-		{
 			DoCast(victim, SPELL_SHADOW_WORD_DEATH);
-		}
-		else if (Unit* dotTarget = SelectTarget(SelectTargetMethod::Random, 0, SHADOW_RANGE, false, true, -SPELL_SHADOW_WORD_PAIN))
-		{
+		else if (Unit* dotTarget = SelectTarget(SelectTargetMethod::Random, 0, STANDARD_RANGE, false, true, -SPELL_SHADOW_WORD_PAIN))
 			DoCast(dotTarget, SPELL_SHADOW_WORD_PAIN);
-		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -1056,21 +1046,18 @@ struct npc_theramore_faithful : public npc_theramore_troop
 	{
 		npc_theramore_troop::JustEngagedWith(who);
 
-		DoCast(who, SPELL_SMITE);
-
 		scheduler
-			// === DPS (GROUP_NORMAL) ===
-
-			// Smite en continu (filler offensif).
-			.Schedule(1s, GROUP_NORMAL, [this](TaskContext smite)
+            // Guardian Spirit
+			.Schedule(1s, GROUP_NORMAL, [this](TaskContext guardian_spirit)
 			{
-				DoCastVictim(SPELL_SMITE);
-				smite.Repeat(2s);
+                if (Unit* target = DoSelectLowestHpFriendly(STANDARD_RANGE))
+                    DoCast(target, SPELL_GUARDIAN_SPIRIT, TRIGGERED_IGNORE_CAST_IN_PROGRESS);
+                guardian_spirit.Repeat(3min);
 			})
-			// Psychic Scream si 2+ ennemis colles.
+			// Psychic Scream si 2+ ennemis colles
 			.Schedule(3s, 8s, GROUP_NORMAL, [this](TaskContext psychic_scream)
 			{
-				if (EnemiesInRange(MELEE_AOE_RANGE) >= PSYCHIC_SCREAM_THRESHOLD)
+				if (EnemiesInRange(10.0f) >= 2)
 				{
 					DoCastAOE(SPELL_PSYCHIC_SCREAM);
 					psychic_scream.Repeat(10s, 25s);
@@ -1078,56 +1065,41 @@ struct npc_theramore_faithful : public npc_theramore_troop
 				else
 					psychic_scream.Repeat(1s);
 			})
-
-			// === HEAL (GROUP_HEALING) ===
-
-			// Halo : heal AOE radial.
-			.Schedule(1s, 5s, GROUP_HEALING, [this](TaskContext holy_word_serenity)
+			// Power Word: Shield avec BP0 = 20% PV max de la cible
+			.Schedule(3s, GROUP_NORMAL, [this](TaskContext power_word_shield)
 			{
-                if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, 80))
-                {
-                    CastStop(SPELL_FLASH_HEAL);
-                    DoCast(target, SPELL_HOLY_WORD_SERENITY);
-                }
-                holy_word_serenity.Repeat(1min);
-			})
-			// Power Word: Shield avec BP0 = 20% PV max de la cible (toutes les 8s).
-			.Schedule(1s, 2s, GROUP_HEALING, [this](TaskContext power_word_shield)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, 30))
+				if (Unit* target = DoSelectBelowHpPctFriendly(STANDARD_RANGE, 60))
 				{
 					CastStop(SPELL_FLASH_HEAL);
 					DoCast(target, SPELL_POWER_WORD_SHIELD);
 				}
-				power_word_shield.Repeat(8s);
+				power_word_shield.Repeat(3s);
 			})
-			// Renew en HoT preventif sur allie sous 60% PV.
-			.Schedule(5s, 7s, GROUP_HEALING, [this](TaskContext renew)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, 60))
-					DoCast(target, SPELL_RENEW);
-				renew.Repeat(10s, 15s);
-			})
-			// Prayer of Healing AOE toutes les 14s (interrompt Flash Heal au passage).
-			.Schedule(12s, 14s, GROUP_HEALING, [this](TaskContext mass_healing)
-			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, 30))
-				{
-					CastStop(SPELL_SMITE);
-					DoCast(target, SPELL_PRAYER_OF_HEALING);
-				}
-				mass_healing.Repeat(10s, 14s);
-			})
-			// Flash Heal en spot sur allie sous 60% PV (toutes les 2s).
-			.Schedule(1s, 8s, GROUP_HEALING, [this](TaskContext flash_heal)
-			{
-				if (Unit* target = FindLowestHealthFriend(me, HEAL_FRIENDLY_RANGE))
-				{
-					CastStop(SPELL_PRAYER_OF_HEALING);
-					DoCast(target, SPELL_FLASH_HEAL);
-				}
-				flash_heal.Repeat(2s, 8s);
-			});
+			// Sorts de soin aléatoires
+            .Schedule(1s, GROUP_NORMAL, [this](TaskContext flash_heal)
+            {
+                if (Unit* target = FindLowestHealthFriend(me, STANDARD_RANGE, true))
+                {
+                    uint32 entry = RAND(SPELL_FLASH_HEAL, SPELL_RENEW, SPELL_PRAYER_OF_HEALING);
+                    if (!me->GetSpellHistory()->HasCooldown(SPELL_HOLY_WORD_SERENITY))
+                        entry = SPELL_HOLY_WORD_SERENITY;
+
+                    DoCast(target, entry);
+
+                    Milliseconds repeat = 1s;
+                    if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(entry, DIFFICULTY_NORMAL))
+                    {
+                        uint32 castTime = spellInfo->CalcCastTime();
+                        if (castTime > 0)
+                            repeat = Milliseconds(castTime);
+                    }
+
+                    flash_heal.Repeat(repeat);
+                    return;
+                }
+
+                flash_heal.Repeat(1s);
+            });
 	}
 };
 
@@ -1553,7 +1525,6 @@ struct npc_roknah_hag : public npc_theramore_horde
 
 struct npc_roknah_grunt : public npc_theramore_horde
 {
-	// https://www.wowhead.com/fr/npc=144522/marco-le-malodorant#abilities
 	npc_roknah_grunt(Creature* creature) : npc_theramore_horde(creature, AI_Type::Melee) {}
 
 	enum Spells

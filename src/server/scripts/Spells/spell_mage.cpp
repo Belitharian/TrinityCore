@@ -77,7 +77,8 @@ enum MageSpells
 	SPELL_MAGE_FLAME_PATCH_TALENT                = 205037,
 	SPELL_MAGE_FLURRY_TRIGGERED_DAMAGE           = 228596,
 	SPELL_MAGE_FRENETIC_SPEED                    = 236060,
-	SPELL_MAGE_FROST_NOVA                        = 122,
+    SPELL_MAGE_FROST_NOVA                        = 122,
+    SPELL_MAGE_FROSTFIRE_BOLT                    = 431044,
 	SPELL_MAGE_GIRAFFE_FORM                      = 32816,
 	SPELL_MAGE_HEAT_SHIMMER                      = 458964,
 	SPELL_MAGE_HEATING_UP                        = 48107,
@@ -138,10 +139,12 @@ enum MageSpells
 	SPELL_MAGE_SPLINTERING_SORCERY               = 443739,
 	SPELL_MAGE_AUGURY_ABOUNDS                    = 1280165,
 	SPELL_MAGE_CONTROLLED_INSTINCTS              = 444483,
-	SPELL_MAGE_CONTROLLED_INSTINCTS_DAMAGE       = 444487,
-	SPELL_MAGE_CONTROLLED_INSTINCTS_DEBUFF       = 463192,
-    SPELL_TEMPORAL_REALIGNMENT_HEAL              = 1244092,
-    SPELL_TEMPORAL_REALIGNMENT_DEBUFF            = 1244093,
+	SPELL_MAGE_CONTROLLED_INSTINCTS_FROST        = 444487,
+	SPELL_MAGE_CONTROLLED_INSTINCTS_ARCANE       = 444720,
+	SPELL_MAGE_CONTROLLED_INSTINCTS_DFROST       = 463192,
+	SPELL_MAGE_CONTROLLED_INSTINCTS_DARCANE      = 454214,
+	SPELL_TEMPORAL_REALIGNMENT_HEAL              = 1244092,
+	SPELL_TEMPORAL_REALIGNMENT_DEBUFF            = 1244093,
 	SPELL_MAGE_ICICLE_TALENT                     = 1246832,
 	SPELL_MAGE_ICICLES_BUFF                      = 205473,
 	SPELL_MAGE_GLACIAL_SPIKE                     = 199786,
@@ -153,8 +156,8 @@ enum MageSpells
 	SPELL_MAGE_ICE_LANCE_TRIGGER_NPC             = 284874,
 	SPELL_MAGE_GLACIAL_SPIKE_NPC                 = 284840,
 
-    SPELL_MAGE_ARCANE_BLAST_NPC                  = 291336,
-    SPELL_MAGE_ARCANE_BARRAGE_NPC                = 44425
+	SPELL_MAGE_ARCANE_BLAST_NPC                  = 291336,
+	SPELL_MAGE_ARCANE_BARRAGE_NPC                = 44425
 };
 
 // Visuels des glacons flottant autour du mage (1 par stack d'Icicles).
@@ -1477,7 +1480,7 @@ class spell_mage_splintering_sorcery : public AuraScript
 {
 	bool Validate(SpellInfo const* /*spellInfo*/) override
 	{
-		return ValidateSpellInfo({ SPELL_MAGE_FROST_SPLINTER });
+		return ValidateSpellInfo({ SPELL_MAGE_FROST_SPLINTER, SPELL_MAGE_ARCANE_SPLINTER });
 	}
 
 	static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
@@ -1488,16 +1491,17 @@ class spell_mage_splintering_sorcery : public AuraScript
 
 		switch (spellInfo->Id)
 		{
-            // Frost
+			// Frost
 			case SPELL_MAGE_FROSTBOLT:
 			case SPELL_MAGE_FLURRY:
 			case SPELL_MAGE_FLURRY_NPC:
+			case SPELL_MAGE_FROSTFIRE_BOLT:
 				return true;
-            // Arcane
-            case SPELL_MAGE_ARCANE_BLAST_NPC:
-            case SPELL_MAGE_ARCANE_MISSILES_DAMAGE:
-            case SPELL_MAGE_ARCANE_BARRAGE_NPC:
-                return true;
+			// Arcane
+			case SPELL_MAGE_ARCANE_MISSILES:
+			case SPELL_MAGE_ARCANE_BLAST_NPC:
+			case SPELL_MAGE_ARCANE_BARRAGE_NPC:
+				return true;
 			default:
 				return false;
 		}
@@ -1516,11 +1520,11 @@ class spell_mage_splintering_sorcery : public AuraScript
 		if (!minEff || !maxEff)
 			return;
 
-        uint32 splinter = eventInfo.GetSchoolMask() & SPELL_SCHOOL_MASK_FROST
-            ? SPELL_MAGE_FROST_SPLINTER
-            : SPELL_MAGE_ARCANE_SPLINTER;
+		uint32 splinter = eventInfo.GetSchoolMask() & SPELL_SCHOOL_MASK_FROST
+			? SPELL_MAGE_FROST_SPLINTER
+			: SPELL_MAGE_ARCANE_SPLINTER;
 
-        uint32 count = urand(uint32(minEff->GetAmount()), uint32(maxEff->GetAmount()));
+		uint32 count = urand(uint32(minEff->GetAmount()), uint32(maxEff->GetAmount()));
 
 		ScheduleSplinterSalvo(caster, target, splinter, count);
 	}
@@ -1537,13 +1541,18 @@ class spell_mage_augury_abounds : public AuraScript
 {
 	bool Validate(SpellInfo const* /*spellInfo*/) override
 	{
-		return ValidateSpellInfo({ SPELL_MAGE_FROST_SPLINTER });
+		return ValidateSpellInfo({ SPELL_MAGE_FROST_SPLINTER, SPELL_MAGE_ARCANE_SPLINTER });
 	}
 
 	static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
 	{
 		SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
-		return spellInfo && spellInfo->Id == SPELL_MAGE_FROST_SPLINTER;
+
+        uint32 splinter = eventInfo.GetSchoolMask() & SPELL_SCHOOL_MASK_FROST
+            ? SPELL_MAGE_FROST_SPLINTER
+            : SPELL_MAGE_ARCANE_SPLINTER;
+
+		return spellInfo && spellInfo->Id == splinter;
 	}
 
 	static void HandleProc(AuraScript const&, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
@@ -1562,9 +1571,9 @@ class spell_mage_augury_abounds : public AuraScript
 		if (!caster || !target)
 			return;
 
-        uint32 splinter = eventInfo.GetSchoolMask() & SPELL_SCHOOL_MASK_FROST
-            ? SPELL_MAGE_FROST_SPLINTER
-            : SPELL_MAGE_ARCANE_SPLINTER;
+		uint32 splinter = eventInfo.GetSchoolMask() & SPELL_SCHOOL_MASK_FROST
+			? SPELL_MAGE_FROST_SPLINTER
+			: SPELL_MAGE_ARCANE_SPLINTER;
 
 		ScheduleSplinterSalvo(caster, target, splinter, uint32(countEff->GetAmount()));
 	}
@@ -1581,13 +1590,24 @@ class spell_mage_controlled_instincts : public AuraScript
 {
 	bool Validate(SpellInfo const* /*spellInfo*/) override
 	{
-		return ValidateSpellInfo({ SPELL_MAGE_CONTROLLED_INSTINCTS_DAMAGE, SPELL_MAGE_CONTROLLED_INSTINCTS_DEBUFF });
+		return ValidateSpellInfo
+        ({
+            SPELL_MAGE_CONTROLLED_INSTINCTS_FROST,
+            SPELL_MAGE_CONTROLLED_INSTINCTS_ARCANE,
+            SPELL_MAGE_CONTROLLED_INSTINCTS_DFROST,
+            SPELL_MAGE_CONTROLLED_INSTINCTS_DARCANE,
+        });
 	}
 
 	static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
 	{
-		SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
-		return spellInfo && spellInfo->Id == SPELL_MAGE_FROST_SPLINTER && eventInfo.GetDamageInfo();
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+
+        uint32 splinter = eventInfo.GetSchoolMask() & SPELL_SCHOOL_MASK_FROST
+            ? SPELL_MAGE_FROST_SPLINTER
+            : SPELL_MAGE_ARCANE_SPLINTER;
+
+		return spellInfo && spellInfo->Id == splinter && eventInfo.GetDamageInfo();
 	}
 
 	static void HandleProc(AuraScript const&, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
@@ -1597,7 +1617,11 @@ class spell_mage_controlled_instincts : public AuraScript
 		if (!caster || !target)
 			return;
 
-		AuraEffect const* pctEff = aurEff->GetBase()->GetEffect(EFFECT_0);
+        SpellEffIndex effIndex = eventInfo.GetSchoolMask() & SPELL_SCHOOL_MASK_FROST
+            ? EFFECT_3
+            : EFFECT_0;
+
+		AuraEffect const* pctEff = aurEff->GetBase()->GetEffect(effIndex);
 		if (!pctEff)
 			return;
 
@@ -1605,13 +1629,21 @@ class spell_mage_controlled_instincts : public AuraScript
 		if (cleaveDamage <= 0)
 			return;
 
-		caster->CastSpell(target, SPELL_MAGE_CONTROLLED_INSTINCTS_DEBUFF, aurEff);
+        uint32 debuff = eventInfo.GetSchoolMask() & SPELL_SCHOOL_MASK_FROST
+            ? SPELL_MAGE_CONTROLLED_INSTINCTS_DFROST
+            : SPELL_MAGE_CONTROLLED_INSTINCTS_DARCANE;
+
+		caster->CastSpell(target, debuff, aurEff);
 
 		CastSpellExtraArgs args(aurEff);
 		args.AddSpellMod(SPELLVALUE_BASE_POINT0, cleaveDamage);
 		args.SetTriggerFlags(TRIGGERED_DONT_REPORT_CAST_ERROR | TRIGGERED_IGNORE_CAST_IN_PROGRESS);
 
-		caster->CastSpell(target, SPELL_MAGE_CONTROLLED_INSTINCTS_DAMAGE, args);
+        uint32 damage = eventInfo.GetSchoolMask() & SPELL_SCHOOL_MASK_FROST
+            ? SPELL_MAGE_CONTROLLED_INSTINCTS_FROST
+            : SPELL_MAGE_CONTROLLED_INSTINCTS_ARCANE;
+
+		caster->CastSpell(target, damage, args);
 	}
 
 	void Register() override
@@ -2035,70 +2067,70 @@ class spell_mage_molten_fury : public AuraScript
 // avec un intervalle fixe de `period` ms entre chaque orbe.
 inline void ScheduleOrbSalvo(Unit* caster, uint32 orbSpell, uint8 orbAmount, Milliseconds period)
 {
-    Milliseconds offset = 0ms;
+	Milliseconds offset = 0ms;
 
-    for (uint8 i = 0; i < orbAmount; ++i)
-    {
-        caster->m_Events.AddEventAtOffset([caster, orbSpell]()
-        {
-            caster->CastSpell(caster, orbSpell, TRIGGERED_FULL_MASK);
-        }, offset);
+	for (uint8 i = 0; i < orbAmount; ++i)
+	{
+		caster->m_Events.AddEventAtOffset([caster, orbSpell]()
+		{
+			caster->CastSpell(caster, orbSpell, TRIGGERED_FULL_MASK);
+		}, offset);
 
-        offset += period;
-    }
+		offset += period;
+	}
 }
 
 // 153626 - Orb Mastery
 // 440458 - Orb Mastery
 class spell_mage_arcane_orb : public SpellScript
 {
-    enum
-    {
-        SPELL_MAGE_ARCANE_ORB           = 153626,
-        SPELL_MAGE_ARCANE_ORB_NPC       = 440458,
+	enum
+	{
+		SPELL_MAGE_ARCANE_ORB           = 153626,
+		SPELL_MAGE_ARCANE_ORB_NPC       = 440458,
 
-        SPELL_MAGE_CLEARCASTING_BUFF    = 263725,
+		SPELL_MAGE_CLEARCASTING_BUFF    = 263725,
 
-        SPELL_MAGE_ORB_MASTERY_TALENT   = 1243435,
-    };
+		SPELL_MAGE_ORB_MASTERY_TALENT   = 1243435,
+	};
 
-    bool Validate(SpellInfo const* /*spellInfo*/) override
-    {
-        return ValidateSpellInfo
-        ({
-            SPELL_MAGE_ARCANE_ORB,
-            SPELL_MAGE_ARCANE_ORB_NPC,
-            SPELL_MAGE_CLEARCASTING_BUFF,
-            SPELL_MAGE_ORB_MASTERY_TALENT
-        });
-    }
+	bool Validate(SpellInfo const* /*spellInfo*/) override
+	{
+		return ValidateSpellInfo
+		({
+			SPELL_MAGE_ARCANE_ORB,
+			SPELL_MAGE_ARCANE_ORB_NPC,
+			SPELL_MAGE_CLEARCASTING_BUFF,
+			SPELL_MAGE_ORB_MASTERY_TALENT
+		});
+	}
 
-    void HandleDummy(SpellEffIndex /*effIndex*/)
-    {
-        Unit* caster = GetCaster();
-        if (!caster || !caster->HasAura(SPELL_MAGE_CLEARCASTING_BUFF) || !caster->HasAura(SPELL_MAGE_ORB_MASTERY_TALENT))
-            return;
+	void HandleDummy(SpellEffIndex /*effIndex*/)
+	{
+		Unit* caster = GetCaster();
+		if (!caster || !caster->HasAura(SPELL_MAGE_CLEARCASTING_BUFF) || !caster->HasAura(SPELL_MAGE_ORB_MASTERY_TALENT))
+			return;
 
-        SpellInfo const* spellInfo = sSpellMgr->AssertSpellInfo(SPELL_MAGE_ORB_MASTERY_TALENT, DIFFICULTY_NONE);
-        uint8 const orbAmount = static_cast<uint8>(spellInfo->GetEffect(EFFECT_0).CalcValue());
-        //Milliseconds const period = Milliseconds(static_cast<int32>(spellInfo->GetEffect(EFFECT_1).CalcValue()));
-        uint32 const orbSpell = caster->IsCreature() ? SPELL_MAGE_ARCANE_ORB_NPC : SPELL_MAGE_ARCANE_ORB;
+		SpellInfo const* spellInfo = sSpellMgr->AssertSpellInfo(SPELL_MAGE_ORB_MASTERY_TALENT, DIFFICULTY_NONE);
+		uint8 const orbAmount = static_cast<uint8>(spellInfo->GetEffect(EFFECT_0).CalcValue());
+		//Milliseconds const period = Milliseconds(static_cast<int32>(spellInfo->GetEffect(EFFECT_1).CalcValue()));
+		uint32 const orbSpell = caster->IsCreature() ? SPELL_MAGE_ARCANE_ORB_NPC : SPELL_MAGE_ARCANE_ORB;
 
-        ScheduleOrbSalvo(caster, orbSpell, orbAmount, 325ms);
-    }
+		ScheduleOrbSalvo(caster, orbSpell, orbAmount, 325ms);
+	}
 
-    void ConsumeClearCasting()
-    {
-        Unit* caster = GetCaster();
-        if (Aura* aura = caster->GetAura(SPELL_MAGE_CLEARCASTING_BUFF))
-            aura->ModStackAmount(-1);
-    }
+	void ConsumeClearCasting()
+	{
+		Unit* caster = GetCaster();
+		if (Aura* aura = caster->GetAura(SPELL_MAGE_CLEARCASTING_BUFF))
+			aura->ModStackAmount(-1);
+	}
 
-    void Register() override
-    {
-        OnEffectLaunch += SpellEffectFn(spell_mage_arcane_orb::HandleDummy, EFFECT_0, SPELL_EFFECT_CREATE_AREATRIGGER);
-        AfterCast += SpellCastFn(spell_mage_arcane_orb::ConsumeClearCasting);
-    }
+	void Register() override
+	{
+		OnEffectLaunch += SpellEffectFn(spell_mage_arcane_orb::HandleDummy, EFFECT_0, SPELL_EFFECT_CREATE_AREATRIGGER);
+		AfterCast += SpellCastFn(spell_mage_arcane_orb::ConsumeClearCasting);
+	}
 };
 
 enum SilvermoonPolymorph
@@ -2269,11 +2301,11 @@ class spell_mage_ray_of_frost_aura : public AuraScript
 class spell_mage_arcane_missiles : public AuraScript
 {
 	void ConsumeClearCasting(AuraEffect const* aurEff, AuraEffectHandleModes /*mode*/)
-    {
-        Unit* caster = GetCaster();
-        if (Aura* aura = caster->GetAura(SPELL_MAGE_CLEARCASTING_BUFF))
-            aura->ModStackAmount(-1);
-    }
+	{
+		Unit* caster = GetCaster();
+		if (Aura* aura = caster->GetAura(SPELL_MAGE_CLEARCASTING_BUFF))
+			aura->ModStackAmount(-1);
+	}
 
 	void HandleEffectPeriodic(AuraEffect const* /*aurEff*/)
 	{
@@ -2536,32 +2568,32 @@ class spell_mage_tempest_barrier : public AuraScript
 // 1244092 - Temporal Realignment
 class spell_mage_temporal_realignment : public SpellScript
 {
-    bool Validate(SpellInfo const* /*spellInfo*/) override
-    {
-        return ValidateSpellInfo
-        ({
-            SPELL_TEMPORAL_REALIGNMENT_DEBUFF,
-        });
-    }
+	bool Validate(SpellInfo const* /*spellInfo*/) override
+	{
+		return ValidateSpellInfo
+		({
+			SPELL_TEMPORAL_REALIGNMENT_DEBUFF,
+		});
+	}
 
-    SpellCastResult CheckTarget()
-    {
-        Unit* caster = GetCaster();
-        if (!caster || caster->HasAura(SPELL_TEMPORAL_REALIGNMENT_DEBUFF))
-            return SPELL_FAILED_BAD_TARGETS;
+	SpellCastResult CheckTarget()
+	{
+		Unit* caster = GetCaster();
+		if (!caster || caster->HasAura(SPELL_TEMPORAL_REALIGNMENT_DEBUFF))
+			return SPELL_FAILED_BAD_TARGETS;
 
-        return SPELL_CAST_OK;
-    }
+		return SPELL_CAST_OK;
+	}
 
 	void HandleTemporalRealignment()
 	{
-        if (Unit* caster = GetCaster())
-            caster->CastSpell(caster, SPELL_TEMPORAL_REALIGNMENT_DEBUFF, true);
+		if (Unit* caster = GetCaster())
+			caster->CastSpell(caster, SPELL_TEMPORAL_REALIGNMENT_DEBUFF, true);
 	}
 
 	void Register() override
 	{
-        OnCheckCast += SpellCheckCastFn(spell_mage_temporal_realignment::CheckTarget);
+		OnCheckCast += SpellCheckCastFn(spell_mage_temporal_realignment::CheckTarget);
 		AfterHit += SpellHitFn(spell_mage_temporal_realignment::HandleTemporalRealignment);
 	}
 };

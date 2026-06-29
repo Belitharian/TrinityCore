@@ -1101,6 +1101,7 @@ enum TrinityStrings
     LANG_NPCINFO_EQUIPMENT                = 5036,
     LANG_NPCINFO_MECHANIC_IMMUNE          = 5037,
     LANG_NPCINFO_UNIT_FIELD_FLAGS         = 5038,
+    LANG_NPCINFO_UNIT_AURAS               = 50000,
     LANG_CONSOLE                          = 5039,
     LANG_CHARACTER                        = 5040,
     LANG_PERMANENTLY                      = 5041,

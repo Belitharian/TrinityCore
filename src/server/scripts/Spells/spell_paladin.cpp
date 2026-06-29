@@ -40,6 +40,8 @@
 enum PaladinSpells
 {
     SPELL_PALADIN_A_JUST_REWARD_HEAL             = 469413,
+    SPELL_PALADIN_AFTERIMAGE_TALENT              = 385414,
+    SPELL_PALADIN_AFTERIMAGE_BUFF                = 400745,
     SPELL_PALADIN_ARDENT_DEFENDER_HEAL           = 66235,
     SPELL_PALADIN_ART_OF_WAR_TRIGGERED           = 231843,
     SPELL_PALADIN_AVENGERS_SHIELD                = 31935,
@@ -109,13 +111,24 @@ enum PaladinSpells
     SPELL_PALADIN_RIGHTEOUS_DEFENSE_TAUNT        = 31790,
     SPELL_PALADIN_RIGHTEOUS_VERDICT_AURA         = 267611,
     SPELL_PALADIN_SEAL_OF_RIGHTEOUSNESS          = 25742,
+    SPELL_PALADIN_SHIELD_OF_THE_RIGHTEOUS        = 53600,
+    SPELL_PALADIN_SHIELD_OF_THE_RIGHTEOUS_NPC    = 337629,
     SPELL_PALADIN_SHIELD_OF_THE_RIGHTEOUS_ARMOR  = 132403,
     SPELL_PALADIN_SHIELD_OF_VENGEANCE_DAMAGE     = 184689,
+    SPELL_PALADIN_SHINING_LIGHT_TALENT           = 321136,
+    SPELL_PALADIN_SHINING_LIGHT_BUFF             = 327510,
     SPELL_PALADIN_TEMPLAR_VERDICT_DAMAGE         = 224266,
     SPELL_PALADIN_T30_2P_HEARTFIRE_DAMAGE        = 408399,
     SPELL_PALADIN_T30_2P_HEARTFIRE_HEAL          = 408400,
     SPELL_PALADIN_WAKE_OF_ASHES_STUN             = 255941,
-    SPELL_PALADIN_ZEAL_AURA                      = 269571
+    SPELL_PALADIN_ZEAL_AURA                      = 269571,
+
+    // NPC-only variants used to drive talents on creatures
+    SPELL_PALADIN_FLASH_OF_LIGHT_NPC             = 283634,
+    SPELL_PALADIN_HOLY_LIGHT_NPC                 = 295698,
+    SPELL_PALADIN_LIGHT_OF_DAWN_NPC              = 295710,
+    SPELL_PALADIN_DIVINE_STORM_NPC               = 357849,
+    SPELL_PALADIN_BLESSED_HAMMER_NPC             = 420092
 };
 
 enum PaladinCovenantSpells
@@ -163,6 +176,54 @@ class spell_pal_a_just_reward : public AuraScript
     void Register() override
     {
         OnEffectProc += AuraEffectProcFn(spell_pal_a_just_reward::HandleEffectProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
+// 385414 - Afterimage
+class spell_pal_afterimage : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_PALADIN_AFTERIMAGE_BUFF });
+    }
+
+    bool CheckEffectProc(AuraEffect const* /*aurEff*/, ProcEventInfo& eventInfo)
+    {
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        if (!spellInfo)
+            return false;
+
+        switch (spellInfo->Id)
+        {
+            case SPELL_PALADIN_AVENGERS_SHIELD:
+            case SPELL_PALADIN_FLASH_OF_LIGHT_NPC:
+            case SPELL_PALADIN_HOLY_LIGHT_NPC:
+            case SPELL_PALADIN_LIGHT_OF_DAWN_NPC:
+            case SPELL_PALADIN_DIVINE_STORM_NPC:
+            case SPELL_PALADIN_BLESSED_HAMMER_NPC:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    void HandleEffectProc(AuraEffect* aurEff, ProcEventInfo& eventInfo)
+    {
+        Unit* target = GetTarget();
+        if (!target)
+            return;
+
+        int32 stacks = irand(1, 5);
+
+        CastSpellExtraArgs args(aurEff);
+        args.AddSpellMod(SPELLVALUE_AURA_STACK, stacks);
+        target->CastSpell(target, SPELL_PALADIN_AFTERIMAGE_BUFF, args);
+    }
+
+    void Register() override
+    {
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_pal_afterimage::CheckEffectProc, EFFECT_2, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_pal_afterimage::HandleEffectProc, EFFECT_2, SPELL_AURA_DUMMY);
     }
 };
 
@@ -1596,6 +1657,42 @@ class spell_pal_shield_of_vengeance : public AuraScript
     SpellEffectValue _initialAmount = 0;
 };
 
+// 321136 - Shining Light
+class spell_pal_shining_light : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_PALADIN_SHINING_LIGHT_BUFF });
+    }
+
+    bool CheckEffectProc(AuraEffect const* /*aurEff*/, ProcEventInfo& eventInfo)
+    {
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        if (!spellInfo)
+            return false;
+
+        return spellInfo->Id == SPELL_PALADIN_SHIELD_OF_THE_RIGHTEOUS
+            || spellInfo->Id == SPELL_PALADIN_SHIELD_OF_THE_RIGHTEOUS_NPC;
+    }
+
+    void HandleEffectProc(AuraEffect* aurEff, ProcEventInfo& /*eventInfo*/)
+    {
+        if (++_counter < aurEff->GetAmount())
+            return;
+
+        _counter = 0;
+        GetTarget()->CastSpell(GetTarget(), SPELL_PALADIN_SHINING_LIGHT_BUFF, aurEff);
+    }
+
+    void Register() override
+    {
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_pal_shining_light::CheckEffectProc, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_pal_shining_light::HandleEffectProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+
+    uint32 _counter = 0;
+};
+
 // 469304 - Steed of Liberty
 class spell_pal_steed_of_liberty : public AuraScript
 {
@@ -1812,6 +1909,59 @@ class spell_pal_wake_of_ashes : public SpellScript
     }
 };
 
+// 85673 - Word of Glory
+class spell_pal_word_of_glory : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_PALADIN_AFTERIMAGE_TALENT, SPELL_PALADIN_AFTERIMAGE_BUFF })
+            && ValidateSpellEffect({ { SPELL_PALADIN_AFTERIMAGE_TALENT, EFFECT_0 }, { SPELL_PALADIN_AFTERIMAGE_TALENT, EFFECT_2 } });
+    }
+
+    void CalcHealingAfterimage(SpellEffectInfo const& /*effectInfo*/, Unit const* victim, int32& healing, int32& /*flatMod*/, float& /*pctMod*/) const
+    {
+        Unit* caster = GetCaster();
+        if (!caster || victim == caster)
+            return;
+
+        Aura* afterimage = caster->GetAura(SPELL_PALADIN_AFTERIMAGE_BUFF);
+        if (!afterimage)
+            return;
+
+        SpellInfo const* talentInfo = sSpellMgr->AssertSpellInfo(SPELL_PALADIN_AFTERIMAGE_TALENT, DIFFICULTY_NONE);
+        int32 threshold = talentInfo->GetEffect(EFFECT_2).CalcValue(caster);
+        if (afterimage->GetStackAmount() < threshold)
+            return;
+
+        int32 pct = talentInfo->GetEffect(EFFECT_0).CalcValue(caster);
+        healing = CalculatePct(healing, pct);
+    }
+
+    void ConsumeAfterimage(SpellEffIndex /*effIndex*/) const
+    {
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        if (Aura* afterimage = caster->GetAura(SPELL_PALADIN_AFTERIMAGE_BUFF))
+        {
+            SpellInfo const* talentInfo = sSpellMgr->AssertSpellInfo(SPELL_PALADIN_AFTERIMAGE_TALENT, DIFFICULTY_NONE);
+            int32 stacksToConsume = talentInfo->GetEffect(EFFECT_2).CalcValue(caster);
+            if (afterimage->GetStackAmount() >= stacksToConsume)
+                afterimage->ModStackAmount(-stacksToConsume);
+        }
+
+        if (Aura* shiningLight = caster->GetAura(SPELL_PALADIN_SHINING_LIGHT_BUFF))
+            shiningLight->ModStackAmount(-1);
+    }
+
+    void Register() override
+    {
+        CalcHealing += SpellCalcHealingFn(spell_pal_word_of_glory::CalcHealingAfterimage);
+        OnEffectHitTarget += SpellEffectFn(spell_pal_word_of_glory::ConsumeAfterimage, EFFECT_0, SPELL_EFFECT_HEAL);
+    }
+};
+
 // 269569 - Zeal
 class spell_pal_zeal : public AuraScript
 {
@@ -1837,6 +1987,7 @@ class spell_pal_zeal : public AuraScript
 void AddSC_paladin_spell_scripts()
 {
     RegisterSpellScript(spell_pal_a_just_reward);
+    RegisterSpellScript(spell_pal_afterimage);
     RegisterSpellScript(spell_pal_ardent_defender);
     RegisterSpellScript(spell_pal_art_of_war);
     RegisterAreaTriggerAI(areatrigger_pal_ashen_hallow);
@@ -1883,6 +2034,7 @@ void AddSC_paladin_spell_scripts()
     RegisterSpellScript(spell_pal_selfless_healer);
     RegisterSpellScript(spell_pal_shield_of_the_righteous);
     RegisterSpellScript(spell_pal_shield_of_vengeance);
+    RegisterSpellScript(spell_pal_shining_light);
     RegisterSpellScript(spell_pal_steed_of_liberty);
     RegisterSpellScript(spell_pal_templar_s_verdict);
     RegisterSpellScript(spell_pal_t3_6p_bonus);
@@ -1890,5 +2042,6 @@ void AddSC_paladin_spell_scripts()
     RegisterSpellScript(spell_pal_t30_2p_protection_bonus);
     RegisterSpellScript(spell_pal_t30_2p_protection_bonus_heal);
     RegisterSpellScript(spell_pal_wake_of_ashes);
+    RegisterSpellScript(spell_pal_word_of_glory);
     RegisterSpellScript(spell_pal_zeal);
 }

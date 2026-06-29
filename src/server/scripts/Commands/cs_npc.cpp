@@ -510,6 +510,19 @@ public:
         handler->PSendSysMessage(LANG_NPCINFO_HEALTH, target->GetCreateHealth(), std::to_string(target->GetMaxHealth()).c_str(), std::to_string(target->GetHealth()).c_str());
         handler->PSendSysMessage(LANG_NPCINFO_MOVEMENT_DATA, target->GetMovementTemplate().ToString().c_str());
 
+        if (CreatureAddon const* addon = target->GetCreatureAddon())
+        {
+            handler->PSendSysMessage(LANG_NPCINFO_UNIT_AURAS);
+            for (uint32 entry : addon->auras)
+            {
+                SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(entry, DIFFICULTY_NONE);
+                if (!spellInfo)
+                    continue;
+
+                handler->PSendSysMessage("- %s (%u)", spellInfo->SpellName->Str[sWorld->GetDefaultDbcLocale()], entry);
+            }
+        }
+
         handler->PSendSysMessage(LANG_NPCINFO_UNIT_FIELD_FLAGS, *target->m_unitData->Flags);
         for (UnitFlags flag : EnumUtils::Iterate<UnitFlags>())
             if (target->HasUnitFlag(flag))

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -1177,9 +1177,7 @@ Optional<uint32> GetSpellToCast(uint32 spellId)
 {
     switch (spellId)
     {
-        case SPELL_PRIEST_PLEA:
         case SPELL_PRIEST_RENEW:
-        case SPELL_PRIEST_RENEW_NPC:
             return SPELL_PRIEST_TRANQUIL_LIGHT;
         case SPELL_PRIEST_POWER_WORD_SHIELD:
         case SPELL_PRIEST_POWER_WORD_LIFE:
@@ -1191,6 +1189,8 @@ Optional<uint32> GetSpellToCast(uint32 spellId)
         case SPELL_PRIEST_HOLY_WORD_SERENITY:
         case SPELL_PRIEST_HOLY_WORD_SERENITY_NPC:
             return SPELL_PRIEST_HEALING_LIGHT;
+        case SPELL_PRIEST_PLEA:
+        case SPELL_PRIEST_RENEW_NPC:
         case SPELL_PRIEST_POWER_WORD_SHIELD_NPC:
         case SPELL_PRIEST_PRAYER_OF_MENDING:
         case SPELL_PRIEST_PRAYER_OF_MENDING_HEAL:
@@ -1259,9 +1259,14 @@ class spell_pri_divine_image : public AuraScript
             return false;
 
         // Sort de PNJ ajoute manuellement
-        if (spellInfo->Id == SPELL_PRIEST_HOLY_WORD_SERENITY_NPC
-            || spellInfo->Id == SPELL_PRIEST_FLASH_HEAL_NPC)
-            return true;
+        switch (spellInfo->Id)
+        {
+            case SPELL_PRIEST_RENEW_NPC:
+            case SPELL_PRIEST_FLASH_HEAL_NPC:
+            case SPELL_PRIEST_POWER_WORD_SHIELD_NPC:
+            case SPELL_PRIEST_HOLY_WORD_SERENITY_NPC:
+                return true;
+        }
 
         // Reproduction du filtre spell_proc original (famille 6, masques)
         if (spellInfo->SpellFamilyName == SPELLFAMILY_PRIEST)
@@ -1297,10 +1302,10 @@ class spell_pri_divine_image : public AuraScript
                 .SetTriggeringAura(aurEff)
                 .SetTriggeringSpell(eventInfo.GetProcSpell())
                 .SetTriggerFlags(TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DISALLOW_PROC_EVENTS | TRIGGERED_DONT_REPORT_CAST_ERROR));
-
-            // Note: Divine Image triggers a cast immediately based on the Holy Word cast.
-            DivineImageHelpers::Trigger(script, aurEff, eventInfo);
         }
+
+        // Note: Divine Image triggers a cast immediately based on the Holy Word cast.
+        DivineImageHelpers::Trigger(script, aurEff, eventInfo);
 
         target->CastSpell(target, SPELL_PRIEST_DIVINE_IMAGE_EMPOWER_STACK, CastSpellExtraArgs()
             .SetTriggeringAura(aurEff)
@@ -1370,7 +1375,7 @@ class spell_pri_divine_image_spell_triggered : public AuraScript
         if (!spellInfo)
             return false;
 
-        // Sorts de PNJ autoris�s explicitement
+        // Sorts de PNJ autorises explicitement
         if (eventInfo.GetActor()->IsCreature())
         {
             switch (spellInfo->Id)
@@ -1751,7 +1756,7 @@ class spell_pri_echo_of_light : public AuraScript
         SpellEffectValue echoAmount = CalculatePct(SpellEffectValue(heal), 20.f);
 
         // Carry over remaining amount from existing HoT
-        if (AuraEffect const* existingEcho = target->GetAuraEffect(SPELL_PRIEST_ECHO_OF_LIGHT_HEAL, EFFECT_0, caster->GetGUID()))
+        if (AuraEffect const* existingEcho = target->GetAuraEffect(SPELL_PRIEST_ECHO_OF_LIGHT_HEAL, EFFECT_0))
             echoAmount += existingEcho->GetAmount() * double(existingEcho->GetRemainingTicks());
 
         caster->CastSpell(target, SPELL_PRIEST_ECHO_OF_LIGHT_HEAL, CastSpellExtraArgsInit

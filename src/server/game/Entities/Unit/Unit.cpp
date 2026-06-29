@@ -7665,25 +7665,61 @@ int32 Unit::SpellBaseHealingBonusDone(SpellSchoolMask schoolMask) const
         return false;
     });
 
-    // Healing bonus of spirit, intellect and strength
-    if (GetTypeId() == TYPEID_PLAYER)
+    if (Player const* thisPlayer = ToPlayer())
     {
-        // Base value
-        advertisedBenefit += ToPlayer()->GetBaseSpellPowerBonus();
+        advertisedBenefit += thisPlayer->GetBaseSpellPowerBonus();
 
-        // Check if we are ever using mana - PaperDollFrame.lua
         if (GetPowerIndex(POWER_MANA) != MAX_POWERS)
-            advertisedBenefit += std::max(0, int32(GetStat(STAT_INTELLECT)));  // spellpower from intellect
+            advertisedBenefit += std::max(0, int32(GetStat(STAT_INTELLECT)));
 
-        // Healing bonus from stats
+        // Bonus de soin proportionnel à une stat (ex. : Esprit via certains talents).
         AuraEffectList const& mHealingDoneOfStatPercent = GetAuraEffectsByType(SPELL_AURA_MOD_SPELL_HEALING_OF_STAT_PERCENT);
-        for (AuraEffectList::const_iterator i = mHealingDoneOfStatPercent.begin(); i != mHealingDoneOfStatPercent.end(); ++i)
+        for (AuraEffect const* aurEff : mHealingDoneOfStatPercent)
         {
-            // stat used dependent from misc value (stat index)
-            Stats usedStat = Stats((*i)->GetSpellEffectInfo().MiscValue);
-            advertisedBenefit += int32(CalculatePct(GetStat(usedStat), (*i)->GetAmount()));
+            Stats const usedStat = Stats(aurEff->GetSpellEffectInfo().MiscValue);
+            advertisedBenefit += int32(CalculatePct(GetStat(usedStat), aurEff->GetAmount()));
         }
     }
+    else if (Creature const* creature = ToCreature())
+    {
+        // Les créatures soigneuses utilisent l'attaque à distance comme proxy caster
+        // (même heuristique que SpellBaseDamageBonusDone).
+        float variance = creature->GetCreatureTemplate()->BaseVariance;
+        UnitMods unitMod = UNIT_MOD_DAMAGE_MAINHAND;
+        WeaponAttackType attackType = BASE_ATTACK;
+
+        if (creature->GetClass() == UNIT_CLASS_MAGE)
+        {
+            variance = creature->GetCreatureTemplate()->RangeVariance;
+            attackType = RANGED_ATTACK;
+            unitMod = UNIT_MOD_DAMAGE_RANGED;
+        }
+
+        constexpr float MIN_ATTACK_TIME_MS = 1000.0f;
+        float const attackTimeSec = std::max(
+            static_cast<float>(getAttackTimer(attackType)),
+            MIN_ATTACK_TIME_MS) / 1000.0f;
+
+        float const weaponMinDamage = GetWeaponDamageRange(attackType, MINDAMAGE);
+        float const weaponMaxDamage = GetWeaponDamageRange(attackType, MAXDAMAGE);
+        float const weaponAvgDamage = (weaponMinDamage + weaponMaxDamage) * 0.5f;
+
+        float const attackPower = GetTotalAttackPowerValue(attackType, false);
+        float const apContribution = (attackPower / attackTimeSec) * variance;
+
+        float const baseValue = GetFlatModifierValue(unitMod, BASE_VALUE) + apContribution;
+        float const basePct = GetPctModifierValue(unitMod, BASE_PCT);
+        float const totalValue = GetFlatModifierValue(unitMod, TOTAL_VALUE);
+        float const totalPct = GetPctModifierValue(unitMod, TOTAL_PCT);
+
+        float const dmgMultiplier = creature->GetCreatureDifficulty()->DamageModifier;
+
+        advertisedBenefit +=
+            ((weaponAvgDamage + baseValue) * basePct + totalValue)
+            * totalPct
+            * dmgMultiplier;
+    }
+
     return advertisedBenefit;
 }
 
