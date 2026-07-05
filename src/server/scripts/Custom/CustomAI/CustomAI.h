@@ -1,4 +1,4 @@
-﻿#ifndef CUSTOM_CUSTOMAI_H
+#ifndef CUSTOM_CUSTOMAI_H
 #define CUSTOM_CUSTOMAI_H
 
 #include "Custom/FakeParty/FakeParty.h"
@@ -81,7 +81,7 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         void MovementInform(uint32 /*type*/, uint32 /*id*/) override;
 
-        std::list<Unit*> DoFindMissingBuff(uint32 /*spellId*/);
+        std::list<Unit*> DoFindMissingBuff(uint32 /*spellId*/, float /*range*/ = 40.0f);
         Unit* SelectRandomMissingBuff(uint32 /*spell*/);
 
         void SetCanRandomMovement(bool apply) { randomMovements = apply; }

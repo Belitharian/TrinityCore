@@ -739,7 +739,7 @@ struct npc_theramore_footman : public npc_theramore_troop
 	static constexpr uint32  BLADESTORM_MIN_ENEMIES = 3;
 	static constexpr uint32  WHIRLWIND_MIN_ENEMIES  = 2;
 
-	void JustEngagedWith(Unit* who) override
+	void JustEngagedWith(Unit* /*who*/) override
 	{
 		scheduler
 
@@ -2860,7 +2860,7 @@ class spell_wild_imp : public SpellScript
 	static constexpr uint8 IMP_MAX_COUNT = 12;
 
 	// 5 imps sur l'arc interieur (R = 2.0m) + 7 sur l'arc exterieur (R = 3.5m),
-	// repartis sur le demi-cercle exact derriere le lanceur (180�, d'epaule a epaule).
+	// repartis sur le demi-cercle exact derriere le lanceur (180?, d'epaule a epaule).
 	static constexpr std::array<SlotDef, IMP_MAX_COUNT> SLOTS = { {
 		// Inner ring : 5 slots, pas de pi/4
 		{ 2.0f, -float(M_PI_2) },

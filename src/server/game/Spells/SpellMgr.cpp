@@ -5475,6 +5475,15 @@ void SpellMgr::LoadSpellInfoCorrections()
         });
     });
 
+    // Deadly Poison
+    ApplySpellFix({ 113780 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0 , [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->BonusCoefficient = 0.0814f;
+        });
+    });
+
     for (SpellInfo const& s : mSpellInfoMap)
     {
         SpellInfo* spellInfo = &const_cast<SpellInfo&>(s);

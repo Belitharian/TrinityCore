@@ -149,6 +149,9 @@ enum MageSpells
 	SPELL_MAGE_ICICLES_BUFF                      = 205473,
 	SPELL_MAGE_GLACIAL_SPIKE                     = 199786,
 	SPELL_MAGE_GLACIAL_SPIKE_BUFF                = 199844,
+	SPELL_MAGE_SPELLFIRE_SPHERES                 = 448601,
+	SPELL_MAGE_SPELLFIRE_SPHERES_GENERATOR       = 449849,
+	SPELL_MAGE_SPELLFIRE_SPHERE                  = 448604,
 
 	// NPC
 	SPELL_MAGE_FLURRY_NPC                        = 284858,
@@ -158,6 +161,13 @@ enum MageSpells
 
 	SPELL_MAGE_ARCANE_BLAST_NPC                  = 291336,
 	SPELL_MAGE_ARCANE_BARRAGE_NPC                = 44425
+};
+
+// Visuels des spheres de feu-sorcier flottant autour du mage (1 par stack de Sphere de feu-sorcier).
+static constexpr uint8 MAX_SPELLFIRE_SPHERES = 3;
+static constexpr uint32 SpellfireSphereVisuals[MAX_SPELLFIRE_SPHERES] =
+{
+	452321, 452323, 452326
 };
 
 // Visuels des glacons flottant autour du mage (1 par stack d'Icicles).
@@ -1474,6 +1484,79 @@ inline void ScheduleSplinterSalvo(Unit* caster, Unit* target, uint32 splinter, u
 		offset += randtime(minStep, maxStep);
 	}
 }
+
+// Ajoute un stack de Sphere de feu-sorcier (448604) et son visuel (jusqu'a 3),
+// utilise a la fois par le proc de Bonne s�rie et le generateur hors combat.
+static void GrantSpellfireSphere(Unit* caster)
+{
+	Aura const* spheres = caster->GetAura(SPELL_MAGE_SPELLFIRE_SPHERE);
+	uint8 const stacks = spheres ? spheres->GetStackAmount() : 0;
+	if (stacks >= MAX_SPELLFIRE_SPHERES)
+		return;
+
+	caster->CastSpell(caster, SpellfireSphereVisuals[stacks], TRIGGERED_FULL_MASK);
+	caster->CastSpell(caster, SPELL_MAGE_SPELLFIRE_SPHERE, TRIGGERED_FULL_MASK);
+}
+
+// 448601 - Spellfire Spheres
+class spell_mage_spellfire_spheres : public AuraScript
+{
+	bool Validate(SpellInfo const* /*spellInfo*/) override
+	{
+		return ValidateSpellInfo({ SPELL_MAGE_SPELLFIRE_SPHERE, SPELL_MAGE_SPELLFIRE_SPHERES_GENERATOR, SPELL_MAGE_HOT_STREAK });
+	}
+
+	static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
+	{
+		return spell_mage_hot_streak_ignite_marker::IsActive(eventInfo.GetProcSpell()) && roll_chance(25);
+	}
+
+	static void HandleProc(AuraScript const&, AuraEffect const* /*aurEff*/, ProcEventInfo const& eventInfo)
+	{
+		GrantSpellfireSphere(eventInfo.GetActor());
+	}
+
+	void OnApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+	{
+		GetTarget()->CastSpell(GetTarget(), SPELL_MAGE_SPELLFIRE_SPHERES_GENERATOR, TRIGGERED_FULL_MASK);
+	}
+
+	void OnRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+	{
+		GetTarget()->RemoveAurasDueToSpell(SPELL_MAGE_SPELLFIRE_SPHERES_GENERATOR);
+	}
+
+	void Register() override
+	{
+		DoCheckProc += AuraCheckProcFn(spell_mage_spellfire_spheres::CheckProc);
+		OnEffectProc += AuraEffectProcFn(spell_mage_spellfire_spheres::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+		OnEffectApply += AuraEffectApplyFn(spell_mage_spellfire_spheres::OnApply, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+		AfterEffectRemove += AuraEffectRemoveFn(spell_mage_spellfire_spheres::OnRemove, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+	}
+};
+
+// 449849 - Spellfire Spheres (generateur hors combat)
+class spell_mage_spellfire_spheres_generator : public AuraScript
+{
+	bool Validate(SpellInfo const* /*spellInfo*/) override
+	{
+		return ValidateSpellInfo({ SPELL_MAGE_SPELLFIRE_SPHERE });
+	}
+
+	void HandlePeriodic(AuraEffect const* /*aurEff*/)
+	{
+		Unit* target = GetTarget();
+		if (target->IsInCombat())
+			return;
+
+		GrantSpellfireSphere(target);
+	}
+
+	void Register() override
+	{
+		OnEffectPeriodic += AuraEffectPeriodicFn(spell_mage_spellfire_spheres_generator::HandlePeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
+	}
+};
 
 // 443739 - Splintering Sorcery
 class spell_mage_splintering_sorcery : public AuraScript
@@ -2902,6 +2985,8 @@ void AddSC_mage_spell_scripts()
 	RegisterSpellScript(spell_mage_scald);
 	RegisterSpellScript(spell_mage_scorch);
 	RegisterSpellScript(spell_mage_shatter);
+	RegisterSpellScript(spell_mage_spellfire_spheres);
+	RegisterSpellScript(spell_mage_spellfire_spheres_generator);
 	RegisterSpellScript(spell_mage_splintering_sorcery);
 	RegisterSpellScript(spell_mage_spontaneous_combustion);
 	RegisterSpellScript(spell_mage_supernova);
