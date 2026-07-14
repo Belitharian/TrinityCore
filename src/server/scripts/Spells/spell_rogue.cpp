@@ -36,10 +36,12 @@ enum RogueSpells
     SPELL_ROGUE_ACROBATIC_STRIKES_PROC              = 455144,
     SPELL_ROGUE_ADRENALINE_RUSH                     = 13750,
     SPELL_ROGUE_AIRBORNE_IRRITANT                   = 200733,
+    SPELL_ROGUE_AMBUSH                               = 8676,
     SPELL_ROGUE_AMPLIFYING_POISON                   = 381664,
     SPELL_ROGUE_AMPLIFYING_POISON_DEBUFF            = 383414,
     SPELL_ROGUE_ATROPHIC_POISON                     = 381637,
     SPELL_ROGUE_ATROPHIC_POISON_DEBUFF              = 392388,
+    SPELL_ROGUE_BACKSTAB                             = 53,
     SPELL_ROGUE_BETWEEN_THE_EYES                    = 199804,
     SPELL_ROGUE_BLACKJACK_TALENT                    = 379005,
     SPELL_ROGUE_BLACKJACK                           = 394119,
@@ -89,11 +91,13 @@ enum RogueSpells
     SPELL_ROGUE_SHADOW_FOCUS                        = 108209,
     SPELL_ROGUE_SHADOW_FOCUS_EFFECT                 = 112942,
     SPELL_ROGUE_SHADOWS_GRASP                       = 206760,
+    SPELL_ROGUE_SHADOWSTRIKE                         = 185438,
     SPELL_ROGUE_SHIV_NATURE_DAMAGE                  = 319504,
     SPELL_ROGUE_SHOT_IN_THE_DARK_TALENT             = 257505,
     SPELL_ROGUE_SHOT_IN_THE_DARK_BUFF               = 257506,
     SPELL_ROGUE_SHURIKEN_STORM_DAMAGE               = 197835,
     SPELL_ROGUE_SHURIKEN_STORM_ENERGIZE             = 212743,
+    SPELL_ROGUE_SINISTER_STRIKE                     = 193315,
     SPELL_ROGUE_SLICE_AND_DICE                      = 315496,
     SPELL_ROGUE_SPRINT                              = 2983,
     SPELL_ROGUE_SOOTHING_DARKNESS_TALENT            = 393970,
@@ -105,6 +109,10 @@ enum RogueSpells
     SPELL_ROGUE_SYMBOLS_OF_DEATH_RANK2              = 328077,
     SPELL_ROGUE_TRUE_BEARING                        = 193359,
     SPELL_ROGUE_TURN_THE_TABLES_BUFF                = 198027,
+    SPELL_ROGUE_UNSEEN_BLADE_TALENT                 = 441146,
+    SPELL_ROGUE_UNSEEN_BLADE_DAMAGE                 = 441144,
+    SPELL_ROGUE_UNSEEN_BLADE_DISORIENT              = 441224,
+    SPELL_ROGUE_UNSEEN_BLADE_COOLDOWN               = 459485,
     SPELL_ROGUE_VANISH                              = 1856,
     SPELL_ROGUE_VANISH_AURA                         = 11327,
     SPELL_ROGUE_TRICKS_OF_THE_TRADE                 = 57934,
@@ -1497,6 +1505,66 @@ class spell_rog_turn_the_tables_periodic_check : public AuraScript
     }
 };
 
+// 441146 - Unseen Blade
+class spell_rog_unseen_blade : public AuraScript
+{
+    enum Spells
+    {
+        SPELL_SINISTER_STRIKE_NPC   = 172028,
+        SPELL_BACKSTAB_NPC          = 1262519,
+    };
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_ROGUE_UNSEEN_BLADE_DAMAGE, SPELL_ROGUE_UNSEEN_BLADE_DISORIENT, SPELL_ROGUE_UNSEEN_BLADE_COOLDOWN });
+    }
+
+    bool CheckProc(AuraEffect const* /*aurEff*/, ProcEventInfo& eventInfo)
+    {
+        // Can only occur once every 20 sec, tracked by the "Unseen Blade unavailable" buff
+        if (GetTarget()->HasAura(SPELL_ROGUE_UNSEEN_BLADE_COOLDOWN))
+            return false;
+
+        SpellInfo const* procSpell = eventInfo.GetSpellInfo();
+        if (!procSpell)
+            return false;
+
+        // Only Ambush, Sinister Strike, Backstab and Shadowstrike also strike with Unseen Blade
+        switch (procSpell->Id)
+        {
+            case SPELL_ROGUE_AMBUSH:
+            case SPELL_ROGUE_SINISTER_STRIKE:
+            case SPELL_ROGUE_BACKSTAB:
+            case SPELL_ROGUE_SHADOWSTRIKE:
+                break;
+            case SPELL_SINISTER_STRIKE_NPC:
+            case SPELL_BACKSTAB_NPC:
+                break;
+            default:
+                return false;
+        }
+
+        return eventInfo.GetActionTarget() != nullptr;
+    }
+
+    void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
+    {
+        Unit* caster = GetTarget();
+        Unit* target = eventInfo.GetActionTarget();
+
+        caster->CastSpell(target, SPELL_ROGUE_UNSEEN_BLADE_DAMAGE, aurEff);
+        caster->CastSpell(target, SPELL_ROGUE_UNSEEN_BLADE_DISORIENT, aurEff);
+        // Start the 20 sec internal cooldown
+        caster->CastSpell(caster, SPELL_ROGUE_UNSEEN_BLADE_COOLDOWN, aurEff);
+    }
+
+    void Register() override
+    {
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_rog_unseen_blade::CheckProc, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_rog_unseen_blade::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
 // 1856 - Vanish - SPELL_ROGUE_VANISH
 class spell_rog_vanish : public SpellScript
 {
@@ -1609,6 +1677,7 @@ void AddSC_rogue_spell_scripts()
     RegisterSpellScript(spell_rog_tricks_of_the_trade_proc);
     RegisterSpellScript(spell_rog_turn_the_tables);
     RegisterSpellScript(spell_rog_turn_the_tables_periodic_check);
+    RegisterSpellScript(spell_rog_unseen_blade);
     RegisterSpellScript(spell_rog_vanish);
     RegisterSpellScript(spell_rog_vanish_aura);
     RegisterSpellScript(spell_rog_venomous_wounds);

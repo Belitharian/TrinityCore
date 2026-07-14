@@ -5460,7 +5460,16 @@ void SpellMgr::LoadSpellInfoCorrections()
     {
         ApplySpellEffectFix(spellInfo, EFFECT_0 , [](SpellEffectInfo* spellEffectInfo)
         {
-            spellEffectInfo->BonusCoefficient = 0.0814f;
+            spellEffectInfo->BonusCoefficient = 0.2814f;
+        });
+    });
+
+    // Unseen Blade
+    ApplySpellFix({ 441144 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0 , [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->BonusCoefficient = 2.8f;
         });
     });
 

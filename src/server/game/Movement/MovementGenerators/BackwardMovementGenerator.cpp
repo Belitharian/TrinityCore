@@ -14,7 +14,6 @@ BackwardMovementGenerator::BackwardMovementGenerator(uint32 id, float x, float y
     : _movementId(id), _speed(speed), _speedSelectionMode(speedSelectionMode),
     _destination(x, y, z), _faceTarget(faceTarget)
 {
-    this->Mode = MOTION_MODE_DEFAULT;
     this->Priority = MOTION_PRIORITY_NORMAL;
     this->Flags = MOVEMENTGENERATOR_FLAG_INITIALIZATION_PENDING;
     this->BaseUnitState = UNIT_STATE_ROAMING;
@@ -28,7 +27,7 @@ MovementGeneratorType BackwardMovementGenerator::GetMovementGeneratorType() cons
     return POINT_MOTION_TYPE;
 }
 
-void BackwardMovementGenerator::Initialize(Unit* owner)
+bool BackwardMovementGenerator::Initialize(Unit* owner)
 {
     RemoveFlag(MOVEMENTGENERATOR_FLAG_INITIALIZATION_PENDING | MOVEMENTGENERATOR_FLAG_TRANSITORY | MOVEMENTGENERATOR_FLAG_DEACTIVATED);
     AddFlag(MOVEMENTGENERATOR_FLAG_INITIALIZED);
@@ -37,7 +36,7 @@ void BackwardMovementGenerator::Initialize(Unit* owner)
     {
         AddFlag(MOVEMENTGENERATOR_FLAG_INTERRUPTED);
         owner->StopMoving();
-        return;
+        return false;
     }
 
     owner->AddUnitState(UNIT_STATE_ROAMING_MOVE);
@@ -66,14 +65,18 @@ void BackwardMovementGenerator::Initialize(Unit* owner)
     if (_faceTarget)
         init.SetFacing(_faceTarget);
 
-    init.Launch();
+    int32 duration = init.Launch();
+    return duration > 0;
 }
 
-void BackwardMovementGenerator::Reset(Unit* owner)
+bool BackwardMovementGenerator::Reset(Unit* owner)
 {
-    RemoveFlag(MOVEMENTGENERATOR_FLAG_TRANSITORY | MOVEMENTGENERATOR_FLAG_DEACTIVATED);
+    if (!owner)
+        return false;
 
+    RemoveFlag(MOVEMENTGENERATOR_FLAG_TRANSITORY | MOVEMENTGENERATOR_FLAG_DEACTIVATED);
     Initialize(owner);
+    return true;
 }
 
 bool BackwardMovementGenerator::Update(Unit* owner, uint32 /*diff*/)
