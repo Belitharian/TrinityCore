@@ -1,0 +1,11 @@
+## Interface: 11508, 20505, 38001, 50500, 50503, 120001, 120005
+## Title: Clan HUD
+## Notes: Affiche en temps reel les besoins des PNJ de clan (module Clans - Emerald)
+## Author: Emerald
+## Version: 1.0
+## SavedVariables: ClanHUDDB
+
+# Ligne "Interface" multi-versions (Classic Era / TBC / WotLK-Cata Classic / retail).
+# Ajoute simplement le numero de TA version si besoin : /run print(select(4, GetBuildInfo()))
+
+ClanHUD.lua
