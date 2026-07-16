@@ -37,7 +37,9 @@ namespace Clan
         bool     hasRawFood    = false; // possede de la viande crue (a cuire)
         bool     hasWood       = false; // possede du bois (pour rallumer)
         bool     hasStone      = false; // possede une pierre (pour rallumer)
-        bool     litFireNearby = false; // un feu allume est a portee
+        bool     litFireNearby  = false; // un feu allume est a portee
+        bool     diseased       = false; // porte une aura de maladie
+        bool     predatorNearby = false; // un animal sauvage (predateur) est a portee
 
         // Index compact dans [0, STATE_COUNT[.
         uint16 Index() const
@@ -52,6 +54,8 @@ namespace Clan
             idx = uint16(idx * 2 + (hasWood ? 1 : 0));
             idx = uint16(idx * 2 + (hasStone ? 1 : 0));
             idx = uint16(idx * 2 + (litFireNearby ? 1 : 0));
+            idx = uint16(idx * 2 + (diseased ? 1 : 0));
+            idx = uint16(idx * 2 + (predatorNearby ? 1 : 0));
             return idx;
         }
     };
@@ -82,9 +86,20 @@ namespace Clan
         // Initialise la table d'un enfant a partir de celles de ses deux parents.
         void InheritFrom(ClanMind const& a, ClanMind const& b);
 
+        // --- Apprentissage du combat (choix defendre / fuir), separe de la Q-table ---
+        bool ChooseDefend() const;               // true = defendre, false = fuir (epsilon-greedy)
+        void LearnCombat(bool defended, float reward); // met a jour la preference combat
+        float GetDefendValue() const { return _combatDefend; }
+        float GetFleeValue() const { return _combatFlee; }
+
     private:
+        // Donne un a priori positif a la "bonne" action de chaque etat (instinct de depart).
+        void SeedPriors();
+
         std::array<std::array<float, ACTION_COUNT>, STATE_COUNT> _q;
         float _epsilon;
+        float _combatDefend = 0.0f; // valeur apprise de l'action "se defendre"
+        float _combatFlee   = 0.0f; // valeur apprise de l'action "fuir"
     };
 }
 

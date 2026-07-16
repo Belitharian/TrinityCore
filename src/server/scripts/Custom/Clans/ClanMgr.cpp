@@ -42,6 +42,14 @@ namespace
     constexpr uint64 BIRTH_ID_BASE = 0x0000000100000000ULL;
     // Garde-fou anti-explosion demographique.
     constexpr size_t MAX_POPULATION = 40;
+
+    // Vrai si l'un est le parent direct de l'autre (interdit la reproduction parent-enfant).
+    // Les fondateurs ont motherId/fatherId = 0, qui ne peut egaler aucun dbId reel.
+    bool IsParentChild(Clan::MemberState const* a, Clan::MemberState const* b)
+    {
+        return b->motherId == a->dbId || b->fatherId == a->dbId
+            || a->motherId == b->dbId || a->fatherId == b->dbId;
+    }
 }
 
 ClanMgr* ClanMgr::instance()
@@ -63,10 +71,9 @@ void ClanMgr::AddMemberTemplate(uint32 entry, ClanId clan, Gender gender, LifeSt
     _memberTemplates[entry] = { clan, gender, stage };
 }
 
-void ClanMgr::AddDisplaySet(ClanId clan, Gender gender, uint32 child, uint32 adult, uint32 elder)
+void ClanMgr::AddDisplaySet(uint32 entry, uint32 child, uint32 adult, uint32 elder)
 {
-    uint16 key = uint16((uint8(clan) << 8) | uint8(gender));
-    _displaysByClanGender[key] = { child, adult, elder };
+    _displaysByEntry[entry] = { child, adult, elder };
 }
 
 void ClanMgr::AddPhrase(uint8 action, std::string text)
@@ -82,11 +89,117 @@ std::string const* ClanMgr::GetRandomPhrase(ActionType action) const
     return &it->second[urand(0, uint32(it->second.size()) - 1)];
 }
 
-uint32 ClanMgr::GetDisplayId(ClanId clan, Gender gender, LifeStage stage) const
+void ClanMgr::AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote)
 {
-    uint16 key = uint16((uint8(clan) << 8) | uint8(gender));
-    auto it = _displaysByClanGender.find(key);
-    return it != _displaysByClanGender.end() ? it->second.Get(stage) : 0;
+    _actionFx[action] = { aura, spell, emote };
+}
+
+ActionFx const* ClanMgr::GetActionFx(ActionType action) const
+{
+    auto it = _actionFx.find(uint8(action));
+    return it != _actionFx.end() ? &it->second : nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Maladies / medecin
+// ---------------------------------------------------------------------------
+void ClanMgr::AddDisease(uint32 aura, uint8 type)
+{
+    if (!aura)
+        return;
+    _allDiseases.push_back(aura);
+    _diseasesByType[type].push_back(aura);
+}
+
+uint32 ClanMgr::GetRandomDisease(AfflictionType type) const
+{
+    auto it = _diseasesByType.find(uint8(type));
+    if (it == _diseasesByType.end() || it->second.empty())
+        return 0;
+    return it->second[urand(0, uint32(it->second.size()) - 1)];
+}
+
+bool ClanMgr::IsDiseased(Unit* who) const
+{
+    if (!who)
+        return false;
+    for (uint32 aura : _allDiseases)
+        if (who->HasAura(aura))
+            return true;
+    return false;
+}
+
+void ClanMgr::CureDiseases(Unit* who) const
+{
+    if (!who)
+        return;
+    for (uint32 aura : _allDiseases)
+        who->RemoveAurasDueToSpell(aura);
+}
+
+uint32 ClanMgr::GetAfflictionMask(Unit* who) const
+{
+    if (!who)
+        return 0;
+
+    uint32 mask = 0;
+    for (auto const& [type, auras] : _diseasesByType)
+        for (uint32 aura : auras)
+            if (who->HasAura(aura))
+            {
+                mask |= (1u << type);
+                break;
+            }
+    return mask;
+}
+
+WorldSummary ClanMgr::GetWorldSummary() const
+{
+    WorldSummary sum;
+    for (auto const& ptr : _states)
+    {
+        MemberState* m = ptr.get();
+        ++sum.population;
+        switch (m->stage)
+        {
+            case LifeStage::Child: ++sum.children; break;
+            case LifeStage::Elder: ++sum.elders;   break;
+            default:               ++sum.adults;   break;
+        }
+        if (Creature* c = ResolveLive(m))
+            if (IsDiseased(c))
+                ++sum.sick;
+    }
+    return sum;
+}
+
+Creature* ClanMgr::FindNearestDoctor(Creature* from) const
+{
+    Creature* best = nullptr;
+    float bestDist = RESOURCE_SEARCH_RANGE;
+
+    for (auto const& [entry, res] : _resourceByEntry)
+    {
+        if (res.type != ResourceType::Doctor || res.kind != ObjectKind::Creature)
+            continue;
+
+        if (Creature* doc = GetClosestCreatureWithEntry(from, entry, RESOURCE_SEARCH_RANGE, true))
+        {
+            float dist = from->GetDistance(doc);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                best = doc;
+            }
+        }
+    }
+    return best;
+}
+
+uint32 ClanMgr::GetDisplayId(uint32 entry, LifeStage stage) const
+{
+    auto it = _displaysByEntry.find(entry);
+    return it != _displaysByEntry.end() ? it->second.Get(stage) : 0;
 }
 
 MemberState* ClanMgr::AddLoadedState(std::unique_ptr<MemberState> state)
@@ -117,10 +230,13 @@ void ClanMgr::LoadFromDB()
     _pendingBySpawn.clear();
     _resourceByEntry.clear();
     _memberTemplates.clear();
-    _displaysByClanGender.clear();
+    _displaysByEntry.clear();
     _fires.clear();
     _nodeClaims.clear();
     _phrasesByAction.clear();
+    _actionFx.clear();
+    _allDiseases.clear();
+    _diseasesByType.clear();
     _nextBirthId = BIRTH_ID_BASE;
 
     ClanDatabase::LoadRegistries();
@@ -202,6 +318,7 @@ MemberState* ClanMgr::RegisterPlacedMember(Creature* creature)
         _pendingBySpawn.erase(it);
         _byDbId[spawnId] = state;
         state->liveGuid = creature->GetGUID();
+        state->entry = creature->GetEntry(); // entry reelle du spawn (cle des modeles)
         state->mapId = creature->GetMapId();
         state->home = creature->GetHomePosition();
         return state;
@@ -226,6 +343,7 @@ MemberState* ClanMgr::RegisterPlacedMember(Creature* creature)
 
     auto state = std::make_unique<MemberState>();
     state->dbId = spawnId;
+    state->entry = creature->GetEntry();
     state->clan = tmpl->second.clan;
     state->gender = tmpl->second.gender;
     state->stage = tmpl->second.stage;
@@ -244,7 +362,7 @@ MemberState* ClanMgr::RegisterPlacedMember(Creature* creature)
     }
 
     // Modele correspondant a l'etape (0 = garde le modele du creature_template).
-    state->displayId = GetDisplayId(state->clan, state->gender, state->stage);
+    state->displayId = GetDisplayId(state->entry, state->stage);
 
     MemberState* raw = state.get();
     _states.push_back(std::move(state));
@@ -287,6 +405,29 @@ Creature* ClanMgr::FindNearestPrey(Creature* from) const
             {
                 bestDist = dist;
                 best = prey;
+            }
+        }
+    }
+    return best;
+}
+
+Creature* ClanMgr::FindNearestPredator(Creature* from) const
+{
+    Creature* best = nullptr;
+    float bestDist = RESOURCE_SEARCH_RANGE;
+
+    for (auto const& [entry, res] : _resourceByEntry)
+    {
+        if (res.type != ResourceType::Predator || res.kind != ObjectKind::Creature)
+            continue;
+
+        if (Creature* pred = GetClosestCreatureWithEntry(from, entry, RESOURCE_SEARCH_RANGE, true))
+        {
+            float dist = from->GetDistance(pred);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                best = pred;
             }
         }
     }
@@ -469,11 +610,15 @@ void ClanMgr::UpdateFires(uint32 diff)
 
         bool extinguish = false;
 
-        // Combustion : le feu finit par s'eteindre avec le temps.
-        if (fs.burnMs <= diff)
-            extinguish = true;
-        else
-            fs.burnMs -= diff;
+        // Combustion : seuls les feux EXTERIEURS s'eteignent avec le temps.
+        // La cheminee (feu interieur) reste toujours allumee -> il y a toujours ou cuire.
+        if (fs.outdoor)
+        {
+            if (fs.burnMs <= diff)
+                extinguish = true;
+            else
+                fs.burnMs -= diff;
+        }
 
         // Pluie : eteint les feux exterieurs.
         if (!extinguish && checkRain && fs.outdoor)
@@ -517,7 +662,7 @@ MemberState* ClanMgr::FindMate(MemberState* self) const
             continue;
         if (mate->gender == self->gender)     // il faut des genres opposes
             continue;
-        if (mate->clan == self->clan)         // reproduction INTER-clans uniquement
+        if (IsParentChild(self, mate))        // pas de reproduction parent-enfant
             continue;
         return mate;
     }
@@ -547,6 +692,8 @@ void ClanMgr::Reproduce(MemberState* a, MemberState* b)
         return;
     if (a->clan == b->clan || a->gender == b->gender)
         return;
+    if (IsParentChild(a, b)) // interdit la reproduction parent-enfant
+        return;
     if (_states.size() >= MAX_POPULATION)
         return;
 
@@ -571,7 +718,8 @@ void ClanMgr::Reproduce(MemberState* a, MemberState* b)
     child->gender = childGender;
     child->stage = LifeStage::Child;
     child->ageDays = 0;
-    child->displayId = GetDisplayId(childClan, childGender, LifeStage::Child);
+    child->entry = entry;                                       // l'enfant garde cette entry en grandissant
+    child->displayId = GetDisplayId(entry, LifeStage::Child);
     child->isBirth = true;
     child->birthEntry = entry;
     child->motherId = mother->dbId;
@@ -640,7 +788,7 @@ void ClanMgr::AgingTick()
 
         if (state->stage != previous)
         {
-            state->displayId = GetDisplayId(state->clan, state->gender, state->stage);
+            state->displayId = GetDisplayId(state->entry, state->stage);
             if (Creature* c = ResolveLive(state))
             {
                 if (state->displayId)
@@ -670,7 +818,10 @@ void ClanMgr::RemoveMemberState(uint64 dbId)
 void ClanMgr::KillMember(MemberState* state)
 {
     if (Creature* c = ResolveLive(state))
-        c->DespawnOrUnsummon();
+    {
+        c->SetCorpseDelay(1000, true);
+        c->KillSelf();
+    }
 
     uint64 dbId = state->dbId;
     RemoveMemberState(dbId);

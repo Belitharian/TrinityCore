@@ -47,7 +47,7 @@ struct npc_clan_member : public ScriptedAI
 
     // Lie explicitement un etat (utilise par ClanMgr pour les nouveau-nes).
     void BindState(Clan::MemberState* state);
-    Clan::MemberState* GetState() const { return _state; }
+    Clan::MemberState* GetState() const { return _owner; }
 
     // Accesseurs de debug (commandes .clan info / .clan hud).
     bool HasRawFood() const { return _hasRawFood; }
@@ -65,6 +65,7 @@ private:
     // Calcule la recompense (delta de besoin + bonus de shaping) et apprend.
     void FinishAction(bool reachedGoal, float shapedReward = 0.0f);
     void ResetActionState();
+    void SetFacingAction();
 
     // Amorces d'action (retournent false si l'action ne peut pas demarrer).
     bool StartHunt();
@@ -76,15 +77,27 @@ private:
     bool StartLightFire();
     bool StartCook();
     void StartWander();
+    bool StartSeekDoctor();
+    bool StartHuntPredator(); // traquer un animal sauvage pour l'exterminer
 
     // Reflexes predateurs.
     void OnThreat(Unit* attacker);
     void EndReflex();
 
+    // Applique une maladie aleatoire
+    bool SetRandomDeceased(Clan::AfflictionType type, float chance);
+
+    // Joue l'effet declare dans ActionFx pour l'action courante
+    void PlayWorkEmote();
+    void CastWorkSpell();
+
+    // Spawn une tombe quand le personnage meur
+    void SpawnGravestone();
+
     Clan::MindState BuildState() const;
     static bool IsNightNow();
 
-    Clan::MemberState* _state;
+    Clan::MemberState* _owner;
     TaskScheduler      _scheduler;
 
     Clan::ActionType _currentAction;
@@ -101,8 +114,24 @@ private:
     bool _hasWood;
     bool _hasStone;
 
-    uint32 _talkCdMs;    // cooldown de parole (anti-spam des phrases)
-    uint32 _starveTimerMs; // accumulateur vers le prochain tick de degats de faim
+    uint32 _talkCdMs;       // cooldown de parole (anti-spam des phrases)
+    uint32 _starveTimerMs;  // accumulateur vers le prochain tick de degats de faim
+    uint32 _diseaseTimerMs; // accumulateur vers le prochain tirage de contagion
+    bool   _combatLearned;  // le choix defendre/fuir courant est un choix appris (adulte)
 };
+
+inline Position GetFacingPosition(WorldObject* object, float range = 2.5f)
+{
+    // Recupere l'orientation du feu
+    float orientation = object->GetOrientation();
+
+    // Calcule la position à 2.5 m devant le feu selon son orientation
+    Position firePos = object->GetPosition();
+    float x = firePos.m_positionX + cos(orientation) * range;
+    float y = firePos.m_positionY + sin(orientation) * range;
+    float z = firePos.m_positionZ; // Garde la même altitude
+
+    return Position(x, y, z);
+}
 
 #endif // CUSTOM_CLANS_CLANMEMBERAI_H

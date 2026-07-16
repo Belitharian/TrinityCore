@@ -47,14 +47,13 @@ namespace Clan
             } while (result->NextRow());
         }
 
-        // Registre des modeles (displayId) par (clan, genre) selon l'etape de vie.
-        if (QueryResult result = WorldDatabase.Query("SELECT clan_id, gender, display_child, display_adult, display_elder FROM custom_clan_display"))
+        // Registre des modeles (displayId) par entry selon l'etape de vie.
+        if (QueryResult result = WorldDatabase.Query("SELECT entry, display_child, display_adult, display_elder FROM custom_clan_display"))
         {
             do
             {
                 Field* f = result->Fetch();
-                sClanMgr->AddDisplaySet(ClanId(f[0].GetUInt8()), Gender(f[1].GetUInt8()),
-                    f[2].GetUInt32(), f[3].GetUInt32(), f[4].GetUInt32());
+                sClanMgr->AddDisplaySet(f[0].GetUInt32(), f[1].GetUInt32(), f[2].GetUInt32(), f[3].GetUInt32());
             } while (result->NextRow());
         }
 
@@ -65,6 +64,26 @@ namespace Clan
             {
                 Field* f = result->Fetch();
                 sClanMgr->AddPhrase(f[0].GetUInt8(), f[1].GetString());
+            } while (result->NextRow());
+        }
+
+        // Effets RP (aura / sort / emote) joues au debut d'une action.
+        if (QueryResult result = WorldDatabase.Query("SELECT action_type, aura, spell, emote FROM custom_clan_action_fx"))
+        {
+            do
+            {
+                Field* f = result->Fetch();
+                sClanMgr->AddActionFx(f[0].GetUInt8(), f[1].GetUInt32(), f[2].GetUInt32(), f[3].GetUInt32());
+            } while (result->NextRow());
+        }
+
+        // Afflictions possibles (aura + type : maladie / poison / saignement).
+        if (QueryResult result = WorldDatabase.Query("SELECT aura, type FROM custom_clan_disease"))
+        {
+            do
+            {
+                Field* f = result->Fetch();
+                sClanMgr->AddDisease(f[0].GetUInt32(), f[1].GetUInt8());
             } while (result->NextRow());
         }
     }
@@ -101,6 +120,11 @@ namespace Clan
             state->displayId        = f[19].GetUInt32();
             state->mind.Deserialize(f[20].GetString());
             state->dirty            = false;
+
+            // Un nouveau-ne garde son entry (= birthEntry) ; un membre place recupere la
+            // sienne quand sa creature apparait (RegisterPlacedMember).
+            if (state->isBirth)
+                state->entry = state->birthEntry;
 
             sClanMgr->AddLoadedState(std::move(state));
         } while (result->NextRow());

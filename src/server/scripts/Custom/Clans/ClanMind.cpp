@@ -29,6 +29,66 @@ namespace Clan
     {
         for (auto& row : _q)
             row.fill(0.0f);
+        SeedPriors();
+    }
+
+    void ClanMind::SeedPriors()
+    {
+        // Pour chaque etat, on decode ses composantes et on donne un a priori positif a
+        // l'action "instinctive". L'agent demarre donc competent, puis affine par apprentissage.
+        for (uint16 s = 0; s < STATE_COUNT; ++s)
+        {
+            uint16 idx = s;
+            bool predator = (idx & 1) != 0; idx >>= 1;
+            bool diseased = (idx & 1) != 0; idx >>= 1;
+            bool fire     = (idx & 1) != 0; idx >>= 1;
+            bool stone    = (idx & 1) != 0; idx >>= 1;
+            bool wood     = (idx & 1) != 0; idx >>= 1;
+            bool raw      = (idx & 1) != 0; idx >>= 1;
+            idx >>= 1; // bit jour/nuit : sans influence sur l'action instinctive
+            NeedType need = NeedType(idx);
+
+            ActionType rec;
+            switch (need)
+            {
+                case NeedType::Thirst: rec = ActionType::DrinkRiver; break;
+                case NeedType::Energy: rec = ActionType::Sleep;      break;
+                case NeedType::Repro:  rec = ActionType::SeekMate;   break;
+                case NeedType::Hunger:
+                    if (raw && fire)
+                        rec = ActionType::Cook;                 // viande + feu -> cuire
+                    else if (raw)                               // viande sans feu -> obtenir un feu
+                        rec = (wood && stone) ? ActionType::LightFire
+                            : (!wood ? ActionType::GatherWood : ActionType::MineRock);
+                    else
+                        rec = ActionType::Hunt;                 // pas de viande -> chasser
+                    break;
+                default: // aucun besoin urgent
+                    if (diseased)             rec = ActionType::SeekDoctor;   // se soigner
+                    else if (predator)        rec = ActionType::HuntPredator; // exterminer la menace
+                    else                      rec = ActionType::Wander;
+                    break;
+            }
+
+            _q[s][uint8(rec)] = Q_SEED_PRIOR;
+        }
+
+        // Instinct de combat : par defaut, se defendre plutot que fuir.
+        _combatDefend = Q_SEED_PRIOR;
+        _combatFlee   = 0.0f;
+    }
+
+    bool ClanMind::ChooseDefend() const
+    {
+        if (rand_norm() < COMBAT_EXPLORE)
+            return roll_chance(50);        // exploration : on tente au hasard
+        return _combatDefend >= _combatFlee; // sinon meilleure option (egalite -> se defendre)
+    }
+
+    void ClanMind::LearnCombat(bool defended, float reward)
+    {
+        float& v = defended ? _combatDefend : _combatFlee;
+        v += Q_ALPHA * (reward - v);
     }
 
     ActionType ClanMind::ChooseAction(MindState const& state) const
@@ -98,6 +158,8 @@ namespace Clan
         for (auto const& row : _q)
             for (float v : row)
                 out << ',' << v;
+        // Valeurs de combat en fin de chaine.
+        out << ',' << _combatDefend << ',' << _combatFlee;
         return out.str();
     }
 
@@ -126,11 +188,20 @@ namespace Clan
                 ++idx;
             }
         }
+
+        // Valeurs de combat (fin de chaine).
+        if (idx < tokens.size())
+            if (Optional<float> value = Trinity::StringTo<float>(tokens[idx]))
+                _combatDefend = *value;
+        ++idx;
+        if (idx < tokens.size())
+            if (Optional<float> value = Trinity::StringTo<float>(tokens[idx]))
+                _combatFlee = *value;
     }
 
     void ClanMind::InheritFrom(ClanMind const& a, ClanMind const& b)
     {
-        for (uint8 s = 0; s < STATE_COUNT; ++s)
+        for (uint16 s = 0; s < STATE_COUNT; ++s)
         {
             for (uint8 act = 0; act < ACTION_COUNT; ++act)
             {
@@ -139,6 +210,10 @@ namespace Clan
                 _q[s][act] = blended;
             }
         }
+
+        // Heritage de l'instinct de combat.
+        _combatDefend = Q_INHERIT_MIX * a._combatDefend + (1.0f - Q_INHERIT_MIX) * b._combatDefend;
+        _combatFlee   = Q_INHERIT_MIX * a._combatFlee   + (1.0f - Q_INHERIT_MIX) * b._combatFlee;
 
         // Un enfant explore encore : on redonne un peu de curiosite.
         _epsilon = std::max(a._epsilon, b._epsilon);

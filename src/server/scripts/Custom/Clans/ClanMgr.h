@@ -36,6 +36,7 @@
 
 class Creature;
 class GameObject;
+class Unit;
 class WorldObject;
 
 namespace Clan
@@ -48,7 +49,8 @@ namespace Clan
         Gender    gender = Gender::Male;
         LifeStage stage = LifeStage::Adult;
         uint32    ageDays = 0;
-        uint32    displayId = 0;                  // modele courant (change avec l'age), persiste
+        uint32    entry = 0;                       // creature_template du PNJ (cle des modeles par entry)
+        uint32    displayId = 0;                   // modele courant (change avec l'age), persiste
 
         Needs     needs;
         ClanMind  mind;
@@ -94,6 +96,24 @@ namespace Clan
         uint32 zoneId  = 0;
     };
 
+    // Effets RP joues au debut d'une action (declares dans custom_clan_action_fx).
+    struct ActionFx
+    {
+        uint32 aura  = 0; // aura appliquee sur soi
+        uint32 spell = 0; // sort lance (sur soi)
+        uint32 emote = 0; // emote jouee (oneshot)
+    };
+
+    // Resume global du monde (pour la fenetre monde de l'addon).
+    struct WorldSummary
+    {
+        uint32 population = 0;
+        uint32 adults = 0;
+        uint32 children = 0;
+        uint32 elders = 0;
+        uint32 sick = 0;
+    };
+
     // Reservation d'un noeud de ressource par un membre (evite que deux PNJ visent le meme).
     struct NodeClaim
     {
@@ -101,7 +121,7 @@ namespace Clan
         uint32     atMs = 0; // date de la reservation (expire apres NODE_CLAIM_TTL_MS)
     };
 
-    // Modeles (displayId) d'un couple (clan, genre) selon l'etape de vie.
+    // Modeles (displayId) d'une entry de PNJ selon l'etape de vie.
     struct DisplaySet
     {
         uint32 child = 0;
@@ -144,8 +164,26 @@ namespace Clan
         // Phrase aleatoire pour une action (nullptr si aucune declaree).
         std::string const* GetRandomPhrase(ActionType action) const;
 
+        // --- Effets RP par action (aura / sort / emote) ---
+        void AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote);
+        // Effets declares pour une action (nullptr si aucun).
+        ActionFx const* GetActionFx(ActionType action) const;
+
+        // --- Afflictions (maladie / poison / saignement) & medecin ---
+        void AddDisease(uint32 aura, uint8 type);     // affliction declaree (custom_clan_disease)
+        uint32 GetRandomDisease(AfflictionType type) const; // aura aleatoire d'un type (0 si aucune)
+        bool IsDiseased(Unit* who) const;             // 'who' porte-t-il une affliction ?
+        void CureDiseases(Unit* who) const;           // retire toutes les afflictions
+        // Masque des types d'affliction actifs sur 'who' (bit0=Disease, bit1=Poison, bit2=Bleed).
+        uint32 GetAfflictionMask(Unit* who) const;
+        Creature* FindNearestDoctor(Creature* from) const;
+
+        // --- Resume monde (fenetre globale de l'addon) ---
+        WorldSummary GetWorldSummary() const;
+
         // --- Perception (utilise par l'IA) ---
         Creature*   FindNearestPrey(Creature* from) const;
+        Creature*   FindNearestPredator(Creature* from) const; // animal sauvage a exterminer
         GameObject* FindNearestResourceObject(Creature* from, ResourceType type) const;
         // Bois / roche : renvoie le noeud disponible le plus proche NON reserve par un
         // autre membre, et le reserve pour 'from' (evite les trajets concurrents).
@@ -158,7 +196,7 @@ namespace Clan
         void LightFire(GameObject* fire);
 
         // --- Reproduction ---
-        // Partenaire eligible pour self (adulte, rassasie, cooldown ecoule, autre clan). nullptr sinon.
+        // Partenaire eligible pour self (adulte, rassasie, cooldown ecoule). nullptr sinon.
         MemberState* FindMate(MemberState* self) const;
         // Declenche une naissance a partir de deux parents (applique les cooldowns).
         void Reproduce(MemberState* a, MemberState* b);
@@ -170,9 +208,9 @@ namespace Clan
         // --- Registres (renseignes par ClanDatabase au chargement) ---
         void AddResourceEntry(uint32 entry, ResourceType type, ObjectKind kind);
         void AddMemberTemplate(uint32 entry, ClanId clan, Gender gender, LifeStage stage);
-        void AddDisplaySet(ClanId clan, Gender gender, uint32 child, uint32 adult, uint32 elder);
-        // Modele a utiliser pour (clan, genre, etape). 0 si non declare (garde le modele du template).
-        uint32 GetDisplayId(ClanId clan, Gender gender, LifeStage stage) const;
+        void AddDisplaySet(uint32 entry, uint32 child, uint32 adult, uint32 elder);
+        // Modele a utiliser pour (entry, etape). 0 si non declare (garde le modele du creature_template).
+        uint32 GetDisplayId(uint32 entry, LifeStage stage) const;
         // Ajoute un etat charge depuis la base.
         MemberState* AddLoadedState(std::unique_ptr<MemberState> state);
 
@@ -200,10 +238,13 @@ namespace Clan
 
         std::unordered_map<uint32, ResourceEntry>  _resourceByEntry;
         std::unordered_map<uint32, MemberTemplate> _memberTemplates;
-        std::unordered_map<uint16, DisplaySet>     _displaysByClanGender; // cle = (clan << 8) | gender
+        std::unordered_map<uint32, DisplaySet>     _displaysByEntry;      // cle = creature_template entry
         std::unordered_map<ObjectGuid, FireState>    _fires;              // feux suivis (par GUID)
         std::unordered_map<ObjectGuid, NodeClaim>    _nodeClaims;         // reservations de noeuds
         std::unordered_map<uint8, std::vector<std::string>> _phrasesByAction; // phrases par action
+        std::unordered_map<uint8, ActionFx>          _actionFx;           // effets RP par action
+        std::vector<uint32>                          _allDiseases;        // toutes les auras d'affliction (check/soin)
+        std::unordered_map<uint8, std::vector<uint32>> _diseasesByType;   // type -> auras (contagion ciblee)
 
         uint32 _dayTimerMs = 0;     // accumulateur vers le prochain jour simule
         uint32 _saveTimerMs = 0;    // accumulateur vers la prochaine sauvegarde

@@ -28,11 +28,13 @@
 #include "ClanNeeds.h"
 #include "ChatPackets.h"
 #include "Creature.h"
+#include "GameTime.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "RBAC.h"
 #include "StringFormat.h"
 #include "WorldSession.h"
+#include "WowTime.h"
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -68,6 +70,8 @@ namespace
             case ActionType::MineRock:   return "Miner roche";
             case ActionType::LightFire:  return "Rallumer feu";
             case ActionType::Cook:       return "Cuire";
+            case ActionType::SeekDoctor: return "Voir le medecin";
+            case ActionType::HuntPredator: return "Exterminer predateur";
             default:                     return "Rien";
         }
     }
@@ -93,31 +97,33 @@ namespace ClanMonitor
     // Prefixe des messages addon (a enregistrer cote client : ClanHUD).
     constexpr char const* ADDON_PREFIX = "CLANHUD";
 
+    enum WatchKind : uint8 { WATCH_CHAT = 0, WATCH_ADDON = 1, WATCH_WORLD = 2 };
+
     struct Watch
     {
         ObjectGuid player;
-        ObjectGuid creature;
-        bool addon = false; // true = message addon (HUD), false = ligne de chat
+        ObjectGuid creature; // vide pour WATCH_WORLD
+        WatchKind  kind = WATCH_CHAT;
     };
 
-    // Suivis actifs (un GM peut suivre plusieurs PNJ, notamment en mode addon).
+    // Suivis actifs (un GM peut suivre plusieurs PNJ + la fenetre monde).
     std::vector<Watch> g_watchers;
     uint32 g_timer = 0;
 
-    // Active/desactive le suivi d'un PNJ (mode chat ou addon). Retourne true si active.
-    bool Toggle(Player* player, Creature* creature, bool addon)
+    // Active/desactive un suivi (chat / addon PNJ / monde). Retourne true si active.
+    bool Toggle(Player* player, Creature* creature, WatchKind kind)
     {
         ObjectGuid pg = player->GetGUID();
-        ObjectGuid cg = creature->GetGUID();
+        ObjectGuid cg = creature ? creature->GetGUID() : ObjectGuid::Empty;
         for (auto it = g_watchers.begin(); it != g_watchers.end(); ++it)
         {
-            if (it->player == pg && it->creature == cg && it->addon == addon)
+            if (it->player == pg && it->creature == cg && it->kind == kind)
             {
                 g_watchers.erase(it);
                 return false;
             }
         }
-        g_watchers.push_back({ pg, cg, addon });
+        g_watchers.push_back({ pg, cg, kind });
         return true;
     }
 
@@ -144,16 +150,40 @@ namespace ClanMonitor
 
         // StringFormat est en style fmt ({}), contrairement a PSendSysMessage.
         // id = identifiant du PNJ : l'addon en fait une fenetre distincte par PNJ.
+        // dis = masque d'affliction (bit0=maladie, bit1=poison, bit2=saignement).
         std::string payload = Trinity::StringFormat(
             "id={};n={};cl={};ge={};st={};ag={};hu={:.0f};th={:.0f};en={:.0f};re={:.0f};"
-            "raw={};wo={};sto={};fi={};eps={:.2f};act={};best={}",
+            "raw={};wo={};sto={};fi={};dis={};eps={:.2f};act={};best={}",
             creature->GetGUID().GetCounter(), creature->GetName(), ClanName(s->clan), GenderName(s->gender), StageName(s->stage),
             s->ageDays, s->needs.hunger, s->needs.thirst, s->needs.energy, s->needs.reproUrge,
             ai->HasRawFood() ? 1 : 0, ai->HasWood() ? 1 : 0, ai->HasStone() ? 1 : 0,
-            cur.litFireNearby ? 1 : 0, s->mind.GetEpsilon(), ActionName(ai->CurrentAction()), ActionName(best));
+            cur.litFireNearby ? 1 : 0, sClanMgr->GetAfflictionMask(creature),
+            s->mind.GetEpsilon(), ActionName(ai->CurrentAction()), ActionName(best));
 
         WorldPackets::Chat::Chat packet;
         packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, creature, player, payload, 0, "", DEFAULT_LOCALE, ADDON_PREFIX);
+        player->SendDirectMessage(packet.Write());
+    }
+
+    // Message addon de l'etat du monde (fenetre globale de l'addon).
+    void SendWorld(Player* player)
+    {
+        Clan::WorldSummary w = sClanMgr->GetWorldSummary();
+
+        int32 hour = 12;
+        bool night = false;
+        if (WowTime const* t = GameTime::GetWowTime())
+        {
+            hour = t->GetHour();
+            night = Clan::IsNight(uint8(hour));
+        }
+
+        std::string payload = Trinity::StringFormat(
+            "w=1;hour={};night={};pop={};ad={};ch={};el={};sick={}",
+            hour, night ? 1 : 0, w.population, w.adults, w.children, w.elders, w.sick);
+
+        WorldPackets::Chat::Chat packet;
+        packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, player, player, payload, 0, "", DEFAULT_LOCALE, ADDON_PREFIX);
         player->SendDirectMessage(packet.Write());
     }
 
@@ -171,17 +201,31 @@ namespace ClanMonitor
         for (auto it = g_watchers.begin(); it != g_watchers.end(); )
         {
             Player* player = ObjectAccessor::FindPlayer(it->player);
-            Creature* creature = player ? ObjectAccessor::GetCreature(*player, it->creature) : nullptr;
-            npc_clan_member* ai = creature ? dynamic_cast<npc_clan_member*>(creature->AI()) : nullptr;
-            if (!player || !ai || !ai->GetState())
+            if (!player)
             {
-                if (player && !it->addon)
+                it = g_watchers.erase(it);
+                continue;
+            }
+
+            // Fenetre monde : pas de PNJ, juste le resume global.
+            if (it->kind == WATCH_WORLD)
+            {
+                SendWorld(player);
+                ++it;
+                continue;
+            }
+
+            Creature* creature = ObjectAccessor::GetCreature(*player, it->creature);
+            npc_clan_member* ai = creature ? dynamic_cast<npc_clan_member*>(creature->AI()) : nullptr;
+            if (!ai || !ai->GetState())
+            {
+                if (it->kind == WATCH_CHAT)
                     ChatHandler(player->GetSession()).SendSysMessage("Suivi termine (membre indisponible).");
                 it = g_watchers.erase(it);
                 continue;
             }
 
-            if (it->addon)
+            if (it->kind == WATCH_ADDON)
                 SendAddon(player, creature, ai);
             else
                 SendLine(player, ai);
@@ -230,6 +274,7 @@ public:
             { "info",    HandleClanInfoCommand,    rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
             { "monitor", HandleClanMonitorCommand, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
             { "hud",     HandleClanHudCommand,     rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
+            { "world",   HandleClanWorldCommand,   rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
         };
         static ChatCommandTable commandTable =
         {
@@ -307,7 +352,7 @@ public:
             return false;
         }
 
-        bool on = ClanMonitor::Toggle(player, target, false);
+        bool on = ClanMonitor::Toggle(player, target, ClanMonitor::WATCH_CHAT);
         handler->PSendSysMessage("Suivi temps reel (chat) : %s.", on ? "ACTIVE (1 ligne/s)" : "desactive");
         return true;
     }
@@ -339,8 +384,24 @@ public:
             return false;
         }
 
-        bool on = ClanMonitor::Toggle(player, target, true);
+        bool on = ClanMonitor::Toggle(player, target, ClanMonitor::WATCH_ADDON);
         handler->PSendSysMessage("Addon ClanHUD : %s.", on ? "ACTIVE (donnees envoyees 1x/s)" : "desactive");
+        return true;
+    }
+
+    // .clan world : active/desactive l'envoi de l'etat du monde a l'addon (fenetre globale).
+    static bool HandleClanWorldCommand(ChatHandler* handler)
+    {
+        Player* player = handler->GetSession() ? handler->GetSession()->GetPlayer() : nullptr;
+        if (!player)
+        {
+            handler->SendSysMessage("Commande utilisable uniquement en jeu.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        bool on = ClanMonitor::Toggle(player, nullptr, ClanMonitor::WATCH_WORLD);
+        handler->PSendSysMessage("Fenetre monde ClanHUD : %s.", on ? "ACTIVE (etat du monde 1x/s)" : "desactive");
         return true;
     }
 };
