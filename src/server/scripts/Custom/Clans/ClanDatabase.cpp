@@ -86,6 +86,18 @@ namespace Clan
                 sClanMgr->AddDisease(f[0].GetUInt32(), f[1].GetUInt8());
             } while (result->NextRow());
         }
+
+        // Attribution des lits : entry du membre (creature_template) -> lit (spawnId du gameobject).
+        // Par entry (et non par spawnId) pour couvrir aussi les nouveau-nes. Registre en lecture
+        // seule (le serveur ne l'ecrit jamais) : l'attribution survit a la mort / au respawn.
+        if (QueryResult result = WorldDatabase.Query("SELECT entry, bed_spawn_id FROM custom_clan_bed"))
+        {
+            do
+            {
+                Field* f = result->Fetch();
+                sClanMgr->AddBedAssignment(f[0].GetUInt32(), f[1].GetUInt64());
+            } while (result->NextRow());
+        }
     }
 
     void ClanDatabase::LoadMembers()

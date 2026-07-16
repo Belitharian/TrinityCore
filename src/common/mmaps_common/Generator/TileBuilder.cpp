@@ -554,6 +554,10 @@ namespace MMAP
                 // Reduce the chance to have underground levels
                 config.ch *= 2;
                 break;
+            // Q-Learning - HillsbradPast
+            case 595:
+                config.walkableRadius = 3;
+                break;
             default:
                 break;
         }

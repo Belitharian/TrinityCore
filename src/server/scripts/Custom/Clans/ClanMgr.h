@@ -61,9 +61,17 @@ namespace Clan
 
         bool      isBirth = false;                // vrai si apparu par reproduction
         uint32    birthEntry = 0;                 // creature_template a summon pour un nouveau-ne
+        bool      deathOmenSaid = false;          // l'Ancien a deja annonce que sa fin est proche (transitoire)
 
         uint32    mapId = 0;
         Position  home;
+
+        // Lit attribue (spawnId du GameObject dans la table `gameobject`). 0 = aucun :
+        // le membre dort alors dans le lit le plus proche, sinon rentre a `home`.
+        // Renseigne depuis le registre custom_clan_bed (par entry du membre), pas persiste
+        // dans la table d'etat -> l'attribution survit a la mort / au respawn, et couvre
+        // les nouveau-nes (qui partagent l'entry de leur gabarit).
+        uint64    bedSpawnId = 0;
 
         ObjectGuid liveGuid;                      // creature vivante associee (vide si non spawnee)
         bool       dirty = true;                  // a resauvegarder
@@ -139,6 +147,16 @@ namespace Clan
         }
     };
 
+    // Cimetiere : emplacement fixe de tombe. Un membre mort y est deplace avant de
+    // faire apparaitre sa pierre tombale. `full` = emplacement deja occupe.
+    // deceasedId = dbId du membre enterre ici (0 = libre) -> sert au "souvenir" des descendants.
+    struct GraveyardSlot
+    {
+        Position position;
+        bool     full = false;
+        uint64   deceasedId = 0;
+    };
+
     class ClanMgr
     {
     public:
@@ -156,8 +174,8 @@ namespace Clan
         MemberState* RegisterPlacedMember(Creature* creature);
         // Detache la creature vivante d'un etat (despawn/reset) sans supprimer l'etat.
         void UnbindLive(MemberState* state);
-        // Mort definitive d'un membre (tue par un ennemi) : retire du registre + de la base.
-        void OnMemberKilled(MemberState* state);
+        // Mort definitive
+        void KillMember(MemberState* state);
 
         // --- Phrases par action ---
         void AddPhrase(uint8 action, std::string text);
@@ -201,13 +219,29 @@ namespace Clan
         // Declenche une naissance a partir de deux parents (applique les cooldowns).
         void Reproduce(MemberState* a, MemberState* b);
 
+        // --- Cimetiere ---
+        // Renvoie un emplacement de tombe libre (et le marque occupe), nullptr si tous
+        // pleins. Utilise a la mort d'un membre pour deplacer le corps avant la tombe.
+        GraveyardSlot* AcquireGraveyardSlot();
+        // Tombe d'un ancetre (mere/pere) du membre 'seeker', la plus proche de 'from' et a
+        // portee. Renvoie true + remplit 'out' (position + orientation), false si aucune.
+        bool FindAncestorGrave(MemberState const* seeker, Creature* from, Position& out) const;
+
         // --- Acces divers ---
         MemberState* GetStateByLiveGuid(ObjectGuid guid) const;
         size_t GetMemberCount() const { return _states.size(); }
+        // GUID de tous les membres actuellement vivants (flux "tout suivre" + ciblage).
+        std::vector<ObjectGuid> GetLiveMemberGuids() const;
 
         // --- Registres (renseignes par ClanDatabase au chargement) ---
         void AddResourceEntry(uint32 entry, ResourceType type, ObjectKind kind);
         void AddMemberTemplate(uint32 entry, ClanId clan, Gender gender, LifeStage stage);
+        // Attribution d'un lit : entry du membre (creature_template) -> spawnId du lit.
+        // Par entry (et non par spawnId) pour que les nouveau-nes, qui partagent l'entry
+        // de leur gabarit, heritent eux aussi d'un lit.
+        void AddBedAssignment(uint32 entry, uint64 bedSpawnId);
+        // Lit attribue a une entry de membre. 0 si aucun.
+        uint64 GetAssignedBed(uint32 entry) const;
         void AddDisplaySet(uint32 entry, uint32 child, uint32 adult, uint32 elder);
         // Modele a utiliser pour (entry, etape). 0 si non declare (garde le modele du creature_template).
         uint32 GetDisplayId(uint32 entry, LifeStage stage) const;
@@ -220,7 +254,6 @@ namespace Clan
         void AgingTick();                                 // appele une fois par "jour" simule
         void TryReproductionRound();                      // matchmaking global
         void SpawnBirth(MemberState* state, WorldObject* summoner); // summon effectif d'un nouveau-ne
-        void KillMember(MemberState* state);              // mort par vieillissement (avec despawn)
         void RemoveMemberState(uint64 dbId);              // retire l'etat du registre + de la base
         uint32 PickBirthEntry(ClanId clan, Gender gender) const; // entry enfant declaree pour (clan,genre)
         uint64 AllocateBirthId();
@@ -245,6 +278,8 @@ namespace Clan
         std::unordered_map<uint8, ActionFx>          _actionFx;           // effets RP par action
         std::vector<uint32>                          _allDiseases;        // toutes les auras d'affliction (check/soin)
         std::unordered_map<uint8, std::vector<uint32>> _diseasesByType;   // type -> auras (contagion ciblee)
+        std::vector<GraveyardSlot>                   _graveyardSlots;     // emplacements de tombes (cimetiere)
+        std::unordered_map<uint32, uint64>           _bedByEntry;         // entry membre -> spawnId lit attribue
 
         uint32 _dayTimerMs = 0;     // accumulateur vers le prochain jour simule
         uint32 _saveTimerMs = 0;    // accumulateur vers la prochaine sauvegarde

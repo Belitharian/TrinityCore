@@ -172,6 +172,15 @@ namespace Clan
         if (tokens.empty())
             return;
 
+        // Garde-fou de dimension : la chaine doit contenir exactement
+        // epsilon + STATE_COUNT*ACTION_COUNT valeurs + les 2 valeurs de combat. Si la taille ne
+        // correspond pas (ex. ACTION_COUNT a change avec l'ajout d'une action), on ignore les
+        // donnees et on garde la table par defaut deja "seedee" par le constructeur : la Q-table
+        // se reinitialise proprement au lieu d'etre lue de travers (donnees mal alignees).
+        size_t const expected = 1 + size_t(STATE_COUNT) * ACTION_COUNT + 2;
+        if (tokens.size() != expected)
+            return;
+
         size_t idx = 0;
         if (Optional<float> eps = Trinity::StringTo<float>(tokens[idx]))
             _epsilon = *eps;

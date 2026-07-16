@@ -72,6 +72,7 @@ namespace
             case ActionType::Cook:       return "Cuire";
             case ActionType::SeekDoctor: return "Voir le medecin";
             case ActionType::HuntPredator: return "Exterminer predateur";
+            case ActionType::Remember:   return "Se souvenir";
             default:                     return "Rien";
         }
     }
@@ -97,7 +98,7 @@ namespace ClanMonitor
     // Prefixe des messages addon (a enregistrer cote client : ClanHUD).
     constexpr char const* ADDON_PREFIX = "CLANHUD";
 
-    enum WatchKind : uint8 { WATCH_CHAT = 0, WATCH_ADDON = 1, WATCH_WORLD = 2 };
+    enum WatchKind : uint8 { WATCH_CHAT = 0, WATCH_ADDON = 1, WATCH_WORLD = 2, WATCH_ALL = 3 };
 
     struct Watch
     {
@@ -141,21 +142,24 @@ namespace ClanMonitor
             cur.litFireNearby ? "o" : "n", s->mind.GetEpsilon(), ActionName(best));
     }
 
-    // Message addon "k=v;..." parse par l'addon ClanHUD (mode .clan hud).
-    void SendAddon(Player* player, Creature* creature, npc_clan_member* ai)
+    // Message addon "k=v;..." parse par l'addon ClanHUD (mode .clan hud / .clan hudall).
+    // asTable = true -> prefixe "tbl=1;" pour que l'addon route la donnee vers le TABLEAU
+    // global (flux "tout suivre") au lieu d'une fenetre individuelle.
+    void SendAddon(Player* player, Creature* creature, npc_clan_member* ai, bool asTable = false)
     {
         MemberState const* s = ai->GetState();
         MindState cur = ai->CurrentMindState();
         ActionType best = s->mind.BestAction(cur.Index());
 
         // StringFormat est en style fmt ({}), contrairement a PSendSysMessage.
-        // id = identifiant du PNJ : l'addon en fait une fenetre distincte par PNJ.
-        // dis = masque d'affliction (bit0=maladie, bit1=poison, bit2=saignement).
+        // id = identifiant du PNJ (compteur de GUID) : cle de fenetre + ciblage (.clan target).
+        // hp = pourcentage de vie. dis = masque d'affliction (bit0=maladie, bit1=poison, bit2=saignement).
         std::string payload = Trinity::StringFormat(
-            "id={};n={};cl={};ge={};st={};ag={};hu={:.0f};th={:.0f};en={:.0f};re={:.0f};"
+            "{}id={};n={};cl={};ge={};st={};ag={};hp={:.0f};hu={:.0f};th={:.0f};en={:.0f};re={:.0f};"
             "raw={};wo={};sto={};fi={};dis={};eps={:.2f};act={};best={}",
+            asTable ? "tbl=1;" : "",
             creature->GetGUID().GetCounter(), creature->GetName(), ClanName(s->clan), GenderName(s->gender), StageName(s->stage),
-            s->ageDays, s->needs.hunger, s->needs.thirst, s->needs.energy, s->needs.reproUrge,
+            s->ageDays, creature->GetHealthPct(), s->needs.hunger, s->needs.thirst, s->needs.energy, s->needs.reproUrge,
             ai->HasRawFood() ? 1 : 0, ai->HasWood() ? 1 : 0, ai->HasStone() ? 1 : 0,
             cur.litFireNearby ? 1 : 0, sClanMgr->GetAfflictionMask(creature),
             s->mind.GetEpsilon(), ActionName(ai->CurrentAction()), ActionName(best));
@@ -211,6 +215,20 @@ namespace ClanMonitor
             if (it->kind == WATCH_WORLD)
             {
                 SendWorld(player);
+                ++it;
+                continue;
+            }
+
+            // Tableau global : une ligne par membre vivant (flux "tout suivre").
+            if (it->kind == WATCH_ALL)
+            {
+                for (ObjectGuid guid : sClanMgr->GetLiveMemberGuids())
+                {
+                    Creature* c = ObjectAccessor::GetCreature(*player, guid);
+                    npc_clan_member* mai = c ? dynamic_cast<npc_clan_member*>(c->AI()) : nullptr;
+                    if (mai && mai->GetState())
+                        SendAddon(player, c, mai, true);
+                }
                 ++it;
                 continue;
             }
@@ -274,7 +292,9 @@ public:
             { "info",    HandleClanInfoCommand,    rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
             { "monitor", HandleClanMonitorCommand, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
             { "hud",     HandleClanHudCommand,     rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
+            { "hudall",  HandleClanHudAllCommand,  rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
             { "world",   HandleClanWorldCommand,   rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
+            { "target",  HandleClanTargetCommand,  rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
         };
         static ChatCommandTable commandTable =
         {
@@ -387,6 +407,55 @@ public:
         bool on = ClanMonitor::Toggle(player, target, ClanMonitor::WATCH_ADDON);
         handler->PSendSysMessage("Addon ClanHUD : %s.", on ? "ACTIVE (donnees envoyees 1x/s)" : "desactive");
         return true;
+    }
+
+    // .clan hudall : active/desactive le flux "tout suivre" (tableau global de l'addon).
+    static bool HandleClanHudAllCommand(ChatHandler* handler)
+    {
+        Player* player = handler->GetSession() ? handler->GetSession()->GetPlayer() : nullptr;
+        if (!player)
+        {
+            handler->SendSysMessage("Commande utilisable uniquement en jeu.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        bool on = ClanMonitor::Toggle(player, nullptr, ClanMonitor::WATCH_ALL);
+        handler->PSendSysMessage("Tableau ClanHUD (tout suivre) : %s.", on ? "ACTIVE (tous les membres, 1x/s)" : "desactive");
+        return true;
+    }
+
+    // .clan target <counter> : cible le membre dont le GUID a ce compteur (appele par l'addon).
+    static bool HandleClanTargetCommand(ChatHandler* handler, uint64 counter)
+    {
+        Player* player = handler->GetSession() ? handler->GetSession()->GetPlayer() : nullptr;
+        if (!player)
+        {
+            handler->SendSysMessage("Commande utilisable uniquement en jeu.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        for (ObjectGuid guid : sClanMgr->GetLiveMemberGuids())
+        {
+            if (guid.GetCounter() != counter)
+                continue;
+
+            // Le PNJ doit etre visible du client pour etre reellement cible.
+            if (ObjectAccessor::GetCreature(*player, guid))
+            {
+                player->SetSelection(guid);
+                return true;
+            }
+
+            handler->SendSysMessage("Ce membre est hors de portee (trop loin pour etre cible).");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        handler->SendSysMessage("Membre introuvable.");
+        handler->SetSentErrorMessage(true);
+        return false;
     }
 
     // .clan world : active/desactive l'envoi de l'etat du monde a l'addon (fenetre globale).

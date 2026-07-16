@@ -49,6 +49,14 @@ struct npc_clan_member : public ScriptedAI
     void BindState(Clan::MemberState* state);
     Clan::MemberState* GetState() const { return _owner; }
 
+    // Reproduction en deux temps : l'initiateur (celui qui a choisi SeekMate) demande
+    // au partenaire de venir le rejoindre a un point de rencontre. Les deux marchent
+    // l'un vers l'autre ; l'accouplement ne demarre qu'une fois reunis.
+    //  - ApproachMate : le partenaire met en pause sa vie et marche vers le point de RV.
+    //  - ReleaseMate  : le partenaire est libere (accouplement fini ou abandonne) et reprend sa vie.
+    void ApproachMate(ObjectGuid initiator, Position const& meetPos);
+    void ReleaseMate();
+
     // Accesseurs de debug (commandes .clan info / .clan hud).
     bool HasRawFood() const { return _hasRawFood; }
     bool HasWood() const { return _hasWood; }
@@ -77,8 +85,12 @@ private:
     bool StartLightFire();
     bool StartCook();
     void StartWander();
+    // Choisit une destination d'errance en espace ouvert (raycast anti-mur) : evite de
+    // viser un point colle a un mur ou dans un recoin trop etroit.
+    Position PickWanderDestination();
     bool StartSeekDoctor();
     bool StartHuntPredator(); // traquer un animal sauvage pour l'exterminer
+    bool StartRemember();     // se recueillir sur la tombe d'un ancetre (tradition)
 
     // Reflexes predateurs.
     void OnThreat(Unit* attacker);
@@ -88,8 +100,10 @@ private:
     bool SetRandomDeceased(Clan::AfflictionType type, float chance);
 
     // Joue l'effet declare dans ActionFx pour l'action courante
-    void PlayWorkEmote();
-    void CastWorkSpell();
+    void PlayCustomEmote();
+    void CastCustomSpell();
+    void CastCustomSpellTarget();
+    void _CastCustomSpell(Creature* creature) const;
 
     // Spawn une tombe quand le personnage meur
     void SpawnGravestone();
@@ -117,21 +131,27 @@ private:
     uint32 _talkCdMs;       // cooldown de parole (anti-spam des phrases)
     uint32 _starveTimerMs;  // accumulateur vers le prochain tick de degats de faim
     uint32 _diseaseTimerMs; // accumulateur vers le prochain tirage de contagion
+    uint32 _mateWaitMs;     // temps restant d'attente que le partenaire rejoigne le point de RV
+    uint32 _rememberCdMs;   // cooldown avant qu'un nouveau recueillement soit recompense (anti-farm)
     bool   _combatLearned;  // le choix defendre/fuir courant est un choix appris (adulte)
 };
 
-inline Position GetFacingPosition(WorldObject* object, float range = 2.5f)
+inline Position GetFacingPosition(Position position, float range = 2.5f)
 {
     // Recupere l'orientation du feu
-    float orientation = object->GetOrientation();
+    float orientation = position.GetOrientation();
 
-    // Calcule la position à 2.5 m devant le feu selon son orientation
-    Position firePos = object->GetPosition();
-    float x = firePos.m_positionX + cos(orientation) * range;
-    float y = firePos.m_positionY + sin(orientation) * range;
-    float z = firePos.m_positionZ; // Garde la même altitude
+    // Calcule la position a #range m devant la position selon son orientation
+    float x = position.m_positionX + cos(orientation) * range;
+    float y = position.m_positionY + sin(orientation) * range;
+    float z = position.m_positionZ; // Garde la meme altitude
 
     return Position(x, y, z);
+}
+
+inline Position GetFacingPosition(WorldObject* object, float range = 2.5f)
+{
+    return GetFacingPosition(object->GetPosition(), range);
 }
 
 #endif // CUSTOM_CLANS_CLANMEMBERAI_H

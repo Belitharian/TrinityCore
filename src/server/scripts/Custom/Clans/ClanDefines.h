@@ -34,7 +34,9 @@ namespace Clan
 		Female = 1
 	};
 
-	// Appartenance a un clan. La reproduction n'a lieu qu'entre clans differents.
+	// Appartenance a un clan. La reproduction est autorisee au sein d'un meme clan
+	// comme entre clans differents (seuls le genre oppose et l'absence de lien
+	// parent-enfant sont requis).
 	enum class ClanId : uint8
 	{
 		None  = 0,
@@ -78,7 +80,8 @@ namespace Clan
 		Cook            = 10, // cuire la viande crue sur un feu allume -> rassasie
 		SeekDoctor      = 11, // aller se faire soigner d'une maladie par le medecin
 		HuntPredator    = 12, // traquer un animal sauvage (predateur) pour l'exterminer
-		Count           = 13
+		Remember        = 13, // se recueillir sur la tombe d'un ancetre (tradition) -> recompense
+		Count           = 14
 	};
 
 	// Types de ressources declarees dans la table custom_clan_resource.
@@ -157,9 +160,9 @@ namespace Clan
 
 	// Famine : au-dela de ce seuil de faim, le membre perd des PV a intervalle regulier
 	// (et finit par mourir de faim s'il ne mange pas). Regen desactivee tant qu'il a faim.
-	constexpr float  HUNGER_STARVE_THRESHOLD = 85.0f;
-	constexpr uint32 STARVE_TICK_MS          = 5000;  // frequence des degats de faim
-	constexpr float  STARVE_DAMAGE_PCT       = 2.0f;  // % des PV max perdus par tick
+	constexpr float  HUNGER_STARVE_THRESHOLD = 70.0f;
+	constexpr uint32 STARVE_TICK_MS          = 2000;  // frequence des degats de faim
+	constexpr float  STARVE_DAMAGE_PCT       = 4.0f;  // % des PV max perdus par tick
 
 	// Maladie / poison / saignement : le membre peut en contracter, et apprend (Q-learning)
 	// a aller se faire soigner par un medecin (PNJ neutre) quand il est afflige.
@@ -183,6 +186,7 @@ namespace Clan
 	constexpr float REWARD_COOK    = 1.00f; // plat cuit -> faim rassasiee
 	constexpr float REWARD_CURE    = 1.00f; // maladie soignee par le medecin
 	constexpr float REWARD_KILL_PREDATOR = 0.80f; // predateur extermine
+	constexpr float REWARD_REMEMBER = 0.50f; // s'etre recueilli sur la tombe d'un ancetre (tradition)
 
 	// Apprentissage du combat (choix defendre / fuir des adultes) - separe de la Q-table.
 	constexpr float REWARD_DEFEND_WIN = 1.00f;  // avoir tue l'agresseur en se defendant
@@ -194,18 +198,29 @@ namespace Clan
 	// ---------------------------------------------------------------------
 	// Perception / execution
 	// ---------------------------------------------------------------------
-	constexpr float  RESOURCE_SEARCH_RANGE = 100.0f;    // rayon de recherche des ressources
-	constexpr float  INTERACT_RANGE        = 3.0f;      // distance d'interaction (boire, etc.)
-	constexpr uint32 DECISION_INTERVAL_MS  = 3000;      // frequence du tick de decision
-	constexpr uint32 INTERACT_DURATION_MS  = 4000;      // duree d'une interaction (boire/dormir)
-	constexpr uint32 HUNT_TIMEOUT_MS       = 20000;     // abandon d'une chasse trop longue
-	constexpr uint32 WOOD_DURATION_MS      = 3000;      // duree de coupage du bois
-	constexpr uint32 STONE_DURATION_MS     = 3000;      // duree de minage
-	constexpr uint32 COOK_DURATION_MS      = 10000;     // duree de cuisson sur un feu
-	constexpr uint32 SLEEP_DURATION_MS     = 10000;     // duree de sommeil
-	constexpr uint32 MATE_DURATION_MS      = 3000;      // duree de rencontre
-	constexpr uint32 DOCTOR_DURATION_MS    = 2800;      // duree pour le docteur
-	constexpr Milliseconds WANDER_DURATION_MS = 3500ms; // duree de marche / decouverte
+	constexpr float  RESOURCE_SEARCH_RANGE = 255.0f; // rayon de recherche des ressources
+	constexpr float  INTERACT_RANGE        = 3.0f;   // distance d'interaction (boire, etc.)
+
+	// Errance : au lieu de MoveRandom (qui vise un point navmesh parfois colle a un mur
+	// ou dans un recoin etroit), on tire quelques directions et on garde la plus degagee
+	// via un raycast anti-collision (destination toujours en espace ouvert / ligne de vue).
+	constexpr float  WANDER_MIN_DIST   = 6.0f;   // distance min d'un saut d'errance
+	constexpr float  WANDER_MAX_DIST   = 18.0f;  // distance max d'un saut d'errance
+	constexpr uint8  WANDER_SAMPLES    = 4;      // nb de directions testees (on garde la plus ouverte)
+	constexpr uint32 DECISION_INTERVAL_MS  = 3000;   // frequence du tick de decision
+	constexpr uint32 INTERACT_DURATION_MS  = 4000;   // duree d'une interaction (boire/dormir)
+	constexpr uint32 HUNT_TIMEOUT_MS       = 20000;  // abandon d'une chasse trop longue
+	constexpr uint32 WOOD_DURATION_MS      = 3000;   // duree de coupage du bois
+	constexpr uint32 STONE_DURATION_MS     = 3000;   // duree de minage
+	constexpr uint32 COOK_DURATION_MS      = 10000;  // duree de cuisson sur un feu
+	constexpr uint32 SLEEP_DURATION_MS     = 10000;  // duree de sommeil
+	constexpr uint32 MATE_DURATION_MS      = 3000;   // duree de l'accouplement (une fois les deux reunis)
+	constexpr uint32 MATE_APPROACH_TIMEOUT_MS = 15000; // attente max que le partenaire rejoigne le point de rencontre
+	constexpr uint32 MATE_POLL_MS          = 400;    // frequence de verification "les deux partenaires sont-ils reunis ?"
+	constexpr uint32 DOCTOR_DURATION_MS    = 2800;   // duree pour le docteur
+	constexpr uint32 WANDER_DURATION_MS    = 3500;   // duree de marche / decouverte
+	constexpr uint32 REMEMBER_DURATION_MS  = 3000;   // duree du recueillement sur la tombe
+	constexpr uint32 REMEMBER_COOLDOWN_MS  = 60000;  // delai avant qu'un souvenir soit de nouveau recompense (anti-farm)
 
 	// Feux et noeuds de ressource.
 	constexpr uint32 FIRE_BURN_DURATION_MS  = 60000;  // combustion avant extinction (1 min)
@@ -247,12 +262,14 @@ namespace Clan
 	constexpr uint32 AGE_CHILD_TO_ADULT_DAYS  = 10;
 	constexpr uint32 AGE_ADULT_TO_ELDER_DAYS  = 30;
 	constexpr uint32 AGE_DEATH_DAYS           = 50;
+	// Fenetre (en jours simules) avant la mort ou un Ancien annonce que "la fin est proche".
+	constexpr uint32 AGE_DEATH_WARNING_DAYS   = 3;
 	constexpr uint32 REPRO_COOLDOWN_DAYS      = 10;
 	// Un adulte doit etre suffisamment rassasie pour se reproduire.
 	constexpr float  REPRO_READY_MAX_NEED     = 40.0f;
 	// Echelle du modele pour un enfant.
 	constexpr float  CHILD_SCALE              = 1.0f;
-	// Tombes aléatoires
+	// Tombes al?atoires
 	constexpr uint8  GRAVESTONE_COUNT         = 3;
 	constexpr uint32 GRAVESTONES[GRAVESTONE_COUNT]
         = { 2000007, 2000008, 2000009 };
@@ -266,19 +283,27 @@ namespace Clan
 	// Identifiants MovementInform emis par l'IA (evite les collisions avec CustomAI).
 	enum ClanMovePointId : uint32
 	{
-		MOVE_TO_RESOURCE   = 5300000, // point d'eau (boire)
-		MOVE_TO_MATE       = 5300001,
-		MOVE_TO_HOME       = 5300002, // lit / maison (dormir)
-		MOVE_TO_WOOD       = 5300003,
-		MOVE_TO_ROCK       = 5300004,
-		MOVE_TO_FIRE_LIGHT = 5300005, // feu eteint a rallumer
-		MOVE_TO_FIRE_COOK  = 5300006, // feu allume pour cuire
-		MOVE_TO_FLEE       = 5300007, // point de fuite (enfants/anciens)
-		MOVE_TO_DOCTOR     = 5300008  // medecin (pour se faire soigner)
+		MOVE_TO_RESOURCE    = 5300000, // point d'eau (boire)
+		MOVE_TO_MATE        = 5300001,
+		MOVE_TO_HOME        = 5300002, // lit / maison (dormir)
+		MOVE_TO_WOOD        = 5300003,
+		MOVE_TO_ROCK        = 5300004,
+		MOVE_TO_FIRE_LIGHT  = 5300005, // feu eteint a rallumer
+		MOVE_TO_FIRE_COOK   = 5300006, // feu allume pour cuire
+		MOVE_TO_FLEE        = 5300007, // point de fuite (enfants/anciens)
+		MOVE_TO_DOCTOR      = 5300008, // medecin (pour se faire soigner)
+		MOVE_TO_MATE_JOIN   = 5300009, // partenaire rejoignant le point de rencontre (cote mate)
+		MOVE_TO_HOME_WANDER = 5300010, // retour a _home quand on ne peut pas errer (interieur)
+		MOVE_TO_WANDER      = 5300011, // saut d'errance vers un point ouvert (raycast anti-mur)
+		MOVE_TO_GRAVE       = 5300012  // se recueillir sur la tombe d'un ancetre
 	};
 
 	// Nom de script attache aux gabarits des membres (creature_template.ScriptName).
 	constexpr char const* MEMBER_SCRIPT_NAME = "npc_clan_member";
+
+	// Cle de phrase reservee (custom_clan_phrase.action_type) pour le presage de mort d'un
+	// Ancien. Volontairement hors de la plage des ActionType pour ne pas entrer en collision.
+	constexpr uint8 PHRASE_DEATH_OMEN = 100;
 
 	// Sort du docteur
 	constexpr uint32 const SPELL_HEAL_DOCTOR = 29170;

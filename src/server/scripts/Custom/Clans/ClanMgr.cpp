@@ -50,6 +50,23 @@ namespace
         return b->motherId == a->dbId || b->fatherId == a->dbId
             || a->motherId == b->dbId || a->fatherId == b->dbId;
     }
+
+    // Emplacements fixes des tombes (cimetiere). A la mort, le corps est deplace vers
+    // le premier emplacement libre avant l'apparition de la pierre tombale.
+    constexpr Position GRAVEYARD_SLOTS[] =
+    {
+        { 1638.13f, 661.80f, 105.22f, 2.298f },
+        { 1640.43f, 665.52f, 105.56f, 2.679f },
+        { 1642.45f, 669.59f, 105.88f, 2.679f },
+        { 1644.31f, 673.31f, 106.03f, 2.679f },
+        { 1636.17f, 672.34f, 106.47f, 2.721f },
+        { 1637.95f, 676.31f, 106.76f, 2.721f },
+        { 1634.26f, 667.78f, 105.99f, 2.715f },
+        { 1631.40f, 664.91f, 105.65f, 2.184f },
+        { 1631.84f, 676.62f, 106.93f, 2.754f },
+        { 1628.12f, 672.69f, 106.78f, 2.222f },
+        { 1623.11f, 670.51f, 106.62f, 1.813f },
+    };
 }
 
 ClanMgr* ClanMgr::instance()
@@ -69,6 +86,18 @@ void ClanMgr::AddResourceEntry(uint32 entry, ResourceType type, ObjectKind kind)
 void ClanMgr::AddMemberTemplate(uint32 entry, ClanId clan, Gender gender, LifeStage stage)
 {
     _memberTemplates[entry] = { clan, gender, stage };
+}
+
+void ClanMgr::AddBedAssignment(uint32 entry, uint64 bedSpawnId)
+{
+    if (entry && bedSpawnId)
+        _bedByEntry[entry] = bedSpawnId;
+}
+
+uint64 ClanMgr::GetAssignedBed(uint32 entry) const
+{
+    auto it = _bedByEntry.find(entry);
+    return it != _bedByEntry.end() ? it->second : 0;
 }
 
 void ClanMgr::AddDisplaySet(uint32 entry, uint32 child, uint32 adult, uint32 elder)
@@ -183,15 +212,8 @@ Creature* ClanMgr::FindNearestDoctor(Creature* from) const
         if (res.type != ResourceType::Doctor || res.kind != ObjectKind::Creature)
             continue;
 
-        if (Creature* doc = GetClosestCreatureWithEntry(from, entry, RESOURCE_SEARCH_RANGE, true))
-        {
-            float dist = from->GetDistance(doc);
-            if (dist < bestDist)
-            {
-                bestDist = dist;
-                best = doc;
-            }
-        }
+        if (Creature* doc = GetClosestCreatureWithEntry(from, entry, SIZE_OF_GRIDS, true))
+            best = doc;
     }
     return best;
 }
@@ -237,7 +259,14 @@ void ClanMgr::LoadFromDB()
     _actionFx.clear();
     _allDiseases.clear();
     _diseasesByType.clear();
+    _bedByEntry.clear();
     _nextBirthId = BIRTH_ID_BASE;
+
+    // (Re)initialise le cimetiere : tous les emplacements redeviennent libres. Les tombes
+    // sont des GameObjects temporaires (non persistes), donc coherent au (re)chargement.
+    _graveyardSlots.clear();
+    for (Position const& p : GRAVEYARD_SLOTS)
+        _graveyardSlots.push_back({ p, false });
 
     ClanDatabase::LoadRegistries();
     ClanDatabase::LoadMembers();
@@ -383,6 +412,16 @@ MemberState* ClanMgr::GetStateByLiveGuid(ObjectGuid guid) const
         if (state->liveGuid == guid)
             return state.get();
     return nullptr;
+}
+
+std::vector<ObjectGuid> ClanMgr::GetLiveMemberGuids() const
+{
+    std::vector<ObjectGuid> out;
+    out.reserve(_states.size());
+    for (auto const& state : _states)
+        if (state->IsSpawned())
+            out.push_back(state->liveGuid);
+    return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -652,6 +691,8 @@ MemberState* ClanMgr::FindMate(MemberState* self) const
 {
     if (!self || self->stage != LifeStage::Adult || self->reproCooldownDays > 0 || !self->needs.IsWellFed())
         return nullptr;
+    if (_states.size() >= MAX_POPULATION)     // population saturee : inutile de chercher
+        return nullptr;
 
     for (auto const& other : _states)
     {
@@ -689,13 +730,25 @@ void ClanMgr::Reproduce(MemberState* a, MemberState* b)
     if (!a || !b || a == b)
         return;
     if (a->reproCooldownDays > 0 || b->reproCooldownDays > 0)
+    {
+        TC_LOG_DEBUG("scripts", "ClanMgr::Reproduce annulee : cooldown actif (a={} b={}).", a->dbId, b->dbId);
         return;
-    if (a->clan == b->clan || a->gender == b->gender)
+    }
+    if (a->gender == b->gender)
+    {
+        TC_LOG_DEBUG("scripts", "ClanMgr::Reproduce annulee : meme genre (a={} b={}).", a->dbId, b->dbId);
         return;
+    }
     if (IsParentChild(a, b)) // interdit la reproduction parent-enfant
+    {
+        TC_LOG_DEBUG("scripts", "ClanMgr::Reproduce annulee : lien parent-enfant (a={} b={}).", a->dbId, b->dbId);
         return;
+    }
     if (_states.size() >= MAX_POPULATION)
+    {
+        TC_LOG_DEBUG("scripts", "ClanMgr::Reproduce annulee : population max atteinte.");
         return;
+    }
 
     // Un enfant herite d'un clan parental (choix aleatoire) et d'un genre aleatoire.
     ClanId childClan = urand(0, 1) ? a->clan : b->clan;
@@ -765,6 +818,53 @@ void ClanMgr::SpawnBirth(MemberState* state, WorldObject* summoner)
 }
 
 // ---------------------------------------------------------------------------
+// Cimetiere
+// ---------------------------------------------------------------------------
+GraveyardSlot* ClanMgr::AcquireGraveyardSlot()
+{
+    for (GraveyardSlot& slot : _graveyardSlots)
+        if (!slot.full)
+        {
+            slot.full = true;
+            return &slot;
+        }
+    return nullptr; // tous les emplacements sont occupes
+}
+
+bool ClanMgr::FindAncestorGrave(MemberState const* seeker, Creature* from, Position& out) const
+{
+    if (!seeker || !from)
+        return false;
+    // Un fondateur (parents = 0) n'a pas d'ancetre a honorer.
+    if (!seeker->motherId && !seeker->fatherId)
+        return false;
+
+    GraveyardSlot const* best = nullptr;
+    float bestDist = RESOURCE_SEARCH_RANGE;
+
+    for (GraveyardSlot const& slot : _graveyardSlots)
+    {
+        if (!slot.full)
+            continue;
+        if (slot.deceasedId != seeker->motherId && slot.deceasedId != seeker->fatherId)
+            continue;
+
+        float dist = from->GetDistance(slot.position);
+        if (dist < bestDist)
+        {
+            bestDist = dist;
+            best = &slot;
+        }
+    }
+
+    if (!best)
+        return false;
+
+    out = best->position;
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Vieillissement
 // ---------------------------------------------------------------------------
 void ClanMgr::AgingTick()
@@ -797,12 +897,26 @@ void ClanMgr::AgingTick()
             }
         }
 
+        // Presage : un Ancien qui approche de sa mort annonce (une fois) que sa fin est proche.
+        if (state->stage == LifeStage::Elder && !state->deathOmenSaid
+            && state->ageDays >= AGE_DEATH_DAYS - AGE_DEATH_WARNING_DAYS
+            && state->ageDays < AGE_DEATH_DAYS)
+        {
+            state->deathOmenSaid = true;
+            if (Creature* c = ResolveLive(state))
+                if (std::string const* phrase = GetRandomPhrase(ActionType(PHRASE_DEATH_OMEN)))
+                    c->Say(*phrase, LANG_UNIVERSAL);
+        }
+
         if (state->ageDays >= AGE_DEATH_DAYS)
             dying.push_back(state);
     }
 
     for (MemberState* state : dying)
-        KillMember(state);
+    {
+        if (Creature* c = ResolveLive(state))
+            c->KillSelf();
+    }
 }
 
 void ClanMgr::RemoveMemberState(uint64 dbId)
@@ -817,29 +931,9 @@ void ClanMgr::RemoveMemberState(uint64 dbId)
 
 void ClanMgr::KillMember(MemberState* state)
 {
-    if (Creature* c = ResolveLive(state))
-    {
-        c->SetCorpseDelay(1000, true);
-        c->KillSelf();
-    }
-
     uint64 dbId = state->dbId;
     RemoveMemberState(dbId);
-    TC_LOG_INFO("scripts", "ClanMgr: deces par vieillissement (dbId {}).", dbId);
-}
-
-void ClanMgr::OnMemberKilled(MemberState* state)
-{
-    if (!state)
-        return;
-
-    // La creature est deja en train de mourir : pas de despawn ici, on retire juste
-    // l'individu de la simulation (mort definitive). Un membre place reapparaitra
-    // naturellement (respawn du coeur) comme un nouvel individu ; un nouveau-ne, lui,
-    // ne sera pas re-summon.
-    uint64 dbId = state->dbId;
-    RemoveMemberState(dbId);
-    TC_LOG_INFO("scripts", "ClanMgr: membre {} tue par un ennemi.", dbId);
+    TC_LOG_INFO("scripts", "ClanMgr: membre {} est en mort definitive.", dbId);
 }
 
 void ClanMgr::TryReproductionRound()
