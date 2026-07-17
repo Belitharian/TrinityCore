@@ -38,18 +38,30 @@ namespace Clan
         // l'action "instinctive". L'agent demarre donc competent, puis affine par apprentissage.
         for (uint16 s = 0; s < STATE_COUNT; ++s)
         {
+            // Decodage : l'ordre doit refleter EXACTEMENT celui de MindState::Index()
+            // (dernier bit pousse = premier bit lu).
             uint16 idx = s;
-            bool predator = (idx & 1) != 0; idx >>= 1;
-            bool diseased = (idx & 1) != 0; idx >>= 1;
-            bool fire     = (idx & 1) != 0; idx >>= 1;
-            bool stone    = (idx & 1) != 0; idx >>= 1;
-            bool wood     = (idx & 1) != 0; idx >>= 1;
-            bool raw      = (idx & 1) != 0; idx >>= 1;
+            bool unlitFire = (idx & 1) != 0; idx >>= 1;
+            bool predator  = (idx & 1) != 0; idx >>= 1;
+            bool diseased  = (idx & 1) != 0; idx >>= 1;
+            bool fire      = (idx & 1) != 0; idx >>= 1;
+            bool stone     = (idx & 1) != 0; idx >>= 1;
+            bool wood      = (idx & 1) != 0; idx >>= 1;
+            bool raw       = (idx & 1) != 0; idx >>= 1;
             idx >>= 1; // bit jour/nuit : sans influence sur l'action instinctive
             NeedType need = NeedType(idx);
 
             ActionType rec;
-            switch (need)
+
+            // PRIORITE ABSOLUE : rester en vie. Une affliction draine les PV en continu et
+            // penalise toute action (REWARD_DISEASED) : on se soigne AVANT de vaquer a ses
+            // besoins. Sans ce hissage, la maladie n'etait consultee que dans la branche
+            // "aucun besoin urgent" -- un malade affame allait donc manger en agonisant.
+            // (Si aucun medecin n'existe, SeekDoctor echoue et l'apprentissage corrigera
+            //  de lui-meme cet instinct : le seed n'est qu'un point de depart.)
+            if (diseased)
+                rec = ActionType::SeekDoctor;
+            else switch (need)
             {
                 case NeedType::Thirst: rec = ActionType::DrinkRiver; break;
                 case NeedType::Energy: rec = ActionType::Sleep;      break;
@@ -64,9 +76,23 @@ namespace Clan
                         rec = ActionType::Hunt;                 // pas de viande -> chasser
                     break;
                 default: // aucun besoin urgent
-                    if (diseased)             rec = ActionType::SeekDoctor;   // se soigner
-                    else if (predator)        rec = ActionType::HuntPredator; // exterminer la menace
-                    else                      rec = ActionType::Wander;
+                    if (predator)             rec = ActionType::HuntPredator; // exterminer la menace
+                    else if (unlitFire)
+                        // Un feu est eteint : l'entretien du foyer prime sur l'errance. Le clan
+                        // s'affaire donc a rallumer TOUS les feux des qu'il n'a rien d'urgent.
+                        rec = (wood && stone) ? ActionType::LightFire
+                            : (!wood ? ActionType::GatherWood : ActionType::MineRock);
+                    // Rien d'urgent : on constitue des reserves plutot que de flaner.
+                    // NB : les drapeaux d'etat ne disent que "en possede / n'en possede pas",
+                    // jamais "est plein" (3 bits de plus feraient x8 sur la Q-table). L'instinct
+                    // n'amorce donc la collecte que jusqu'a UNE unite de chaque ; c'est
+                    // l'apprentissage qui pousse jusqu'a la capacite max, car chaque ramassage
+                    // paie (REWARD_WOOD/STONE/RAWFOOD) tant qu'on n'est pas plein, et l'action
+                    // echoue une fois la capacite atteinte -> l'agent apprend seul a s'arreter.
+                    else if (!wood)           rec = ActionType::GatherWood;
+                    else if (!stone)          rec = ActionType::MineRock;
+                    else if (!raw)            rec = ActionType::Hunt;
+                    else                      rec = ActionType::Wander;       // sac garni : explorer
                     break;
             }
 

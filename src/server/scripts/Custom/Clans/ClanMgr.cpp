@@ -28,8 +28,9 @@
 #include "ObjectAccessor.h"
 #include "Random.h"
 #include "ScriptedCreature.h"
+#include "StringFormat.h"
 #include "TemporarySummon.h"
-#include "Weather.h"
+#include "Util.h"
 #include <algorithm>
 #include <list>
 
@@ -88,16 +89,37 @@ void ClanMgr::AddMemberTemplate(uint32 entry, ClanId clan, Gender gender, LifeSt
     _memberTemplates[entry] = { clan, gender, stage };
 }
 
-void ClanMgr::AddBedAssignment(uint32 entry, uint64 bedSpawnId)
+void ClanMgr::AddHouse(uint64 spawnId, uint8 clanId)
 {
-    if (entry && bedSpawnId)
-        _bedByEntry[entry] = bedSpawnId;
+    _houses[spawnId] = { spawnId, ClanId(clanId) };
+    _houseByClan.try_emplace(clanId, spawnId);
+}
+
+void ClanMgr::AddBedAssignment(uint64 bedSpawnId, uint64 houseSpawnId, uint32 memberEntry)
+{
+    if (bedSpawnId && houseSpawnId)
+        _bedToHouse[bedSpawnId] = houseSpawnId;
+    if (memberEntry && bedSpawnId)
+        _bedByEntry[memberEntry] = bedSpawnId;
 }
 
 uint64 ClanMgr::GetAssignedBed(uint32 entry) const
 {
     auto it = _bedByEntry.find(entry);
     return it != _bedByEntry.end() ? it->second : 0;
+}
+
+uint64 ClanMgr::GetMemberHouse(uint32 entry, ClanId clan) const
+{
+    uint64 bed = GetAssignedBed(entry);
+    if (bed)
+    {
+        auto it = _bedToHouse.find(bed);
+        if (it != _bedToHouse.end())
+            return it->second;
+    }
+    auto it = _houseByClan.find(uint8(clan));
+    return it != _houseByClan.end() ? it->second : 0;
 }
 
 void ClanMgr::AddDisplaySet(uint32 entry, uint32 child, uint32 adult, uint32 elder)
@@ -118,9 +140,30 @@ std::string const* ClanMgr::GetRandomPhrase(ActionType action) const
     return &it->second[urand(0, uint32(it->second.size()) - 1)];
 }
 
-void ClanMgr::AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote)
+void ClanMgr::AddEpitaph(uint8 cause, std::string text)
 {
-    _actionFx[action] = { aura, spell, emote };
+    _epitaphsByCause[cause].push_back(std::move(text));
+}
+
+std::string ClanMgr::BuildEpitaph(DeathCause cause, std::string const& name, uint32 ageDays) const
+{
+    // Modele de la cause exacte ; a defaut, repli sur les modeles "cause inconnue".
+    auto it = _epitaphsByCause.find(uint8(cause));
+    if (it == _epitaphsByCause.end() || it->second.empty())
+        it = _epitaphsByCause.find(uint8(DeathCause::Unknown));
+
+    if (it == _epitaphsByCause.end() || it->second.empty())
+        return Trinity::StringFormat("Ci-git {}.", name); // aucun modele declare : repli minimal
+
+    std::string text = it->second[urand(0, uint32(it->second.size()) - 1)];
+    StringReplaceAll(&text, "$name", name);
+    StringReplaceAll(&text, "$age", std::to_string(ageDays));
+    return text;
+}
+
+void ClanMgr::AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote, uint32 item, uint8 itemSlot)
+{
+    _actionFx[action] = { aura, spell, emote, item, itemSlot };
 }
 
 ActionFx const* ClanMgr::GetActionFx(ActionType action) const
@@ -205,8 +248,6 @@ WorldSummary ClanMgr::GetWorldSummary() const
 Creature* ClanMgr::FindNearestDoctor(Creature* from) const
 {
     Creature* best = nullptr;
-    float bestDist = RESOURCE_SEARCH_RANGE;
-
     for (auto const& [entry, res] : _resourceByEntry)
     {
         if (res.type != ResourceType::Doctor || res.kind != ObjectKind::Creature)
@@ -256,9 +297,13 @@ void ClanMgr::LoadFromDB()
     _fires.clear();
     _nodeClaims.clear();
     _phrasesByAction.clear();
+    _epitaphsByCause.clear();
     _actionFx.clear();
     _allDiseases.clear();
     _diseasesByType.clear();
+    _houses.clear();
+    _bedToHouse.clear();
+    _houseByClan.clear();
     _bedByEntry.clear();
     _nextBirthId = BIRTH_ID_BASE;
 
@@ -271,8 +316,80 @@ void ClanMgr::LoadFromDB()
     ClanDatabase::LoadRegistries();
     ClanDatabase::LoadMembers();
 
-    TC_LOG_INFO("scripts", "ClanMgr: {} membre(s) charge(s), {} entry(s) de ressource, {} gabarit(s).",
-        _states.size(), _resourceByEntry.size(), _memberTemplates.size());
+    TC_LOG_INFO("scripts", "ClanMgr: {} membre(s) charge(s), {} entry(s) de ressource, {} gabarit(s), {} maison(s).",
+        _states.size(), _resourceByEntry.size(), _memberTemplates.size(), _houses.size());
+}
+
+void ClanMgr::ReloadRegistries()
+{
+    // On ne touche NI aux etats des membres, NI au runtime (feux, reservations de noeuds,
+    // cimetiere) : seules les donnees declaratives sont relues.
+    _resourceByEntry.clear();
+    _memberTemplates.clear();
+    _displaysByEntry.clear();
+    _phrasesByAction.clear();
+    _epitaphsByCause.clear();
+    _actionFx.clear();
+    _allDiseases.clear();
+    _diseasesByType.clear();
+    _houses.clear();
+    _bedToHouse.clear();
+    _houseByClan.clear();
+    _bedByEntry.clear();
+
+    ClanDatabase::LoadRegistries();
+
+    // Lit et maison sont resolus au spawn (BindState) : sans ce rafraichissement, les
+    // membres deja en jeu garderaient l'ancienne attribution jusqu'a leur prochain respawn.
+    for (auto const& state : _states)
+    {
+        state->bedSpawnId   = GetAssignedBed(state->entry);
+        state->houseSpawnId = GetMemberHouse(state->entry, state->clan);
+    }
+
+    TC_LOG_INFO("scripts", "ClanMgr: registres recharges ({} ressource(s), {} gabarit(s), {} fx, {} maison(s)).",
+        _resourceByEntry.size(), _memberTemplates.size(), _actionFx.size(), _houses.size());
+}
+
+void ClanMgr::ResetAll()
+{
+    // 1. Detacher les IA AVANT de detruire les etats : leurs taches planifiees capturent
+    //    this et dereferencent _owner (timers de cuisson, d'accouplement...).
+    std::vector<Creature*> placed; // membres places : a re-enregistrer apres le rechargement
+    for (auto const& state : _states)
+    {
+        Creature* c = ResolveLive(state.get());
+        if (!c)
+            continue;
+
+        npc_clan_member* ai = dynamic_cast<npc_clan_member*>(c->AI());
+        if (!ai)
+            continue;
+
+        ai->UnbindState();
+
+        if (c->GetSpawnId())
+            placed.push_back(c);    // spawn de l'admin : il reste, on le re-enregistrera
+        else
+            c->DespawnOrUnsummon(); // nouveau-ne : son etat disparait, la creature aussi
+    }
+
+    // 2. Table rase (memoire + base).
+    _states.clear();
+    _byDbId.clear();
+    _pendingBySpawn.clear();
+    ClanDatabase::WipeMembers();
+
+    // 3. Rechargement complet : la table etant vide, aucun membre n'est charge.
+    LoadFromDB();
+
+    // 4. Les membres places encore en jeu repartent a neuf (etat vierge, cerveau seede).
+    for (Creature* c : placed)
+        if (npc_clan_member* ai = dynamic_cast<npc_clan_member*>(c->AI()))
+            ai->BindState(RegisterPlacedMember(c));
+
+    TC_LOG_INFO("scripts", "ClanMgr: simulation remise a zero ({} membre(s) place(s) reinitialise(s)).",
+        placed.size());
 }
 
 void ClanMgr::RespawnBirths()
@@ -299,7 +416,10 @@ void ClanMgr::Update(uint32 diff)
     {
         _dayTimerMs -= dayLenMs;
         AgingTick();
-        TryReproductionRound();
+        // Plus d'appariement global automatique : la reproduction ne se fait QUE via la
+        // rencontre physique pilotee par l'IA (action SeekMate -> maison -> face a face).
+        // Un fallback global reproduisait les couples instantanement n'importe ou, ce qui
+        // court-circuitait la rencontre et faisait naitre les enfants "au milieu de rien".
     }
 
     _saveTimerMs += diff;
@@ -410,6 +530,16 @@ MemberState* ClanMgr::GetStateByLiveGuid(ObjectGuid guid) const
 {
     for (auto const& state : _states)
         if (state->liveGuid == guid)
+            return state.get();
+    return nullptr;
+}
+
+MemberState* ClanMgr::GetStateByDbId(uint64 dbId) const
+{
+    if (!dbId)
+        return nullptr;
+    for (auto const& state : _states)
+        if (state->dbId == dbId)
             return state.get();
     return nullptr;
 }
@@ -553,7 +683,7 @@ void ClanMgr::DepleteNode(GameObject* node, uint32 respawnMs)
 // ---------------------------------------------------------------------------
 // Feux
 // ---------------------------------------------------------------------------
-FireState& ClanMgr::RegisterFire(GameObject* fire, bool outdoor)
+FireState& ClanMgr::RegisterFire(GameObject* fire)
 {
     auto it = _fires.find(fire->GetGUID());
     if (it == _fires.end())
@@ -561,9 +691,7 @@ FireState& ClanMgr::RegisterFire(GameObject* fire, bool outdoor)
         FireState fs;
         fs.lit = true; // un feu decouvert est considere allume au depart
         fs.burnMs = FIRE_BURN_DURATION_MS;
-        fs.outdoor = outdoor;
         fs.mapId = fire->GetMapId();
-        fs.zoneId = fire->GetZoneId();
         it = _fires.emplace(fire->GetGUID(), fs).first;
 
         // On force l'apparence "allume" des la decouverte (sinon le GO garde son etat
@@ -580,15 +708,14 @@ GameObject* ClanMgr::FindNearestFire(Creature* from, bool wantLit)
 
     for (auto const& [entry, res] : _resourceByEntry)
     {
-        if (res.type != ResourceType::FireIndoor && res.type != ResourceType::FireOutdoor)
+        if (res.type != ResourceType::Fire)
             continue;
 
-        bool outdoor = (res.type == ResourceType::FireOutdoor);
         std::list<GameObject*> fires;
         GetGameObjectListWithEntryInGrid(fires, from, entry, RESOURCE_SEARCH_RANGE);
         for (GameObject* fire : fires)
         {
-            FireState& fs = RegisterFire(fire, outdoor);
+            FireState& fs = RegisterFire(fire);
             if (fs.lit != wantLit)
                 continue;
 
@@ -606,17 +733,22 @@ GameObject* ClanMgr::FindNearestFire(Creature* from, bool wantLit)
 GameObject* ClanMgr::FindNearestLitFire(Creature* from)   { return FindNearestFire(from, true); }
 GameObject* ClanMgr::FindNearestUnlitFire(Creature* from) { return FindNearestFire(from, false); }
 
+bool ClanMgr::IsFireLit(ObjectGuid fireGuid) const
+{
+    auto it = _fires.find(fireGuid);
+    return it != _fires.end() && it->second.lit;
+}
+
 void ClanMgr::LightFire(GameObject* fire)
 {
     if (!fire)
         return;
 
-    // Le feu a normalement deja ete enregistre par FindNearestUnlitFire ; sinon on
-    // l'enregistre en repli (exterieur inconnu -> false).
+    // Le feu a normalement deja ete enregistre par FindNearestUnlitFire ; sinon on l'ajoute.
     auto it = _fires.find(fire->GetGUID());
     if (it == _fires.end())
         it = _fires.emplace(fire->GetGUID(),
-            FireState{ true, FIRE_BURN_DURATION_MS, false, fire->GetMapId(), fire->GetZoneId() }).first;
+            FireState{ true, FIRE_BURN_DURATION_MS, fire->GetMapId() }).first;
 
     it->second.lit = true;
     it->second.burnMs = FIRE_BURN_DURATION_MS;
@@ -634,53 +766,23 @@ void ClanMgr::ApplyFireVisual(GameObject* fire, bool lit) const
 
 void ClanMgr::UpdateFires(uint32 diff)
 {
-    _rainTimerMs += diff;
-    bool checkRain = false;
-    if (_rainTimerMs >= RAIN_CHECK_INTERVAL_MS)
-    {
-        _rainTimerMs = 0;
-        checkRain = true;
-    }
-
     for (auto& [guid, fs] : _fires)
     {
         if (!fs.lit)
             continue;
 
-        bool extinguish = false;
-
-        // Combustion : seuls les feux EXTERIEURS s'eteignent avec le temps.
-        // La cheminee (feu interieur) reste toujours allumee -> il y a toujours ou cuire.
-        if (fs.outdoor)
+        // Combustion : TOUS les feux finissent par s'eteindre. C'est ce qui donne du travail
+        // aux PNJ (ramasser bois + pierre, puis rallumer) et rend la cuisson non acquise.
+        if (fs.burnMs > diff)
         {
-            if (fs.burnMs <= diff)
-                extinguish = true;
-            else
-                fs.burnMs -= diff;
+            fs.burnMs -= diff;
+            continue;
         }
 
-        // Pluie : eteint les feux exterieurs.
-        if (!extinguish && checkRain && fs.outdoor)
-        {
-            if (Map* map = sMapMgr->FindMap(fs.mapId, 0))
-            {
-                if (Weather* weather = map->GetOrGenerateZoneDefaultWeather(fs.zoneId))
-                {
-                    WeatherState ws = weather->GetWeatherState();
-                    if (ws == WEATHER_STATE_LIGHT_RAIN || ws == WEATHER_STATE_MEDIUM_RAIN
-                        || ws == WEATHER_STATE_HEAVY_RAIN || ws == WEATHER_STATE_BLACKRAIN)
-                        extinguish = true;
-                }
-            }
-        }
-
-        if (extinguish)
-        {
-            fs.lit = false;
-            if (Map* map = sMapMgr->FindMap(fs.mapId, 0))
-                if (GameObject* fire = map->GetGameObject(guid))
-                    ApplyFireVisual(fire, false);
-        }
+        fs.lit = false;
+        if (Map* map = sMapMgr->FindMap(fs.mapId, 0))
+            if (GameObject* fire = map->GetGameObject(guid))
+                ApplyFireVisual(fire, false);
     }
 }
 
@@ -694,10 +796,25 @@ MemberState* ClanMgr::FindMate(MemberState* self) const
     if (_states.size() >= MAX_POPULATION)     // population saturee : inutile de chercher
         return nullptr;
 
+    // Deja marie : on retourne TOUJOURS au meme conjoint, jamais vers quelqu'un d'autre.
+    // S'il est indisponible (pas apparu, cooldown, affame...), on attend : pas d'infidelite.
+    // (Un veuvage remet spouseId a 0 ailleurs, voir RemoveMemberState.)
+    if (self->spouseId)
+    {
+        MemberState* spouse = GetStateByDbId(self->spouseId);
+        if (spouse && spouse->IsSpawned() && spouse->stage == LifeStage::Adult
+            && spouse->reproCooldownDays == 0 && spouse->needs.IsWellFed())
+            return spouse;
+        return nullptr;
+    }
+
+    // Celibataire : on ne courtise que des celibataires.
     for (auto const& other : _states)
     {
         MemberState* mate = other.get();
         if (mate == self || !mate->IsSpawned())
+            continue;
+        if (mate->spouseId)                   // deja engage avec quelqu'un d'autre
             continue;
         if (mate->stage != LifeStage::Adult || mate->reproCooldownDays > 0 || !mate->needs.IsWellFed())
             continue;
@@ -744,6 +861,18 @@ void ClanMgr::Reproduce(MemberState* a, MemberState* b)
         TC_LOG_DEBUG("scripts", "ClanMgr::Reproduce annulee : lien parent-enfant (a={} b={}).", a->dbId, b->dbId);
         return;
     }
+
+    // Le couple est valide : on scelle l'union AVANT les garde-fous de naissance, sinon
+    // deux partenaires ne se marieraient pas quand la population est pleine (ils
+    // repartiraient chacun chercher ailleurs au tour suivant).
+    if (!a->spouseId && !b->spouseId)
+    {
+        a->spouseId = b->dbId;
+        b->spouseId = a->dbId;
+        a->dirty = b->dirty = true;
+        TC_LOG_INFO("scripts", "ClanMgr: union de {} et {}.", a->dbId, b->dbId);
+    }
+
     if (_states.size() >= MAX_POPULATION)
     {
         TC_LOG_DEBUG("scripts", "ClanMgr::Reproduce annulee : population max atteinte.");
@@ -761,6 +890,16 @@ void ClanMgr::Reproduce(MemberState* a, MemberState* b)
             "naissance annulee.", uint32(childClan), uint32(childGender));
         return;
     }
+
+    // Evite la multitude d'enfants identiques : un seul enfant vivant par entry a la fois.
+    // (Les enfants gardent leur entry en grandissant : la place se libere donc quand celui-ci
+    //  devient adulte, ou s'il meurt.)
+    for (auto const& other : _states)
+        if (other->entry == entry && other->stage == LifeStage::Child)
+        {
+            TC_LOG_DEBUG("scripts", "ClanMgr::Reproduce annulee : un enfant d'entry {} existe deja.", entry);
+            return;
+        }
 
     MemberState* mother = (a->gender == Gender::Female) ? a : b;
     MemberState* father = (a->gender == Gender::Male) ? a : b;
@@ -810,6 +949,9 @@ void ClanMgr::SpawnBirth(MemberState* state, WorldObject* summoner)
 
     if (TempSummon* child = summoner->SummonCreature(state->birthEntry, summoner->GetPosition()))
     {
+        // Pour le target
+        summoner->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
+
         state->home = child->GetPosition();
         state->mapId = child->GetMapId();
         if (npc_clan_member* ai = dynamic_cast<npc_clan_member*>(child->AI()))
@@ -864,6 +1006,14 @@ bool ClanMgr::FindAncestorGrave(MemberState const* seeker, Creature* from, Posit
     return true;
 }
 
+GraveyardSlot const* ClanMgr::FindGraveByGuid(ObjectGuid graveGuid) const
+{
+    for (GraveyardSlot const& slot : _graveyardSlots)
+        if (slot.full && slot.graveGuid == graveGuid)
+            return &slot;
+    return nullptr;
+}
+
 // ---------------------------------------------------------------------------
 // Vieillissement
 // ---------------------------------------------------------------------------
@@ -914,6 +1064,7 @@ void ClanMgr::AgingTick()
 
     for (MemberState* state : dying)
     {
+        state->deathCause = DeathCause::OldAge; // grave sur la tombe (lu dans SpawnGravestone)
         if (Creature* c = ResolveLive(state))
             c->KillSelf();
     }
@@ -921,6 +1072,16 @@ void ClanMgr::AgingTick()
 
 void ClanMgr::RemoveMemberState(uint64 dbId)
 {
+    // Veuvage : on libere le conjoint survivant, sinon il resterait marie a un disparu et
+    // ne chercherait plus jamais personne (FindMate ne regarde que le conjoint).
+    for (auto const& state : _states)
+        if (state->spouseId == dbId)
+        {
+            state->spouseId = 0;
+            state->dirty = true;
+            TC_LOG_INFO("scripts", "ClanMgr: {} devient veuf/veuve (conjoint {} disparu).", state->dbId, dbId);
+        }
+
     _byDbId.erase(dbId);
     _pendingBySpawn.erase(dbId);
     ClanDatabase::DeleteMember(dbId, false);
@@ -934,26 +1095,6 @@ void ClanMgr::KillMember(MemberState* state)
     uint64 dbId = state->dbId;
     RemoveMemberState(dbId);
     TC_LOG_INFO("scripts", "ClanMgr: membre {} est en mort definitive.", dbId);
-}
-
-void ClanMgr::TryReproductionRound()
-{
-    if (_states.size() >= MAX_POPULATION)
-        return;
-
-    // Appariement global de secours : un enfant au plus par tour.
-    for (auto const& ptrA : _states)
-    {
-        MemberState* a = ptrA.get();
-        if (!a->IsSpawned() || a->stage != LifeStage::Adult || a->reproCooldownDays > 0 || !a->needs.IsWellFed())
-            continue;
-
-        if (MemberState* b = FindMate(a))
-        {
-            Reproduce(a, b);
-            return;
-        }
-    }
 }
 
 Creature* ClanMgr::ResolveLive(MemberState const* state) const

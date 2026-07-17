@@ -39,6 +39,9 @@ namespace Clan
         void SaveMember(MemberState const& state, bool direct);
         // Supprime un membre (mort definitive).
         void DeleteMember(uint64 dbId, bool direct);
+        // Vide toute la table d'etat (commande .clan reset). Synchrone : le rechargement
+        // qui suit doit lire une table effectivement vide.
+        void WipeMembers();
     }
 }
 

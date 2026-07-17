@@ -511,16 +511,8 @@ class spell_mage_clearcasting : public AuraScript
 		return ValidateSpellInfo({ SPELL_MAGE_HEAT_SHIMMER });
 	}
 
-	bool CheckProc(ProcEventInfo& eventInfo)
+	bool CheckProc(ProcEventInfo& /*eventInfo*/)
 	{
-		SpellInfo const* spellInfo = eventInfo.GetProcSpell()->m_spellInfo;
-
-		//if (spellInfo->Id == SPELL_MAGE_ARCANE_MISSILES)
-		//    return false;
-
-		//if (spellInfo->Id == SPELL_MAGE_ARCANE_MISSILES_DAMAGE)
-		//    return false;
-
 		return roll_chance(GetEffectInfo(EFFECT_1).CalcValue());
 	}
 
@@ -1486,7 +1478,7 @@ inline void ScheduleSplinterSalvo(Unit* caster, Unit* target, uint32 splinter, u
 }
 
 // Ajoute un stack de Sphere de feu-sorcier (448604) et son visuel (jusqu'a 3),
-// utilise a la fois par le proc de Bonne s�rie et le generateur hors combat.
+// utilise a la fois par le proc de Bonne s?rie et le generateur hors combat.
 static void GrantSpellfireSphere(Unit* caster)
 {
 	Aura const* spheres = caster->GetAura(SPELL_MAGE_SPELLFIRE_SPHERE);
@@ -2383,7 +2375,7 @@ class spell_mage_ray_of_frost_aura : public AuraScript
 // 5143 - Arcane Missiles
 class spell_mage_arcane_missiles : public AuraScript
 {
-	void ConsumeClearCasting(AuraEffect const* aurEff, AuraEffectHandleModes /*mode*/)
+	void ConsumeClearCasting(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
 	{
 		Unit* caster = GetCaster();
 		if (Aura* aura = caster->GetAura(SPELL_MAGE_CLEARCASTING_BUFF))

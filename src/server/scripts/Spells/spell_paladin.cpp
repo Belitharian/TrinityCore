@@ -207,7 +207,7 @@ class spell_pal_afterimage : public AuraScript
         }
     }
 
-    void HandleEffectProc(AuraEffect* aurEff, ProcEventInfo& eventInfo)
+    void HandleEffectProc(AuraEffect* aurEff, ProcEventInfo& /*eventInfo*/)
     {
         Unit* target = GetTarget();
         if (!target)

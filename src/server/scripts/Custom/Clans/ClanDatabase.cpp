@@ -67,13 +67,26 @@ namespace Clan
             } while (result->NextRow());
         }
 
-        // Effets RP (aura / sort / emote) joues au debut d'une action.
-        if (QueryResult result = WorldDatabase.Query("SELECT action_type, aura, spell, emote FROM custom_clan_action_fx"))
+        // Effets RP (aura / sort / emote) + equipement affiche pendant une action.
+        if (QueryResult result = WorldDatabase.Query(
+            "SELECT action_type, aura, spell, emote, item, item_slot FROM custom_clan_action_fx"))
         {
             do
             {
                 Field* f = result->Fetch();
-                sClanMgr->AddActionFx(f[0].GetUInt8(), f[1].GetUInt32(), f[2].GetUInt32(), f[3].GetUInt32());
+                sClanMgr->AddActionFx(f[0].GetUInt8(), f[1].GetUInt32(), f[2].GetUInt32(), f[3].GetUInt32(),
+                    f[4].GetUInt32(), f[5].GetUInt8());
+            } while (result->NextRow());
+        }
+
+        // Epitaphes gravees sur les tombes, par cause de mort (voir enum DeathCause).
+        // Jetons substitues a la mort : $name (nom du defunt), $age (age en jours).
+        if (QueryResult result = WorldDatabase.Query("SELECT cause, text FROM custom_clan_epitaph"))
+        {
+            do
+            {
+                Field* f = result->Fetch();
+                sClanMgr->AddEpitaph(f[0].GetUInt8(), f[1].GetString());
             } while (result->NextRow());
         }
 
@@ -87,15 +100,25 @@ namespace Clan
             } while (result->NextRow());
         }
 
-        // Attribution des lits : entry du membre (creature_template) -> lit (spawnId du gameobject).
-        // Par entry (et non par spawnId) pour couvrir aussi les nouveau-nes. Registre en lecture
-        // seule (le serveur ne l'ecrit jamais) : l'attribution survit a la mort / au respawn.
-        if (QueryResult result = WorldDatabase.Query("SELECT entry, bed_spawn_id FROM custom_clan_bed"))
+        // Maisons attribuees a un clan (custom_clan_house).
+        if (QueryResult result = WorldDatabase.Query("SELECT spawn_id, clan_id FROM custom_clan_house"))
         {
             do
             {
                 Field* f = result->Fetch();
-                sClanMgr->AddBedAssignment(f[0].GetUInt32(), f[1].GetUInt64());
+                sClanMgr->AddHouse(f[0].GetUInt64(), f[1].GetUInt8());
+            } while (result->NextRow());
+        }
+
+        // Attribution des lits : un lit appartient a une maison et peut etre attribue a un
+        // membre (par entry). Par entry (et non par spawnId) pour couvrir aussi les nouveau-nes.
+        // Registre en lecture seule : l'attribution survit a la mort / au respawn.
+        if (QueryResult result = WorldDatabase.Query("SELECT bed_spawn_id, house_spawn_id, member_entry FROM custom_clan_bed"))
+        {
+            do
+            {
+                Field* f = result->Fetch();
+                sClanMgr->AddBedAssignment(f[0].GetUInt64(), f[1].GetUInt64(), f[2].GetUInt32());
             } while (result->NextRow());
         }
     }
@@ -104,7 +127,7 @@ namespace Clan
     {
         QueryResult result = WorldDatabase.Query(
             "SELECT db_id, clan_id, gender, stage, age_days, hunger, thirst, energy, repro_urge, "
-            "mother_id, father_id, repro_cd_days, is_birth, birth_entry, map, pos_x, pos_y, pos_z, orientation, display_id, qtable "
+            "mother_id, father_id, repro_cd_days, is_birth, birth_entry, map, pos_x, pos_y, pos_z, orientation, display_id, qtable, spouse_id "
             "FROM custom_clan_member");
         if (!result)
             return;
@@ -131,6 +154,7 @@ namespace Clan
             state->home.Relocate(f[15].GetFloat(), f[16].GetFloat(), f[17].GetFloat(), f[18].GetFloat());
             state->displayId        = f[19].GetUInt32();
             state->mind.Deserialize(f[20].GetString());
+            state->spouseId         = f[21].GetUInt64();
             state->dirty            = false;
 
             // Un nouveau-ne garde son entry (= birthEntry) ; un membre place recupere la
@@ -147,18 +171,25 @@ namespace Clan
         std::string query = Trinity::StringFormat(
             "REPLACE INTO custom_clan_member "
             "(db_id, clan_id, gender, stage, age_days, hunger, thirst, energy, repro_urge, "
-            "mother_id, father_id, repro_cd_days, is_birth, birth_entry, map, pos_x, pos_y, pos_z, orientation, display_id, qtable) "
-            "VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, '{}')",
+            "mother_id, father_id, repro_cd_days, is_birth, birth_entry, map, pos_x, pos_y, pos_z, orientation, display_id, qtable, spouse_id) "
+            "VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, '{}', {})",
             state.dbId, uint32(state.clan), uint32(state.gender), uint32(state.stage), state.ageDays,
             state.needs.hunger, state.needs.thirst, state.needs.energy, state.needs.reproUrge,
             state.motherId, state.fatherId, state.reproCooldownDays, state.isBirth ? 1u : 0u, state.birthEntry,
             state.mapId, state.home.GetPositionX(), state.home.GetPositionY(), state.home.GetPositionZ(),
-            state.home.GetOrientation(), state.displayId, state.mind.Serialize());
+            state.home.GetOrientation(), state.displayId, state.mind.Serialize(), state.spouseId);
 
         if (direct)
             WorldDatabase.DirectExecute(query.c_str());
         else
             WorldDatabase.Execute(query.c_str());
+    }
+
+    void ClanDatabase::WipeMembers()
+    {
+        // DirectExecute (et non Execute) : LoadMembers() est appele juste apres et doit
+        // voir la table vide. Un ordre asynchrone rechargerait les lignes qu'on efface.
+        WorldDatabase.DirectExecute("TRUNCATE TABLE custom_clan_member");
     }
 
     void ClanDatabase::DeleteMember(uint64 dbId, bool direct)

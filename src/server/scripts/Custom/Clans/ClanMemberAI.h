@@ -28,6 +28,7 @@
 #include "ObjectGuid.h"
 #include "ScriptedCreature.h"
 #include "TaskScheduler.h"
+#include <array>
 
 namespace Clan { struct MemberState; }
 
@@ -47,6 +48,10 @@ struct npc_clan_member : public ScriptedAI
 
     // Lie explicitement un etat (utilise par ClanMgr pour les nouveau-nes).
     void BindState(Clan::MemberState* state);
+    // Detache l'IA de son etat AVANT que celui-ci ne soit detruit (.clan reset). Annule
+    // toutes les taches planifiees : plusieurs d'entre elles dereferencent _owner (timer de
+    // cuisson, d'accouplement...), et se declencheraient sur un pointeur mort.
+    void UnbindState();
     Clan::MemberState* GetState() const { return _owner; }
 
     // Reproduction en deux temps : l'initiateur (celui qui a choisi SeekMate) demande
@@ -58,18 +63,26 @@ struct npc_clan_member : public ScriptedAI
     void ReleaseMate();
 
     // Accesseurs de debug (commandes .clan info / .clan hud).
-    bool HasRawFood() const { return _hasRawFood; }
-    bool HasWood() const { return _hasWood; }
-    bool HasStone() const { return _hasStone; }
+    // Quantite portee d'un type de ressource (0 si rien).
+    uint32 GetItemCount(Clan::ItemType type) const;
+    bool HasRawFood() const { return GetItemCount(Clan::ItemType::RawFood) > 0; }
+    bool HasWood() const { return GetItemCount(Clan::ItemType::Wood) > 0; }
+    bool HasStone() const { return GetItemCount(Clan::ItemType::Stone) > 0; }
     Clan::ActionType CurrentAction() const { return _currentAction; }
     Clan::MindState CurrentMindState() const; // = BuildState() (etat courant percu)
+
+    // Debug (.clan force) : interrompt l'action en cours et execute IMMEDIATEMENT l'action
+    // demandee, en court-circuitant la selection Q-learning. Retourne true si l'action a
+    // reellement demarre (prerequis reunis), false sinon. A n'utiliser qu'en test.
+    bool ForceAction(Clan::ActionType action);
 
 private:
     // Reflexe en cours (preempte la boucle de decision).
     enum class Reflex : uint8 { None, Defend, Flee };
 
     void DecisionTick();
-    void BeginAction(Clan::ActionType action);
+    // Demarre une action. Retourne true si elle a pu s'engager, false sinon (prerequis manquants).
+    bool BeginAction(Clan::ActionType action);
     // Calcule la recompense (delta de besoin + bonus de shaping) et apprend.
     void FinishAction(bool reachedGoal, float shapedReward = 0.0f);
     void ResetActionState();
@@ -100,13 +113,18 @@ private:
     bool SetRandomDeceased(Clan::AfflictionType type, float chance);
 
     // Joue l'effet declare dans ActionFx pour l'action courante
-    void PlayCustomEmote();
+    void ResetEquipment();
     void CastCustomSpell();
     void CastCustomSpellTarget();
-    void _CastCustomSpell(Creature* creature) const;
+    void _CastCustomSpell(Creature* creature);
 
     // Spawn une tombe quand le personnage meur
     void SpawnGravestone();
+
+    // --- Inventaire ---
+    bool IsItemFull(Clan::ItemType type) const;                    // capacite atteinte ?
+    bool AddItem(Clan::ItemType type, uint32 count = 1);           // false si plein
+    bool ConsumeItem(Clan::ItemType type, uint32 count = 1);       // false si quantite insuffisante
 
     Clan::MindState BuildState() const;
     static bool IsNightNow();
@@ -120,19 +138,23 @@ private:
     float            _needBefore;      // niveau du besoin vise avant l'action
     ObjectGuid       _actionTarget;    // proie / partenaire / gameobject / agresseur cible
     uint32           _huntTimerMs;     // garde-fou anti-chasse infinie
+    // Vrai des que la proie est abattue (entre le tir et le prelevement sur la depouille).
+    // Une chasse ainsi "engagee" ne doit plus etre gaspillee : le garde-fou de temps
+    // recupere la viande au lieu d'echouer, sinon le PNJ tue une proie sans jamais manger.
+    bool             _huntPreyKilled;
     bool             _busy;            // une action est en cours
     Reflex           _reflex;          // reflexe predateur en cours
 
-    // Inventaire (en memoire, non persiste) pour la chaine cuisson / rallumage.
-    bool _hasRawFood;
-    bool _hasWood;
-    bool _hasStone;
+    // Inventaire (en memoire, non persiste) : quantite portee par type de ressource.
+    // Sert la chaine cuisson / rallumage et permet de faire des reserves.
+    std::array<uint32, uint8(Clan::ItemType::Count)> _inventory;
 
     uint32 _talkCdMs;       // cooldown de parole (anti-spam des phrases)
     uint32 _starveTimerMs;  // accumulateur vers le prochain tick de degats de faim
     uint32 _diseaseTimerMs; // accumulateur vers le prochain tirage de contagion
     uint32 _mateWaitMs;     // temps restant d'attente que le partenaire rejoigne le point de RV
     uint32 _rememberCdMs;   // cooldown avant qu'un nouveau recueillement soit recompense (anti-farm)
+    bool   _equipDirty;     // un equipement d'action est affiche : il faudra le reposer
     bool   _combatLearned;  // le choix defendre/fuir courant est un choix appris (adulte)
 };
 

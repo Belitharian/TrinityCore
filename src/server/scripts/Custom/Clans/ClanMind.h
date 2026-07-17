@@ -37,9 +37,12 @@ namespace Clan
         bool     hasRawFood    = false; // possede de la viande crue (a cuire)
         bool     hasWood       = false; // possede du bois (pour rallumer)
         bool     hasStone      = false; // possede une pierre (pour rallumer)
-        bool     litFireNearby  = false; // un feu allume est a portee
+        bool     litFireNearby  = false; // un feu ALLUME est a portee (on peut y cuire)
         bool     diseased       = false; // porte une aura de maladie
         bool     predatorNearby = false; // un animal sauvage (predateur) est a portee
+        // Un feu ETEINT est a portee. Distinct de litFireNearby : sans ce drapeau, des qu'un
+        // seul feu est allume l'agent ne "voit" plus les autres eteints et ne les rallume pas.
+        bool     unlitFireNearby = false;
 
         // Index compact dans [0, STATE_COUNT[.
         uint16 Index() const
@@ -56,6 +59,7 @@ namespace Clan
             idx = uint16(idx * 2 + (litFireNearby ? 1 : 0));
             idx = uint16(idx * 2 + (diseased ? 1 : 0));
             idx = uint16(idx * 2 + (predatorNearby ? 1 : 0));
+            idx = uint16(idx * 2 + (unlitFireNearby ? 1 : 0));
             return idx;
         }
     };

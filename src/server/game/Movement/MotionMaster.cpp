@@ -656,7 +656,8 @@ void MotionMaster::MovePoint(uint32 id, float x, float y, float z, bool generate
         fadeObject, std::move(scriptResult)));
 }
 
-void MotionMaster::MoveCloserAndStop(uint32 id, Unit* target, float distance)
+void MotionMaster::MoveCloserAndStop(uint32 id, WorldObject* target, float distance,
+    MovementWalkRunSpeedSelectionMode speedSelectionMode /*= MovementWalkRunSpeedSelectionMode::Default*/)
 {
     float distanceToTravel = _owner->GetExactDist2d(target) - distance;
     if (distanceToTravel > 0.0f)
@@ -664,7 +665,7 @@ void MotionMaster::MoveCloserAndStop(uint32 id, Unit* target, float distance)
         float angle = _owner->GetAbsoluteAngle(target);
         float destx = _owner->GetPositionX() + distanceToTravel * std::cos(angle);
         float desty = _owner->GetPositionY() + distanceToTravel * std::sin(angle);
-        MovePoint(id, destx, desty, target->GetPositionZ());
+        MovePoint(id, destx, desty, target->GetPositionZ(), true, {}, {}, speedSelectionMode);
     }
     else
     {

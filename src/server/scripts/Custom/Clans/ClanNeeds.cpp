@@ -22,14 +22,19 @@ namespace Clan
 {
     void Needs::Decay(uint32 diffMs, bool night, bool canReproduce)
     {
-        float seconds = diffMs / 1000.0f;
-        hunger = std::min(NEED_MAX, hunger + HUNGER_RATE * seconds);
-        thirst = std::min(NEED_MAX, thirst + THIRST_RATE * seconds);
-        energy = std::min(NEED_MAX, energy + (night ? ENERGY_RATE_NIGHT : ENERGY_RATE_DAY) * seconds);
+        // Les taux sont exprimes en points par JOUR SIMULE : on convertit le temps reel
+        // ecoule en fraction de jour simule. Les besoins suivent donc la meme echelle de temps
+        // que le vieillissement -- raccourcir la duree d'un jour accelere aussi les besoins.
+        float dayLenSec = float(std::max<uint32>(1, REAL_SECONDS_PER_SIM_DAY));
+        float days = (diffMs / 1000.0f) / dayLenSec;
+
+        hunger = std::min(NEED_MAX, hunger + HUNGER_RATE * days);
+        thirst = std::min(NEED_MAX, thirst + THIRST_RATE * days);
+        energy = std::min(NEED_MAX, energy + (night ? ENERGY_RATE_NIGHT : ENERGY_RATE_DAY) * days);
 
         // Seuls les adultes ressentent le besoin de se reproduire.
         if (canReproduce)
-            reproUrge = std::min(NEED_MAX, reproUrge + REPRO_RATE * seconds);
+            reproUrge = std::min(NEED_MAX, reproUrge + REPRO_RATE * days);
         else
             reproUrge = 0.0f;
     }

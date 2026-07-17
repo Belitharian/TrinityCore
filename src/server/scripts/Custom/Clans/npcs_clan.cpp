@@ -28,13 +28,18 @@
 #include "ClanNeeds.h"
 #include "ChatPackets.h"
 #include "Creature.h"
+#include "GameObject.h"
+#include "GameObjectAI.h"
 #include "GameTime.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "RBAC.h"
 #include "StringFormat.h"
+#include "Util.h"
 #include "WorldSession.h"
 #include "WowTime.h"
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -88,6 +93,45 @@ namespace
             default:               return "Adulte";
         }
     }
+
+    // --- Parsing des arguments des commandes de debug ---------------------------------
+    std::string ToLower(std::string s)
+    {
+        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        return s;
+    }
+
+    // Besoin nomme -> NeedType. Renvoie NeedType::Count si inconnu.
+    NeedType ParseNeed(std::string const& raw)
+    {
+        std::string s = ToLower(raw);
+        if (s == "hunger" || s == "faim")                     return NeedType::Hunger;
+        if (s == "thirst" || s == "soif")                     return NeedType::Thirst;
+        if (s == "energy" || s == "energie" || s == "fatigue") return NeedType::Energy;
+        if (s == "repro")                                     return NeedType::Repro;
+        return NeedType::Count;
+    }
+
+    // Action nommee -> ActionType. Renvoie ActionType::Count si inconnue. Accepte des alias courts.
+    ActionType ParseAction(std::string const& raw)
+    {
+        std::string s = ToLower(raw);
+        if (s == "idle")                          return ActionType::Idle;
+        if (s == "wander" || s == "errer")        return ActionType::Wander;
+        if (s == "hunt" || s == "chasser")        return ActionType::Hunt;
+        if (s == "drinkriver" || s == "river" || s == "riviere") return ActionType::DrinkRiver;
+        if (s == "drinkwell" || s == "well" || s == "puits")     return ActionType::DrinkWell;
+        if (s == "sleep" || s == "dormir")        return ActionType::Sleep;
+        if (s == "seekmate" || s == "mate" || s == "repro") return ActionType::SeekMate;
+        if (s == "gatherwood" || s == "wood" || s == "bois")     return ActionType::GatherWood;
+        if (s == "minerock" || s == "rock" || s == "roche")      return ActionType::MineRock;
+        if (s == "lightfire" || s == "fire" || s == "feu")       return ActionType::LightFire;
+        if (s == "cook" || s == "cuire")          return ActionType::Cook;
+        if (s == "seekdoctor" || s == "doctor" || s == "medecin") return ActionType::SeekDoctor;
+        if (s == "huntpredator" || s == "predator" || s == "predateur") return ActionType::HuntPredator;
+        if (s == "remember" || s == "souvenir")   return ActionType::Remember;
+        return ActionType::Count;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +156,7 @@ namespace ClanMonitor
     uint32 g_timer = 0;
 
     // Active/desactive un suivi (chat / addon PNJ / monde). Retourne true si active.
-    bool Toggle(Player* player, Creature* creature, WatchKind kind)
+    bool static Toggle(Player* player, Creature* creature, WatchKind kind)
     {
         ObjectGuid pg = player->GetGUID();
         ObjectGuid cg = creature ? creature->GetGUID() : ObjectGuid::Empty;
@@ -129,40 +173,53 @@ namespace ClanMonitor
     }
 
     // Ligne de chat lisible (mode .clan monitor).
-    void SendLine(Player* player, npc_clan_member* ai)
+    void static SendLine(Player* player, npc_clan_member* ai)
     {
         MemberState const* s = ai->GetState();
         MindState cur = ai->CurrentMindState();
         ActionType best = s->mind.BestAction(cur.Index());
         ChatHandler(player->GetSession()).PSendSysMessage(
-            "|cff88ccff[suivi]|r %s%s %s | F%.0f S%.0f E%.0f R%.0f | inv r/b/p:%s/%s/%s feu:%s | eps%.2f | ideal:%s",
+            "|cff88ccff[suivi]|r %s%s %s | F%.0f S%.0f E%.0f R%.0f | inv r/b/p:%u/%u/%u feu:%s | eps%.2f | ideal:%s",
             ClanName(s->clan), GenderName(s->gender), StageName(s->stage),
             s->needs.hunger, s->needs.thirst, s->needs.energy, s->needs.reproUrge,
-            ai->HasRawFood() ? "o" : "n", ai->HasWood() ? "o" : "n", ai->HasStone() ? "o" : "n",
+            ai->GetItemCount(ItemType::RawFood), ai->GetItemCount(ItemType::Wood), ai->GetItemCount(ItemType::Stone),
             cur.litFireNearby ? "o" : "n", s->mind.GetEpsilon(), ActionName(best));
     }
 
     // Message addon "k=v;..." parse par l'addon ClanHUD (mode .clan hud / .clan hudall).
     // asTable = true -> prefixe "tbl=1;" pour que l'addon route la donnee vers le TABLEAU
     // global (flux "tout suivre") au lieu d'une fenetre individuelle.
-    void SendAddon(Player* player, Creature* creature, npc_clan_member* ai, bool asTable = false)
+    void static SendAddon(Player* player, Creature* creature, npc_clan_member* ai, bool asTable = false)
     {
         MemberState const* s = ai->GetState();
         MindState cur = ai->CurrentMindState();
         ActionType best = s->mind.BestAction(cur.Index());
 
+        // Conjoint : le nom vit sur la creature, pas dans MemberState. S'il n'est pas
+        // apparu (hors de portee, pas encore spawn), on sait qu'il est marie sans plus.
+        std::string spouseName = "-";
+        if (s->spouseId)
+        {
+            spouseName = "?";
+            if (MemberState const* sp = sClanMgr->GetStateByDbId(s->spouseId))
+                if (Creature* spouse = ObjectAccessor::GetCreature(*creature, sp->liveGuid))
+                    spouseName = spouse->GetName();
+        }
+
         // StringFormat est en style fmt ({}), contrairement a PSendSysMessage.
         // id = identifiant du PNJ (compteur de GUID) : cle de fenetre + ciblage (.clan target).
         // hp = pourcentage de vie. dis = masque d'affliction (bit0=maladie, bit1=poison, bit2=saignement).
+        // raw/wo/sto = QUANTITES portees (inventaire), cap = capacite max par type.
         std::string payload = Trinity::StringFormat(
             "{}id={};n={};cl={};ge={};st={};ag={};hp={:.0f};hu={:.0f};th={:.0f};en={:.0f};re={:.0f};"
-            "raw={};wo={};sto={};fi={};dis={};eps={:.2f};act={};best={}",
+            "raw={};wo={};sto={};cap={};fi={};dis={};eps={:.2f};act={};best={};sp={}",
             asTable ? "tbl=1;" : "",
             creature->GetGUID().GetCounter(), creature->GetName(), ClanName(s->clan), GenderName(s->gender), StageName(s->stage),
             s->ageDays, creature->GetHealthPct(), s->needs.hunger, s->needs.thirst, s->needs.energy, s->needs.reproUrge,
-            ai->HasRawFood() ? 1 : 0, ai->HasWood() ? 1 : 0, ai->HasStone() ? 1 : 0,
+            ai->GetItemCount(ItemType::RawFood), ai->GetItemCount(ItemType::Wood), ai->GetItemCount(ItemType::Stone),
+            INVENTORY_MAX_PER_ITEM,
             cur.litFireNearby ? 1 : 0, sClanMgr->GetAfflictionMask(creature),
-            s->mind.GetEpsilon(), ActionName(ai->CurrentAction()), ActionName(best));
+            s->mind.GetEpsilon(), ActionName(ai->CurrentAction()), ActionName(best), spouseName);
 
         WorldPackets::Chat::Chat packet;
         packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, creature, player, payload, 0, "", DEFAULT_LOCALE, ADDON_PREFIX);
@@ -170,7 +227,7 @@ namespace ClanMonitor
     }
 
     // Message addon de l'etat du monde (fenetre globale de l'addon).
-    void SendWorld(Player* player)
+    void static SendWorld(Player* player)
     {
         Clan::WorldSummary w = sClanMgr->GetWorldSummary();
 
@@ -191,8 +248,24 @@ namespace ClanMonitor
         player->SendDirectMessage(packet.Write());
     }
 
+    // Envoie l'epitaphe a l'addon, qui l'affiche dans SA fenetre (une stele dediee).
+    // On n'utilise plus le gossip : son apparence est entierement cote client (aucune
+    // texture ni couleur dans SMSG_GOSSIP_MESSAGE), impossible d'en faire une vraie stele.
+    void static SendGraveEpitaph(Player* player, std::string const& name, std::string const& epitaph)
+    {
+        // Le payload est decoupe sur ';' : on neutralise ceux du texte pour ne pas
+        // tronquer l'epitaphe cote addon.
+        std::string safe = epitaph;
+        StringReplaceAll(&safe, ";", ",");
+
+        WorldPackets::Chat::Chat packet;
+        packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, player, player,
+            Trinity::StringFormat("ep={};epN={}", safe, name), 0, "", DEFAULT_LOCALE, ADDON_PREFIX);
+        player->SendDirectMessage(packet.Write());
+    }
+
     // Appele chaque tick ; emet une mise a jour par seconde et nettoie les suivis invalides.
-    void Update(uint32 diff)
+    void static Update(uint32 diff)
     {
         if (g_watchers.empty())
             return;
@@ -279,6 +352,33 @@ public:
     }
 };
 
+// ---------------------------------------------------------------------------
+// Pierre tombale : un clic affiche l'epitaphe (nom du defunt + cause de la mort).
+//
+// Le nom d'un GameObject ne peut PAS varier par instance : le client interroge le serveur
+// par entry et recoit le gameobject_template (donnee statique, mise en cache).
+//
+// On n'ouvre PAS de gossip : son apparence (fond, couleurs, police) est entierement cote
+// client et non pilotable depuis le serveur. L'epitaphe part donc a l'addon, qui l'affiche
+// dans sa propre stele. Sans l'addon, cliquer une tombe ne fait rien.
+// ---------------------------------------------------------------------------
+struct go_clan_gravestone : public GameObjectAI
+{
+    explicit go_clan_gravestone(GameObject* go) : GameObjectAI(go) { }
+
+    bool OnGossipHello(Player* player) override
+    {
+        Clan::GraveyardSlot const* grave = sClanMgr->FindGraveByGuid(me->GetGUID());
+        if (!grave)
+            return false; // tombe inconnue (ex. serveur redemarre) : comportement par defaut
+
+        // L'epitaphe vient de custom_clan_epitaph : elle a ete resolue (jetons substitues)
+        // au moment de la mort et figee sur l'emplacement.
+        ClanMonitor::SendGraveEpitaph(player, grave->deceasedName, grave->epitaph);
+        return true; // true = on a gere le clic : pas de gossip par defaut
+    }
+};
+
 // --- Commande de debug : .clan info (sur une creature selectionnee) ---
 class clan_commandscript : public CommandScript
 {
@@ -294,7 +394,14 @@ public:
             { "hud",     HandleClanHudCommand,     rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
             { "hudall",  HandleClanHudAllCommand,  rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
             { "world",   HandleClanWorldCommand,   rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
-            { "target",  HandleClanTargetCommand,  rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
+            { "reload",  HandleClanReloadCommand,  rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::Yes },
+            { "reset",   HandleClanResetCommand,   rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::Yes },
+            // Commandes de debug : mise en scene d'un comportement pour le tester.
+            { "need",    HandleClanNeedCommand,    rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
+            { "force",   HandleClanForceCommand,   rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
+            { "ready",   HandleClanReadyCommand,   rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
+            { "disease", HandleClanDiseaseCommand, rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
+            { "cure",    HandleClanCureCommand,    rbac::RBAC_PERM_COMMAND_NPC_INFO, Console::No },
         };
         static ChatCommandTable commandTable =
         {
@@ -326,15 +433,19 @@ public:
         handler->PSendSysMessage("|cff00ff00[Clan]|r dbId %s | clan %s | genre %s | etape %s | age %uj | cd repro %uj",
             std::to_string(s->dbId).c_str(), ClanName(s->clan), GenderName(s->gender), StageName(s->stage),
             s->ageDays, s->reproCooldownDays);
+        handler->PSendSysMessage("Maison %s | Lit %s",
+            s->houseSpawnId ? std::to_string(s->houseSpawnId).c_str() : "aucune",
+            s->bedSpawnId   ? std::to_string(s->bedSpawnId).c_str()   : "aucun");
         handler->PSendSysMessage("Besoins -> Faim %.0f | Soif %.0f | Fatigue %.0f | Repro %.0f",
             s->needs.hunger, s->needs.thirst, s->needs.energy, s->needs.reproUrge);
         handler->PSendSysMessage("Apprentissage -> epsilon %.3f (bas = exploite ce qu'il a appris)", s->mind.GetEpsilon());
 
-        // Inventaire courant (chaine cuisson / rallumage).
+        // Inventaire courant (chaine cuisson / rallumage) : quantites portees / capacite.
         MindState cur = ai->CurrentMindState();
-        handler->PSendSysMessage("Inventaire -> viande crue: %s | bois: %s | pierre: %s | feu allume proche: %s",
-            ai->HasRawFood() ? "oui" : "non", ai->HasWood() ? "oui" : "non",
-            ai->HasStone() ? "oui" : "non", cur.litFireNearby ? "oui" : "non");
+        handler->PSendSysMessage("Inventaire (max %u) -> viande crue: %u | bois: %u | pierre: %u | feu allume proche: %s",
+            INVENTORY_MAX_PER_ITEM,
+            ai->GetItemCount(ItemType::RawFood), ai->GetItemCount(ItemType::Wood),
+            ai->GetItemCount(ItemType::Stone), cur.litFireNearby ? "oui" : "non");
 
         // Meilleure action apprise pour l'etat courant (preuve d'apprentissage).
         uint16 idx = cur.Index();
@@ -425,37 +536,160 @@ public:
         return true;
     }
 
-    // .clan target <counter> : cible le membre dont le GUID a ce compteur (appele par l'addon).
-    static bool HandleClanTargetCommand(ChatHandler* handler, uint64 counter)
+    // .clan reload : relit les tables declaratives (phrases, fx/items, epitaphes, ressources,
+    // gabarits, modeles, maladies, lits). N'affecte NI les besoins, NI les cerveaux appris.
+    static bool HandleClanReloadCommand(ChatHandler* handler)
     {
-        Player* player = handler->GetSession() ? handler->GetSession()->GetPlayer() : nullptr;
-        if (!player)
+        sClanMgr->ReloadRegistries();
+        handler->SendSysMessage("Registres Clans recharges (phrases, fx/items, epitaphes, ressources, gabarits, lits).");
+        return true;
+    }
+
+    // .clan reset : remet la simulation a zero (vide custom_clan_member) sans redemarrer.
+    // Les nouveau-nes disparaissent, les membres places repartent vierges (cerveau seede).
+    static bool HandleClanResetCommand(ChatHandler* handler)
+    {
+        sClanMgr->ResetAll();
+        handler->PSendSysMessage("Simulation Clans remise a zero : %u membre(s) en jeu.",
+            uint32(sClanMgr->GetMemberCount()));
+        return true;
+    }
+
+    // Helper commun aux commandes de debug : recupere le membre de clan selectionne.
+    static npc_clan_member* GetSelectedMember(ChatHandler* handler)
+    {
+        Creature* target = handler->getSelectedCreature();
+        if (!target)
         {
-            handler->SendSysMessage("Commande utilisable uniquement en jeu.");
+            handler->SendSysMessage("Selectionnez une creature de clan.");
+            handler->SetSentErrorMessage(true);
+            return nullptr;
+        }
+
+        npc_clan_member* ai = dynamic_cast<npc_clan_member*>(target->AI());
+        if (!ai || !ai->GetState())
+        {
+            handler->SendSysMessage("Cette creature n'est pas un membre de clan.");
+            handler->SetSentErrorMessage(true);
+            return nullptr;
+        }
+        return ai;
+    }
+
+    // .clan need <hunger|thirst|energy|repro> <0-100> : force la valeur d'un besoin.
+    // Sert a declencher le comportement lie (faim haute -> chaine cuisson, repro haute -> SeekMate...).
+    static bool HandleClanNeedCommand(ChatHandler* handler, std::string const& need, uint32 value)
+    {
+        npc_clan_member* ai = GetSelectedMember(handler);
+        if (!ai)
+            return false;
+
+        NeedType type = ParseNeed(need);
+        if (type == NeedType::Count)
+        {
+            handler->SendSysMessage("Besoin inconnu. Utilisez : hunger | thirst | energy | repro.");
             handler->SetSentErrorMessage(true);
             return false;
         }
 
-        for (ObjectGuid guid : sClanMgr->GetLiveMemberGuids())
+        float v = float(std::min<uint32>(value, 100));
+        MemberState* s = ai->GetState();
+        switch (type)
         {
-            if (guid.GetCounter() != counter)
-                continue;
+            case NeedType::Hunger: s->needs.hunger    = v; break;
+            case NeedType::Thirst: s->needs.thirst    = v; break;
+            case NeedType::Energy: s->needs.energy    = v; break;
+            case NeedType::Repro:  s->needs.reproUrge = v; break;
+            default: break;
+        }
+        s->dirty = true;
+        handler->PSendSysMessage("%s regle a %.0f pour ce membre.", NeedName(type), v);
+        return true;
+    }
 
-            // Le PNJ doit etre visible du client pour etre reellement cible.
-            if (ObjectAccessor::GetCreature(*player, guid))
-            {
-                player->SetSelection(guid);
-                return true;
-            }
+    // .clan force <action> : execute immediatement une action precise (court-circuite la
+    // selection Q-learning). Isole la mecanique d'un comportement pour le tester a la demande.
+    static bool HandleClanForceCommand(ChatHandler* handler, std::string const& action)
+    {
+        npc_clan_member* ai = GetSelectedMember(handler);
+        if (!ai)
+            return false;
 
-            handler->SendSysMessage("Ce membre est hors de portee (trop loin pour etre cible).");
+        ActionType act = ParseAction(action);
+        if (act == ActionType::Count)
+        {
+            handler->SendSysMessage("Action inconnue. Ex : hunt, cook, sleep, seekmate, lightfire, "
+                "gatherwood, minerock, drinkriver, drinkwell, seekdoctor, huntpredator, remember, wander.");
             handler->SetSentErrorMessage(true);
             return false;
         }
 
-        handler->SendSysMessage("Membre introuvable.");
-        handler->SetSentErrorMessage(true);
-        return false;
+        bool ok = ai->ForceAction(act);
+        handler->PSendSysMessage("Action forcee '%s' : %s.", ActionName(act),
+            ok ? "demarree" : "n'a PAS pu demarrer (prerequis manquants : ressource absente, pas de maison, etc.)");
+        return true;
+    }
+
+    // .clan ready : rend le membre selectionne pret a la reproduction (besoins vitaux a 0,
+    // envie de repro elevee, cooldown remis a 0). Prepare un test de repro en un coup.
+    static bool HandleClanReadyCommand(ChatHandler* handler)
+    {
+        npc_clan_member* ai = GetSelectedMember(handler);
+        if (!ai)
+            return false;
+
+        MemberState* s = ai->GetState();
+        s->needs.hunger    = 0.0f;
+        s->needs.thirst    = 0.0f;
+        s->needs.energy    = 0.0f;
+        s->needs.reproUrge = 90.0f;
+        s->reproCooldownDays = 0;
+        s->dirty = true;
+
+        // Avertit des prerequis manquants qui empecheraient malgre tout la reproduction.
+        std::string warn;
+        if (s->stage != LifeStage::Adult)
+            warn += " [PAS adulte -> ne se reproduira pas]";
+        if (!s->houseSpawnId)
+            warn += " [AUCUNE maison attribuee -> SeekMate echouera]";
+
+        handler->PSendSysMessage("Membre pret a la reproduction (besoins vitaux 0, envie repro 90, cooldown 0).%s",
+            warn.c_str());
+        return true;
+    }
+
+    // .clan disease : applique une affliction aleatoire (teste l'apprentissage de SeekDoctor).
+    static bool HandleClanDiseaseCommand(ChatHandler* handler)
+    {
+        npc_clan_member* ai = GetSelectedMember(handler);
+        if (!ai)
+            return false;
+
+        Creature* target = handler->getSelectedCreature();
+        uint32 aura = sClanMgr->GetRandomDisease(AfflictionType::Disease);
+        if (!aura)
+        {
+            handler->SendSysMessage("Aucune affliction declaree (custom_clan_disease).");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        target->AddAura(aura, target);
+        handler->PSendSysMessage("Affliction %u appliquee (le membre devrait apprendre a aller voir le medecin).", aura);
+        return true;
+    }
+
+    // .clan cure : retire toutes les afflictions du membre selectionne.
+    static bool HandleClanCureCommand(ChatHandler* handler)
+    {
+        npc_clan_member* ai = GetSelectedMember(handler);
+        if (!ai)
+            return false;
+
+        Creature* target = handler->getSelectedCreature();
+        sClanMgr->CureDiseases(target);
+        handler->SendSysMessage("Afflictions retirees.");
+        return true;
     }
 
     // .clan world : active/desactive l'envoi de l'etat du monde a l'addon (fenetre globale).
@@ -478,6 +712,7 @@ public:
 void AddSC_npcs_clan()
 {
     RegisterCreatureAI(npc_clan_member);
+    RegisterGameObjectAI(go_clan_gravestone); // ScriptName = "go_clan_gravestone"
     new ClanWorldScript();
     new clan_commandscript();
 }

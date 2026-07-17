@@ -1,16 +1,20 @@
 --[[
-    Clan HUD — supervision live des PNJ de clan + etat du monde.
+    Clan HUD — fenetre unique de supervision du module Clans.
+
+    Mise en page :
+      - en haut : etat du monde (heure, jour/nuit, population, malades) ;
+      - en dessous : UNE COLONNE PAR PNJ, toutes visibles d'un coup. La zone defile
+        HORIZONTALEMENT (molette) pour que la fenetre reste de largeur raisonnable.
 
     Cote serveur (GM) :
-      - .clan world  : ouvre/alimente la fenetre MONDE (etat global, live).
-      - .clan hud    : ouvre une fenetre pour le PNJ CIBLE (une par PNJ).
+      - .clan world  : alimente le bandeau "monde" (1x/s).
+      - .clan hudall : alimente les colonnes de TOUS les PNJ (1x/s).
+      - .clan hud    : flux d'un seul PNJ (la cible) ; alimente aussi cette fenetre.
       - .clan monitor: flux texte dans le chat (sans addon).
 
-    La fenetre MONDE a deux boutons :
-      - "+ HUD (cible)" : lance .clan hud sur ta cible actuelle.
-      - "Live monde"    : (re)active le flux .clan world.
-
-    Toutes les fenetres sont deplacables ; leurs positions sont sauvegardees.
+    Commandes addon :
+      /clanhud        : affiche/masque la fenetre.
+      /clanhud debug  : trace les clics du bouton "Cibler" (diagnostic du ciblage).
 ]]
 
 local ADDON_PREFIX = "CLANHUD"
@@ -18,8 +22,17 @@ local ADDON_PREFIX = "CLANHUD"
 ClanHUDDB = ClanHUDDB or {}
 ClanHUDDB.pos = ClanHUDDB.pos or {}
 
-local memberWindows = {}
-local newCount = 0
+-- Geometrie des colonnes.
+local COL_W        = 200  -- largeur d'une colonne (un PNJ)
+local COL_H        = 258  -- hauteur d'une colonne
+local VISIBLE_COLS = 4    -- colonnes visibles sans defiler
+local SCROLL_W     = COL_W * VISIBLE_COLS
+
+-- Cache des PNJ recus : id -> dernier paquet de donnees (avec _last = horodatage).
+local members = {}
+local main            -- la fenetre unique
+local columnsChild    -- conteneur defilant des colonnes
+local columns  = {}   -- index -> frame de colonne (recyclee)
 
 -- ---------------------------------------------------------------------------
 -- Utilitaires
@@ -50,6 +63,136 @@ local function afflictionText(mask)
     return table.concat(parts, ", ")
 end
 
+-- Couleur de la barre de vie : vert (100%) -> rouge (0%).
+local function hpColor(pct)
+    pct = tonumber(pct) or 0
+    return math.min(1, 2 - pct / 50), math.min(1, pct / 50), 0.1
+end
+
+-- Configure un bouton SECURISE pour cibler un PNJ par son nom exact.
+-- Meme approche que RareScanner : "/cleartarget" puis "/targetexact <nom>". Le ciblage est
+-- une action protegee : il faut un bouton securise + un clic materiel. Les attributs
+-- securises ne peuvent pas etre modifies en combat.
+local function setTargetMacro(btn, name)
+    if not btn or not name or name == "" then return end
+    if InCombatLockdown() then return end
+    if btn.clanTargetName == name then return end
+    btn:SetAttribute("macrotext", "/cleartarget\n/targetexact " .. name)
+    btn.clanTargetName = name
+end
+
+-- Bouton "Cibler" : on n'herite QUE de SecureActionButtonTemplate et on l'habille a la main.
+-- Combiner deux templates peut ecraser le OnClick securise, auquel cas la macro n'est jamais
+-- executee et le ciblage ne fonctionne pas.
+local function createTargetButton(parent, name)
+    local btn = CreateFrame("Button", name, parent, "SecureActionButtonTemplate")
+    btn:RegisterForClicks("AnyUp", "AnyDown")
+    btn:SetAttribute("type", "macro")
+
+    local bg = btn:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.25, 0.25, 0.32, 0.95)
+    local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetColorTexture(0.45, 0.45, 0.60, 0.9)
+
+    btn.label = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    btn.label:SetPoint("CENTER")
+    btn.label:SetText("Cibler")
+
+    -- Diagnostic (/clanhud debug) : PreClick s'execute hors du code securise, il ne casse
+    -- donc rien et permet de verifier que le clic arrive et quelle macro est posee.
+    btn:SetScript("PreClick", function(self)
+        if ClanHUDDB.debug and DEFAULT_CHAT_FRAME then
+            DEFAULT_CHAT_FRAME:AddMessage(string.format(
+                "|cff88ccff[Clan HUD]|r clic Cibler | nom=%s | macro=%s",
+                tostring(self.clanTargetName), tostring(self:GetAttribute("macrotext"))))
+        end
+    end)
+
+    return btn
+end
+
+-- ---------------------------------------------------------------------------
+-- Stele : fenetre d'epitaphe (affichee au clic sur une tombe)
+-- ---------------------------------------------------------------------------
+-- Fenetre 100% custom, et non un habillage du GossipFrame : l'apparence du gossip
+-- (fond, police, couleur du texte) vit entierement cote client et n'est pas pilotable.
+-- Le serveur se contente d'envoyer le texte ("ep=..."), on fait le reste ici.
+local epitaphWindow
+
+local function createEpitaphWindow()
+    -- BackdropTemplate : donne le tuilage du fond ET la bordure en une seule declaration
+    -- (bien plus propre que d'empiler des textures a la main).
+    local f = CreateFrame("Frame", "ClanHUDEpitaph", UIParent, "BackdropTemplate")
+    f:SetSize(380, 285)
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
+    f:SetFrameStrata("DIALOG")
+    f:SetBackdrop({
+        bgFile   = "Interface\\FrameGeneral\\UI-Background-Marble",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 64, edgeSize = 16,
+        insets = { left = 5, right = 5, top = 5, bottom = 5 },
+    })
+    f:SetBackdropBorderColor(0.55, 0.5, 0.4, 1)
+
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+
+    -- Fermeture par Echap, comme n'importe quelle fenetre du jeu.
+    tinsert(UISpecialFrames, "ClanHUDEpitaph")
+
+    local title = f:CreateFontString(nil, "OVERLAY")
+    title:SetFont("Fonts\\MORPHEUS.TTF", 22, "")
+    title:SetPoint("TOP", 0, -18)
+    title:SetTextColor(0.85, 0.78, 0.6)
+    title:SetText("Épitaphe")
+
+    local rule = f:CreateTexture(nil, "ARTWORK")
+    rule:SetColorTexture(0.55, 0.5, 0.4, 0.6)
+    rule:SetHeight(1)
+    rule:SetPoint("TOPLEFT", 40, -48)
+    rule:SetPoint("TOPRIGHT", -40, -48)
+
+    -- Nom du defunt, sous le titre : sa propre FontString (sinon l'epitaphe l'ecraserait).
+    f.name = f:CreateFontString(nil, "OVERLAY")
+    f.name:SetFont("Fonts\\MORPHEUS.TTF", 19, "")
+    f.name:SetPoint("TOP", 0, -58)
+    f.name:SetTextColor(1, 0.95, 0.8)
+    f.name:SetJustifyH("CENTER")
+
+    -- MORPHEUS : la police "livre/parchemin" du jeu, parfaite pour une inscription.
+    -- Le texte porte ses propres codes couleur (|cff...) definis en base, par cause de mort.
+    f.text = f:CreateFontString(nil, "OVERLAY")
+    f.text:SetFont("Fonts\\MORPHEUS.TTF", 17, "")
+    f.text:SetPoint("TOPLEFT", 28, -92)
+    f.text:SetPoint("BOTTOMRIGHT", -28, 52)
+    f.text:SetJustifyH("CENTER")
+    f.text:SetJustifyV("MIDDLE")
+    f.text:SetSpacing(4)
+
+    local close = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    close:SetSize(110, 22)
+    close:SetPoint("BOTTOM", 0, 16)
+    close:SetText("Fermer")
+    close:SetScript("OnClick", function() f:Hide() end)
+
+    f:Hide()
+    epitaphWindow = f
+    return f
+end
+
+local function showEpitaph(text, name)
+    if not epitaphWindow then createEpitaphWindow() end
+    epitaphWindow.name:SetText(name or "")
+    epitaphWindow.text:SetText(text or "")
+    epitaphWindow:Show()
+    epitaphWindow:Raise()
+end
+
 local function saveWindowPos(id, frame)
     local point, _, relPoint, x, y = frame:GetPoint()
     ClanHUDDB.pos[id] = { point = point, relPoint = relPoint, x = x, y = y }
@@ -74,227 +217,24 @@ end
 local function backdrop(frame, r, g, b)
     local bg = frame:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
-    bg:SetColorTexture(0, 0, 0, 0.7)
+    bg:SetColorTexture(0, 0, 0, 0.85)
     local border = frame:CreateTexture(nil, "BACKGROUND", nil, -1)
     border:SetPoint("TOPLEFT", -1, 1)
     border:SetPoint("BOTTOMRIGHT", 1, -1)
     border:SetColorTexture(r, g, b, 0.85)
 end
 
--- ---------------------------------------------------------------------------
--- Tableau global (flux "tout suivre" : une ligne par membre)
--- ---------------------------------------------------------------------------
-local TABLE_WIDTH = 600
-local ROW_H       = 16
-local HEADER_Y    = -34
-
-local tableWindow
-local tableRows = {}     -- id -> ligne
-local tableRowList = {}  -- ordre d'affichage
-
--- Couleur de vie : vert (100%) -> rouge (0%), en hexa "rrggbb".
-local function hpColorHex(pct)
-    pct = tonumber(pct) or 0
-    local r = math.min(1, 2 - pct / 50)
-    local g = math.min(1, pct / 50)
-    return string.format("%02x%02x%02x", math.floor(r * 255), math.floor(g * 255), 26)
-end
-
-local function tableCol(parent, x, w, justify)
-    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    fs:SetPoint("LEFT", parent, "LEFT", x, 0)
-    fs:SetWidth(w)
-    fs:SetJustifyH(justify or "LEFT")
-    return fs
-end
-
-local function createTableWindow()
-    local f = CreateFrame("Frame", "ClanHUDTable", UIParent)
-    f:SetSize(TABLE_WIDTH, 90)
-    if not ClanHUDDB.pos["table"] then
-        f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-    end
-    makeDraggable("table", f)
-    backdrop(f, 0.4, 0.6, 0.35)
-
-    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOP", 0, -8)
-    title:SetText("|cff99ff99Clan — Tableau|r")
-
-    local function header(x, w, text, justify)
-        local fs = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        fs:SetPoint("TOPLEFT", x, HEADER_Y)
-        fs:SetWidth(w)
-        fs:SetJustifyH(justify or "LEFT")
-        fs:SetText(text)
-    end
-    header(10, 120, "Nom")
-    header(135, 40, "Vie",    "CENTER")
-    header(180, 42, "Faim",   "CENTER")
-    header(225, 42, "Soif",   "CENTER")
-    header(270, 46, "Fatig.", "CENTER")
-    header(320, 42, "Repro",  "CENTER")
-    header(370, 120, "Action")
-
-    f.emptyLine = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    f.emptyLine:SetPoint("TOPLEFT", 12, HEADER_Y - ROW_H)
-    f.emptyLine:SetText("En attente... (bouton \"Tableau\" ou .clan hudall)")
-
-    tableWindow = f
-    return f
-end
-
-local function layoutTable()
-    local y = HEADER_Y - ROW_H
-    local shown = 0
-    for _, row in ipairs(tableRowList) do
-        if row:IsShown() then
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", tableWindow, "TOPLEFT", 8, y)
-            y = y - ROW_H
-            shown = shown + 1
-        end
-    end
-    tableWindow.emptyLine:SetShown(shown == 0)
-    tableWindow:SetHeight(math.max(90, -HEADER_Y + ROW_H + shown * ROW_H + 12))
-end
-
-local function getTableRow(id)
-    if tableRows[id] then return tableRows[id] end
-
-    local row = CreateFrame("Frame", nil, tableWindow)
-    row:SetSize(TABLE_WIDTH - 16, ROW_H)
-    row.nameFS = tableCol(row, 10, 120)
-    row.hpFS   = tableCol(row, 135, 40, "CENTER")
-    row.huFS   = tableCol(row, 180, 42, "CENTER")
-    row.thFS   = tableCol(row, 225, 42, "CENTER")
-    row.enFS   = tableCol(row, 270, 46, "CENTER")
-    row.reFS   = tableCol(row, 320, 42, "CENTER")
-    row.actFS  = tableCol(row, 370, 120)
-
-    row.id = id
-    row.btn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    row.btn:SetSize(66, 14)
-    row.btn:SetPoint("LEFT", row, "LEFT", 500, 0)
-    row.btn:SetText("Cibler")
-    row.btn:SetScript("OnClick", function()
-        SendChatMessage(".clan target " .. row.id, "SAY")
-    end)
-
-    tableRows[id] = row
-    table.insert(tableRowList, row)
-    return row
-end
-
-local function updateTableRow(d)
-    if not tableWindow then createTableWindow() end
-    tableWindow:Show()
-
-    local row = getTableRow(d.id)
-    local wasShown = row:IsShown()
-    row.nameFS:SetText(d.n or "?")
-    row.hpFS:SetText(string.format("|cff%s%s%%|r", hpColorHex(d.hp), d.hp or "?"))
-    row.huFS:SetText(d.hu or "?")
-    row.thFS:SetText(d.th or "?")
-    row.enFS:SetText(d.en or "?")
-    row.reFS:SetText(d.re or "?")
-    row.actFS:SetText(d.act or "-")
-    row.lastUpdate = GetTime()
-    row:Show()
-    if not wasShown then layoutTable() end
-end
-
--- Ouvre le tableau et (re)active le flux serveur "tout suivre".
-local function openTable()
-    if not tableWindow then createTableWindow() end
-    tableWindow:Show()
-    SendChatMessage(".clan hudall", "SAY")
-end
-
--- ---------------------------------------------------------------------------
--- Fenetre MONDE (principale)
--- ---------------------------------------------------------------------------
-local world
-local function createWorldWindow()
-    local f = CreateFrame("Frame", "ClanHUDWorld", UIParent)
-    f:SetSize(270, 178)
-    if not ClanHUDDB.pos["world"] then
-        f:SetPoint("TOP", UIParent, "TOP", 0, -120)
-    end
-    makeDraggable("world", f)
-    backdrop(f, 0.85, 0.7, 0.2)
-
-    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOP", 0, -8)
-    title:SetText("|cffffd100Clan — Monde|r")
-
-    f.timeLine = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    f.timeLine:SetPoint("TOP", title, "BOTTOM", 0, -6)
-    f.timeLine:SetText("En attente... (tape .clan world)")
-
-    f.popLine = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    f.popLine:SetPoint("TOPLEFT", 14, -56)
-    f.popLine:SetText("")
-
-    f.sickLine = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    f.sickLine:SetPoint("TOPLEFT", 14, -74)
-    f.sickLine:SetText("")
-
-    -- Bouton : ajouter un HUD depuis la cible.
-    local addBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    addBtn:SetSize(120, 22)
-    addBtn:SetPoint("BOTTOMLEFT", 12, 38)
-    addBtn:SetText("+ HUD (cible)")
-    addBtn:SetScript("OnClick", function()
-        -- Lance la commande serveur sur la cible actuelle.
-        SendChatMessage(".clan hud", "SAY")
-    end)
-
-    -- Bouton : (re)activer le flux monde.
-    local liveBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    liveBtn:SetSize(120, 22)
-    liveBtn:SetPoint("BOTTOMRIGHT", -12, 38)
-    liveBtn:SetText("Live monde")
-    liveBtn:SetScript("OnClick", function()
-        SendChatMessage(".clan world", "SAY")
-    end)
-
-    -- Bouton : ouvrir le tableau global et suivre TOUT le monde.
-    local tableBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    tableBtn:SetSize(246, 22)
-    tableBtn:SetPoint("BOTTOM", 0, 10)
-    tableBtn:SetText("Tableau (tout suivre)")
-    tableBtn:SetScript("OnClick", openTable)
-
-    world = f
-    return f
-end
-
-local function updateWorld(d)
-    if not world then createWorldWindow() end
-    local hour = tonumber(d.hour) or 0
-    local night = (d.night == "1")
-    world.timeLine:SetText(string.format("Heure : %02dh00  —  %s",
-        hour, night and "|cff6699ffNuit|r" or "|cffffd100Jour|r"))
-    world.popLine:SetText(string.format("Population : %s   (adultes %s | enfants %s | anciens %s)",
-        d.pop or "?", d.ad or "?", d.ch or "?", d.el or "?"))
-    world.sickLine:SetText(string.format("Malades : %s", d.sick or "0"))
-    world.frameLastUpdate = GetTime()
-end
-
--- ---------------------------------------------------------------------------
--- Fenetres PNJ (une par membre)
--- ---------------------------------------------------------------------------
-local function CreateBar(parent, labelText, y, r, g, b)
+-- Barre horizontale (vie / besoin) dimensionnee pour tenir dans une colonne.
+local function createBar(parent, labelText, y, r, g, b)
     local label = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    label:SetPoint("TOPLEFT", 12, y)
-    label:SetWidth(60)
+    label:SetPoint("TOPLEFT", 6, y)
+    label:SetWidth(42)
     label:SetJustifyH("LEFT")
     label:SetText(labelText)
 
     local bar = CreateFrame("StatusBar", nil, parent)
-    bar:SetSize(170, 14)
-    bar:SetPoint("TOPLEFT", 78, y)
+    bar:SetSize(138, 13)
+    bar:SetPoint("TOPLEFT", 50, y)
     bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
     bar:SetStatusBarColor(r, g, b)
     bar:SetMinMaxValues(0, 100)
@@ -310,103 +250,217 @@ local function CreateBar(parent, labelText, y, r, g, b)
     return bar, val
 end
 
-local function CreateMemberWindow(id)
-    newCount = newCount + 1
-    local f = CreateFrame("Frame", "ClanHUDMember_" .. id, UIParent)
-    f:SetSize(260, 262)
-    if not ClanHUDDB.pos[id] then
-        f:SetPoint("CENTER", UIParent, "CENTER", (newCount - 1) * 24, -(newCount - 1) * 24)
+-- ---------------------------------------------------------------------------
+-- Colonnes (une par PNJ)
+-- ---------------------------------------------------------------------------
+local function getColumn(i)
+    local col = columns[i]
+    if col then return col end
+
+    col = CreateFrame("Frame", nil, columnsChild)
+    col:SetSize(COL_W, COL_H)
+    col:SetPoint("TOPLEFT", (i - 1) * COL_W, 0)
+
+    -- Filet vertical de separation entre colonnes.
+    local sep = col:CreateTexture(nil, "BACKGROUND")
+    sep:SetPoint("TOPRIGHT", 0, 0)
+    sep:SetPoint("BOTTOMRIGHT", 0, 0)
+    sep:SetWidth(1)
+    sep:SetColorTexture(0.35, 0.35, 0.4, 0.8)
+
+    -- Nom : police standard (pas "Large").
+    col.name = col:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    col.name:SetPoint("TOPLEFT", 6, 0)
+    col.name:SetWidth(188)
+    col.name:SetJustifyH("LEFT")
+
+    col.sub = col:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    col.sub:SetPoint("TOPLEFT", 6, -17)
+    col.sub:SetWidth(188)
+    col.sub:SetJustifyH("LEFT")
+
+    col.barHp,     col.valHp     = createBar(col, "Vie",     -38, 0.20, 0.80, 0.20)
+    col.barHunger, col.valHunger = createBar(col, "Faim",    -60, 0.85, 0.55, 0.20)
+    col.barThirst, col.valThirst = createBar(col, "Soif",    -77, 0.25, 0.55, 0.90)
+    col.barEnergy, col.valEnergy = createBar(col, "Fatigue", -94, 0.60, 0.40, 0.80)
+    col.barRepro,  col.valRepro  = createBar(col, "Repro",  -111, 0.85, 0.45, 0.65)
+
+    local function line(y)
+        local fs = col:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("TOPLEFT", 6, y)
+        fs:SetWidth(188)
+        fs:SetJustifyH("LEFT")
+        return fs
     end
-    makeDraggable(id, f)
-    backdrop(f, 0.3, 0.5, 0.7)
+    col.disLine    = line(-132)
+    col.invLine    = line(-150)
+    col.actLine    = line(-168)
+    col.learnLine  = line(-186)
+    col.spouseLine = line(-204)
 
-    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOP", 0, -8)
-    title:SetText("|cff88ccffClan HUD|r")
+    col.targetBtn = createTargetButton(col, "ClanHUDColTarget_" .. i)
+    col.targetBtn:SetSize(110, 20)
+    col.targetBtn:SetPoint("TOPLEFT", 6, -230)
 
-    local sub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    sub:SetPoint("TOP", title, "BOTTOM", 0, -3)
-    sub:SetText("...")
-
-    local win = { frame = f, sub = sub, lastUpdate = 0 }
-    win.barHunger, win.valHunger = CreateBar(f, "Faim",    -46, 0.85, 0.55, 0.20)
-    win.barThirst, win.valThirst = CreateBar(f, "Soif",    -64, 0.25, 0.55, 0.90)
-    win.barEnergy, win.valEnergy = CreateBar(f, "Fatigue", -82, 0.60, 0.40, 0.80)
-    win.barRepro,  win.valRepro  = CreateBar(f, "Repro",  -100, 0.85, 0.45, 0.65)
-
-    win.disLine = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    win.disLine:SetPoint("TOPLEFT", 12, -124)
-    win.disLine:SetPoint("TOPRIGHT", -12, -124)
-    win.disLine:SetJustifyH("LEFT")
-
-    win.invLine = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    win.invLine:SetPoint("TOPLEFT", 12, -146)
-    win.invLine:SetPoint("TOPRIGHT", -12, -146)
-    win.invLine:SetJustifyH("LEFT")
-
-    win.actLine = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    win.actLine:SetPoint("TOPLEFT", 12, -168)
-    win.actLine:SetPoint("TOPRIGHT", -12, -168)
-    win.actLine:SetJustifyH("LEFT")
-
-    win.learnLine = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    win.learnLine:SetPoint("TOPLEFT", 12, -190)
-    win.learnLine:SetPoint("TOPRIGHT", -12, -190)
-    win.learnLine:SetJustifyH("LEFT")
-
-    -- Bouton "Cibler" : demande au serveur de cibler CE PNJ precisement, par son id
-    -- (compteur de GUID) via ".clan target <id>". Precis meme si les noms se repetent.
-    local targetBtn = CreateFrame("Button", "ClanHUDTarget_" .. id, f, "UIPanelButtonTemplate")
-    targetBtn:SetSize(120, 22)
-    targetBtn:SetPoint("BOTTOM", 0, 10)
-    targetBtn:SetText("Cibler")
-    targetBtn:SetScript("OnClick", function()
-        SendChatMessage(".clan target " .. id, "SAY")
-    end)
-    win.targetBtn = targetBtn
-
-    memberWindows[id] = win
-    return win
+    columns[i] = col
+    return col
 end
 
-local function getMemberWindow(id)
-    return memberWindows[id] or CreateMemberWindow(id)
-end
+local function paintColumn(col, d)
+    col.name:SetText(string.format("|cff88ccff%s|r", d.n or "?"))
+    col.sub:SetText(string.format("clan %s | %s | %s | %sj",
+        d.cl or "?", d.ge or "?", d.st or "?", d.ag or "?"))
 
-local function updateMember(d)
-    -- Premier contact avec cet id : on ouvrira sa fenetre au premier plan (voir plus bas).
-    local isNew = (memberWindows[d.id] == nil)
-    local win = getMemberWindow(d.id)
+    local hp = tonumber(d.hp) or 0
+    col.barHp:SetValue(hp)
+    col.barHp:SetStatusBarColor(hpColor(hp))
+    col.valHp:SetText(string.format("%d%%", hp))
+
     local hu = tonumber(d.hu) or 0
     local th = tonumber(d.th) or 0
     local en = tonumber(d.en) or 0
     local re = tonumber(d.re) or 0
+    col.barHunger:SetValue(hu); col.valHunger:SetText(string.format("%d", hu))
+    col.barThirst:SetValue(th); col.valThirst:SetText(string.format("%d", th))
+    col.barEnergy:SetValue(en); col.valEnergy:SetText(string.format("%d", en))
+    col.barRepro:SetValue(re);  col.valRepro:SetText(string.format("%d", re))
 
-    win.barHunger:SetValue(hu); win.valHunger:SetText(string.format("%d", hu))
-    win.barThirst:SetValue(th); win.valThirst:SetText(string.format("%d", th))
-    win.barEnergy:SetValue(en); win.valEnergy:SetText(string.format("%d", en))
-    win.barRepro:SetValue(re);  win.valRepro:SetText(string.format("%d", re))
+    col.disLine:SetText("Etat : " .. afflictionText(d.dis))
+    col.invLine:SetText(string.format("Sac : V %s/%s  B %s/%s  P %s/%s   Feu %s",
+        d.raw or "0", d.cap or "?", d.wo or "0", d.cap or "?", d.sto or "0", d.cap or "?", yn(d.fi)))
+    col.actLine:SetText(string.format("Action : |cffffffff%s|r", d.act or "-"))
+    col.learnLine:SetText(string.format("Ideal : |cff88ff88%s|r (e%s)", d.best or "-", d.eps or "-"))
+    -- "-" = celibataire ; "?" = marie mais le conjoint n'est pas apparu cote client.
+    col.spouseLine:SetText(string.format("Conjoint : |cffff99cc%s|r", d.sp or "-"))
 
-    win.sub:SetText(string.format("|cffffd100%s|r  —  clan %s | %s | %s | %sj | Vie %s%%",
-        d.n or "?", d.cl or "?", d.ge or "?", d.st or "?", d.ag or "?", d.hp or "?"))
-    win.disLine:SetText("Etat : " .. afflictionText(d.dis))
-    win.invLine:SetText(string.format("Viande %s  Bois %s  Pierre %s  Feu %s",
-        yn(d.raw), yn(d.wo), yn(d.sto), yn(d.fi)))
-    win.actLine:SetText(string.format("Action : |cffffffff%s|r", d.act or "-"))
-    win.learnLine:SetText(string.format("Ideal : |cff88ff88%s|r   (epsilon %s)",
-        d.best or "-", d.eps or "-"))
+    setTargetMacro(col.targetBtn, d.n)
+    col:Show()
+end
 
-    win.lastUpdate = GetTime()
-    win.frame:Show()
+-- Repeint TOUTES les colonnes depuis le cache (appele au throttle : les donnees
+-- n'arrivent qu'1x/s, inutile de trier/repeindre a chaque paquet recu).
+local function refreshColumns()
+    if not main then return end
 
-    -- Nouveau PNJ repere : on met sa fenetre au premier plan et on le signale.
-    if isNew then
-        win.frame:Raise()
-        if DEFAULT_CHAT_FRAME then
-            DEFAULT_CHAT_FRAME:AddMessage(string.format(
-                "|cff88ccff[Clan HUD]|r Nouveau PNJ repere : |cffffd100%s|r", d.n or "?"))
-        end
+    local list = {}
+    for id, d in pairs(members) do
+        table.insert(list, { id = id, name = d.n or "?", data = d })
     end
+    table.sort(list, function(x, y) return x.name < y.name end)
+
+    for i, entry in ipairs(list) do
+        paintColumn(getColumn(i), entry.data)
+    end
+    for i = #list + 1, #columns do
+        columns[i]:Hide()
+    end
+
+    columnsChild:SetWidth(math.max(1, #list * COL_W))
+
+    -- Le contenu a pu retrecir (PNJ disparus) : on re-borne le defilement courant, sinon
+    -- on resterait bloque sur une zone vide, au-dela de la derniere colonne.
+    local scroll = columnsChild:GetParent()
+    local maxScroll = math.max(0, columnsChild:GetWidth() - scroll:GetWidth())
+    if scroll:GetHorizontalScroll() > maxScroll then
+        scroll:SetHorizontalScroll(maxScroll)
+    end
+
+    main.countLine:SetText(string.format("%d PNJ suivi%s   |cff808080(molette : defiler)|r",
+        #list, #list > 1 and "s" or ""))
+    main.emptyLine:SetShown(#list == 0)
+end
+
+-- ---------------------------------------------------------------------------
+-- Fenetre
+-- ---------------------------------------------------------------------------
+local function createMainWindow()
+    local f = CreateFrame("Frame", "ClanHUDMain", UIParent)
+    -- Hauteur derivee de COL_H (88 d'en-tete + colonnes + 62 pour les boutons) : ainsi la
+    -- fenetre suit automatiquement si l'on ajoute/retire une ligne dans les colonnes.
+    f:SetSize(SCROLL_W + 28, COL_H + 150)
+    if not ClanHUDDB.pos["main"] then
+        f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    end
+    makeDraggable("main", f)
+    backdrop(f, 0.85, 0.7, 0.2)
+
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOP", 0, -10)
+    title:SetText("|cffffd100Clan HUD|r")
+
+    -- --- Bandeau "monde" (haut) ---
+    f.timeLine = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.timeLine:SetPoint("TOPLEFT", 16, -34)
+    f.timeLine:SetText("En attente du flux monde... (bouton \"Live monde\")")
+
+    f.popLine = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    f.popLine:SetPoint("TOPLEFT", 16, -52)
+    f.popLine:SetText("")
+
+    f.countLine = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    f.countLine:SetPoint("TOPLEFT", 16, -70)
+    f.countLine:SetText("0 PNJ suivi")
+
+    -- --- Zone defilante HORIZONTALE contenant les colonnes ---
+    -- ScrollFrame sans template : les templates standards sont verticaux. On pilote le
+    -- defilement horizontal a la molette.
+    local scroll = CreateFrame("ScrollFrame", "ClanHUDColumnsScroll", f)
+    scroll:SetPoint("TOPLEFT", 14, -88)
+    scroll:SetSize(SCROLL_W, COL_H)
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        local maxScroll = math.max(0, columnsChild:GetWidth() - self:GetWidth())
+        local cur = self:GetHorizontalScroll()
+        self:SetHorizontalScroll(math.min(maxScroll, math.max(0, cur - delta * COL_W)))
+    end)
+
+    columnsChild = CreateFrame("Frame", nil, scroll)
+    columnsChild:SetSize(1, COL_H)
+    scroll:SetScrollChild(columnsChild)
+
+    f.emptyLine = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    f.emptyLine:SetPoint("TOPLEFT", 16, -100)
+    f.emptyLine:SetText("Aucun PNJ suivi. Clique sur \"Tout suivre\" (ou .clan hudall).")
+
+    -- --- Boutons (bas) ---
+    local liveBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    liveBtn:SetSize(150, 22)
+    liveBtn:SetPoint("BOTTOMLEFT", 14, 12)
+    liveBtn:SetText("Live monde")
+    liveBtn:SetScript("OnClick", function() SendChatMessage(".clan world", "SAY") end)
+
+    local allBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    allBtn:SetSize(150, 22)
+    allBtn:SetPoint("BOTTOMLEFT", 172, 12)
+    allBtn:SetText("Tout suivre")
+    allBtn:SetScript("OnClick", function() SendChatMessage(".clan hudall", "SAY") end)
+
+    local hudBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    hudBtn:SetSize(150, 22)
+    hudBtn:SetPoint("BOTTOMLEFT", 330, 12)
+    hudBtn:SetText("+ Suivre la cible")
+    hudBtn:SetScript("OnClick", function() SendChatMessage(".clan hud", "SAY") end)
+
+    local closeBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    closeBtn:SetSize(100, 22)
+    closeBtn:SetPoint("BOTTOMRIGHT", -14, 12)
+    closeBtn:SetText("Fermer")
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    main = f
+    return f
+end
+
+local function updateWorld(d)
+    if not main then return end
+
+    local hour = tonumber(d.hour) or 0
+    local night = (d.night == "1")
+    main.timeLine:SetText(string.format("Heure : %02dh00  —  %s",
+        hour, night and "|cff6699ffNuit|r" or "|cffffd100Jour|r"))
+    main.popLine:SetText(string.format(
+        "Population : %s   (adultes %s | enfants %s | anciens %s)      Malades : %s",
+        d.pop or "?", d.ad or "?", d.ch or "?", d.el or "?", d.sick or "0"))
 end
 
 -- ---------------------------------------------------------------------------
@@ -420,44 +474,53 @@ driver:SetScript("OnEvent", function(self, event, arg1, arg2)
         if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
             C_ChatInfo.RegisterAddonMessagePrefix(ADDON_PREFIX)
         end
-        createWorldWindow() -- la fenetre monde est toujours presente
+        createMainWindow()
+        refreshColumns()
+
     elseif event == "CHAT_MSG_ADDON" and arg1 == ADDON_PREFIX and arg2 then
         local d = parse(arg2)
-        if d.tbl then          -- flux "tout suivre" -> ligne de tableau (contient aussi d.id)
-            updateTableRow(d)
-        elseif d.w then        -- resume monde
+        if d.ep and d.epN then         -- epitaphe : clic sur une pierre tombale
+            showEpitaph(d.ep, d.epN)
+        elseif d.w then      -- resume monde
             updateWorld(d)
-        elseif d.id then       -- fenetre PNJ individuelle (.clan hud)
-            updateMember(d)
+        elseif d.id then     -- donnees d'un PNJ (flux global "tbl=1" OU flux individuel)
+            d._last = GetTime()
+            members[d.id] = d
         end
     end
 end)
 
--- Ferme les fenetres PNJ / lignes de tableau qui ne recoivent plus de donnees.
-driver:SetScript("OnUpdate", function()
+-- Purge des PNJ qui ne recoivent plus de donnees (mort / flux coupe) puis repeinte.
+local elapsed = 0
+driver:SetScript("OnUpdate", function(self, dt)
+    elapsed = elapsed + dt
+    if elapsed < 0.5 then return end
+    elapsed = 0
+
     local now = GetTime()
-    for _, win in pairs(memberWindows) do
-        if win.frame:IsShown() and win.lastUpdate > 0 and (now - win.lastUpdate) > 3 then
-            win.frame:Hide()
+    for id, d in pairs(members) do
+        if now - (d._last or 0) > 5 then
+            members[id] = nil -- retrait pendant un pairs() : sans danger en Lua
         end
     end
 
-    -- Tableau : masque les lignes obsoletes (membre mort / flux coupe) et re-agence.
-    if tableWindow then
-        local changed = false
-        for _, row in ipairs(tableRowList) do
-            if row:IsShown() and row.lastUpdate and (now - row.lastUpdate) > 4 then
-                row:Hide()
-                changed = true
-            end
-        end
-        if changed then layoutTable() end
-    end
+    refreshColumns()
 end)
 
--- /clanhud : affiche/masque la fenetre monde.
+-- ---------------------------------------------------------------------------
+-- Commandes
+-- ---------------------------------------------------------------------------
 SLASH_CLANHUD1 = "/clanhud"
-SlashCmdList["CLANHUD"] = function()
-    if not world then createWorldWindow() end
-    if world:IsShown() then world:Hide() else world:Show() end
+SlashCmdList["CLANHUD"] = function(msg)
+    if msg and string.find(string.lower(msg), "debug") then
+        ClanHUDDB.debug = not ClanHUDDB.debug
+        if DEFAULT_CHAT_FRAME then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff88ccff[Clan HUD]|r debug : "
+                .. (ClanHUDDB.debug and "|cff40ff40ON|r" or "|cffff6060OFF|r"))
+        end
+        return
+    end
+
+    if not main then createMainWindow() end
+    if main:IsShown() then main:Hide() else main:Show() end
 end

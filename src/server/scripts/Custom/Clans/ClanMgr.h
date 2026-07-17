@@ -58,16 +58,24 @@ namespace Clan
         uint64    motherId = 0;                   // dbId des parents (0 = fondateur)
         uint64    fatherId = 0;
         uint32    reproCooldownDays = 0;
+        // Conjoint (dbId). Une fois maries, les deux ne cherchent plus personne d'autre.
+        // Remis a 0 si le conjoint meurt : le veuf redevient libre de se remarier.
+        uint64    spouseId = 0;
 
         bool      isBirth = false;                // vrai si apparu par reproduction
         uint32    birthEntry = 0;                 // creature_template a summon pour un nouveau-ne
         bool      deathOmenSaid = false;          // l'Ancien a deja annonce que sa fin est proche (transitoire)
+        DeathCause deathCause = DeathCause::Unknown; // renseignee juste avant la mort, gravee sur la tombe
 
         uint32    mapId = 0;
         Position  home;
 
+        // Maison du clan (spawnId du GameObject). Resolu au bind via le lit attribue ou
+        // la maison par defaut du clan. Non persiste (recalcule a chaque spawn/reload).
+        uint64    houseSpawnId = 0;
+
         // Lit attribue (spawnId du GameObject dans la table `gameobject`). 0 = aucun :
-        // le membre dort alors dans le lit le plus proche, sinon rentre a `home`.
+        // le membre dort alors dans le lit le plus proche, sinon rentre a la maison / `home`.
         // Renseigne depuis le registre custom_clan_bed (par entry du membre), pas persiste
         // dans la table d'etat -> l'attribution survit a la mort / au respawn, et couvre
         // les nouveau-nes (qui partagent l'entry de leur gabarit).
@@ -97,11 +105,9 @@ namespace Clan
     // Etat d'un feu suivi (allume/eteint, minuterie de combustion).
     struct FireState
     {
-        bool   lit     = true;
-        uint32 burnMs  = 0;      // temps restant avant extinction naturelle
-        bool   outdoor = false;  // exterieur => eteint par la pluie
-        uint32 mapId   = 0;
-        uint32 zoneId  = 0;
+        bool   lit    = true;
+        uint32 burnMs = 0;      // temps restant avant extinction naturelle
+        uint32 mapId  = 0;      // pour retrouver le GameObject a l'extinction
     };
 
     // Effets RP joues au debut d'une action (declares dans custom_clan_action_fx).
@@ -110,6 +116,10 @@ namespace Clan
         uint32 aura  = 0; // aura appliquee sur soi
         uint32 spell = 0; // sort lance (sur soi)
         uint32 emote = 0; // emote jouee (oneshot)
+        // Equipement affiche pendant l'action (item id ; 0 = aucun). Applique au runtime via
+        // SetVirtualItem : aucune declaration dans creature_equip_template n'est necessaire.
+        uint32 item  = 0;
+        uint8  itemSlot = 0; // 0 = main droite, 1 = main gauche, 2 = a distance
     };
 
     // Resume global du monde (pour la fenetre monde de l'addon).
@@ -147,6 +157,15 @@ namespace Clan
         }
     };
 
+    // Maison attribuee a un clan. Les lits (custom_clan_bed) referencent la maison
+    // a laquelle ils appartiennent ; chaque membre resout sa maison via son lit ou,
+    // a defaut, la premiere maison declaree pour son clan.
+    struct HouseInfo
+    {
+        uint64 spawnId = 0;
+        ClanId clan = ClanId::None;
+    };
+
     // Cimetiere : emplacement fixe de tombe. Un membre mort y est deplace avant de
     // faire apparaitre sa pierre tombale. `full` = emplacement deja occupe.
     // deceasedId = dbId du membre enterre ici (0 = libre) -> sert au "souvenir" des descendants.
@@ -155,6 +174,15 @@ namespace Clan
         Position position;
         bool     full = false;
         uint64   deceasedId = 0;
+
+        // Epitaphe : lue au clic sur la pierre tombale (gossip).
+        std::string deceasedName;
+        DeathCause  cause = DeathCause::Unknown;
+        uint32      ageDays = 0;    // age au moment de la mort
+        ObjectGuid  graveGuid;      // la pierre tombale posee ici (cle du gossip)
+        // Texte grave, resolu UNE FOIS a la mort depuis custom_clan_epitaph (sinon un tirage
+        // aleatoire a chaque clic ferait "changer" l'inscription de la tombe).
+        std::string epitaph;
     };
 
     class ClanMgr
@@ -164,6 +192,12 @@ namespace Clan
 
         // --- Cycle de vie serveur ---
         void LoadFromDB();          // registres (world) + etats persistants (characters)
+        // Recharge UNIQUEMENT les registres (phrases, fx/items, epitaphes, ressources,
+        // gabarits, modeles, maladies, lits). Les membres en jeu ne sont pas touches.
+        void ReloadRegistries();
+        // Remet la simulation a zero : detache les IA, detruit les etats (memoire + base),
+        // recharge tout, puis re-enregistre les membres places encore presents.
+        void ResetAll();
         void RespawnBirths();       // re-summon des nouveau-nes sauvegardes
         void Update(uint32 diff);   // vieillissement, reproduction, sauvegarde periodique
         void SaveAll(bool direct);  // flush de tous les etats "dirty"
@@ -182,8 +216,15 @@ namespace Clan
         // Phrase aleatoire pour une action (nullptr si aucune declaree).
         std::string const* GetRandomPhrase(ActionType action) const;
 
+        // --- Epitaphes (custom_clan_epitaph) ---
+        // Modele de texte grave sur une tombe, par cause de mort. Jetons supportes :
+        //   $name = nom du defunt, $age = age (jours) au moment de la mort.
+        void AddEpitaph(uint8 cause, std::string text);
+        // Choisit un modele au hasard pour cette cause et y substitue les jetons.
+        std::string BuildEpitaph(DeathCause cause, std::string const& name, uint32 ageDays) const;
+
         // --- Effets RP par action (aura / sort / emote) ---
-        void AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote);
+        void AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote, uint32 item, uint8 itemSlot);
         // Effets declares pour une action (nullptr si aucun).
         ActionFx const* GetActionFx(ActionType action) const;
 
@@ -212,6 +253,9 @@ namespace Clan
         GameObject* FindNearestLitFire(Creature* from);
         GameObject* FindNearestUnlitFire(Creature* from);
         void LightFire(GameObject* fire);
+        // Le feu identifie est-il actuellement allume ? (false si inconnu / eteint). Sert a
+        // revalider un feu pendant la cuisson : il a pu s'eteindre entre le choix et l'arrivee.
+        bool IsFireLit(ObjectGuid fireGuid) const;
 
         // --- Reproduction ---
         // Partenaire eligible pour self (adulte, rassasie, cooldown ecoule). nullptr sinon.
@@ -226,9 +270,12 @@ namespace Clan
         // Tombe d'un ancetre (mere/pere) du membre 'seeker', la plus proche de 'from' et a
         // portee. Renvoie true + remplit 'out' (position + orientation), false si aucune.
         bool FindAncestorGrave(MemberState const* seeker, Creature* from, Position& out) const;
+        // Emplacement portant cette pierre tombale (pour lire l'epitaphe). nullptr si inconnu.
+        GraveyardSlot const* FindGraveByGuid(ObjectGuid graveGuid) const;
 
         // --- Acces divers ---
         MemberState* GetStateByLiveGuid(ObjectGuid guid) const;
+        MemberState* GetStateByDbId(uint64 dbId) const;
         size_t GetMemberCount() const { return _states.size(); }
         // GUID de tous les membres actuellement vivants (flux "tout suivre" + ciblage).
         std::vector<ObjectGuid> GetLiveMemberGuids() const;
@@ -236,12 +283,17 @@ namespace Clan
         // --- Registres (renseignes par ClanDatabase au chargement) ---
         void AddResourceEntry(uint32 entry, ResourceType type, ObjectKind kind);
         void AddMemberTemplate(uint32 entry, ClanId clan, Gender gender, LifeStage stage);
-        // Attribution d'un lit : entry du membre (creature_template) -> spawnId du lit.
-        // Par entry (et non par spawnId) pour que les nouveau-nes, qui partagent l'entry
-        // de leur gabarit, heritent eux aussi d'un lit.
-        void AddBedAssignment(uint32 entry, uint64 bedSpawnId);
+        // Maisons : attribuees a un clan (custom_clan_house).
+        void AddHouse(uint64 spawnId, uint8 clanId);
+        // Attribution d'un lit (custom_clan_bed) : lie un lit a sa maison et (optionnel) a
+        // un membre. Par entry (et non par spawnId) pour que les nouveau-nes, qui partagent
+        // l'entry de leur gabarit, heritent eux aussi d'un lit.
+        void AddBedAssignment(uint64 bedSpawnId, uint64 houseSpawnId, uint32 memberEntry);
         // Lit attribue a une entry de membre. 0 si aucun.
         uint64 GetAssignedBed(uint32 entry) const;
+        // Maison du membre : resolue via son lit attribue (maison du lit) ou, a defaut,
+        // la premiere maison declaree pour son clan. 0 si aucune.
+        uint64 GetMemberHouse(uint32 entry, ClanId clan) const;
         void AddDisplaySet(uint32 entry, uint32 child, uint32 adult, uint32 elder);
         // Modele a utiliser pour (entry, etape). 0 si non declare (garde le modele du creature_template).
         uint32 GetDisplayId(uint32 entry, LifeStage stage) const;
@@ -252,7 +304,6 @@ namespace Clan
         ClanMgr() = default;
 
         void AgingTick();                                 // appele une fois par "jour" simule
-        void TryReproductionRound();                      // matchmaking global
         void SpawnBirth(MemberState* state, WorldObject* summoner); // summon effectif d'un nouveau-ne
         void RemoveMemberState(uint64 dbId);              // retire l'etat du registre + de la base
         uint32 PickBirthEntry(ClanId clan, Gender gender) const; // entry enfant declaree pour (clan,genre)
@@ -260,8 +311,8 @@ namespace Clan
         Creature* ResolveLive(MemberState const* state) const;   // creature vivante d'un etat (ou nullptr)
 
         GameObject* FindNearestFire(Creature* from, bool wantLit); // enregistre + renvoie le feu le plus proche
-        FireState& RegisterFire(GameObject* fire, bool outdoor);   // enregistre un feu (allume par defaut)
-        void UpdateFires(uint32 diff);                             // combustion + extinction par la pluie
+        FireState& RegisterFire(GameObject* fire);                 // enregistre un feu (allume par defaut)
+        void UpdateFires(uint32 diff);                             // combustion -> extinction
         // Applique l'apparence allumee/eteinte a un feu (unique endroit a ajuster).
         void ApplyFireVisual(GameObject* fire, bool lit) const;
 
@@ -275,16 +326,19 @@ namespace Clan
         std::unordered_map<ObjectGuid, FireState>    _fires;              // feux suivis (par GUID)
         std::unordered_map<ObjectGuid, NodeClaim>    _nodeClaims;         // reservations de noeuds
         std::unordered_map<uint8, std::vector<std::string>> _phrasesByAction; // phrases par action
+        std::unordered_map<uint8, std::vector<std::string>> _epitaphsByCause; // epitaphes par cause de mort
         std::unordered_map<uint8, ActionFx>          _actionFx;           // effets RP par action
         std::vector<uint32>                          _allDiseases;        // toutes les auras d'affliction (check/soin)
         std::unordered_map<uint8, std::vector<uint32>> _diseasesByType;   // type -> auras (contagion ciblee)
         std::vector<GraveyardSlot>                   _graveyardSlots;     // emplacements de tombes (cimetiere)
+        std::unordered_map<uint64, HouseInfo>        _houses;             // spawnId GO maison -> info
+        std::unordered_map<uint64, uint64>           _bedToHouse;         // spawnId lit -> spawnId maison
+        std::unordered_map<uint8, uint64>            _houseByClan;        // clanId -> spawnId premiere maison du clan
         std::unordered_map<uint32, uint64>           _bedByEntry;         // entry membre -> spawnId lit attribue
 
         uint32 _dayTimerMs = 0;     // accumulateur vers le prochain jour simule
         uint32 _saveTimerMs = 0;    // accumulateur vers la prochaine sauvegarde
         uint32 _respawnTimerMs = 0; // re-tente l'apparition des nouveau-nes en attente
-        uint32 _rainTimerMs = 0;    // accumulateur vers le prochain test de pluie
         uint64 _nextBirthId = 0;    // compteur d'id de naissance
     };
 }

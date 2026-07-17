@@ -179,7 +179,7 @@ class TC_GAME_API MotionMaster
          *  Only works in 2D.
          *  This method doesn't account for any movement done by the target. in other words, it only works if the target is stationary.
          */
-        void MoveCloserAndStop(uint32 id, Unit* target, float distance);
+        void MoveCloserAndStop(uint32 id, WorldObject* target, float distance, MovementWalkRunSpeedSelectionMode speedSelectionMode = MovementWalkRunSpeedSelectionMode::Default);
         // These two movement types should only be used with creatures having landing/takeoff animations
         void MoveLand(uint32 id, Position const& pos, Optional<int32> tierTransitionId = {}, Optional<float> velocity = {},
             MovementWalkRunSpeedSelectionMode speedSelectionMode = MovementWalkRunSpeedSelectionMode::Default,
