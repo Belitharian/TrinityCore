@@ -30,7 +30,8 @@
 #include "TaskScheduler.h"
 #include <array>
 
-namespace Clan { struct MemberState; }
+class GameObject;
+namespace Clan { struct MemberState; struct HouseState; class ClanRole; }
 
 struct npc_clan_member : public ScriptedAI
 {
@@ -61,6 +62,9 @@ struct npc_clan_member : public ScriptedAI
     //  - ReleaseMate  : le partenaire est libere (accouplement fini ou abandonne) et reprend sa vie.
     void ApproachMate(ObjectGuid initiator, Position const& meetPos);
     void ReleaseMate();
+    // Le partenaire signale a l'initiateur qu'il est arrive au point de rencontre (evenementiel,
+    // remplace le sondage de distance). L'initiateur accouple des que lui ET le partenaire sont la.
+    void NotifyMateArrived(ObjectGuid mate);
 
     // Accesseurs de debug (commandes .clan info / .clan hud).
     // Quantite portee d'un type de ressource (0 si rien).
@@ -70,6 +74,9 @@ struct npc_clan_member : public ScriptedAI
     bool HasStone() const { return GetItemCount(Clan::ItemType::Stone) > 0; }
     Clan::ActionType CurrentAction() const { return _currentAction; }
     Clan::MindState CurrentMindState() const; // = BuildState() (etat courant percu)
+    // Role metier courant (homme/femme/enfant), derive du sexe + de l'etape de vie. Utilise
+    // par le debug/monitor pour interroger la Q-table avec le bon gating d'actions.
+    Clan::ClanRole const* GetRole() const;
 
     // Debug (.clan force) : interrompt l'action en cours et execute IMMEDIATEMENT l'action
     // demandee, en court-circuitant la selection Q-learning. Retourne true si l'action a
@@ -87,12 +94,16 @@ private:
     void FinishAction(bool reachedGoal, float shapedReward = 0.0f);
     void ResetActionState();
     void SetFacingAction();
+    void SetFacingAction(Position const& point);
 
     // Amorces d'action (retournent false si l'action ne peut pas demarrer).
     bool StartHunt();
     bool StartDrink(Clan::ResourceType type);
     bool StartSleep();
     bool StartSeekMate();
+    // Declenche l'accouplement des que l'initiateur ET le partenaire sont arrives au RV
+    // (appele sur les deux evenements d'arrivee). Ne fait rien tant que l'un des deux manque.
+    void TryBeginMating();
     bool StartGatherWood();
     bool StartMineRock();
     bool StartLightFire();
@@ -104,6 +115,17 @@ private:
     bool StartSeekDoctor();
     bool StartHuntPredator(); // traquer un animal sauvage pour l'exterminer
     bool StartRemember();     // se recueillir sur la tombe d'un ancetre (tradition)
+    // Actions "realisme" (roles + stock de maison).
+    bool StartEat();          // rentrer manger un repas du stock (tout membre affame)
+    bool StartShopping();     // (femmes) aller chez le vendeur, rapporter des repas au stock
+    bool StartPlay();         // (enfants) jouer / explorer pres de la maison
+    // Rentrer a la maison deposer la recolte portee (viande/bois/pierre) dans le stock.
+    // Utilise en fin de Hunt/GatherWood/MineRock (depot au retour). false si pas de maison.
+    bool GoDepositHome();
+
+    // Maison du membre (etat + GameObject dans le monde). nullptr si non declaree / absente.
+    Clan::HouseState* MyHouse() const;
+    GameObject* MyHouseObject() const;
 
     // Reflexes predateurs.
     void OnThreat(Unit* attacker);
@@ -113,13 +135,21 @@ private:
     bool SetRandomDeceased(Clan::AfflictionType type, float chance);
 
     // Joue l'effet declare dans ActionFx pour l'action courante
+    void PlayCustomFx();
+    void PlayCustomFxTarget();
+    void _PlayCustomFx(Creature* creature);
+
     void ResetEquipment();
-    void CastCustomSpell();
-    void CastCustomSpellTarget();
-    void _CastCustomSpell(Creature* creature);
+
+    void CastSpellTarget(Creature* target);
 
     // Spawn une tombe quand le personnage meur
     void SpawnGravestone();
+
+    // Repose le dormeur au sol (reactive la gravite) s'il avait ete monte sur un lit.
+    // Appele a tout point de sortie du sommeil (reveil OU interruption par un predateur),
+    // sinon il resterait a flotter en l'air.
+    void RestoreSleepPosture();
 
     // --- Inventaire ---
     bool IsItemFull(Clan::ItemType type) const;                    // capacite atteinte ?
@@ -144,6 +174,7 @@ private:
     bool             _huntPreyKilled;
     bool             _busy;            // une action est en cours
     Reflex           _reflex;          // reflexe predateur en cours
+    Position         _gravePoint;      // point de la tombe d'un ancetre dans le cimetiere
 
     // Inventaire (en memoire, non persiste) : quantite portee par type de ressource.
     // Sert la chaine cuisson / rallumage et permet de faire des reserves.
@@ -152,10 +183,18 @@ private:
     uint32 _talkCdMs;       // cooldown de parole (anti-spam des phrases)
     uint32 _starveTimerMs;  // accumulateur vers le prochain tick de degats de faim
     uint32 _diseaseTimerMs; // accumulateur vers le prochain tirage de contagion
-    uint32 _mateWaitMs;     // temps restant d'attente que le partenaire rejoigne le point de RV
     uint32 _rememberCdMs;   // cooldown avant qu'un nouveau recueillement soit recompense (anti-farm)
+    uint32 _shopCdMs;       // cooldown avant de refaire les courses (anti-farm)
     bool   _equipDirty;     // un equipement d'action est affiche : il faudra le reposer
+    bool   _sleepElevated;  // le dormeur a ete monte sur un lit (gravite coupee) : a redescendre
     bool   _combatLearned;  // le choix defendre/fuir courant est un choix appris (adulte)
+    // Derniere etape de vie pour laquelle la Q-table a ete amorcee (SeedTopUp). Quand l'age
+    // change de categorie (enfant->adulte...), le role change : on re-amorce les nouvelles actions.
+    Clan::LifeStage _lastSeededStage;
+    // Rendez-vous d'accouplement (evenementiel) : chacun bascule a true a l'arrivee du
+    // partenaire concerne ; TryBeginMating accouple quand les deux sont vrais.
+    bool   _selfAtMeet;     // l'initiateur est arrive a son point de rencontre
+    bool   _mateAtMeet;     // le partenaire a signale son arrivee (via NotifyMateArrived)
 };
 
 inline Position GetFacingPosition(Position position, float range = 2.5f)

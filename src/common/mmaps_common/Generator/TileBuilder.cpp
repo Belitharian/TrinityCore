@@ -554,6 +554,16 @@ namespace MMAP
                 // Reduce the chance to have underground levels
                 config.ch *= 2;
                 break;
+            // Map custom Clans (interieur meuble : tables, barrieres, lits)
+            case 595:
+                // walkableClimb par defaut (6 en mode fin, ~1.6 yd) : le dessus des
+                // tables/bancs se connecte au navmesh du sol -> les PNJ montent dessus
+                // et contournent en passant PAR-DESSUS. rcFilterLowHangingWalkableObstacles
+                // aplatit aussi les barrieres basses (< climb) en sol marchable.
+                // 2 (~0.5 yd) : tables/barrieres redeviennent des obstacles pleins que
+                // le chemin contourne ; les marches d'escalier basses restent franchissables.
+                config.walkableClimb = m_bigBaseUnit ? 1 : 2;
+                break;
             default:
                 break;
         }

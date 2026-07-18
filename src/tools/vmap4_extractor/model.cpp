@@ -78,7 +78,7 @@ bool Model::open()
     }
     else
     {
-        //printf("not included %s\n", filename.c_str());
+        printf("not included %s\n", filename.c_str());
         f.close();
         return false;
     }

@@ -29,22 +29,24 @@
 
 namespace Clan
 {
-    // Etat discret percu par l'agent.
+    class ClanRole; // role metier (homme/femme/enfant) : gate les actions et fournit l'instinct
+
+    // Etat discret percu par l'agent. Les drapeaux de ressources refletent desormais le STOCK
+    // DE LA MAISON (partage), pas l'inventaire individuel : les decisions du clan tournent
+    // autour de ce que contient le foyer (repas prets, matieres, etat du feu).
     struct MindState
     {
         NeedType urgentNeed    = NeedType::None;
         bool     night         = false;
-        bool     hasRawFood    = false; // possede de la viande crue (a cuire)
-        bool     hasWood       = false; // possede du bois (pour rallumer)
-        bool     hasStone      = false; // possede une pierre (pour rallumer)
-        bool     litFireNearby  = false; // un feu ALLUME est a portee (on peut y cuire)
-        bool     diseased       = false; // porte une aura de maladie
-        bool     predatorNearby = false; // un animal sauvage (predateur) est a portee
-        // Un feu ETEINT est a portee. Distinct de litFireNearby : sans ce drapeau, des qu'un
-        // seul feu est allume l'agent ne "voit" plus les autres eteints et ne les rallume pas.
-        bool     unlitFireNearby = false;
+        bool     houseHasMeal    = false; // un repas cuisine est dispo au stock (on peut manger)
+        bool     houseHasRawFood = false; // de la viande crue est au stock (a cuisiner)
+        bool     houseHasWood    = false; // du bois est au stock (pour rallumer)
+        bool     houseHasStone   = false; // de la pierre est au stock (pour rallumer)
+        bool     houseFireLit    = false; // le foyer de la maison est allume (on peut cuire)
+        bool     diseased        = false; // porte une aura de maladie
+        bool     predatorNearby  = false; // un animal sauvage (predateur) est a portee
 
-        // Index compact dans [0, STATE_COUNT[.
+        // Index compact dans [0, STATE_COUNT[. L'ordre d'empilage DOIT correspondre a Decode().
         uint16 Index() const
         {
             uint16 needIdx = uint16(urgentNeed);
@@ -53,14 +55,31 @@ namespace Clan
 
             uint16 idx = needIdx;
             idx = uint16(idx * TIME_STATE_COUNT + (night ? 1 : 0));
-            idx = uint16(idx * 2 + (hasRawFood ? 1 : 0));
-            idx = uint16(idx * 2 + (hasWood ? 1 : 0));
-            idx = uint16(idx * 2 + (hasStone ? 1 : 0));
-            idx = uint16(idx * 2 + (litFireNearby ? 1 : 0));
+            idx = uint16(idx * 2 + (houseHasMeal ? 1 : 0));
+            idx = uint16(idx * 2 + (houseHasRawFood ? 1 : 0));
+            idx = uint16(idx * 2 + (houseHasWood ? 1 : 0));
+            idx = uint16(idx * 2 + (houseHasStone ? 1 : 0));
+            idx = uint16(idx * 2 + (houseFireLit ? 1 : 0));
             idx = uint16(idx * 2 + (diseased ? 1 : 0));
             idx = uint16(idx * 2 + (predatorNearby ? 1 : 0));
-            idx = uint16(idx * 2 + (unlitFireNearby ? 1 : 0));
             return idx;
+        }
+
+        // Inverse de Index() : reconstruit l'etat a partir de son indice (dernier bit empile
+        // = premier lu). Sert au seed d'instinct (SeedTopUp) qui balaie tous les etats.
+        static MindState Decode(uint16 index)
+        {
+            MindState s;
+            s.predatorNearby  = (index & 1) != 0; index >>= 1;
+            s.diseased        = (index & 1) != 0; index >>= 1;
+            s.houseFireLit    = (index & 1) != 0; index >>= 1;
+            s.houseHasStone   = (index & 1) != 0; index >>= 1;
+            s.houseHasWood    = (index & 1) != 0; index >>= 1;
+            s.houseHasRawFood = (index & 1) != 0; index >>= 1;
+            s.houseHasMeal    = (index & 1) != 0; index >>= 1;
+            s.night           = (index & 1) != 0; index >>= 1;
+            s.urgentNeed      = NeedType(index % NEED_STATE_COUNT);
+            return s;
         }
     };
 
@@ -69,17 +88,24 @@ namespace Clan
     public:
         ClanMind();
 
-        // Choisit une action pour l'etat courant (epsilon-greedy).
-        ActionType ChooseAction(MindState const& state) const;
+        // Choisit une action pour l'etat courant (epsilon-greedy), RESTREINTE aux actions
+        // autorisees par le role (homme/femme/enfant).
+        ActionType ChooseAction(MindState const& state, ClanRole const* role) const;
 
-        // Met a jour la Q-table apres avoir observe une recompense et le nouvel etat.
-        void Learn(MindState const& prev, ActionType action, float reward, MindState const& next);
+        // Met a jour la Q-table apres avoir observe une recompense et le nouvel etat. Le role
+        // borne l'estimation de la valeur future aux actions que l'agent peut reellement prendre.
+        void Learn(MindState const& prev, ActionType action, float reward, MindState const& next, ClanRole const* role);
 
-        // Meilleure valeur Q apprise pour un etat (utile au debug).
-        float BestValue(MindState const& state) const;
-        // Meilleure action apprise pour un etat, hors exploration (utile au debug).
-        ActionType BestAction(uint16 stateIndex) const;
+        // Meilleure valeur Q apprise pour un etat, parmi les actions autorisees par le role.
+        float BestValue(MindState const& state, ClanRole const* role) const;
+        // Meilleure action apprise pour un etat (hors exploration), parmi les actions du role.
+        ActionType BestAction(uint16 stateIndex, ClanRole const* role) const;
         float ValueOf(uint16 stateIndex, ActionType action) const;
+
+        // Amorce non destructive : pour chaque etat, remonte l'action instinctive du role a au
+        // moins Q_SEED_PRIOR si elle est encore sous ce seuil (n'abaisse jamais un acquis).
+        // Appele a chaque (re)spawn et aux transitions d'age (le role change avec l'etape).
+        void SeedTopUp(ClanRole const* role);
 
         float GetEpsilon() const { return _epsilon; }
 
@@ -97,9 +123,6 @@ namespace Clan
         float GetFleeValue() const { return _combatFlee; }
 
     private:
-        // Donne un a priori positif a la "bonne" action de chaque etat (instinct de depart).
-        void SeedPriors();
-
         std::array<std::array<float, ACTION_COUNT>, STATE_COUNT> _q;
         float _epsilon;
         float _combatDefend = 0.0f; // valeur apprise de l'action "se defendre"

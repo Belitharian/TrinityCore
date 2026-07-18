@@ -18,6 +18,7 @@
 #include "ClanMemberAI.h"
 #include "ClanMgr.h"
 #include "ClanNeeds.h"
+#include "ClanRole.h"
 #include "Creature.h"
 #include "GameObject.h"
 #include "GameTime.h"
@@ -39,23 +40,66 @@ namespace
     constexpr uint32 GROUP_DECISION = 1;
     // Groupe des interactions ponctuelles (boire/dormir/cuire/errer) : annulable par un reflexe.
     constexpr uint32 GROUP_ACTION = 2;
+
+    // Entretien du foyer qu'un HOMME doit assurer faute de femme au clan (les deux actions
+    // font partie de son repertoire autorise). Miroir de la logique de RoleWoman, limite a
+    // ce qu'un homme peut faire (rallumer + cuisiner ; pas de courses). Renvoie
+    // ActionType::Count si rien a tenir OU si un besoin vital prime -> on laisse alors le
+    // choix normal (Q-table) gerer la survie de l'individu.
+    Clan::ActionType HearthFallback(Clan::MindState const& s)
+    {
+        using Clan::ActionType;
+        using Clan::NeedType;
+
+        if (s.diseased || s.urgentNeed == NeedType::Thirst || s.urgentNeed == NeedType::Energy)
+            return ActionType::Count;
+
+        if (!s.houseFireLit && s.houseHasWood && s.houseHasStone)
+            return ActionType::LightFire;               // foyer eteint : le rallumer
+        if (s.houseHasRawFood && s.houseFireLit && !s.houseHasMeal)
+            return ActionType::Cook;                    // viande + feu, pas de repas : cuisiner
+        return ActionType::Count;
+    }
 }
 
 npc_clan_member::npc_clan_member(Creature* creature) : ScriptedAI(creature),
-    _owner(nullptr), _currentAction(ActionType::Idle), _targetNeed(NeedType::None),
-    _needBefore(0.0f), _huntTimerMs(0), _huntPreyKilled(false), _busy(false), _reflex(Reflex::None),
-    _inventory{}, _talkCdMs(0), _starveTimerMs(0),
-    _diseaseTimerMs(0), _mateWaitMs(0), _rememberCdMs(0), _equipDirty(false), _combatLearned(false)
+_owner(nullptr), _currentAction(ActionType::Idle), _targetNeed(NeedType::None),
+_needBefore(0.0f), _huntTimerMs(0), _huntPreyKilled(false), _busy(false), _reflex(Reflex::None),
+_inventory {}, _talkCdMs(0), _starveTimerMs(0), _diseaseTimerMs(0), _rememberCdMs(0), _shopCdMs(0),
+_equipDirty(false), _sleepElevated(false), _combatLearned(false), _lastSeededStage(Clan::LifeStage::Adult),
+_selfAtMeet(false), _mateAtMeet(false)
 {
+}
+
+Clan::ClanRole const* npc_clan_member::GetRole() const
+{
+    // Role derive du sexe + de l'etape de vie ; toujours en phase avec le vieillissement
+    // (RoleFor renvoie un singleton, pas d'allocation). _owner peut etre nul avant BindState.
+    return _owner ? RoleFor(_owner->gender, _owner->stage) : nullptr;
+}
+
+Clan::HouseState* npc_clan_member::MyHouse() const
+{
+    return _owner ? sClanMgr->GetHouseBySpawn(_owner->houseSpawnId) : nullptr;
+}
+
+GameObject* npc_clan_member::MyHouseObject() const
+{
+    if (!_owner || !_owner->houseSpawnId)
+        return nullptr;
+
+    return me->GetMap()->GetGameObjectBySpawnId(_owner->houseSpawnId);
 }
 
 // ---------------------------------------------------------------------------
 // Inventaire
 // ---------------------------------------------------------------------------
+
 uint32 npc_clan_member::GetItemCount(ItemType type) const
 {
     if (type >= ItemType::Count)
         return 0;
+
     return _inventory[uint8(type)];
 }
 
@@ -71,7 +115,7 @@ bool npc_clan_member::AddItem(ItemType type, uint32 count)
 
     uint32& slot = _inventory[uint8(type)];
     if (slot + count > INVENTORY_MAX_PER_ITEM)
-        return false; // on ne porte pas plus que la capacite
+        return false; // On ne porte pas plus que la capacite
 
     slot += count;
     return true;
@@ -116,12 +160,15 @@ void npc_clan_member::BindState(MemberState* state)
 
     // Lit et maison (registres custom_clan_bed / custom_clan_house) : resolus a chaque
     // (re)spawn, donc survivent a la mort du membre.
-    _owner->bedSpawnId   = sClanMgr->GetAssignedBed(_owner->entry);
+    _owner->bedSpawnId = sClanMgr->GetAssignedBed(_owner->entry);
     _owner->houseSpawnId = sClanMgr->GetMemberHouse(_owner->entry, _owner->clan);
+
     if (!_owner->displayId)
         _owner->displayId = sClanMgr->GetDisplayId(_owner->entry, _owner->stage);
+
     if (_owner->displayId)
         me->SetDisplayId(_owner->displayId);
+
     me->SetObjectScale(_owner->stage == LifeStage::Child ? CHILD_SCALE : 1.0f);
 
     // Le module pilote entierement les deplacements : on neutralise le mouvement
@@ -131,9 +178,14 @@ void npc_clan_member::BindState(MemberState* state)
     me->GetMotionMaster()->Clear();
     me->GetMotionMaster()->MoveIdle();
 
-    // Decouverte proactive des feux alentour : ils sont ainsi allumes des le depart
-    // (sinon ils gardent leur etat de spawn jusqu'a ce qu'un membre aille cuisiner).
+    // Decouverte proactive des feux alentour : ils sont ainsi allumes des le depart, et
+    // surtout enregistres (RegisterFire) avec leur rattachement de maison (custom_clan_fire).
     sClanMgr->FindNearestLitFire(me);
+
+    // Amorce de la Q-table pour le ROLE courant (homme/femme/enfant). Non destructif : ne
+    // remonte que les instincts encore sous le seuil, donc n'ecrase ni l'acquis, ni l'heritage.
+    _owner->mind.SeedTopUp(GetRole());
+    _lastSeededStage = _owner->stage;
 
     ResetActionState();
 
@@ -153,11 +205,14 @@ void npc_clan_member::UnbindState()
     _scheduler.CancelAll();
     ResetActionState();
     ResetEquipment();
+    RestoreSleepPosture(); // si detache en plein sommeil sur un lit
+
     me->SetEmoteState(EMOTE_STATE_NONE);
     if (me->GetStandState() != UNIT_STAND_STATE_STAND)
         me->SetStandState(UNIT_STAND_STATE_STAND);
+
     me->GetMotionMaster()->MoveIdle();
-    _owner = nullptr; // a partir d'ici UpdateAI et DecisionTick sortent immediatement
+    _owner = nullptr; // A partir d'ici UpdateAI et DecisionTick sortent immediatement
 }
 
 void npc_clan_member::Reset()
@@ -170,11 +225,14 @@ void npc_clan_member::ResetActionState()
     _busy = false;
     _currentAction = ActionType::Idle;
     _targetNeed = NeedType::None;
-    _actionTarget.Clear();
     _huntTimerMs = 0;
     _huntPreyKilled = false;
     _reflex = Reflex::None;
     _combatLearned = false;
+    _selfAtMeet = false;
+    _mateAtMeet = false;
+    _needBefore = 0.0f;
+    _actionTarget.Clear();
 }
 
 void npc_clan_member::SetFacingAction()
@@ -191,13 +249,21 @@ void npc_clan_member::SetFacingAction()
             creature->SetFacingToObject(me);
     }
     else if (WorldObject* actionTarget = ObjectAccessor::GetWorldObject(*me, _actionTarget))
+    {
         me->SetFacingToObject(actionTarget);
+    }
+}
+
+void npc_clan_member::SetFacingAction(Position const& point)
+{
+    me->SetFacingToPoint(point);
 }
 
 bool npc_clan_member::IsNightNow()
 {
     if (WowTime const* t = GameTime::GetWowTime())
         return Clan::IsNight(uint8(t->GetHour()));
+
     return false;
 }
 
@@ -205,17 +271,20 @@ MindState npc_clan_member::CurrentMindState() const
 {
     if (!_owner)
         return MindState();
+
     return BuildState();
 }
 
 bool npc_clan_member::SetRandomDeceased(Clan::AfflictionType type, float chance)
 {
     if (!sClanMgr->IsDiseased(me) && roll_chance(chance))
+    {
         if (uint32 aura = sClanMgr->GetRandomDisease(type))
         {
             me->AddAura(aura, me);
             return true;
         }
+    }
 
     return false;
 }
@@ -223,18 +292,18 @@ bool npc_clan_member::SetRandomDeceased(Clan::AfflictionType type, float chance)
 void npc_clan_member::ResetEquipment()
 {
     if (!_equipDirty)
-        return; // rien d'emprunte : on evite d'envoyer des champs pour rien
+        return; // Rien d'emprunte : on evite d'envoyer des champs pour rien
 
-    SetEquipmentSlots(true); // recharge l'equipement d'origine du gabarit
+    SetEquipmentSlots(true); // Recharge l'equipement d'origine du gabarit
     _equipDirty = false;
 }
 
-void npc_clan_member::CastCustomSpell()
+void npc_clan_member::PlayCustomFx()
 {
-    _CastCustomSpell(me);
+    _PlayCustomFx(me);
 }
 
-void npc_clan_member::CastCustomSpellTarget()
+void npc_clan_member::PlayCustomFxTarget()
 {
     if (!_actionTarget.IsCreature())
         return;
@@ -243,40 +312,76 @@ void npc_clan_member::CastCustomSpellTarget()
     if (!actionTarget)
         return;
 
-    _CastCustomSpell(actionTarget);
+    _PlayCustomFx(actionTarget);
 }
 
-void npc_clan_member::_CastCustomSpell(Creature* creature)
+void npc_clan_member::CastSpellTarget(Creature* target)
 {
-    if (Clan::ActionFx const* fx = sClanMgr->GetActionFx(_currentAction))
+    if (!target)
+        return;
+
+    Clan::ActionFx const* fx = sClanMgr->GetActionFx(_currentAction);
+    if (!fx)
+        return;
+
+    if (!_actionTarget.IsCreature())
+        return;
+
+    Creature* actionTarget = ObjectAccessor::GetCreature(*me, _actionTarget);
+    if (!actionTarget)
+        return;
+
+    if (fx->spell)
     {
-        if (fx->emote)
-            me->SetEmoteState(Emote(fx->emote));
+        actionTarget->CastSpell(target, fx->spell, CastSpellExtraArgs(
+            TRIGGERED_IGNORE_CAST_IN_PROGRESS |
+            TRIGGERED_IGNORE_POWER_COST |
+            TRIGGERED_IGNORE_CASTER_AURASTATE |
+            TRIGGERED_DONT_REPORT_CAST_ERROR)
+        );
+    }
+}
 
-        if (fx->spell)
-            creature->CastSpell(creature, fx->spell,
-                CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS
-                    | TRIGGERED_IGNORE_POWER_COST
-                    | TRIGGERED_IGNORE_CASTER_AURASTATE
-                    | TRIGGERED_DONT_REPORT_CAST_ERROR)
-            );
+/// <param name="target">Ne concerne que le type EMOTE et SPELL</param>
+void npc_clan_member::_PlayCustomFx(Creature* creature)
+{
+    Clan::ActionFx const* fx = sClanMgr->GetActionFx(_currentAction);
+    if (!fx)
+        return;
 
-        if (fx->aura)
-            creature->AddAura(fx->aura, creature);
+    if (fx->emote)
+        creature->SetEmoteState(Emote(fx->emote));
 
-        if (fx->item)
+    if (fx->spell)
+    {
+        creature->CastSpell(creature, fx->spell, CastSpellExtraArgs(
+            TRIGGERED_IGNORE_CAST_IN_PROGRESS |
+            TRIGGERED_IGNORE_POWER_COST |
+            TRIGGERED_IGNORE_CASTER_AURASTATE |
+            TRIGGERED_DONT_REPORT_CAST_ERROR)
+        );
+    }
+
+    if (fx->aura)
+        creature->AddAura(fx->aura, creature);
+
+    if (fx->item)
+    {
+        // SetEquipmentSlots -> SetVirtualItem : equipement au runtime
+        switch (fx->itemSlot)
         {
-            // SetEquipmentSlots -> SetVirtualItem : equipement pose au runtime, aucune entree
-            // dans creature_equip_template n'est requise (l'item id suffit).
-            switch (fx->itemSlot)
-            {
-                case 1:  SetEquipmentSlots(false, EQUIP_NO_CHANGE, int32(fx->item), EQUIP_NO_CHANGE); break;
-                case 2:  SetEquipmentSlots(false, EQUIP_NO_CHANGE, EQUIP_NO_CHANGE, int32(fx->item)); break;
-                default: SetEquipmentSlots(false, int32(fx->item), EQUIP_NO_CHANGE, EQUIP_NO_CHANGE); break;
-            }
-
-            _equipDirty = true;
+            case 1:
+                SetEquipmentSlots(false, EQUIP_NO_CHANGE, int32(fx->item), EQUIP_NO_CHANGE);
+                break;
+            case 2:
+                SetEquipmentSlots(false, EQUIP_NO_CHANGE, EQUIP_NO_CHANGE, int32(fx->item));
+                break;
+            default:
+                SetEquipmentSlots(false, int32(fx->item), EQUIP_NO_CHANGE, EQUIP_NO_CHANGE);
+                break;
         }
+
+        _equipDirty = true;
     }
 }
 
@@ -285,11 +390,9 @@ void npc_clan_member::SpawnGravestone()
     // Deplace d'abord le corps vers un emplacement de cimetiere libre (si disponible),
     // pour que la tombe apparaisse au cimetiere et non sur le lieu de la mort. Faute de
     // place, on retombe sur le comportement d'origine (tombe sur place).
-    // Destination de la tombe : par defaut le lieu de la mort. S'il reste un emplacement
-    // libre, on prend SA position (connue directement, sans dependre de l'etat post-teleport)
-    // et on y deplace le corps. Dans les deux cas la tombe apparait.
     Position dest = me->GetPosition();
     GraveyardSlot* slot = sClanMgr->AcquireGraveyardSlot();
+
     if (slot)
     {
         dest = slot->position;
@@ -297,12 +400,12 @@ void npc_clan_member::SpawnGravestone()
         // action "Remember") et epitaphe (lue au clic). _owner est encore valide ici (JustDied).
         if (_owner)
         {
-            slot->deceasedId   = _owner->dbId;
+            slot->deceasedId = _owner->dbId;
             slot->deceasedName = me->GetName();
-            slot->cause        = _owner->deathCause;
-            slot->ageDays      = _owner->ageDays;
+            slot->cause = _owner->deathCause;
+            slot->ageDays = _owner->ageDays;
             // Texte grave une fois pour toutes (modele de custom_clan_epitaph + jetons).
-            slot->epitaph      = sClanMgr->BuildEpitaph(_owner->deathCause, me->GetName(), _owner->ageDays);
+            slot->epitaph = sClanMgr->BuildEpitaph(_owner->deathCause, me->GetName(), _owner->ageDays);
         }
         me->NearTeleportTo(dest);
     }
@@ -311,6 +414,7 @@ void npc_clan_member::SpawnGravestone()
 
     uint32 randomEntry = GRAVESTONES[urand(0, GRAVESTONE_COUNT - 1)];
     QuaternionData rot = QuaternionData::fromEulerAnglesZYX(dest.GetOrientation(), 0.0f, 0.0f);
+
     if (GameObject* gravestone = me->SummonGameObject(randomEntry, dest, rot, 0s))
     {
         // Lien pierre -> emplacement : c'est ainsi que le gossip retrouve l'epitaphe.
@@ -330,24 +434,30 @@ MindState npc_clan_member::BuildState() const
     MindState s;
     s.urgentNeed = _owner->needs.MostUrgent();
 
-    // Vie critique : se nourrir passe devant tout le reste. On force le besoin percu sur
-    // Hunger plutot que d'ajouter un drapeau d'etat : l'instinct de la faim amorce deja
-    // toute la chaine (chasser -> feu -> cuire), et le nombre d'etats reste inchange.
-    if (me->GetHealthPct() <= HEALTH_LOW_PCT)
+    // Vie critique : se nourrir passe devant tout le reste -- MAIS seulement si le membre a
+    // deja une vraie faim (EAT_HUNGER_MIN). Sinon on forcerait "Hunger" -> Eat, qui echoue
+    // (ventre plein) -> boucle sterile, et surtout on viderait le stock pour se soigner.
+    // Le blesse rassasie se soignera a son prochain cycle de faim naturel.
+    if (me->GetHealthPct() <= HEALTH_LOW_PCT && _owner->needs.hunger >= EAT_HUNGER_MIN)
         s.urgentNeed = NeedType::Hunger;
 
     s.night = IsNightNow();
-    // L'etat percu reste booleen (en possede / n'en possede pas) : la quantite exacte ne
-    // rentre pas dans la Q-table, seulement dans l'inventaire.
-    s.hasRawFood = HasRawFood();
-    s.hasWood = HasWood();
-    s.hasStone = HasStone();
-    s.litFireNearby = sClanMgr->FindNearestLitFire(me) != nullptr;
+
+    // Etat percu centre sur le STOCK DE LA MAISON (partage) : c'est autour de lui que
+    // s'organise la division du travail. Booleens "en possede / n'en possede pas".
+    if (HouseState const* h = MyHouse())
+    {
+        s.houseHasMeal = h->meals > 0;
+        s.houseHasRawFood = h->Get(ItemType::RawFood) > 0;
+        s.houseHasWood = h->Get(ItemType::Wood) > 0;
+        s.houseHasStone = h->Get(ItemType::Stone) > 0;
+    }
+
+    // Le foyer de la maison est-il allume ? (feu rattache a la maison via custom_clan_fire.)
+    s.houseFireLit = _owner->houseSpawnId && sClanMgr->FindHouseFire(me, _owner->houseSpawnId, true) != nullptr;
     s.diseased = sClanMgr->IsDiseased(me);
     s.predatorNearby = sClanMgr->FindNearestPredator(me) != nullptr;
-    // Percu separement : un feu peut etre allume (on peut cuire) ALORS QU'un autre est
-    // eteint (il y a du travail). Sans ca, le clan n'entretient jamais le second foyer.
-    s.unlitFireNearby = sClanMgr->FindNearestUnlitFire(me) != nullptr;
+
     return s;
 }
 
@@ -373,6 +483,12 @@ void npc_clan_member::UpdateAI(uint32 diff)
     else
         _rememberCdMs = 0;
 
+    // Cooldown des courses (anti-farm de repas achetes).
+    if (_shopCdMs > diff)
+        _shopCdMs -= diff;
+    else
+        _shopCdMs = 0;
+
     // Degats de survie (famine ET maladie, meme tick) : les deux rongent les PV et peuvent
     // tuer. La regeneration est suspendue tant que le membre a faim.
     _starveTimerMs += diff;
@@ -382,9 +498,9 @@ void npc_clan_member::UpdateAI(uint32 diff)
 
         float pct = 0.0f;
         if (_owner->needs.hunger >= HUNGER_STARVE_THRESHOLD)
-            pct += STARVE_DAMAGE_PCT;   // faim critique
+            pct += STARVE_DAMAGE_PCT;   // Faim critique
         if (sClanMgr->IsDiseased(me))
-            pct += DISEASE_DAMAGE_PCT;  // affliction en cours (maladie / poison / saignement)
+            pct += DISEASE_DAMAGE_PCT;  // Affliction en cours (maladie / poison / saignement)
 
         if (pct > 0.0f && me->IsAlive())
         {
@@ -393,13 +509,15 @@ void npc_clan_member::UpdateAI(uint32 diff)
                 dmg = 1;
 
             if (me->GetHealth() > dmg)
+            {
                 me->SetHealth(me->GetHealth() - dmg);
+            }
             else
             {
                 // Cause gravee sur la tombe : la faim prime si les deux sevissent.
                 _owner->deathCause = (_owner->needs.hunger >= HUNGER_STARVE_THRESHOLD)
                     ? DeathCause::Starvation : DeathCause::Disease;
-                me->KillSelf(); // mort de faim / de maladie -> JustDied
+                me->KillSelf(); // Mort de faim / de maladie -> JustDied
                 return;         // _state est desormais libere : on ne touche plus a rien
             }
         }
@@ -464,14 +582,22 @@ void npc_clan_member::UpdateAI(uint32 diff)
                 _scheduler.CancelGroup(GROUP_ACTION);
                 if (Creature* prey = ObjectAccessor::GetCreature(*me, _actionTarget))
                     prey->DespawnOrUnsummon();
-                AddItem(ItemType::RawFood);
-                FinishAction(true, REWARD_RAWFOOD);
+
+                // Depot direct au stock de la maison (le garde-fou n'orchestre pas de trajet retour).
+                if (HouseState* h = MyHouse())
+                    h->Add(ItemType::RawFood, 1);
+
+                FinishAction(true, REWARD_RAWFOOD + REWARD_STORE);
             }
             else
+            {
                 FinishAction(false);
+            }
         }
         else
+        {
             _huntTimerMs -= diff;
+        }
     }
 }
 
@@ -480,8 +606,38 @@ void npc_clan_member::DecisionTick()
     if (!_owner || _busy || _reflex != Reflex::None)
         return;
 
+    // Le vieillissement a pu changer de categorie (enfant->adulte...) : le role change, on
+    // amorce alors les instincts des actions nouvellement accessibles (non destructif).
+    if (_owner->stage != _lastSeededStage)
+    {
+        _owner->mind.SeedTopUp(GetRole());
+        _lastSeededStage = _owner->stage;
+    }
+
     _decisionState = BuildState();
-    ActionType action = _owner->mind.ChooseAction(_decisionState);
+    ActionType action = _owner->mind.ChooseAction(_decisionState, GetRole());
+
+    // "Plus de femme au clan" : un homme adulte/ancien doit alors tenir le foyer lui-meme
+    // (rallumer + cuisiner), tache normalement devolue aux femmes. Regle DETERMINISTE et non
+    // apprise : condition globale rare, hors de l'etat Q-table pour ne pas doubler les etats.
+    if (_owner->gender == Clan::Gender::Male && _owner->stage != LifeStage::Child
+        && !sClanMgr->HasLivingWoman())
+    {
+        if (ActionType hearth = HearthFallback(_decisionState); hearth != ActionType::Count)
+            action = hearth;
+    }
+
+    // Epuisement : au-dela du seuil, on DOIT dormir, quel que soit l'appat de la production.
+    // Regle DETERMINISTE (la fatigue n'a pas de cout chiffre, l'apprentissage seul ne suffit
+    // pas). On cede toutefois le pas a une urgence vitale plus grave : maladie a soigner ou
+    // faim critique (risque de mort). Le sommeil, lui, ne tue jamais.
+    if (_owner->needs.energy >= EXHAUSTION_THRESHOLD
+        && !sClanMgr->IsDiseased(me)
+        && _owner->needs.hunger < HUNGER_STARVE_THRESHOLD)
+    {
+        action = ActionType::Sleep;
+    }
+
     BeginAction(action);
 }
 
@@ -494,7 +650,7 @@ bool npc_clan_member::BeginAction(ActionType action)
 
     // On tente d'abord de demarrer l'action ; on ne parle qu'ensuite, si elle a
     // reellement commence (evite d'annoncer "je cuisine" alors que le feu est eteint).
-    bool started;
+    bool started = false;
     switch (action)
     {
         case ActionType::Hunt:          started = StartHunt();                          break;
@@ -509,12 +665,13 @@ bool npc_clan_member::BeginAction(ActionType action)
         case ActionType::SeekDoctor:    started = StartSeekDoctor();                    break;
         case ActionType::HuntPredator:  started = StartHuntPredator();                  break;
         case ActionType::Remember:      started = StartRemember();                      break;
-
+        case ActionType::Eat:           started = StartEat();                           break;
+        case ActionType::Shopping:      started = StartShopping();                      break;
+        case ActionType::Play:          started = StartPlay();                          break;
         case ActionType::Wander:
             StartWander();
             started = true;
             break;
-
         case ActionType::Idle:
         default:
             started = true;
@@ -562,6 +719,21 @@ bool npc_clan_member::ForceAction(ActionType action)
     return BeginAction(action);
 }
 
+void npc_clan_member::RestoreSleepPosture()
+{
+    if (!_sleepElevated)
+        return;
+
+    _sleepElevated = false;
+    me->SetDisableGravity(false);
+
+    // On avait ajoute BED_SLEEP_HEIGHT au Z pour monter sur le matelas : on le retranche
+    // pour reposer exactement au sol (meme XY, le dormeur n'a pas bouge).
+    Position ground = me->GetPosition();
+    ground.m_positionZ -= BED_SLEEP_HEIGHT;
+    me->NearTeleportTo(ground);
+}
+
 void npc_clan_member::FinishAction(bool reachedGoal, float shapedReward)
 {
     float reward;
@@ -577,19 +749,21 @@ void npc_clan_member::FinishAction(bool reachedGoal, float shapedReward)
     if (sClanMgr->IsDiseased(me))
         reward += REWARD_DISEASED;
 
-    // Le cerveau apprend de l'experience.
-    _owner->mind.Learn(_decisionState, _currentAction, reward, BuildState());
+    // Le cerveau apprend de l'experience (valeur future bornee au repertoire du role).
+    _owner->mind.Learn(_decisionState, _currentAction, reward, BuildState(), GetRole());
     _owner->dirty = true;
 
     // Nettoyage : sortir du combat, arreter le mouvement d'action, se relever.
     if (me->IsInCombat())
         me->CombatStop(true);
+
     me->AttackStop();
 
     // Coupe une eventuelle emote de travail (bucheron/mineur)
     me->SetEmoteState(EMOTE_STATE_NONE);
 
-    ResetEquipment();                    // repose l'outil de l'action qui vient de finir
+    RestoreSleepPosture(); // Si on dormait sur un lit : redescendre au sol
+    ResetEquipment(); // Repose l'outil de l'action qui vient de finir
 
     // IMPORTANT : on arrete tout mouvement residuel (notamment le MoveRandom du Wander,
     // qui tournerait sinon indefiniment). Le PNJ ne bouge que pour une action deliberee.
@@ -600,12 +774,11 @@ void npc_clan_member::FinishAction(bool reachedGoal, float shapedReward)
 
 bool npc_clan_member::StartHunt()
 {
-    // La viande crue n'est PAS une reserve : une seule piece cuite rassasie entierement la
-    // faim, et la cuisson n'en consomme qu'une. Inutile d'en empiler -- des qu'on en porte, il
-    // faut aller cuire (chaine feu -> cuisson), pas rechasser. On ne chasse donc que le sac
-    // vide de viande : sinon l'agent, paye a chaque prise (REWARD_RAWFOOD), apprenait a
-    // stocker 5 pieces avant de manger et mourait de faim entre-temps.
-    if (HasRawFood())
+    // La chasse approvisionne le STOCK DE LA MAISON en viande crue (ce sont les femmes qui
+    // cuisinent). Inutile de chasser sans maison ou porter la recolte, ou si le stock de
+    // viande est deja plein (l'agent apprend alors a faire autre chose).
+    HouseState* house = MyHouse();
+    if (!house || house->Get(ItemType::RawFood) >= HOUSE_STOCK_MAX)
         return false;
 
     Creature* prey = sClanMgr->FindNearestPrey(me);
@@ -616,10 +789,9 @@ bool npc_clan_member::StartHunt()
     // depouille (MOVE_TO_CARCASS) -> prelevement agenouille. Pas de corps a corps : le
     // suivi de combat de UpdateAI ne concerne plus que HuntPredator.
     _actionTarget = prey->GetGUID();
-    _huntTimerMs = HUNT_TIMEOUT_MS; // garde-fou decompte dans UpdateAI
-    me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_PREY, prey,
-        HUNT_SHOOT_RANGE,
-        MovementWalkRunSpeedSelectionMode::ForceWalk);
+    _huntTimerMs = HUNT_TIMEOUT_MS; // Garde-fou decompte dans UpdateAI
+
+    me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_PREY, prey, HUNT_SHOOT_RANGE, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
 }
 
@@ -635,6 +807,7 @@ bool npc_clan_member::StartHuntPredator()
 
     _actionTarget = predator->GetGUID();
     _huntTimerMs = HUNT_TIMEOUT_MS;
+
     me->Attack(predator, true);
     me->GetMotionMaster()->MoveChase(predator);
     return true;
@@ -648,10 +821,9 @@ bool npc_clan_member::StartRemember()
     if (!sClanMgr->FindAncestorGrave(_owner, me, grave))
         return false;
 
-    _actionTarget.Clear(); // la tombe est une position, pas un objet cible
-    me->GetMotionMaster()->MovePoint(MOVE_TO_GRAVE, GetFacingPosition(grave, 1.5f),
-        true, me->GetAbsoluteAngle(grave), {},
-        MovementWalkRunSpeedSelectionMode::ForceWalk);
+    _actionTarget.Clear(); // La tombe est une position, pas un objet cible
+    _gravePoint = grave;   // donc il faut garder la position en memoire
+    me->GetMotionMaster()->MovePoint(MOVE_TO_GRAVE, GetFacingPosition(_gravePoint, 2.5f), true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
 }
 
@@ -662,9 +834,7 @@ bool npc_clan_member::StartDrink(ResourceType type)
         return false;
 
     _actionTarget = water->GetGUID();
-    me->GetMotionMaster()->MovePoint(MOVE_TO_RESOURCE, water->GetRandomNearPosition(2.5f),
-        true, {}, {},
-        MovementWalkRunSpeedSelectionMode::ForceWalk);
+    me->GetMotionMaster()->MovePoint(MOVE_TO_RESOURCE, GetFacingPosition(water), true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
 }
 
@@ -674,22 +844,28 @@ bool npc_clan_member::StartSleep()
     GameObject* bed = nullptr;
     if (_owner->bedSpawnId)
         bed = me->GetMap()->GetGameObjectBySpawnId(_owner->bedSpawnId);
+
     if (!bed)
         bed = sClanMgr->FindNearestResourceObject(me, ResourceType::Bed);
 
     Position dest;
+    _actionTarget.Clear();
     if (bed)
+    {
         dest = bed->GetPosition();
+        _actionTarget = bed->GetGUID(); // le handler s'en sert pour coucher le dormeur SUR le matelas
+    }
     else if (_owner->houseSpawnId)
     {
         GameObject* house = me->GetMap()->GetGameObjectBySpawnId(_owner->houseSpawnId);
         dest = house ? house->GetPosition() : _owner->home;
     }
     else
+    {
         dest = _owner->home;
-    me->GetMotionMaster()->MovePoint(MOVE_TO_HOME, dest,
-        true, dest.GetAbsoluteAngle(me), {},
-        MovementWalkRunSpeedSelectionMode::ForceWalk);
+    }
+
+    me->GetMotionMaster()->MovePoint(MOVE_TO_HOME, dest, true, dest.GetAbsoluteAngle(me), {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
 }
 
@@ -711,18 +887,16 @@ void npc_clan_member::ApproachMate(ObjectGuid initiator, Position const& meetPos
     me->SetEmoteState(EMOTE_STATE_NONE);
     if (me->IsInCombat())
         me->CombatStop(true);
+
     me->AttackStop();
 
     // Marche vers le point de rencontre dans la maison (l'accouplement est pilote par
     // l'initiateur). L'orientation finale, portee par meetPos, place le partenaire face a lui.
-    me->GetMotionMaster()->MovePoint(MOVE_TO_MATE_JOIN, meetPos,
-        true, meetPos.GetOrientation(), {},
-        MovementWalkRunSpeedSelectionMode::ForceWalk);
+    me->GetMotionMaster()->MovePoint(MOVE_TO_MATE_JOIN, meetPos, true, meetPos.GetOrientation(), {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
 
     // Garde-fou : si l'initiateur ne nous libere jamais (mort, predateur...), on se
     // libere nous-memes pour ne pas rester bloque en pause indefiniment.
-    _scheduler.Schedule(Milliseconds(MATE_APPROACH_TIMEOUT_MS + MATE_DURATION_MS + 2000), GROUP_ACTION,
-        [this](TaskContext /*task*/)
+    _scheduler.Schedule(Milliseconds(MATE_APPROACH_TIMEOUT_MS + MATE_DURATION_MS + 2000), GROUP_ACTION, [this](TaskContext /*task*/)
     {
         if (_busy && _currentAction == ActionType::SeekMate && _reflex == Reflex::None)
             ReleaseMate();
@@ -733,6 +907,7 @@ void npc_clan_member::ReleaseMate()
 {
     if (!_owner)
         return;
+
     // Ne rien faire si le partenaire est deja passe a autre chose (reflexe, action finie).
     if (_reflex != Reflex::None || _currentAction != ActionType::SeekMate)
         return;
@@ -740,7 +915,7 @@ void npc_clan_member::ReleaseMate()
     _scheduler.CancelGroup(GROUP_ACTION);
     me->SetEmoteState(EMOTE_STATE_NONE);
     me->GetMotionMaster()->MoveIdle();
-    ResetActionState(); // libere _busy -> la boucle de decision reprend
+    ResetActionState(); // Libere _busy -> la boucle de decision reprend
 }
 
 bool npc_clan_member::StartSeekMate()
@@ -752,8 +927,7 @@ bool npc_clan_member::StartSeekMate()
     // Reproduction UNIQUEMENT dans la maison : sans maison attribuee, pas d'accouplement.
     // Le rendez-vous se tient dans la maison de l'initiateur (les deux partenaires s'y
     // rejoignent, y compris pour un couple inter-clan).
-    GameObject* house = _owner->houseSpawnId
-        ? me->GetMap()->GetGameObjectBySpawnId(_owner->houseSpawnId) : nullptr;
+    GameObject* house = _owner->houseSpawnId ? me->GetMap()->GetGameObjectBySpawnId(_owner->houseSpawnId) : nullptr;
     if (!house)
         return false;
 
@@ -787,18 +961,107 @@ bool npc_clan_member::StartSeekMate()
     myPoint.SetOrientation(myPoint.GetAbsoluteAngle(&matePoint));
     matePoint.SetOrientation(matePoint.GetAbsoluteAngle(&myPoint));
 
+    // Rendez-vous evenementiel : chacun bascule son drapeau a l'arrivee (aucun sondage).
+    // On purge d'abord toute tache d'action residuelle (ex. garde-fou de timeout d'un SeekMate
+    // precedent avorte) : sans ca, elle pourrait avorter cette nouvelle rencontre.
+    _scheduler.CancelGroup(GROUP_ACTION);
+    _selfAtMeet = false;
+    _mateAtMeet = false;
+
     mateAI->ApproachMate(me->GetGUID(), matePoint);
-    _mateWaitMs = MATE_APPROACH_TIMEOUT_MS;
-    me->GetMotionMaster()->MovePoint(MOVE_TO_MATE, myPoint,
-        true, myPoint.GetOrientation(), {},
-        MovementWalkRunSpeedSelectionMode::ForceWalk);
+    me->GetMotionMaster()->MovePoint(MOVE_TO_MATE, myPoint, true, myPoint.GetOrientation(), {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+
+    // Garde-fou : si la rencontre n'aboutit pas dans le delai (partenaire bloque, initiateur
+    // n'arrive jamais...), on libere le partenaire et on abandonne. Annule par TryBeginMating
+    // des que l'accouplement demarre.
+    _scheduler.Schedule(Milliseconds(MATE_APPROACH_TIMEOUT_MS), GROUP_ACTION, [this](TaskContext /*task*/)
+    {
+        if (!_busy || _currentAction != ActionType::SeekMate || _reflex != Reflex::None)
+            return;
+
+        if (Creature* mateCreature = ObjectAccessor::GetCreature(*me, _actionTarget))
+            if (npc_clan_member* mateAI = dynamic_cast<npc_clan_member*>(mateCreature->AI()))
+                mateAI->ReleaseMate();
+
+        FinishAction(false); // Rencontre echouee
+    });
     return true;
+}
+
+void npc_clan_member::TryBeginMating()
+{
+    // Tant que l'un des deux partenaires n'est pas au point de rencontre, on ne fait rien :
+    // l'autre evenement d'arrivee rappellera cette methode.
+    if (!_owner || _currentAction != ActionType::SeekMate || _reflex != Reflex::None)
+        return;
+
+    if (!_selfAtMeet || !_mateAtMeet)
+        return;
+
+    Creature* mate = ObjectAccessor::GetCreature(*me, _actionTarget);
+    if (!mate || !mate->IsAlive())
+    {
+        FinishAction(false); // Partenaire perdu (mort / despawn) pendant l'approche
+        return;
+    }
+
+    // Exigence conservee : l'accouplement n'a lieu QUE si les deux sont a la maison ET proches.
+    // Par construction ils se tiennent a leurs points de RV (dans la maison) ; ce controle ne
+    // fait qu'ecarter le cas ou l'un aurait ete repousse.
+    GameObject* house = _owner->houseSpawnId ? me->GetMap()->GetGameObjectBySpawnId(_owner->houseSpawnId) : nullptr;
+
+    bool bothAtHome = house && me->IsWithinDist(house, MATE_HOUSE_RADIUS) && mate->IsWithinDist(house, MATE_HOUSE_RADIUS);
+    if (!bothAtHome || !me->IsWithinDist(mate, INTERACT_RANGE))
+    {
+        if (npc_clan_member* mateAI = dynamic_cast<npc_clan_member*>(mate->AI()))
+            mateAI->ReleaseMate();
+
+        FinishAction(false);
+        return;
+    }
+
+    // Les deux sont reunis : on annule le garde-fou de timeout, on se fait face, effet RP.
+    _scheduler.CancelGroup(GROUP_ACTION);
+    SetFacingAction();
+    PlayCustomFx();
+    PlayCustomFxTarget();
+
+    // Accouplement proprement dit, puis naissance a la fin de la duree.
+    _scheduler.Schedule(Milliseconds(MATE_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
+    {
+        if (MemberState* mate = sClanMgr->GetStateByLiveGuid(_actionTarget))
+            sClanMgr->Reproduce(_owner, mate);
+
+        _owner->needs.Satisfy(NeedType::Repro, NEED_MAX);
+
+        // Le partenaire reprend sa vie (son besoin de repro a ete apaise par Reproduce).
+        if (Creature* mateCreature = ObjectAccessor::GetCreature(*me, _actionTarget))
+            if (npc_clan_member* mateAI = dynamic_cast<npc_clan_member*>(mateCreature->AI()))
+                mateAI->ReleaseMate();
+
+        FinishAction(true);
+    });
+}
+
+void npc_clan_member::NotifyMateArrived(ObjectGuid mate)
+{
+    // Signal envoye par le partenaire quand il atteint son point de rencontre.
+    if (!_owner || _currentAction != ActionType::SeekMate || _reflex != Reflex::None)
+        return;
+
+    if (mate != _actionTarget) // Pas le partenaire que l'on attend
+        return;
+
+    _mateAtMeet = true;
+    TryBeginMating();
 }
 
 bool npc_clan_member::StartGatherWood()
 {
-    // On ramasse tant qu'on n'a pas atteint la capacite de portage en bois.
-    if (IsItemFull(ItemType::Wood))
+    // Le bois alimente le STOCK DE LA MAISON (rallumage par les femmes). On ne ramasse pas
+    // sans maison ou si le stock de bois est plein.
+    HouseState* house = MyHouse();
+    if (!house || house->Get(ItemType::Wood) >= HOUSE_STOCK_MAX)
         return false;
 
     GameObject* wood = sClanMgr->FindNearestAvailableNode(me, ResourceType::Wood);
@@ -806,16 +1069,16 @@ bool npc_clan_member::StartGatherWood()
         return false;
 
     _actionTarget = wood->GetGUID();
-    me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_WOOD, wood,
-        2.f,
-        MovementWalkRunSpeedSelectionMode::ForceWalk);
+    me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_WOOD, wood, 2.0f, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
 }
 
 bool npc_clan_member::StartMineRock()
 {
-    // On mine tant qu'on n'a pas atteint la capacite de portage en pierre.
-    if (IsItemFull(ItemType::Stone))
+    // La pierre alimente le STOCK DE LA MAISON (rallumage). On ne mine pas sans maison ou si
+    // le stock de pierre est plein.
+    HouseState* house = MyHouse();
+    if (!house || house->Get(ItemType::Stone) >= HOUSE_STOCK_MAX)
         return false;
 
     GameObject* rock = sClanMgr->FindNearestAvailableNode(me, ResourceType::Rock);
@@ -823,43 +1086,108 @@ bool npc_clan_member::StartMineRock()
         return false;
 
     _actionTarget = rock->GetGUID();
-    me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_ROCK, rock,
-        2.f,
-        MovementWalkRunSpeedSelectionMode::ForceWalk);
+    me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_ROCK, rock, 2.0f, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
 }
 
 bool npc_clan_member::StartLightFire()
 {
-    // Il faut du bois ET une pierre pour rallumer.
-    if (!HasWood() || !HasStone())
+    // Rallumer le FOYER DE LA MAISON consomme du bois ET une pierre DU STOCK partage.
+    HouseState* house = MyHouse();
+    if (!house || house->Get(ItemType::Wood) == 0 || house->Get(ItemType::Stone) == 0)
         return false;
 
-    GameObject* fire = sClanMgr->FindNearestUnlitFire(me);
+    GameObject* fire = sClanMgr->FindHouseFire(me, _owner->houseSpawnId, false); // Le foyer, eteint
     if (!fire)
         return false;
 
     _actionTarget = fire->GetGUID();
-    me->GetMotionMaster()->MovePoint(MOVE_TO_FIRE_LIGHT, GetFacingPosition(fire, 3.6f),
-        true, {}, {},
-        MovementWalkRunSpeedSelectionMode::ForceWalk);
+    me->GetMotionMaster()->MovePoint(MOVE_TO_FIRE_LIGHT, GetFacingPosition(fire, 3.6f), true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
 }
 
 bool npc_clan_member::StartCook()
 {
-    if (!HasRawFood())
+    // Cuisiner puise la viande crue DU STOCK et produit un repas (ajoute au stock). Inutile
+    // si pas de viande, si le stock de repas est plein, ou sans foyer allume a la maison.
+    HouseState* house = MyHouse();
+    if (!house || house->Get(ItemType::RawFood) == 0 || house->meals >= HOUSE_MEALS_MAX)
         return false;
 
-    GameObject* fire = sClanMgr->FindNearestLitFire(me);
+    GameObject* fire = sClanMgr->FindHouseFire(me, _owner->houseSpawnId, true); // Le foyer, allume
     if (!fire)
         return false;
 
     _actionTarget = fire->GetGUID();
-    me->GetMotionMaster()->MovePoint(MOVE_TO_FIRE_COOK, GetFacingPosition(fire, 3.6f),
-        true, {}, {},
-        MovementWalkRunSpeedSelectionMode::ForceWalk
-    );
+    me->GetMotionMaster()->MovePoint(MOVE_TO_FIRE_COOK, GetFacingPosition(fire, 3.6f), true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+    return true;
+}
+
+bool npc_clan_member::StartEat()
+{
+    // On ne depense un repas du stock partage que si on a VRAIMENT faim : sinon on affame
+    // les autres (ex. un blesse qui mange en boucle pour se soigner, le ventre plein).
+    if (_owner->needs.hunger < EAT_HUNGER_MIN)
+        return false;
+
+    // Manger un repas du stock de la maison : tout membre affame, tant qu'il reste un repas.
+    HouseState* house = MyHouse();
+    if (!house || house->meals == 0)
+        return false;
+
+    GameObject* home = MyHouseObject();
+    Position dest = home ? home->GetRandomNearPosition(1.0f) : _owner->home;
+    me->GetMotionMaster()->MovePoint(MOVE_TO_EAT, dest, true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+    return true;
+}
+
+bool npc_clan_member::StartShopping()
+{
+    // Courses (femmes) : aller chez un vendeur et rapporter des repas au stock de la maison.
+    if (_shopCdMs > 0)
+        return false;
+
+    HouseState* house = MyHouse();
+    if (!house || house->meals >= HOUSE_MEALS_MAX)
+        return false;
+
+    Creature* vendor = sClanMgr->FindNearestVendor(me);
+    if (!vendor)
+        return false;
+
+    _actionTarget = vendor->GetGUID();
+    me->GetMotionMaster()->MovePoint(MOVE_TO_VENDOR, GetFacingPosition(vendor), true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+    return true;
+}
+
+bool npc_clan_member::StartPlay()
+{
+    // Jeu / exploration (enfants) : un saut vers un point ouvert pres de la maison, comme
+    // l'errance, avec l'effet RP de jeu s'il est declare. Toujours possible.
+    me->GetMotionMaster()->MovePoint(MOVE_TO_PLAY, PickWanderDestination(), true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+
+    _scheduler.Schedule(Milliseconds(PLAY_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
+    {
+        if (_busy && _currentAction == ActionType::Play)
+            FinishAction(true, REWARD_PLAY);
+    });
+    return true;
+}
+
+bool npc_clan_member::GoDepositHome()
+{
+    // Rentrer deposer la recolte portee au stock de la maison (depot au retour).
+    GameObject* home = MyHouseObject();
+    if (!home)
+        return false;
+
+    // Nettoyage du rendu transitoire de la recolte AVANT de marcher : sans ca, le PNJ rentre
+    // en gardant l'emote de travail (agenouille a depecer, hache/pioche en main). FinishAction
+    // refera ce nettoyage a l'arrivee (idempotent : ResetEquipment est garde par _equipDirty).
+    me->SetEmoteState(EMOTE_STATE_NONE);
+    ResetEquipment();
+
+    me->GetMotionMaster()->MovePoint(MOVE_TO_STORE, GetFacingPosition(home, 2.0f), true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
 }
 
@@ -874,7 +1202,7 @@ Position npc_clan_member::PickWanderDestination()
     for (uint8 i = 0; i < WANDER_SAMPLES; ++i)
     {
         float angle = frand(0.0f, 2.0f * float(M_PI));
-        float dist  = frand(WANDER_MIN_DIST, WANDER_MAX_DIST);
+        float dist = frand(WANDER_MIN_DIST, WANDER_MAX_DIST);
         Position candidate = me->GetFirstCollisionPosition(dist, angle);
 
         float reached = me->GetExactDist2d(candidate);
@@ -897,9 +1225,7 @@ void npc_clan_member::StartWander()
     {
         // Saut vers un point ouvert (raycast anti-mur) plutot que MoveRandom, qui vise un
         // point navmesh parfois colle a un mur ou dans un recoin -> plus de rasage de murs.
-        me->GetMotionMaster()->MovePoint(MOVE_TO_WANDER, PickWanderDestination(),
-            true, {}, {},
-            MovementWalkRunSpeedSelectionMode::ForceWalk);
+        me->GetMotionMaster()->MovePoint(MOVE_TO_WANDER, PickWanderDestination(), true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     }
     else
     {
@@ -907,9 +1233,8 @@ void npc_clan_member::StartWander()
         if (_owner->houseSpawnId)
             if (GameObject* house = me->GetMap()->GetGameObjectBySpawnId(_owner->houseSpawnId))
                 indoorDest = house->GetPosition();
-        me->GetMotionMaster()->MovePoint(MOVE_TO_HOME_WANDER, indoorDest,
-            true, {}, {},
-            MovementWalkRunSpeedSelectionMode::ForceWalk);
+
+        me->GetMotionMaster()->MovePoint(MOVE_TO_HOME_WANDER, indoorDest, true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     }
 
     _scheduler.Schedule(duration, GROUP_ACTION, [this](TaskContext /*task*/)
@@ -927,7 +1252,7 @@ bool npc_clan_member::StartSeekDoctor()
 
     Creature* doctor = sClanMgr->FindNearestDoctor(me);
     if (!doctor)
-        return false; // pas de medecin en vue
+        return false; // Pas de medecin en vue
 
     _actionTarget = doctor->GetGUID();
     me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_DOCTOR, doctor, 1.8f);
@@ -957,10 +1282,10 @@ void npc_clan_member::MovementInform(uint32 type, uint32 id)
 
     switch (id)
     {
-        case MOVE_TO_RESOURCE: // arrive a un point d'eau : on boit un moment
+        case MOVE_TO_RESOURCE: // Arrive a un point d'eau : on boit un moment
         {
             SetFacingAction();
-            CastCustomSpell();
+            PlayCustomFx();
             _scheduler.Schedule(Milliseconds(INTERACT_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
             {
                 SetRandomDeceased(AfflictionType::Poison, DISEASE_CHANCE_DRINK);
@@ -969,111 +1294,79 @@ void npc_clan_member::MovementInform(uint32 type, uint32 id)
             });
             break;
         }
-        case MOVE_TO_HOME: // arrive au lit / a la maison : on dort
+        case MOVE_TO_HOME: // Arrive au lit / a la maison : on dort
         {
-            SetFacingAction();
-            CastCustomSpell();
+            // Dans un lit : se coucher SUR le matelas. On ne peut pas viser un Z eleve via
+            // MovePoint (le mouvement replaque sur le navmesh) -> on teleporte le dormeur et on
+            // coupe la gravite pour l'y maintenir, oriente dans l'axe du lit.
+            if (GameObject* bed = ObjectAccessor::GetGameObject(*me, _actionTarget))
+            {
+                Position onBed = bed->GetPosition();
+                onBed.SetOrientation(bed->GetOrientation());
+                //me->SetDisableGravity(true);
+                me->NearTeleportTo(onBed);
+                _sleepElevated = true;
+            }
+            else
+                SetFacingAction();
+
+            PlayCustomFx();
             _scheduler.Schedule(Milliseconds(SLEEP_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
             {
                 _owner->needs.Satisfy(NeedType::Energy, NEED_MAX);
-                FinishAction(true);
+                FinishAction(true); // FinishAction repose le dormeur au sol (RestoreSleepPosture)
             });
             break;
         }
-        case MOVE_TO_MATE: // arrive au point de rencontre : on attend le partenaire, PUIS on s'accouple
+        case MOVE_TO_MATE: // Initiateur arrive a son point de rencontre
         {
-            // Verification periodique : l'accouplement ne demarre qu'une fois les DEUX reunis.
-            _scheduler.Schedule(Milliseconds(MATE_POLL_MS), GROUP_ACTION, [this](TaskContext task)
-            {
-                Creature* mate = ObjectAccessor::GetCreature(*me, _actionTarget);
-                if (!mate || !mate->IsAlive())
-                {
-                    FinishAction(false); // partenaire perdu (mort / despawn)
-                    return;
-                }
-
-                // Exigence : l'accouplement n'a lieu QUE si les DEUX partenaires sont a la
-                // maison ET face a face (proches). Sinon on patiente (dans la limite du garde-fou).
-                GameObject* house = _owner->houseSpawnId
-                    ? me->GetMap()->GetGameObjectBySpawnId(_owner->houseSpawnId) : nullptr;
-                bool bothAtHome = house
-                    && me->IsWithinDist(house, MATE_HOUSE_RADIUS)
-                    && mate->IsWithinDist(house, MATE_HOUSE_RADIUS);
-                bool bothClose = me->IsWithinDist(mate, INTERACT_RANGE);
-
-                if (!bothClose || !bothAtHome)
-                {
-                    if (_mateWaitMs <= MATE_POLL_MS)
-                    {
-                        // Partenaire jamais arrive (ou pas dans la maison) : on le libere et on abandonne.
-                        if (npc_clan_member* mateAI = dynamic_cast<npc_clan_member*>(mate->AI()))
-                            mateAI->ReleaseMate();
-                        FinishAction(false);
-                        return;
-                    }
-                    _mateWaitMs -= MATE_POLL_MS;
-                    task.Repeat(Milliseconds(MATE_POLL_MS));
-                    return;
-                }
-
-                // Les deux partenaires sont reunis : on se fait face et on joue l'effet RP.
-                SetFacingAction();
-                CastCustomSpell();
-                CastCustomSpellTarget();
-
-                // Accouplement proprement dit, puis naissance a la fin de la duree.
-                _scheduler.Schedule(Milliseconds(MATE_DURATION_MS), GROUP_ACTION, [this](TaskContext /*inner*/)
-                {
-                    if (MemberState* mate = sClanMgr->GetStateByLiveGuid(_actionTarget))
-                        sClanMgr->Reproduce(_owner, mate);
-                    _owner->needs.Satisfy(NeedType::Repro, NEED_MAX);
-
-                    // Le partenaire reprend sa vie (son besoin de repro a ete apaise par Reproduce).
-                    if (Creature* mateCreature = ObjectAccessor::GetCreature(*me, _actionTarget))
-                        if (npc_clan_member* mateAI = dynamic_cast<npc_clan_member*>(mateCreature->AI()))
-                            mateAI->ReleaseMate();
-
-                    FinishAction(true);
-                });
-            });
+            // Evenementiel : on note notre arrivee. TryBeginMating accouplera quand le
+            // partenaire aura lui aussi signale la sienne (plus de sondage de distance).
+            _selfAtMeet = true;
+            TryBeginMating();
             break;
         }
-        case MOVE_TO_MATE_JOIN: // partenaire : arrive au point de rencontre, on se tourne vers l'initiateur et on attend
+        case MOVE_TO_MATE_JOIN: // Partenaire arrive au point de rencontre
         {
             SetFacingAction();
-            CastCustomSpell();
-            // On reste en pause (_busy) : c'est l'initiateur qui declenche l'accouplement
-            // une fois reunis, puis nous libere via ReleaseMate. Le garde-fou d'ApproachMate
-            // nous libere si l'initiateur disparait.
+            PlayCustomFx();
+            // On signale notre arrivee a l'initiateur (_actionTarget = son GUID). C'est lui qui
+            // declenche l'accouplement une fois les deux reunis, puis nous libere via ReleaseMate.
+            // Le garde-fou d'ApproachMate nous libere si l'initiateur disparait.
+            if (Creature* initiator = ObjectAccessor::GetCreature(*me, _actionTarget))
+                if (npc_clan_member* initiatorAI = dynamic_cast<npc_clan_member*>(initiator->AI()))
+                    initiatorAI->NotifyMateArrived(me->GetGUID());
             break;
         }
-        case MOVE_TO_DOCTOR: // arrive chez le medecin : soin (retrait des afflictions)
+        case MOVE_TO_DOCTOR: // Arrive chez le medecin : soin (retrait des afflictions)
         {
             SetFacingAction();
-            if (Creature* doctor = ObjectAccessor::GetCreature(*me, _actionTarget))
-                doctor->CastSpell(me, SPELL_HEAL_DOCTOR, CastSpellExtraArgs(TRIGGERED_IGNORE_POWER_COST | TRIGGERED_IGNORE_CASTER_AURAS));
+            CastSpellTarget(me);
             _scheduler.Schedule(Milliseconds(DOCTOR_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
             {
                 if (Creature* doctor = ObjectAccessor::GetCreature(*me, _actionTarget))
-                    doctor->SetFacingTo(doctor->GetHomePosition().GetOrientation());
+                {
+                    doctor->GetMotionMaster()->Clear();
+                    doctor->GetMotionMaster()->MoveTargetedHome();
+                }
                 sClanMgr->CureDiseases(me);
-                FinishAction(true, REWARD_CURE); // action apprise : soin recompense
+                FinishAction(true, REWARD_CURE); // Action apprise : soin recompense
             });
             break;
         }
-        case MOVE_TO_PREY: // a portee de tir : on abat la proie a l'arme a feu
+        case MOVE_TO_PREY: // A portee de tir : on abat la proie a l'arme a feu
         {
             Creature* prey = ObjectAccessor::GetCreature(*me, _actionTarget);
             if (!prey || !prey->IsAlive())
             {
-                FinishAction(false); // proie perdue pendant l'approche
+                FinishAction(false); // Proie perdue pendant l'approche
                 break;
             }
 
             // L'action est engagee : on sort l'outil du metier s'il est declare.
             me->SetFacingToObject(prey);
             me->SetEmoteState(EMOTE_STATE_HOLD_RIFLE);
-            CastCustomSpell();
+            PlayCustomFx();
 
             // Le coup porte : la proie s'effondre, puis on va la chercher.
             _scheduler
@@ -1111,7 +1404,7 @@ void npc_clan_member::MovementInform(uint32 type, uint32 id)
                     me->SetEmoteState(EMOTE_STATE_NONE);
 
                     if (!_busy || _currentAction != ActionType::Hunt)
-                        return; // la chasse a ete interrompue entre-temps (garde-fou, reflexe...)
+                        return; // La chasse a ete interrompue entre-temps (garde-fou, reflexe...)
 
                     Creature* prey = ObjectAccessor::GetCreature(*me, _actionTarget);
                     if (!prey)
@@ -1120,12 +1413,11 @@ void npc_clan_member::MovementInform(uint32 type, uint32 id)
                         return;
                     }
 
-                    me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_CARCASS, prey, 0.5f,
-                        MovementWalkRunSpeedSelectionMode::ForceWalk);
+                    me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_CARCASS, prey, 0.5f, MovementWalkRunSpeedSelectionMode::ForceWalk);
                 });
             break;
         }
-        case MOVE_TO_CARCASS: // arrive sur la depouille : on s'agenouille et on preleve la viande
+        case MOVE_TO_CARCASS: // Arrive sur la depouille : on s'agenouille et on preleve la viande
         {
             SetFacingAction();
             me->SetEmoteState(EMOTE_STATE_LOOT);
@@ -1137,15 +1429,26 @@ void npc_clan_member::MovementInform(uint32 type, uint32 id)
                 if (Creature* prey = ObjectAccessor::GetCreature(*me, _actionTarget))
                     prey->DespawnOrUnsummon();
 
+                // On porte la viande crue puis on rentre la deposer au stock de la maison.
                 AddItem(ItemType::RawFood);
-                // FinishAction remet le PNJ debout et lui rend la main (reprise de son plan).
-                FinishAction(true, REWARD_RAWFOOD);
+                if (!GoDepositHome())
+                {
+                    // Pas de maison joignable : depot direct au stock si possible, sinon on
+                    // valide quand meme la recolte pour ne pas bloquer l'apprentissage.
+                    if (HouseState* h = MyHouse())
+                    {
+                        h->Add(ItemType::RawFood, 1);
+                        ConsumeItem(ItemType::RawFood, 1);
+                    }
+                    FinishAction(true, REWARD_RAWFOOD + REWARD_STORE);
+                }
             });
             break;
         }
-        case MOVE_TO_GRAVE: // arrive sur la tombe d'un ancetre : on se recueille (tradition)
+        case MOVE_TO_GRAVE: // Arrive sur la tombe d'un ancetre : on se recueille (tradition)
         {
-            CastCustomSpell(); // effet de deuil declare (emote/aura) si present
+            SetFacingAction(_gravePoint);
+            PlayCustomFx(); // Effet de deuil declare (emote/aura) si present
             _scheduler.Schedule(Milliseconds(REMEMBER_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
             {
                 // Recompense gardee par un cooldown : le camping de tombe ne rapporte plus rien,
@@ -1160,7 +1463,7 @@ void npc_clan_member::MovementInform(uint32 type, uint32 id)
             });
             break;
         }
-        case MOVE_TO_WOOD: // arrive au bois : on ramasse (le noeud s'epuise)
+        case MOVE_TO_WOOD: // Arrive au bois : on ramasse (le noeud s'epuise)
         {
             // Un autre membre a pu prendre le noeud pendant le trajet.
             if (!ObjectAccessor::GetGameObject(*me, _actionTarget))
@@ -1169,22 +1472,30 @@ void npc_clan_member::MovementInform(uint32 type, uint32 id)
                 break;
             }
             SetFacingAction();
-            CastCustomSpell();
+            PlayCustomFx();
             _scheduler.Schedule(Milliseconds(WOOD_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
             {
                 GameObject* wood = ObjectAccessor::GetGameObject(*me, _actionTarget);
-                if (!wood) // disparu pendant la recolte : on ne recolte rien
+                if (!wood) // Disparu pendant la recolte : on ne recolte rien
                 {
                     FinishAction(false);
                     return;
                 }
                 sClanMgr->DepleteNode(wood, WOOD_RESPAWN_MS);
                 AddItem(ItemType::Wood);
-                FinishAction(true, REWARD_WOOD);
+                if (!GoDepositHome())
+                {
+                    if (HouseState* h = MyHouse())
+                    {
+                        h->Add(ItemType::Wood, 1);
+                        ConsumeItem(ItemType::Wood, 1);
+                    }
+                    FinishAction(true, REWARD_WOOD + REWARD_STORE);
+                }
             });
             break;
         }
-        case MOVE_TO_ROCK: // arrive a la roche : on mine (le noeud s'epuise)
+        case MOVE_TO_ROCK: // Arrive a la roche : on mine (le noeud s'epuise)
         {
             // Un autre membre a pu prendre le noeud pendant le trajet.
             if (!ObjectAccessor::GetGameObject(*me, _actionTarget))
@@ -1193,64 +1504,141 @@ void npc_clan_member::MovementInform(uint32 type, uint32 id)
                 break;
             }
             SetFacingAction();
-            CastCustomSpell();
+            PlayCustomFx();
             _scheduler.Schedule(Milliseconds(STONE_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
             {
                 GameObject* rock = ObjectAccessor::GetGameObject(*me, _actionTarget);
-                if (!rock) // disparu pendant l'extraction : on ne mine rien
+                if (!rock) // Disparu pendant l'extraction : on ne mine rien
                 {
                     FinishAction(false);
                     return;
                 }
                 sClanMgr->DepleteNode(rock, ROCK_RESPAWN_MS);
                 AddItem(ItemType::Stone);
-                FinishAction(true, REWARD_STONE);
+                if (!GoDepositHome())
+                {
+                    if (HouseState* h = MyHouse())
+                    {
+                        h->Add(ItemType::Stone, 1);
+                        ConsumeItem(ItemType::Stone, 1);
+                    }
+                    FinishAction(true, REWARD_STONE + REWARD_STORE);
+                }
             });
             break;
         }
-        case MOVE_TO_FIRE_LIGHT: // arrive au feu eteint : on le rallume (consomme bois + pierre)
+        case MOVE_TO_FIRE_LIGHT: // Arrive au foyer eteint : on le rallume (consomme bois + pierre DU STOCK)
         {
-            if (GameObject* fire = ObjectAccessor::GetGameObject(*me, _actionTarget))
+            GameObject* fire = ObjectAccessor::GetGameObject(*me, _actionTarget);
+            HouseState* house = MyHouse();
+            if (fire && house && house->Get(ItemType::Wood) > 0 && house->Get(ItemType::Stone) > 0)
             {
                 SetFacingAction();
-                CastCustomSpell();
+                PlayCustomFx();
+                house->Take(ItemType::Wood, 1);  // Le rallumage consomme une unite de chaque
+                house->Take(ItemType::Stone, 1);
                 sClanMgr->LightFire(fire);
-                ConsumeItem(ItemType::Wood);  // le rallumage consomme une unite de chaque
-                ConsumeItem(ItemType::Stone);
                 FinishAction(true, REWARD_LIGHT);
             }
             else
                 FinishAction(false);
             break;
         }
-        case MOVE_TO_FIRE_COOK: // arrive au feu : on ne cuit QUE si le feu est TOUJOURS allume
+        case MOVE_TO_FIRE_COOK: // Arive au feu : on ne cuit QUE si le feu est TOUJOURS allume
         {
             // Le feu se consume (FIRE_BURN_DURATION_MS) et a pu s'eteindre pendant le trajet :
             // sans ce controle, le membre "cuisait" sur un foyer mort et se rassasiait quand meme.
             if (!ObjectAccessor::GetGameObject(*me, _actionTarget) || !sClanMgr->IsFireLit(_actionTarget))
             {
-                FinishAction(false); // feu eteint / disparu : cuisson impossible
+                FinishAction(false); // Feu eteint / disparu : cuisson impossible
                 break;
             }
 
             SetFacingAction();
-            CastCustomSpell();
+            PlayCustomFx();
             _scheduler.Schedule(Milliseconds(COOK_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
             {
                 // Re-verification en fin de cuisson : le feu doit etre reste allume tout du long.
                 if (!ObjectAccessor::GetGameObject(*me, _actionTarget) || !sClanMgr->IsFireLit(_actionTarget))
                 {
-                    FinishAction(false); // le feu s'est eteint pendant la cuisson : repas rate
+                    FinishAction(false); // Le feu s'est eteint pendant la cuisson : repas rate
+                    return;
+                }
+
+                // La cuisson transforme une viande crue DU STOCK en un repas (ajoute au stock) ;
+                // elle ne rassasie plus directement : on mange ensuite via l'action Eat.
+                HouseState* house = MyHouse();
+                if (!house || house->Get(ItemType::RawFood) == 0)
+                {
+                    FinishAction(false); // Plus de viande au stock (consommee entre-temps)
                     return;
                 }
 
                 SetRandomDeceased(AfflictionType::Disease, DISEASE_CHANCE_COOK);
-                _owner->needs.Satisfy(NeedType::Hunger, NEED_MAX);
-                ConsumeItem(ItemType::RawFood); // une piece de viande par repas
-                // Les PV sont rendus par le sort du repas (custom_clan_action_fx, action 10),
-                // lance a l'arrivee au feu : pas de soin en dur ici.
-                FinishAction(true, REWARD_COOK);
+                house->Take(ItemType::RawFood, 1);
+                house->AddMeal(1);
+                FinishAction(true, REWARD_MEAL);
             });
+            break;
+        }
+        case MOVE_TO_STORE: // Rentre a la maison : on depose la recolte portee au stock partage
+        {
+            // Type recolte selon l'action en cours (chasse/bois/mine).
+            ItemType type = ItemType::RawFood;
+            float pickup = REWARD_RAWFOOD;
+            if (_currentAction == ActionType::GatherWood) { type = ItemType::Wood;  pickup = REWARD_WOOD; }
+            else if (_currentAction == ActionType::MineRock) { type = ItemType::Stone; pickup = REWARD_STONE; }
+
+            HouseState* house = MyHouse();
+            if (house && GetItemCount(type) > 0 && house->Add(type, 1))
+            {
+                ConsumeItem(type, 1); // La piece portee passe au stock de la maison
+                FinishAction(true, pickup + REWARD_STORE);
+            }
+            else
+                FinishAction(false); // Stock plein / pas de maison : depot impossible
+            break;
+        }
+        case MOVE_TO_EAT: // Rentre a la maison : on mange un repas du stock (rassasie la faim)
+        {
+            PlayCustomFx(); // Effet du repas (soin PV) si declare (custom_clan_action_fx, action Eat)
+            _scheduler.Schedule(Milliseconds(EAT_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
+            {
+                HouseState* house = MyHouse();
+                if (!house || !house->TakeMeal(1))
+                {
+                    FinishAction(false); // Plus de repas (mange par un autre entre-temps)
+                    return;
+                }
+                _owner->needs.Satisfy(NeedType::Hunger, NEED_MAX);
+                FinishAction(true, REWARD_EAT);
+            });
+            break;
+        }
+        case MOVE_TO_VENDOR: // (Femmes) Arrive chez le vendeur : on achete des repas pour le stock
+        {
+            SetFacingAction();
+            PlayCustomFx();
+            PlayCustomFxTarget();
+            _scheduler.Schedule(Milliseconds(SHOP_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
+            {
+                if (Creature* vendor = ObjectAccessor::GetCreature(*me, _actionTarget))
+                {
+                    vendor->GetMotionMaster()->Clear();
+                    vendor->GetMotionMaster()->MoveTargetedHome();
+                    vendor->SetEmoteState(EMOTE_STATE_NONE);
+                }
+                if (HouseState* house = MyHouse())
+                    house->AddMeal(SHOP_FOOD_AMOUNT);
+                _shopCdMs = SHOP_COOLDOWN_MS; // Anti-farm
+                FinishAction(true, REWARD_SHOP);
+            });
+            break;
+        }
+        case MOVE_TO_PLAY: // (Enfants) Point de jeu atteint : on joue (l'effet RP si declare)
+        {
+            PlayCustomFx();
+            // La fin de l'action est pilotee par le minuteur arme dans StartPlay.
             break;
         }
         default:
@@ -1261,6 +1649,7 @@ void npc_clan_member::MovementInform(uint32 type, uint32 id)
 // ---------------------------------------------------------------------------
 // Reflexes face aux predateurs (loups / ours)
 // ---------------------------------------------------------------------------
+
 void npc_clan_member::JustEngagedWith(Unit* who)
 {
     OnThreat(who);
@@ -1297,10 +1686,14 @@ void npc_clan_member::OnThreat(Unit* attacker)
     _scheduler.CancelGroup(GROUP_ACTION);
     _busy = true;
 
+    // Reveille en sursaut : si on dormait sur un lit, redescendre au sol avant de fuir/combattre
+    // (sinon on flotterait en l'air, gravite encore coupee).
+    RestoreSleepPosture();
+
     // Coupe une eventuelle emote de travail
     me->SetEmoteState(EMOTE_STATE_NONE);
 
-    // Adultes : le choix "se defendre / fuir" est APPRIS. Enfants/anciens : fuite systematique.
+    // Adultes : le choix "se defendre / fuir" est APPRI. Enfants/anciens : fuite systematique.
     bool defend = false;
     if (_owner->stage == LifeStage::Adult)
     {
@@ -1358,8 +1751,8 @@ void npc_clan_member::EndReflex()
     if (me->IsInCombat())
         me->CombatStop(true);
     me->AttackStop();
-    me->GetMotionMaster()->MoveIdle(); // stoppe la poursuite / la fuite residuelle
-    ResetActionState(); // libere _busy -> la boucle de decision reprend
+    me->GetMotionMaster()->MoveIdle(); // Stoppe la poursuite / la fuite residuelle
+    ResetActionState(); // Libere _busy -> la boucle de decision reprend
 }
 
 void npc_clan_member::JustDied(Unit* killer)
@@ -1378,6 +1771,6 @@ void npc_clan_member::JustDied(Unit* killer)
     if (_owner)
     {
         sClanMgr->KillMember(_owner);
-        _owner = nullptr; // l'etat vient d'etre detruit : ne plus y toucher
+        _owner = nullptr; // L'etat vient d'etre detruit : ne plus y toucher
     }
 }

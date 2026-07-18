@@ -100,13 +100,14 @@ namespace Clan
             } while (result->NextRow());
         }
 
-        // Maisons attribuees a un clan (custom_clan_house).
-        if (QueryResult result = WorldDatabase.Query("SELECT spawn_id, clan_id FROM custom_clan_house"))
+        // Maisons attribuees a un clan (custom_clan_house). fire_spawn_id = le foyer de la
+        // maison (GameObject feu que les femmes entretiennent) ; 0 = aucun.
+        if (QueryResult result = WorldDatabase.Query("SELECT spawn_id, clan_id, fire_spawn_id FROM custom_clan_house"))
         {
             do
             {
                 Field* f = result->Fetch();
-                sClanMgr->AddHouse(f[0].GetUInt64(), f[1].GetUInt8());
+                sClanMgr->AddHouse(f[0].GetUInt64(), f[1].GetUInt8(), f[2].GetUInt64());
             } while (result->NextRow());
         }
 

@@ -24,7 +24,7 @@ ClanHUDDB.pos = ClanHUDDB.pos or {}
 
 -- Geometrie des colonnes.
 local COL_W        = 200  -- largeur d'une colonne (un PNJ)
-local COL_H        = 258  -- hauteur d'une colonne
+local COL_H        = 278  -- hauteur d'une colonne
 local VISIBLE_COLS = 4    -- colonnes visibles sans defiler
 local SCROLL_W     = COL_W * VISIBLE_COLS
 
@@ -48,6 +48,14 @@ end
 
 local function yn(v)
     return (v == "1") and "|cff40ff40oui|r" or "|cffff6060non|r"
+end
+
+-- Role "metier" derive du genre + de l'etape (division du travail d'epoque).
+--   st = "Enfant"/"Adulte"/"Ancien" ; ge = "M"/"F".
+local function roleText(st, ge)
+    if st == "Enfant" then return "|cff9adcffEnfant (jeu)|r" end
+    if ge == "F" then return "|cffff9cc0Femme (foyer)|r" end
+    return "|cff9ad19aHomme (chasse)|r"
 end
 
 -- Decode le masque d'affliction (bit0=maladie, bit1=poison, bit2=saignement).
@@ -293,14 +301,15 @@ local function getColumn(i)
         return fs
     end
     col.disLine    = line(-132)
-    col.invLine    = line(-150)
-    col.actLine    = line(-168)
-    col.learnLine  = line(-186)
-    col.spouseLine = line(-204)
+    col.houseLine  = line(-150)  -- stock de la maison (viande/bois/pierre)
+    col.mealLine   = line(-168)  -- repas prets + etat du foyer
+    col.actLine    = line(-186)
+    col.learnLine  = line(-204)
+    col.spouseLine = line(-222)
 
     col.targetBtn = createTargetButton(col, "ClanHUDColTarget_" .. i)
     col.targetBtn:SetSize(110, 20)
-    col.targetBtn:SetPoint("TOPLEFT", 6, -230)
+    col.targetBtn:SetPoint("TOPLEFT", 6, -250)
 
     columns[i] = col
     return col
@@ -308,8 +317,8 @@ end
 
 local function paintColumn(col, d)
     col.name:SetText(string.format("|cff88ccff%s|r", d.n or "?"))
-    col.sub:SetText(string.format("clan %s | %s | %s | %sj",
-        d.cl or "?", d.ge or "?", d.st or "?", d.ag or "?"))
+    col.sub:SetText(string.format("clan %s | %sj | %s",
+        d.cl or "?", d.ag or "?", roleText(d.st, d.ge)))
 
     local hp = tonumber(d.hp) or 0
     col.barHp:SetValue(hp)
@@ -326,8 +335,14 @@ local function paintColumn(col, d)
     col.barRepro:SetValue(re);  col.valRepro:SetText(string.format("%d", re))
 
     col.disLine:SetText("Etat : " .. afflictionText(d.dis))
-    col.invLine:SetText(string.format("Sac : V %s/%s  B %s/%s  P %s/%s   Feu %s",
-        d.raw or "0", d.cap or "?", d.wo or "0", d.cap or "?", d.sto or "0", d.cap or "?", yn(d.fi)))
+    -- Stock PARTAGE de la maison du clan (ce autour de quoi tourne toute la vie du clan).
+    col.houseLine:SetText(string.format("Maison : V %s  B %s  P %s",
+        d.hraw or "0", d.hwood or "0", d.hstn or "0"))
+    -- Repas prets a manger : en rouge si 0 (personne ne peut se nourrir), vert sinon. + foyer.
+    local meals = tonumber(d.hmeal) or 0
+    local mealsCol = (meals > 0) and "|cff40ff40" or "|cffff6060"
+    col.mealLine:SetText(string.format("Repas : %s%s/%s|r   Foyer %s",
+        mealsCol, d.hmeal or "0", d.hmmax or "?", yn(d.fi)))
     col.actLine:SetText(string.format("Action : |cffffffff%s|r", d.act or "-"))
     col.learnLine:SetText(string.format("Ideal : |cff88ff88%s|r (e%s)", d.best or "-", d.eps or "-"))
     -- "-" = celibataire ; "?" = marie mais le conjoint n'est pas apparu cote client.

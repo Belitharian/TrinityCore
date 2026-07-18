@@ -16,6 +16,7 @@
  */
 
 #include "ClanMind.h"
+#include "ClanRole.h"
 #include "Optional.h"
 #include "Random.h"
 #include "StringConvert.h"
@@ -29,79 +30,28 @@ namespace Clan
     {
         for (auto& row : _q)
             row.fill(0.0f);
-        SeedPriors();
-    }
-
-    void ClanMind::SeedPriors()
-    {
-        // Pour chaque etat, on decode ses composantes et on donne un a priori positif a
-        // l'action "instinctive". L'agent demarre donc competent, puis affine par apprentissage.
-        for (uint16 s = 0; s < STATE_COUNT; ++s)
-        {
-            // Decodage : l'ordre doit refleter EXACTEMENT celui de MindState::Index()
-            // (dernier bit pousse = premier bit lu).
-            uint16 idx = s;
-            bool unlitFire = (idx & 1) != 0; idx >>= 1;
-            bool predator  = (idx & 1) != 0; idx >>= 1;
-            bool diseased  = (idx & 1) != 0; idx >>= 1;
-            bool fire      = (idx & 1) != 0; idx >>= 1;
-            bool stone     = (idx & 1) != 0; idx >>= 1;
-            bool wood      = (idx & 1) != 0; idx >>= 1;
-            bool raw       = (idx & 1) != 0; idx >>= 1;
-            idx >>= 1; // bit jour/nuit : sans influence sur l'action instinctive
-            NeedType need = NeedType(idx);
-
-            ActionType rec;
-
-            // PRIORITE ABSOLUE : rester en vie. Une affliction draine les PV en continu et
-            // penalise toute action (REWARD_DISEASED) : on se soigne AVANT de vaquer a ses
-            // besoins. Sans ce hissage, la maladie n'etait consultee que dans la branche
-            // "aucun besoin urgent" -- un malade affame allait donc manger en agonisant.
-            // (Si aucun medecin n'existe, SeekDoctor echoue et l'apprentissage corrigera
-            //  de lui-meme cet instinct : le seed n'est qu'un point de depart.)
-            if (diseased)
-                rec = ActionType::SeekDoctor;
-            else switch (need)
-            {
-                case NeedType::Thirst: rec = ActionType::DrinkRiver; break;
-                case NeedType::Energy: rec = ActionType::Sleep;      break;
-                case NeedType::Repro:  rec = ActionType::SeekMate;   break;
-                case NeedType::Hunger:
-                    if (raw && fire)
-                        rec = ActionType::Cook;                 // viande + feu -> cuire
-                    else if (raw)                               // viande sans feu -> obtenir un feu
-                        rec = (wood && stone) ? ActionType::LightFire
-                            : (!wood ? ActionType::GatherWood : ActionType::MineRock);
-                    else
-                        rec = ActionType::Hunt;                 // pas de viande -> chasser
-                    break;
-                default: // aucun besoin urgent
-                    if (predator)             rec = ActionType::HuntPredator; // exterminer la menace
-                    else if (unlitFire)
-                        // Un feu est eteint : l'entretien du foyer prime sur l'errance. Le clan
-                        // s'affaire donc a rallumer TOUS les feux des qu'il n'a rien d'urgent.
-                        rec = (wood && stone) ? ActionType::LightFire
-                            : (!wood ? ActionType::GatherWood : ActionType::MineRock);
-                    // Rien d'urgent : on constitue des reserves plutot que de flaner.
-                    // NB : les drapeaux d'etat ne disent que "en possede / n'en possede pas",
-                    // jamais "est plein" (3 bits de plus feraient x8 sur la Q-table). L'instinct
-                    // n'amorce donc la collecte que jusqu'a UNE unite de chaque ; c'est
-                    // l'apprentissage qui pousse jusqu'a la capacite max, car chaque ramassage
-                    // paie (REWARD_WOOD/STONE/RAWFOOD) tant qu'on n'est pas plein, et l'action
-                    // echoue une fois la capacite atteinte -> l'agent apprend seul a s'arreter.
-                    else if (!wood)           rec = ActionType::GatherWood;
-                    else if (!stone)          rec = ActionType::MineRock;
-                    else if (!raw)            rec = ActionType::Hunt;
-                    else                      rec = ActionType::Wander;       // sac garni : explorer
-                    break;
-            }
-
-            _q[s][uint8(rec)] = Q_SEED_PRIOR;
-        }
-
-        // Instinct de combat : par defaut, se defendre plutot que fuir.
+        // Instinct de combat : par defaut, se defendre plutot que fuir. (Le seed des ACTIONS
+        // depend du role, pas encore connu a la construction : il est applique par SeedTopUp
+        // au (re)spawn et aux transitions d'age.)
         _combatDefend = Q_SEED_PRIOR;
         _combatFlee   = 0.0f;
+    }
+
+    void ClanMind::SeedTopUp(ClanRole const* role)
+    {
+        if (!role)
+            return;
+
+        // Pour chaque etat, on remonte l'action instinctive DU ROLE a au moins Q_SEED_PRIOR si
+        // elle est encore sous ce seuil. Non destructif (jamais d'abaissement) et idempotent :
+        // on peut le rappeler a chaque spawn et a chaque changement d'etape sans effacer l'acquis.
+        for (uint16 s = 0; s < STATE_COUNT; ++s)
+        {
+            ActionType instinct = role->Instinct(MindState::Decode(s));
+            float& q = _q[s][uint8(instinct)];
+            if (q < Q_SEED_PRIOR)
+                q = Q_SEED_PRIOR;
+        }
     }
 
     bool ClanMind::ChooseDefend() const
@@ -117,34 +67,48 @@ namespace Clan
         v += Q_ALPHA * (reward - v);
     }
 
-    ActionType ClanMind::ChooseAction(MindState const& state) const
+    ActionType ClanMind::ChooseAction(MindState const& state, ClanRole const* role) const
     {
-        uint16 s = state.Index();
-
-        // Exploration : action aleatoire avec probabilite epsilon.
+        // Exploration : action aleatoire PARMI CELLES AUTORISEES par le role.
         if (rand_norm() < _epsilon)
-            return ActionType(urand(0, ACTION_COUNT - 1));
+        {
+            ActionType allowed[ACTION_COUNT];
+            uint8 n = 0;
+            for (uint8 a = 0; a < ACTION_COUNT; ++a)
+                if (!role || role->IsAllowed(ActionType(a)))
+                    allowed[n++] = ActionType(a);
+            if (n == 0)
+                return ActionType::Idle;
+            return allowed[urand(0, n - 1)];
+        }
 
-        // Exploitation : meilleure action connue.
-        return BestAction(s);
+        // Exploitation : meilleure action connue (dans le repertoire du role).
+        return BestAction(state.Index(), role);
     }
 
-    ActionType ClanMind::BestAction(uint16 stateIndex) const
+    ActionType ClanMind::BestAction(uint16 stateIndex, ClanRole const* role) const
     {
         if (stateIndex >= STATE_COUNT)
             stateIndex = 0;
 
-        // Argmax DETERMINISTE : a Q-valeurs egales, on renvoie toujours la meme action
-        // (la premiere). Evite que l'action "ideale" affichee scintille tant qu'un etat
-        // n'a rien appris (toutes les valeurs a ~0). L'exploration reste assuree par
-        // epsilon dans ChooseAction.
+        // Argmax DETERMINISTE parmi les actions autorisees : a Q-valeurs egales, on garde la
+        // premiere (indice le plus bas). Idle (0) est vital pour tous, donc toujours un repli.
         auto const& row = _q[stateIndex];
-        uint8 bestAction = 0;
-        for (uint8 a = 1; a < ACTION_COUNT; ++a)
-            if (row[a] > row[bestAction])
-                bestAction = a;
-
-        return ActionType(bestAction);
+        ActionType best = ActionType::Idle;
+        float bestVal = 0.0f;
+        bool found = false;
+        for (uint8 a = 0; a < ACTION_COUNT; ++a)
+        {
+            if (role && !role->IsAllowed(ActionType(a)))
+                continue;
+            if (!found || row[a] > bestVal)
+            {
+                bestVal = row[a];
+                best = ActionType(a);
+                found = true;
+            }
+        }
+        return best;
     }
 
     float ClanMind::ValueOf(uint16 stateIndex, ActionType action) const
@@ -154,20 +118,29 @@ namespace Clan
         return _q[stateIndex][uint8(action)];
     }
 
-    float ClanMind::BestValue(MindState const& state) const
+    float ClanMind::BestValue(MindState const& state, ClanRole const* role) const
     {
         auto const& row = _q[state.Index()];
-        float best = row[0];
-        for (uint8 a = 1; a < ACTION_COUNT; ++a)
-            best = std::max(best, row[a]);
-        return best;
+        bool found = false;
+        float best = 0.0f;
+        for (uint8 a = 0; a < ACTION_COUNT; ++a)
+        {
+            if (role && !role->IsAllowed(ActionType(a)))
+                continue;
+            if (!found || row[a] > best)
+            {
+                best = row[a];
+                found = true;
+            }
+        }
+        return found ? best : 0.0f;
     }
 
-    void ClanMind::Learn(MindState const& prev, ActionType action, float reward, MindState const& next)
+    void ClanMind::Learn(MindState const& prev, ActionType action, float reward, MindState const& next, ClanRole const* role)
     {
         uint16 s = prev.Index();
         uint8 a = uint8(action);
-        float nextBest = BestValue(next);
+        float nextBest = BestValue(next, role);
 
         // Q(s,a) <- Q(s,a) + alpha * [r + gamma * max_a' Q(s',a') - Q(s,a)]
         float& q = _q[s][a];

@@ -92,8 +92,9 @@ namespace Clan
 
     bool Needs::IsWellFed() const
     {
-        return hunger < REPRO_READY_MAX_NEED
-            && thirst < REPRO_READY_MAX_NEED
-            && energy < REPRO_READY_MAX_NEED;
+        // Eligibilite a la reproduction : il suffit de ne pas etre affame. On NE teste PLUS la
+        // fatigue -- les hommes, chroniquement epuises (ils ne dorment qu'a l'epuisement),
+        // n'auraient sinon jamais leur fenetre de reproduction. Etre fatigue n'empeche pas.
+        return hunger < REPRO_READY_MAX_NEED;
     }
 }

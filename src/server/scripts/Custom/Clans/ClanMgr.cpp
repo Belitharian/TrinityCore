@@ -44,12 +44,23 @@ namespace
     // Garde-fou anti-explosion demographique.
     constexpr size_t MAX_POPULATION = 40;
 
-    // Vrai si l'un est le parent direct de l'autre (interdit la reproduction parent-enfant).
-    // Les fondateurs ont motherId/fatherId = 0, qui ne peut egaler aucun dbId reel.
-    bool IsParentChild(Clan::MemberState const* a, Clan::MemberState const* b)
+    // Vrai si a et b sont trop proches pour se reproduire : lien parent-enfant direct, OU
+    // fratrie (au moins un parent commun). Les fondateurs ont motherId/fatherId = 0 : on
+    // garde ces zeros hors comparaison, sinon tous les fondateurs passeraient pour freres.
+    bool IsCloseRelative(Clan::MemberState const* a, Clan::MemberState const* b)
     {
-        return b->motherId == a->dbId || b->fatherId == a->dbId
-            || a->motherId == b->dbId || a->fatherId == b->dbId;
+        // Parent -> enfant (l'un est le pere/la mere de l'autre).
+        if (b->motherId == a->dbId || b->fatherId == a->dbId
+            || a->motherId == b->dbId || a->fatherId == b->dbId)
+            return true;
+
+        // Fratrie : meme mere OU meme pere (demi-freres inclus). On ignore le parent inconnu (0).
+        if (a->motherId != 0 && a->motherId == b->motherId)
+            return true;
+        if (a->fatherId != 0 && a->fatherId == b->fatherId)
+            return true;
+
+        return false;
     }
 
     // Emplacements fixes des tombes (cimetiere). A la mort, le corps est deplace vers
@@ -89,10 +100,16 @@ void ClanMgr::AddMemberTemplate(uint32 entry, ClanId clan, Gender gender, LifeSt
     _memberTemplates[entry] = { clan, gender, stage };
 }
 
-void ClanMgr::AddHouse(uint64 spawnId, uint8 clanId)
+void ClanMgr::AddHouse(uint64 spawnId, uint8 clanId, uint64 fireSpawnId)
 {
-    _houses[spawnId] = { spawnId, ClanId(clanId) };
+    HouseState& h = _houses[spawnId];
+    h.spawnId = spawnId;
+    h.clan    = ClanId(clanId);
+    // Un clan = une seule maison : la premiere declaree fait foi (try_emplace n'ecrase pas).
     _houseByClan.try_emplace(clanId, spawnId);
+    // Le foyer de la maison : rattachement feu -> maison (utilise par FindHouseFire / RegisterFire).
+    if (fireSpawnId)
+        _fireHouseBySpawn[fireSpawnId] = spawnId;
 }
 
 void ClanMgr::AddBedAssignment(uint64 bedSpawnId, uint64 houseSpawnId, uint32 memberEntry)
@@ -101,6 +118,18 @@ void ClanMgr::AddBedAssignment(uint64 bedSpawnId, uint64 houseSpawnId, uint32 me
         _bedToHouse[bedSpawnId] = houseSpawnId;
     if (memberEntry && bedSpawnId)
         _bedByEntry[memberEntry] = bedSpawnId;
+}
+
+HouseState* ClanMgr::GetHouseBySpawn(uint64 spawnId)
+{
+    auto it = _houses.find(spawnId);
+    return it != _houses.end() ? &it->second : nullptr;
+}
+
+HouseState* ClanMgr::GetClanHouse(ClanId clan)
+{
+    auto it = _houseByClan.find(uint8(clan));
+    return it != _houseByClan.end() ? GetHouseBySpawn(it->second) : nullptr;
 }
 
 uint64 ClanMgr::GetAssignedBed(uint32 entry) const
@@ -259,6 +288,28 @@ Creature* ClanMgr::FindNearestDoctor(Creature* from) const
     return best;
 }
 
+Creature* ClanMgr::FindNearestVendor(Creature* from) const
+{
+    Creature* best = nullptr;
+    float bestDist = RESOURCE_SEARCH_RANGE;
+    for (auto const& [entry, res] : _resourceByEntry)
+    {
+        if (res.type != ResourceType::Vendor || res.kind != ObjectKind::Creature)
+            continue;
+
+        if (Creature* vendor = GetClosestCreatureWithEntry(from, entry, RESOURCE_SEARCH_RANGE, true))
+        {
+            float dist = from->GetDistance(vendor);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                best = vendor;
+            }
+        }
+    }
+    return best;
+}
+
 uint32 ClanMgr::GetDisplayId(uint32 entry, LifeStage stage) const
 {
     auto it = _displaysByEntry.find(entry);
@@ -305,6 +356,7 @@ void ClanMgr::LoadFromDB()
     _bedToHouse.clear();
     _houseByClan.clear();
     _bedByEntry.clear();
+    _fireHouseBySpawn.clear();
     _nextBirthId = BIRTH_ID_BASE;
 
     // (Re)initialise le cimetiere : tous les emplacements redeviennent libres. Les tombes
@@ -336,6 +388,7 @@ void ClanMgr::ReloadRegistries()
     _bedToHouse.clear();
     _houseByClan.clear();
     _bedByEntry.clear();
+    _fireHouseBySpawn.clear();
 
     ClanDatabase::LoadRegistries();
 
@@ -544,6 +597,16 @@ MemberState* ClanMgr::GetStateByDbId(uint64 dbId) const
     return nullptr;
 }
 
+bool ClanMgr::HasLivingWoman() const
+{
+    // Les etats des morts sont retires de _states : y etre = etre en vie. Les enfants ne
+    // tiennent pas le foyer, on exige donc une femme adulte ou anciennne.
+    for (auto const& state : _states)
+        if (state->gender == Gender::Female && state->stage != LifeStage::Child)
+            return true;
+    return false;
+}
+
 std::vector<ObjectGuid> ClanMgr::GetLiveMemberGuids() const
 {
     std::vector<ObjectGuid> out;
@@ -692,6 +755,13 @@ FireState& ClanMgr::RegisterFire(GameObject* fire)
         fs.lit = true; // un feu decouvert est considere allume au depart
         fs.burnMs = FIRE_BURN_DURATION_MS;
         fs.mapId = fire->GetMapId();
+        // Rattachement a une maison (custom_clan_fire), via le spawnId persistant du feu.
+        if (uint64 spawnId = fire->GetSpawnId())
+        {
+            auto h = _fireHouseBySpawn.find(spawnId);
+            if (h != _fireHouseBySpawn.end())
+                fs.houseSpawnId = h->second;
+        }
         it = _fires.emplace(fire->GetGUID(), fs).first;
 
         // On force l'apparence "allume" des la decouverte (sinon le GO garde son etat
@@ -732,6 +802,38 @@ GameObject* ClanMgr::FindNearestFire(Creature* from, bool wantLit)
 
 GameObject* ClanMgr::FindNearestLitFire(Creature* from)   { return FindNearestFire(from, true); }
 GameObject* ClanMgr::FindNearestUnlitFire(Creature* from) { return FindNearestFire(from, false); }
+
+GameObject* ClanMgr::FindHouseFire(Creature* from, uint64 houseSpawnId, bool wantLit)
+{
+    if (!houseSpawnId)
+        return nullptr;
+
+    GameObject* best = nullptr;
+    float bestDist = RESOURCE_SEARCH_RANGE;
+
+    for (auto const& [entry, res] : _resourceByEntry)
+    {
+        if (res.type != ResourceType::Fire)
+            continue;
+
+        std::list<GameObject*> fires;
+        GetGameObjectListWithEntryInGrid(fires, from, entry, RESOURCE_SEARCH_RANGE);
+        for (GameObject* fire : fires)
+        {
+            FireState& fs = RegisterFire(fire);
+            if (fs.houseSpawnId != houseSpawnId || fs.lit != wantLit)
+                continue;
+
+            float dist = from->GetDistance(fire);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                best = fire;
+            }
+        }
+    }
+    return best;
+}
 
 bool ClanMgr::IsFireLit(ObjectGuid fireGuid) const
 {
@@ -820,7 +922,9 @@ MemberState* ClanMgr::FindMate(MemberState* self) const
             continue;
         if (mate->gender == self->gender)     // il faut des genres opposes
             continue;
-        if (IsParentChild(self, mate))        // pas de reproduction parent-enfant
+        if (mate->clan != self->clan)         // il faut des membres du meme clan
+            continue;
+        if (IsCloseRelative(self, mate))      // pas de reproduction parent-enfant ni entre freres/soeurs
             continue;
         return mate;
     }
@@ -856,9 +960,9 @@ void ClanMgr::Reproduce(MemberState* a, MemberState* b)
         TC_LOG_DEBUG("scripts", "ClanMgr::Reproduce annulee : meme genre (a={} b={}).", a->dbId, b->dbId);
         return;
     }
-    if (IsParentChild(a, b)) // interdit la reproduction parent-enfant
+    if (IsCloseRelative(a, b)) // interdit la reproduction parent-enfant ET entre freres/soeurs
     {
-        TC_LOG_DEBUG("scripts", "ClanMgr::Reproduce annulee : lien parent-enfant (a={} b={}).", a->dbId, b->dbId);
+        TC_LOG_DEBUG("scripts", "ClanMgr::Reproduce annulee : parents trop proches (a={} b={}).", a->dbId, b->dbId);
         return;
     }
 
@@ -892,10 +996,10 @@ void ClanMgr::Reproduce(MemberState* a, MemberState* b)
     }
 
     // Evite la multitude d'enfants identiques : un seul enfant vivant par entry a la fois.
-    // (Les enfants gardent leur entry en grandissant : la place se libere donc quand celui-ci
-    //  devient adulte, ou s'il meurt.)
+    // (Les enfants gardent leur entry en grandissant : il faut donc eviter de faire un
+    // enfant avec le meme entry qu'un des parents.)
     for (auto const& other : _states)
-        if (other->entry == entry && other->stage == LifeStage::Child)
+        if (other->entry == entry)
         {
             TC_LOG_DEBUG("scripts", "ClanMgr::Reproduce annulee : un enfant d'entry {} existe deja.", entry);
             return;
@@ -977,8 +1081,10 @@ bool ClanMgr::FindAncestorGrave(MemberState const* seeker, Creature* from, Posit
 {
     if (!seeker || !from)
         return false;
-    // Un fondateur (parents = 0) n'a pas d'ancetre a honorer.
-    if (!seeker->motherId && !seeker->fatherId)
+
+    // On verifie d'abord si le seeker a au moins une cible potentielle dans le cimetiere
+    bool hasTargets = seeker->motherId || seeker->fatherId || seeker->spouseId;
+    if (!hasTargets)
         return false;
 
     GraveyardSlot const* best = nullptr;
@@ -988,7 +1094,13 @@ bool ClanMgr::FindAncestorGrave(MemberState const* seeker, Creature* from, Posit
     {
         if (!slot.full)
             continue;
-        if (slot.deceasedId != seeker->motherId && slot.deceasedId != seeker->fatherId)
+
+        // La tombe doit correspondre soit au pere, soit ? la mere, soit au conjoint
+        bool isBeloved = (slot.deceasedId == seeker->motherId) || 
+                         (slot.deceasedId == seeker->fatherId) || 
+                         (slot.deceasedId == seeker->spouseId);
+                         
+        if (!isBeloved)
             continue;
 
         float dist = from->GetDistance(slot.position);
