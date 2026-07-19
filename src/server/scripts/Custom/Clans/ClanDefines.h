@@ -320,34 +320,34 @@ namespace Clan
     // Perception / execution
     // ---------------------------------------------------------------------
     constexpr float  RESOURCE_SEARCH_RANGE   = SIZE_OF_GRIDS; // rayon de recherche des ressources
-    constexpr float  INTERACT_RANGE          = 3.0f;          // distance d'interaction (boire, etc.)
 
     // Errance : au lieu de MoveRandom (qui vise un point navmesh parfois colle a un mur
     // ou dans un recoin etroit), on tire quelques directions et on garde la plus degagee
     // via un raycast anti-collision (destination toujours en espace ouvert / ligne de vue).
-    constexpr float  WANDER_MIN_DIST         = 6.0f;   // distance min d'un saut d'errance
-    constexpr float  WANDER_MAX_DIST         = 18.0f;  // distance max d'un saut d'errance
-    constexpr uint8  WANDER_SAMPLES          = 4;      // nb de directions testees (on garde la plus ouverte)
+    constexpr float  WANDER_MIN_DIST         = 8.0f;   // distance min d'un saut d'errance
+    constexpr float  WANDER_MAX_DIST         = 20.0f;  // distance max d'un saut d'errance
+    constexpr uint8  WANDER_SAMPLES          = 6;      // nb de directions testees (on garde la plus ouverte)
     // Frequence du tick de decision. C'est aussi le temps mort MAXIMUM entre la fin d'une
     // action et le choix de la suivante : plus il est bas, plus les PNJ paraissent reactifs.
     constexpr uint32 DECISION_INTERVAL_MS    = 1500;
-    constexpr uint32 INTERACT_DURATION_MS    = 4000;   // duree d'une interaction (boire/dormir)
+    constexpr uint32 HUNT_SHOT_DELAY_MS      = 1000;   // temps entre le coup de feu et la mise a mort
+    constexpr uint32 DRINK_DURATION_MS       = 4000;   // duree de boire
+    constexpr uint32 HUNT_LOOT_DURATION_MS   = 2500;   // duree du prelevement (agenouille)
+    constexpr uint32 WOOD_DURATION_MS        = 3000;   // duree de coupage du bois
+    constexpr uint32 STONE_DURATION_MS       = 3000;   // duree de minage
+    constexpr uint32 COOK_DURATION_MS        = 10000;  // duree de cuisson sur un feu
+    constexpr uint32 SLEEP_DURATION_MS       = 30000;  // duree de sommeil
+    // Chasse
     constexpr uint32 HUNT_TIMEOUT_MS         = 20000;  // garde-fou : abandon d'une chasse trop longue
     // Sequence de chasse : on s'approche a portee de tir, on abat la proie a l'arme a feu,
     // puis on marche jusqu'a la depouille et on s'agenouille pour prelever la viande.
     constexpr float  HUNT_SHOOT_RANGE        = 20.0f;  // distance a laquelle on ouvre le feu
     constexpr uint32 HUNT_KILL_DELAY_MS      = 800;    // temps entre le coup de feu et la mise a mort
-    constexpr uint32 HUNT_SHOT_DELAY_MS      = 1000;   // temps entre le coup de feu et la mise a mort
-    constexpr uint32 HUNT_LOOT_DURATION_MS   = 2500;   // duree du prelevement (agenouille)
-    constexpr uint32 WOOD_DURATION_MS        = 3000;   // duree de coupage du bois
-    constexpr uint32 STONE_DURATION_MS       = 3000;   // duree de minage
-    constexpr uint32 COOK_DURATION_MS        = 10000;  // duree de cuisson sur un feu
-    constexpr uint32 SLEEP_DURATION_MS       = 10000;  // duree de sommeil
     // Hauteur du matelas au-dessus de l'origine du GameObject "lit". Le dormeur y est
     // teleporte (gravite coupee), sinon son corps git au sol, enfonce sous le maillage.
     // A AJUSTER selon ton modele de lit (0 = origine deja au niveau du matelas).
     constexpr float  BED_SLEEP_HEIGHT        = 0.9f;
-    constexpr uint32 MATE_DURATION_MS        = 3000;   // duree de l'accouplement (une fois les deux reunis)
+    constexpr uint32 MATE_DURATION_MS        = 30000;  // duree de l'accouplement (une fois les deux reunis)
     constexpr float  MATE_APPROACH_RANGE     = 0.8f;   // demi-distance entre les partenaires au point de rencontre (face a face, proches)
     constexpr uint32 MATE_APPROACH_TIMEOUT_MS = 15000; // attente max que le partenaire rejoigne le point de rencontre
     // Reproduction UNIQUEMENT dans la maison du couple : rayon autour du centre de la maison

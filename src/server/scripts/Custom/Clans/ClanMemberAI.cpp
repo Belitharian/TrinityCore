@@ -1237,7 +1237,7 @@ void npc_clan_member::TryBeginMating()
     GameObject* house = _owner->houseSpawnId ? me->GetMap()->GetGameObjectBySpawnId(_owner->houseSpawnId) : nullptr;
 
     bool bothAtHome = house && me->IsWithinDist(house, MATE_HOUSE_RADIUS) && mate->IsWithinDist(house, MATE_HOUSE_RADIUS);
-    if (!bothAtHome || !me->IsWithinDist(mate, INTERACT_RANGE))
+    if (!bothAtHome)
     {
         if (npc_clan_member* mateAI = dynamic_cast<npc_clan_member*>(mate->AI()))
             mateAI->ReleaseMate();
@@ -1803,7 +1803,7 @@ void npc_clan_member::MovementInform(uint32 /*type*/, uint32 id)
         {
             SetFacingAction();
             PlayCustomFx();
-            _scheduler.Schedule(Milliseconds(INTERACT_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
+            _scheduler.Schedule(Milliseconds(DRINK_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
             {
                 SetRandomDeceased(AfflictionType::Poison, DISEASE_CHANCE_DRINK);
                 _owner->needs.Satisfy(NeedType::Thirst, NEED_MAX);
