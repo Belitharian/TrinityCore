@@ -36,8 +36,8 @@ namespace Clan
     // autour de ce que contient le foyer (repas prets, matieres, etat du feu).
     struct MindState
     {
-        NeedType urgentNeed    = NeedType::None;
-        bool     night         = false;
+        NeedType urgentNeed      = NeedType::None;
+        bool     night           = false;
         bool     houseHasMeal    = false; // un repas cuisine est dispo au stock (on peut manger)
         bool     houseHasRawFood = false; // de la viande crue est au stock (a cuisiner)
         bool     houseHasWood    = false; // du bois est au stock (pour rallumer)
@@ -45,6 +45,11 @@ namespace Clan
         bool     houseFireLit    = false; // le foyer de la maison est allume (on peut cuire)
         bool     diseased        = false; // porte une aura de maladie
         bool     predatorNearby  = false; // un animal sauvage (predateur) est a portee
+        // Seul bit portant sur l'inventaire INDIVIDUEL : au moins un type de ressource est porte
+        // au maximum (INVENTORY_MAX_PER_ITEM). Il rend le retour au foyer (StoreHome) apprenable :
+        // sans lui, "chasser" recouvrait deux situations opposees (partir chasser / rentrer livrer)
+        // et une recolte pouvait rester bloquee a vie dans un sac plein.
+        bool     bagFull         = false;
 
         // Index compact dans [0, STATE_COUNT[. L'ordre d'empilage DOIT correspondre a Decode().
         uint16 Index() const
@@ -62,6 +67,7 @@ namespace Clan
             idx = uint16(idx * 2 + (houseFireLit ? 1 : 0));
             idx = uint16(idx * 2 + (diseased ? 1 : 0));
             idx = uint16(idx * 2 + (predatorNearby ? 1 : 0));
+            idx = uint16(idx * 2 + (bagFull ? 1 : 0));
             return idx;
         }
 
@@ -70,6 +76,7 @@ namespace Clan
         static MindState Decode(uint16 index)
         {
             MindState s;
+            s.bagFull         = (index & 1) != 0; index >>= 1;
             s.predatorNearby  = (index & 1) != 0; index >>= 1;
             s.diseased        = (index & 1) != 0; index >>= 1;
             s.houseFireLit    = (index & 1) != 0; index >>= 1;

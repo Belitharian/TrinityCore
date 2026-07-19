@@ -123,6 +123,7 @@ namespace Clan
 		// SetVirtualItem : aucune declaration dans creature_equip_template n'est necessaire.
 		uint32 item = 0;
 		uint8  itemSlot = 0; // 0 = main droite, 1 = main gauche, 2 = a distance
+        uint32 sound = 0; // son
 	};
 
 	// Resume global du monde (pour la fenetre monde de l'addon).
@@ -133,6 +134,8 @@ namespace Clan
 		uint32 children = 0;
 		uint32 elders = 0;
 		uint32 sick = 0;
+		uint32 firesLit = 0;   // feux suivis actuellement allumes
+		uint32 firesTotal = 0; // feux suivis (decouverts) au total
 	};
 
 	// Reservation d'un noeud de ressource par un membre (evite que deux PNJ visent le meme).
@@ -165,6 +168,13 @@ namespace Clan
 	// ajoutent les repas cuisines ; tout membre affame vient y manger un repas.
 	struct HouseState
 	{
+        HouseState()
+        {
+            Add(ItemType::RawFood,  INVENTORY_MAX_PER_ITEM); // ajoute 5 viandes crues
+            Add(ItemType::Stone,    INVENTORY_MAX_PER_ITEM); // ajoute 5 pierres
+            Add(ItemType::Wood,     INVENTORY_MAX_PER_ITEM); // ajoute 5 bois
+        }
+
 		uint64 spawnId = 0;
 		ClanId clan = ClanId::None;
 		uint32 mapId = 0;
@@ -261,7 +271,7 @@ namespace Clan
 		std::string BuildEpitaph(DeathCause cause, std::string const& name, uint32 ageDays) const;
 
 		// --- Effets RP par action (aura / sort / emote) ---
-		void AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote, uint32 item, uint8 itemSlot);
+		void AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote, uint32 item, uint8 itemSlot, uint32 sound);
 		// Effets declares pour une action (nullptr si aucun).
 		ActionFx const* GetActionFx(ActionType action) const;
 
@@ -298,6 +308,9 @@ namespace Clan
 		// Feu rattache a une maison (custom_clan_fire), allume ou eteint selon wantLit, le plus
 		// proche de 'from'. C'est le foyer que les femmes entretiennent. nullptr si aucun.
 		GameObject* FindHouseFire(Creature* from, uint64 houseSpawnId, bool wantLit);
+		// Temps restant (ms) avant que le foyer allume de cette maison ne s'eteigne. 0 si
+		// aucun foyer allume. Sert au compte a rebours du HUD.
+		uint32 GetHouseFireBurnMs(Creature* from, uint64 houseSpawnId);
 
 		// --- Maison / stock partage ---
 		// Etat (dont stock) d'une maison par son spawnId, ou du clan (une maison par clan). nullptr si aucune.

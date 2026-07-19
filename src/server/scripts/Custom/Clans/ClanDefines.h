@@ -70,8 +70,8 @@ namespace Clan
         Idle            = 0,
         Wander          = 1,
         Hunt            = 2,  // chasser une proie reelle -> viande crue
-        DrinkRiver      = 3, 
-        DrinkWell       = 4, 
+        StoreHome       = 3,  // rentrer deposer TOUT le sac au stock de la maison
+        Drink           = 4,
         Sleep           = 5, 
         SeekMate        = 6, 
         GatherWood      = 7,  // ramasser du bois -> pour rallumer un feu
@@ -131,8 +131,9 @@ namespace Clan
     };
 
     // Capacite de portage par type de ressource : au-dela, on ne ramasse plus.
-    // (L'etat percu par la Q-table reste booleen "en possede / n'en possede pas" : la
-    //  quantite ne fait donc pas exploser le nombre d'etats.)
+    // L'etat percu par la Q-table ne retient qu'un booleen "sac plein" (MindState::bagFull) :
+    // la quantite exacte ne fait donc pas exploser le nombre d'etats. C'est ce drapeau qui
+    // declenche le retour au foyer (action StoreHome) -- on ne rentre QUE le sac plein.
     constexpr uint32 INVENTORY_MAX_PER_ITEM = 5;
 
     // Cause de la mort, gravee sur la tombe et lisible en cliquant dessus (gossip).
@@ -160,14 +161,17 @@ namespace Clan
     // ---------------------------------------------------------------------
     // Dimensions de la Q-table
     // ---------------------------------------------------------------------
-    // Etat discret = (besoin le plus urgent) x (jour/nuit) x 7 bits de contexte, desormais
-    // centres sur le STOCK DE LA MAISON (et non plus l'inventaire individuel) :
-    // houseHasMeal, houseHasRawFood, houseHasWood, houseHasStone, houseFireLit, diseased, predatorNearby.
+    // Etat discret = (besoin le plus urgent) x (jour/nuit) x 8 bits de contexte, centres sur le
+    // STOCK DE LA MAISON (et non plus l'inventaire individuel) :
+    // houseHasMeal, houseHasRawFood, houseHasWood, houseHasStone, houseFireLit, diseased,
+    // predatorNearby, + bagFull (le seul bit qui parle de l'inventaire PORTE : sans lui, "chasser"
+    // signifiait tantot chasser tantot rentrer livrer, et l'agent melangeait deux vecus
+    // contradictoires dans la meme case de la Q-table).
     constexpr uint8  ACTION_COUNT     = uint8(ActionType::Count);   // 17
     constexpr uint8  NEED_STATE_COUNT = uint8(NeedType::Count);     // 5 (None..Repro)
     constexpr uint8  TIME_STATE_COUNT = 2;                          // jour / nuit
-    constexpr uint16 FLAG_STATE_COUNT = 128;                        // 2^7 booleens de contexte
-    constexpr uint16 STATE_COUNT      = uint16(NEED_STATE_COUNT * TIME_STATE_COUNT * FLAG_STATE_COUNT); // 5*2*128 = 1280
+    constexpr uint16 FLAG_STATE_COUNT = 256;                        // 2^8 booleens de contexte
+    constexpr uint16 STATE_COUNT      = uint16(NEED_STATE_COUNT * TIME_STATE_COUNT * FLAG_STATE_COUNT); // 5*2*256 = 2560
 
     // ---------------------------------------------------------------------
     // Parametres d'apprentissage (Q-learning) - tous ajustables
@@ -230,8 +234,16 @@ namespace Clan
     constexpr float  DISEASE_CHANCE_DRINK    = 2.0f;   // % de contracter une maladie (type Disease) par tirage
     constexpr float  DISEASE_CHANCE_PRED     = 8.0f;   // % d'infliger un saignement quand un animal attaque
 
-    // Recompense negative appliquee quand une action echoue / perd du temps.
+    // Recompense negative appliquee quand une action ENGAGEE echoue (on s'est deplace, la cible a
+    // disparu, le feu s'est eteint pendant la cuisson) : du temps a bel et bien ete gaspille.
     constexpr float REWARD_FAIL              = -0.5f;
+    // Action qui n'a meme pas pu DEMARRER : ses conditions n'etaient pas reunies (courses en
+    // cooldown, feu deja allume, stock vide...). Rien n'a ete tente, rien n'a ete perdu sinon un
+    // tick : la sanction doit rester symbolique. Avec REWARD_FAIL, une decision toutes les 1.5s
+    // face a un cooldown de 30s infligeait jusqu'a vingt -0.5 d'affilee et condamnait
+    // definitivement l'action -- c'est ainsi que les femmes avaient desappris a faire les
+    // courses et la cuisine, ne gardant que boire et manger (qui, eux, reussissent toujours).
+    constexpr float REWARD_UNAVAILABLE       = -0.05f;
     // Petite penalite de temps par pas de decision (encourage l'efficacite).
     constexpr float REWARD_TIME_PENALTY      = -0.05f;
     // Etre malade est tres penalisant : toute action menee en etant afflige est punie.
@@ -254,6 +266,31 @@ namespace Clan
     constexpr float REWARD_EAT               = 1.00f;  // avoir mange un repas -> faim rassasiee
     constexpr float REWARD_SHOP              = 0.60f;  // avoir rapporte de la nourriture achetee au vendeur
     constexpr float REWARD_PLAY              = 0.30f;  // (enfant) avoir joue / explore
+
+    // Ponderation par la RARETE : recolter (et deposer) ce qui MANQUE au foyer rapporte plus que
+    // d'empiler ce qu'on a deja en abondance. Sans ca, le bois payait 0.30 que la maison en ait 0
+    // ou 19, et rien ne poussait un homme a varier ses taches : il se figeait sur une seule.
+    // Le multiplicateur vaut 1.0 a stock nul et decroit lineairement jusqu'au plancher une fois
+    // le niveau de "confort" atteint (jamais 0 : une action utile ne doit jamais cesser de payer).
+    constexpr uint32 HOUSE_STOCK_COMFORT     = 8;      // au-dela, une ressource n'est plus "rare"
+    constexpr float  REWARD_SCARCITY_FLOOR   = 0.25f;  // multiplicateur plancher (stock confortable)
+
+    // Anti-boucle : repeter indefiniment la meme action (ex. chasser sans jamais ramasser bois ni
+    // pierre) devient progressivement moins payant. Malus PLAFONNE : il casse la boucle sans
+    // jamais tuer durablement l'action, qui redevient attractive des qu'on a fait autre chose.
+    constexpr uint8  REPEAT_TOLERANCE        = 3;      // repetitions consecutives gratuites
+    constexpr uint8  REPEAT_PENALTY_STEPS    = 5;      // paliers de malus avant plafond
+    constexpr float  REWARD_REPEAT_PENALTY   = -0.08f; // malus par palier (plafond -0.40)
+
+    // Garde-fou anti-blocage : si une action n'a toujours pas rendu la main au-dela de ce delai
+    // (MovementInform jamais recu : navmesh, GameObject despawne, cible hors d'atteinte), on la
+    // solde en echec pour liberer le membre. Sans ca, _busy reste vrai a vie et le PNJ est gele.
+    constexpr uint32 ACTION_TIMEOUT_MS       = 60000;
+
+    // Distance en-deca de laquelle on est considere "au foyer" : la livraison se fait alors sur
+    // place, sans MovePoint (un deplacement de distance nulle ne renvoie pas toujours son
+    // MovementInform, ce qui figerait l'action).
+    constexpr float  STORE_REACH_DIST        = 4.0f;
 
     // Apprentissage du combat (choix defendre / fuir des adultes) - separe de la Q-table.
     constexpr float REWARD_DEFEND_WIN        = 1.00f;  // avoir tue l'agresseur en se defendant
@@ -309,6 +346,9 @@ namespace Clan
     constexpr uint32 SHOP_COOLDOWN_MS        = 30000;  // delai avant de pouvoir refaire les courses (anti-farm)
     constexpr uint32 SHOP_FOOD_AMOUNT        = 2;      // nb de repas rapportes par sortie courses
     constexpr uint32 PLAY_DURATION_MS        = 4000;   // duree d'une session de jeu (enfant)
+    // Rayon max autour du foyer ou un enfant peut jouer/errer. Au-dela il rentre (sauf pour
+    // aller au medecin, gere par SeekDoctor). Empeche les enfants de partir a l'aventure.
+    constexpr float  CHILD_HOME_RADIUS       = 15.0f;
 
     // Feux et noeuds de ressource.
     // Tous les feux se consument puis s'eteignent : c'est ce qui oblige les PNJ a ramasser
@@ -394,7 +434,11 @@ namespace Clan
         MOVE_TO_STORE       = 5300015, // retour a la maison pour deposer la recolte au stock
         MOVE_TO_VENDOR      = 5300016, // (femmes) aller chez le vendeur (courses)
         MOVE_TO_EAT         = 5300017, // retour a la maison pour manger un repas du stock
-        MOVE_TO_PLAY        = 5300018  // (enfants) point de jeu pres de la maison
+        MOVE_TO_PLAY        = 5300018, // (enfants) point de jeu pres de la maison
+        // Phase 1 du suivi de route : rejoindre le point d'entree sur la route. Doit se faire
+        // avec le pathfinding (le PNJ peut partir de l'interieur d'une maison), alors que la
+        // route elle-meme est parcourue en spline exacte, sans navmesh.
+        MOVE_TO_ROAD_ENTRY  = 5300019
     };
 
     // Capacite du stock d'une maison, par type de ressource (viande/bois/pierre) et repas.

@@ -190,9 +190,9 @@ std::string ClanMgr::BuildEpitaph(DeathCause cause, std::string const& name, uin
     return text;
 }
 
-void ClanMgr::AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote, uint32 item, uint8 itemSlot)
+void ClanMgr::AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote, uint32 item, uint8 itemSlot, uint32 sound)
 {
-    _actionFx[action] = { aura, spell, emote, item, itemSlot };
+    _actionFx[action] = { aura, spell, emote, item, itemSlot, sound };
 }
 
 ActionFx const* ClanMgr::GetActionFx(ActionType action) const
@@ -271,6 +271,13 @@ WorldSummary ClanMgr::GetWorldSummary() const
             if (IsDiseased(c))
                 ++sum.sick;
     }
+
+    // Etat des feux suivis (ceux decouverts par les membres) : combien sont allumes.
+    sum.firesTotal = uint32(_fires.size());
+    for (auto const& [guid, fs] : _fires)
+        if (fs.lit)
+            ++sum.firesLit;
+
     return sum;
 }
 
@@ -835,6 +842,15 @@ GameObject* ClanMgr::FindHouseFire(Creature* from, uint64 houseSpawnId, bool wan
     return best;
 }
 
+uint32 ClanMgr::GetHouseFireBurnMs(Creature* from, uint64 houseSpawnId)
+{
+    GameObject* fire = FindHouseFire(from, houseSpawnId, true); // le foyer ALLUME de la maison
+    if (!fire)
+        return 0;
+    auto it = _fires.find(fire->GetGUID());
+    return it != _fires.end() ? it->second.burnMs : 0;
+}
+
 bool ClanMgr::IsFireLit(ObjectGuid fireGuid) const
 {
     auto it = _fires.find(fireGuid);
@@ -977,6 +993,15 @@ void ClanMgr::Reproduce(MemberState* a, MemberState* b)
         TC_LOG_INFO("scripts", "ClanMgr: union de {} et {}.", a->dbId, b->dbId);
     }
 
+    // Cooldowns / apaisement du besoin de reproduction.
+    // Apaise le besoin meme en cas d'erreur (pop max, aucun template de gosse,
+    //  gosse qui existe deja)
+    a->reproCooldownDays = REPRO_COOLDOWN_DAYS;
+    b->reproCooldownDays = REPRO_COOLDOWN_DAYS;
+    a->needs.reproUrge = 0.0f;
+    b->needs.reproUrge = 0.0f;
+    a->dirty = b->dirty = true;
+
     if (_states.size() >= MAX_POPULATION)
     {
         TC_LOG_DEBUG("scripts", "ClanMgr::Reproduce annulee : population max atteinte.");
@@ -1028,13 +1053,6 @@ void ClanMgr::Reproduce(MemberState* a, MemberState* b)
     MemberState* raw = child.get();
     _states.push_back(std::move(child));
     _byDbId[raw->dbId] = raw;
-
-    // Cooldowns / apaisement du besoin de reproduction.
-    a->reproCooldownDays = REPRO_COOLDOWN_DAYS;
-    b->reproCooldownDays = REPRO_COOLDOWN_DAYS;
-    a->needs.reproUrge = 0.0f;
-    b->needs.reproUrge = 0.0f;
-    a->dirty = b->dirty = true;
 
     // Apparition immediate si la mere est dans le monde.
     if (Creature* motherCreature = ResolveLive(mother))

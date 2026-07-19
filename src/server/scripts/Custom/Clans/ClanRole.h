@@ -56,8 +56,7 @@ namespace Clan
             {
                 case ActionType::Idle:
                 case ActionType::Wander:
-                case ActionType::DrinkRiver:
-                case ActionType::DrinkWell:
+                case ActionType::Drink:
                 case ActionType::Sleep:
                 case ActionType::SeekDoctor:
                 case ActionType::Eat:        // manger un repas du stock : tout le monde mange
@@ -75,7 +74,7 @@ namespace Clan
                 return ActionType::SeekDoctor;
             switch (s.urgentNeed)
             {
-                case NeedType::Thirst: return ActionType::DrinkRiver;
+                case NeedType::Thirst: return ActionType::Drink;
                 case NeedType::Energy: return ActionType::Sleep;
                 default:               return ActionType::Count;
             }
@@ -97,6 +96,7 @@ namespace Clan
                 case ActionType::Hunt:
                 case ActionType::GatherWood:
                 case ActionType::MineRock:
+                case ActionType::StoreHome:   // seul l'homme recolte, donc seul lui a de quoi livrer
                 case ActionType::HuntPredator:
                 case ActionType::SeekMate:
                 case ActionType::LightFire:
@@ -111,6 +111,13 @@ namespace Clan
         {
             if (ActionType v = VitalInstinct(s); v != ActionType::Count)
                 return v;
+
+            // Sac plein : on rentre livrer avant toute autre tache. Une recolte qui dort dans un
+            // sac ne nourrit personne et gele toute la chaine du foyer (rien a cuire -> pas de
+            // feu -> pas de repas). Seule exception : si un repas est deja pret et qu'on a faim,
+            // on mange d'abord -- c'est immediat et cela se passe deja a la maison.
+            if (s.bagFull && !(s.urgentNeed == NeedType::Hunger && s.houseHasMeal))
+                return ActionType::StoreHome;
 
             switch (s.urgentNeed)
             {
@@ -170,10 +177,17 @@ namespace Clan
                 default: // rien d'urgent : on tient le foyer (feu + reserves de repas)
                     if (!s.houseFireLit && s.houseHasWood && s.houseHasStone)
                         return ActionType::LightFire;
-                    if (s.houseHasRawFood && s.houseFireLit && !s.houseHasMeal)
+                    // On cuisine des qu'il y a de la viande et du feu, MEME si un repas est deja
+                    // pret : c'est le metier, et on constitue des reserves pour tout le clan.
+                    // (Avant, la moindre portion en stock renvoyait l'instinct sur Idle : la
+                    // seule action amorcee des etats "rien d'urgent" etait donc l'attente, et les
+                    // femmes cessaient purement et simplement de tenir le foyer.) Le stock est
+                    // borne par HOUSE_MEALS_MAX cote StartCook : inutile de le tester ici.
+                    if (s.houseHasRawFood && s.houseFireLit)
                         return ActionType::Cook;
-                    if (!s.houseHasMeal)
-                        return ActionType::Shopping;             // pas de repas d'avance -> courses
+                    // Rien a cuisiner : on va chercher de quoi manger chez le vendeur.
+                    if (!s.houseHasRawFood)
+                        return ActionType::Shopping;
                     return ActionType::Idle;
             }
         }

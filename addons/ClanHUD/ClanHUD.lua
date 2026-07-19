@@ -338,12 +338,25 @@ local function paintColumn(col, d)
     -- Stock PARTAGE de la maison du clan (ce autour de quoi tourne toute la vie du clan).
     col.houseLine:SetText(string.format("Maison : V %s  B %s  P %s",
         d.hraw or "0", d.hwood or "0", d.hstn or "0"))
-    -- Repas prets a manger : en rouge si 0 (personne ne peut se nourrir), vert sinon. + foyer.
+    -- Repas prets a manger : en rouge si 0 (personne ne peut se nourrir), vert sinon.
     local meals = tonumber(d.hmeal) or 0
     local mealsCol = (meals > 0) and "|cff40ff40" or "|cffff6060"
-    col.mealLine:SetText(string.format("Repas : %s%s/%s|r   Foyer %s",
-        mealsCol, d.hmeal or "0", d.hmmax or "?", yn(d.fi)))
-    col.actLine:SetText(string.format("Action : |cffffffff%s|r", d.act or "-"))
+    -- Foyer : "eteint" en rouge, sinon "allume (42s)" avec le compte a rebours avant extinction
+    -- (rouge s'il reste moins de 15s, jaune sinon).
+    local fb = tonumber(d.fb) or 0
+    local fireTxt
+    if d.fi == "1" then
+        local c = (fb < 15) and "ffff6060" or "ffffd100"
+        fireTxt = string.format("|c%sallume (%ds)|r", c, fb)
+    else
+        fireTxt = "|cffff6060eteint|r"
+    end
+    col.mealLine:SetText(string.format("Repas : %s%s/%s|r   Foyer : %s",
+        mealsCol, d.hmeal or "0", d.hmmax or "?", fireTxt))
+    -- Sac plein : le membre doit rentrer livrer sa recolte avant de repartir en tournee. On le
+    -- signale ici car c'est la cause la plus frequente d'un stock de maison qui ne monte pas.
+    local bagTxt = (d.bag == "1") and "  |cffff6060[sac plein]|r" or ""
+    col.actLine:SetText(string.format("Action : |cffffffff%s|r%s", d.act or "-", bagTxt))
     col.learnLine:SetText(string.format("Ideal : |cff88ff88%s|r (e%s)", d.best or "-", d.eps or "-"))
     -- "-" = celibataire ; "?" = marie mais le conjoint n'est pas apparu cote client.
     col.spouseLine:SetText(string.format("Conjoint : |cffff99cc%s|r", d.sp or "-"))
@@ -473,9 +486,13 @@ local function updateWorld(d)
     local night = (d.night == "1")
     main.timeLine:SetText(string.format("Heure : %02dh00  —  %s",
         hour, night and "|cff6699ffNuit|r" or "|cffffd100Jour|r"))
+    -- Feux : allumes / total decouverts, colore selon qu'il reste des feux eteints a rallumer.
+    local fl = tonumber(d.fl) or 0
+    local ft = tonumber(d.ft) or 0
+    local fireColor = (ft > 0 and fl < ft) and "ffff6060" or "ff40ff40"
     main.popLine:SetText(string.format(
-        "Population : %s   (adultes %s | enfants %s | anciens %s)      Malades : %s",
-        d.pop or "?", d.ad or "?", d.ch or "?", d.el or "?", d.sick or "0"))
+        "Population : %s   (adultes %s | enfants %s | anciens %s)      Malades : %s      Feux : |c%s%d/%d|r",
+        d.pop or "?", d.ad or "?", d.ch or "?", d.el or "?", d.sick or "0", fireColor, fl, ft))
 end
 
 -- ---------------------------------------------------------------------------

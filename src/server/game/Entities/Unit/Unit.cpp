@@ -1,4 +1,4 @@
-/*
+ï»¿/*
  * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -7127,8 +7127,8 @@ int32 Unit::SpellBaseDamageBonusDone(SpellSchoolMask schoolMask) const
     }
     else if (Creature const* creature = ToCreature())
     {
-        // Sélection du type d'attaque et du modificateur d'unité selon la classe de la créature.
-        // Les créatures de classe MAGE utilisent l'attaque à distance (heuristique caster).
+        // S?ction du type d'attaque et du modificateur d'unit?elon la classe de la cr?ure.
+        // Les cr?ures de classe MAGE utilisent l'attaque ?istance (heuristique caster).
         float variance = creature->GetCreatureTemplate()->BaseVariance;
         UnitMods unitMod = UNIT_MOD_DAMAGE_MAINHAND;
         WeaponAttackType attackType = BASE_ATTACK;
@@ -7140,34 +7140,34 @@ int32 Unit::SpellBaseDamageBonusDone(SpellSchoolMask schoolMask) const
             unitMod = UNIT_MOD_DAMAGE_RANGED;
         }
 
-        // Vitesse d'attaque réelle en secondes (GetAttackTime retourne des millisecondes).
-        // Plancher à 1000 ms pour éviter une division par zéro ou une vitesse absurde.
+        // Vitesse d'attaque r?le en secondes (GetAttackTime retourne des millisecondes).
+        // Plancher ?000 ms pour ?ter une division par z? ou une vitesse absurde.
         constexpr float MIN_ATTACK_TIME_MS = 1000.0f;
         float const attackTimeSec = std::max(
             static_cast<float>(getAttackTimer(attackType)),
             MIN_ATTACK_TIME_MS) / 1000.0f;
 
-        // Moyenne des dégâts arme ? plus représentative que MAXDAMAGE seul.
+        // Moyenne des d?ts arme ? plus repr?ntative que MAXDAMAGE seul.
         float const weaponMinDamage = GetWeaponDamageRange(attackType, MINDAMAGE);
         float const weaponMaxDamage = GetWeaponDamageRange(attackType, MAXDAMAGE);
         float const weaponAvgDamage = (weaponMinDamage + weaponMaxDamage) * 0.5f;
 
-        // Contribution de l'attack power ramenée au DPS réel de la créature,
-        // puis mise à l'échelle par la variance du template.
-        // Formule : (AP / vitesse_arme) * variance ? cohérent avec le modèle TrinityCore joueur.
+        // Contribution de l'attack power ramen?au DPS r? de la cr?ure,
+        // puis mise ?'?elle par la variance du template.
+        // Formule : (AP / vitesse_arme) * variance ? coh?nt avec le mod? TrinityCore joueur.
         float const attackPower = GetTotalAttackPowerValue(attackType, false);
         float const apContribution = (attackPower / attackTimeSec) * variance;
 
         // Modificateurs du stat system (UNIT_MOD).
         // BASE_PCT et TOTAL_PCT restent de purs multiplicateurs de stat,
-        // sans mélange avec attackSpeedMulti.
+        // sans m?nge avec attackSpeedMulti.
         float const baseValue = GetFlatModifierValue(unitMod, BASE_VALUE) + apContribution;
         float const basePct = GetPctModifierValue(unitMod, BASE_PCT);
         float const totalValue = GetFlatModifierValue(unitMod, TOTAL_VALUE);
         float const totalPct = GetPctModifierValue(unitMod, TOTAL_PCT);
 
-        // Modificateur de dégâts lié à la difficulté (DamageModifier).
-        // Appliqué sur l'ensemble du calcul pour cohérence ? totalValue inclus.
+        // Modificateur de d?ts li? la difficult?DamageModifier).
+        // Appliqu?ur l'ensemble du calcul pour coh?nce ? totalValue inclus.
         float const dmgMultiplier = creature->GetCreatureDifficulty()->DamageModifier;
 
         DoneAdvertisedBenefit +=
@@ -7668,7 +7668,7 @@ int32 Unit::SpellBaseHealingBonusDone(SpellSchoolMask schoolMask) const
         if (GetPowerIndex(POWER_MANA) != MAX_POWERS)
             advertisedBenefit += std::max(0, int32(GetStat(STAT_INTELLECT)));
 
-        // Bonus de soin proportionnel à une stat (ex. : Esprit via certains talents).
+        // Bonus de soin proportionnel ?ne stat (ex. : Esprit via certains talents).
         AuraEffectList const& mHealingDoneOfStatPercent = GetAuraEffectsByType(SPELL_AURA_MOD_SPELL_HEALING_OF_STAT_PERCENT);
         for (AuraEffect const* aurEff : mHealingDoneOfStatPercent)
         {
@@ -7678,8 +7678,8 @@ int32 Unit::SpellBaseHealingBonusDone(SpellSchoolMask schoolMask) const
     }
     else if (Creature const* creature = ToCreature())
     {
-        // Les créatures soigneuses utilisent l'attaque à distance comme proxy caster
-        // (même heuristique que SpellBaseDamageBonusDone).
+        // Les cr?ures soigneuses utilisent l'attaque ?istance comme proxy caster
+        // (m? heuristique que SpellBaseDamageBonusDone).
         float variance = creature->GetCreatureTemplate()->BaseVariance;
         UnitMods unitMod = UNIT_MOD_DAMAGE_MAINHAND;
         WeaponAttackType attackType = BASE_ATTACK;

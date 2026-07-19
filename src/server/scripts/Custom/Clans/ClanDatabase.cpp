@@ -17,6 +17,7 @@
 
 #include "ClanDatabase.h"
 #include "ClanMgr.h"
+#include "ClanRoad.h"
 #include "DatabaseEnv.h"
 #include "Log.h"
 #include "Position.h"
@@ -27,6 +28,9 @@ namespace Clan
 {
     void ClanDatabase::LoadRegistries()
     {
+        // Routes suivies par les PNJ pour les deplacements "sociaux" (vendeur, medecin).
+        Road::Load();
+
         // Registre des ressources : quelles Creatures/GameObjects sont gibier/eau/bois/lit.
         if (QueryResult result = WorldDatabase.Query("SELECT entry, object_kind, resource_type FROM custom_clan_resource"))
         {
@@ -69,13 +73,13 @@ namespace Clan
 
         // Effets RP (aura / sort / emote) + equipement affiche pendant une action.
         if (QueryResult result = WorldDatabase.Query(
-            "SELECT action_type, aura, spell, emote, item, item_slot FROM custom_clan_action_fx"))
+            "SELECT action_type, aura, spell, emote, item, item_slot, sound FROM custom_clan_action_fx"))
         {
             do
             {
                 Field* f = result->Fetch();
                 sClanMgr->AddActionFx(f[0].GetUInt8(), f[1].GetUInt32(), f[2].GetUInt32(), f[3].GetUInt32(),
-                    f[4].GetUInt32(), f[5].GetUInt8());
+                    f[4].GetUInt32(), f[5].GetUInt8(), f[6].GetUInt32());
             } while (result->NextRow());
         }
 

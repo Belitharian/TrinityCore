@@ -67,8 +67,8 @@ namespace
 		{
 			case ActionType::Wander:        return "Errer";
 			case ActionType::Hunt:          return "Chasser";
-			case ActionType::DrinkRiver:    return "Boire(riviere)";
-			case ActionType::DrinkWell:     return "Boire(puits)";
+			case ActionType::StoreHome:     return "Rentrer deposer";
+			case ActionType::Drink:     return "Boire(puits)";
 			case ActionType::Sleep:         return "Dormir";
 			case ActionType::SeekMate:      return "Chercher partenaire";
 			case ActionType::GatherWood:    return "Ramasser bois";
@@ -122,8 +122,8 @@ namespace
 		if (s == "idle")                                                 return ActionType::Idle;
 		if (s == "wander"       || s == "errer")                         return ActionType::Wander;
 		if (s == "hunt"         || s == "chasser")                       return ActionType::Hunt;
-		if (s == "river"        || s == "riviere")                       return ActionType::DrinkRiver;
-		if (s == "well"         || s == "puits")                         return ActionType::DrinkWell;
+		if (s == "storehome"    || s == "store"     || s == "deposer")   return ActionType::StoreHome;
+		if (s == "well"         || s == "puits")                         return ActionType::Drink;
 		if (s == "sleep"        || s == "dormir")                        return ActionType::Sleep;
 		if (s == "seekmate"     || s == "mate"      || s == "repro")     return ActionType::SeekMate;
 		if (s == "gatherwood"   || s == "wood"      || s == "bois")      return ActionType::GatherWood;
@@ -230,20 +230,24 @@ namespace ClanMonitor
 		// StringFormat est en style fmt ({}), contrairement a PSendSysMessage.
 		// id = identifiant du PNJ (compteur de GUID) : cle de fenetre + ciblage (.clan target).
 		// hp = pourcentage de vie. dis = masque d'affliction (bit0=maladie, bit1=poison, bit2=saignement).
-		// raw/wo/sto = QUANTITES portees (transit vers le stock), cap = capacite de portage.
-		// hraw/hwood/hstn/hmeal = STOCK de la maison ; hcap/hmmax = capacites du stock/repas ; fi = foyer allume.
+		// raw/wo/sto = QUANTITES portees (transit vers le stock), cap = capacite de portage,
+		// bag = 1 si au moins un type est plein (le membre doit rentrer livrer avant de repartir).
+		// fb = secondes restantes avant extinction du foyer (0 = eteint).
+		uint32 fireBurnSec = sClanMgr->GetHouseFireBurnMs(creature, s->houseSpawnId) / 1000;
+
+		// hraw/hwood/hstn/hmeal = STOCK de la maison ; hcap/hmmax = capacites ; fi = foyer allume ; fb = compte a rebours.
 		std::string payload = Trinity::StringFormat(
 			"{}id={};n={};cl={};ge={};st={};ag={};hp={:.0f};hu={:.0f};th={:.0f};en={:.0f};re={:.0f};"
-			"raw={};wo={};sto={};cap={};fi={};dis={};eps={:.2f};act={};best={};sp={};"
-			"hraw={};hwood={};hstn={};hmeal={};hcap={};hmmax={}",
+			"raw={};wo={};sto={};cap={};bag={};fi={};dis={};eps={:.2f};act={};best={};sp={};"
+			"hraw={};hwood={};hstn={};hmeal={};hcap={};hmmax={};fb={}",
 			asTable ? "tbl=1;" : "",
 			creature->GetGUID().GetCounter(), creature->GetName(), ClanName(s->clan), GenderName(s->gender), StageName(s->stage),
 			s->ageDays, creature->GetHealthPct(), s->needs.hunger, s->needs.thirst, s->needs.energy, s->needs.reproUrge,
 			ai->GetItemCount(ItemType::RawFood), ai->GetItemCount(ItemType::Wood), ai->GetItemCount(ItemType::Stone),
-			INVENTORY_MAX_PER_ITEM,
+			INVENTORY_MAX_PER_ITEM, cur.bagFull ? 1 : 0,
 			cur.houseFireLit ? 1 : 0, sClanMgr->GetAfflictionMask(creature),
 			s->mind.GetEpsilon(), ActionName(ai->CurrentAction()), ActionName(best), spouseName,
-			hRaw, hWood, hStone, hMeal, HOUSE_STOCK_MAX, HOUSE_MEALS_MAX);
+			hRaw, hWood, hStone, hMeal, HOUSE_STOCK_MAX, HOUSE_MEALS_MAX, fireBurnSec);
 
 		WorldPackets::Chat::Chat packet;
 		packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, creature, player, payload, 0, "", DEFAULT_LOCALE, ADDON_PREFIX);
@@ -264,8 +268,9 @@ namespace ClanMonitor
 		}
 
 		std::string payload = Trinity::StringFormat(
-			"w=1;hour={};night={};pop={};ad={};ch={};el={};sick={}",
-			hour, night ? 1 : 0, w.population, w.adults, w.children, w.elders, w.sick);
+			"w=1;hour={};night={};pop={};ad={};ch={};el={};sick={};fl={};ft={}",
+			hour, night ? 1 : 0, w.population, w.adults, w.children, w.elders, w.sick,
+			w.firesLit, w.firesTotal);
 
 		WorldPackets::Chat::Chat packet;
 		packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, player, player, payload, 0, "", DEFAULT_LOCALE, ADDON_PREFIX);
@@ -455,8 +460,12 @@ public:
 				h->meals, HOUSE_MEALS_MAX, cur.houseFireLit ? "allume" : "eteint");
 		else
 			handler->PSendSysMessage("Maison stock -> (aucune maison attribuee)");
-		handler->PSendSysMessage("Porte (transit) -> viande: %u | bois: %u | pierre: %u",
-			ai->GetItemCount(ItemType::RawFood), ai->GetItemCount(ItemType::Wood), ai->GetItemCount(ItemType::Stone));
+		// "SAC PLEIN" = le membre doit rentrer livrer avant de repartir en tournee (regle
+		// deterministe de DecisionTick). C'est aussi le bit percu par la Q-table (MindState::bagFull).
+		handler->PSendSysMessage("Porte (transit, max %u) -> viande: %u | bois: %u | pierre: %u%s",
+			INVENTORY_MAX_PER_ITEM,
+			ai->GetItemCount(ItemType::RawFood), ai->GetItemCount(ItemType::Wood), ai->GetItemCount(ItemType::Stone),
+			cur.bagFull ? " | |cffff6060SAC PLEIN -> doit rentrer deposer|r" : "");
 
 		uint16 idx = cur.Index();
 		ActionType best = s->mind.BestAction(idx, ai->GetRole());

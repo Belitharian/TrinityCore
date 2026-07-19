@@ -7,8 +7,7 @@
 CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 	type(type), summons(creature), canCombatMove(true), damageReduction(false),
 	textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance(50)),
-	encircleReactOnCooldown(false), circleAngle(0.f),
-	fakeParty(creature), linkedPlayer(nullptr)
+	fakeParty(creature), linkedPlayer(nullptr), encircleReactOnCooldown(false), circleAngle(0.f)
 {
 	if (type == AI_Type::Distance)
 	{
@@ -21,8 +20,7 @@ CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 CustomAI::CustomAI(Creature* creature, bool damageReduction, AI_Type type) : ScriptedAI(creature),
 	type(type), summons(creature), canCombatMove(true), damageReduction(damageReduction),
 	textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance(50)),
-	encircleReactOnCooldown(false), circleAngle(0.f),
-	fakeParty(creature), linkedPlayer(nullptr)
+	fakeParty(creature), linkedPlayer(nullptr), encircleReactOnCooldown(false), circleAngle(0.f)
 {
 	if (type == AI_Type::Distance)
 	{
@@ -59,7 +57,7 @@ void CustomAI::SummonedCreatureDespawn(Creature* summon)
 	summons.Despawn(summon);
 }
 
-void CustomAI::SummonedCreatureDies(Creature* summon, Unit* killer)
+void CustomAI::SummonedCreatureDies(Creature* summon, Unit* /*killer*/)
 {
 	summons.Despawn(summon);
 }

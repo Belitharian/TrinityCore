@@ -29,6 +29,7 @@
 #include "ScriptedCreature.h"
 #include "TaskScheduler.h"
 #include <array>
+#include <vector>
 
 class GameObject;
 namespace Clan { struct MemberState; struct HouseState; class ClanRole; }
@@ -40,6 +41,8 @@ struct npc_clan_member : public ScriptedAI
     void JustAppeared() override;
     void Reset() override;
     void UpdateAI(uint32 diff) override;
+    void WaypointReached(uint32 waypointId, uint32 pathId) override;
+    void WaypointPathEnded(uint32 waypointId, uint32 pathId) override;
     void MovementInform(uint32 type, uint32 id) override;
     void JustDied(Unit* killer) override;
 
@@ -98,7 +101,7 @@ private:
 
     // Amorces d'action (retournent false si l'action ne peut pas demarrer).
     bool StartHunt();
-    bool StartDrink(Clan::ResourceType type);
+    bool StartDrink();
     bool StartSleep();
     bool StartSeekMate();
     // Declenche l'accouplement des que l'initiateur ET le partenaire sont arrives au RV
@@ -112,6 +115,26 @@ private:
     // Choisit une destination d'errance en espace ouvert (raycast anti-mur) : evite de
     // viser un point colle a un mur ou dans un recoin trop etroit.
     Position PickWanderDestination();
+    // Destination aleatoire dans un rayon autour du foyer (jeu/errance des enfants) ; si le
+    // membre est deja au-dela du rayon, renvoie le foyer lui-meme (il rentre).
+    Position HomeAnchoredDestination(float radius) const;
+
+    // --- Suivi de route (custom_clan_path) --------------------------------------------
+    // Emprunte la route declaree pour l'action courante via un WaypointMovementGenerator.
+    // Tous les noeuds etant sans delai et de meme MoveType, BuildSegments() les fusionne en
+    // UN segment continu -> trajet fluide, sans arret ni virage anguleux aux noeuds, et le
+    // pathfinding reste actif entre eux.
+    //
+    // Retourne false si aucune route ne s'applique : l'appelant doit alors faire son
+    // MovePoint habituel (fallback standard).
+    //
+    // La route s'arrete a son point de SORTIE, pas sur 'dest' : c'est WaypointPathEnded qui
+    // relance ensuite le MovePoint d'origine avec 'pointId', de sorte que le switch de
+    // MovementInform se declenche normalement et reste inchange.
+    bool MoveAlongRoad(Position const& dest, uint32 pointId, bool walk = true);
+    void BeginRoadTravel(); // phase 2 : longer la route (declenche sur MOVE_TO_ROAD_ENTRY)
+    void ClearRoad();       // annule la route ET la retire de MOTION_SLOT_DEFAULT
+
     bool StartSeekDoctor();
     bool StartHuntPredator(); // traquer un animal sauvage pour l'exterminer
     bool StartRemember();     // se recueillir sur la tombe d'un ancetre (tradition)
@@ -119,8 +142,13 @@ private:
     bool StartEat();          // rentrer manger un repas du stock (tout membre affame)
     bool StartShopping();     // (femmes) aller chez le vendeur, rapporter des repas au stock
     bool StartPlay();         // (enfants) jouer / explorer pres de la maison
-    // Rentrer a la maison deposer la recolte portee (viande/bois/pierre) dans le stock.
-    // Utilise en fin de Hunt/GatherWood/MineRock (depot au retour). false si pas de maison.
+    // Rentrer livrer TOUT le sac au stock de la maison. Action de plein droit (StoreHome) :
+    // tant qu'elle etait une branche cachee de Hunt/GatherWood/MineRock, une recolte pouvait
+    // rester bloquee a vie dans un sac plein des que la Q-valeur de l'action porteuse baissait.
+    bool StartStoreHome();
+    // Met le membre en route vers sa maison pour y deposer sa recolte. Se replie sur le point
+    // de foyer (_owner->home) si le GameObject maison est introuvable : un membre doit
+    // TOUJOURS pouvoir livrer, sans quoi il accumule les echecs et n'ose plus rien recolter.
     bool GoDepositHome();
 
     // Maison du membre (etat + GameObject dans le monde). nullptr si non declaree / absente.
@@ -155,6 +183,20 @@ private:
     bool IsItemFull(Clan::ItemType type) const;                    // capacite atteinte ?
     bool AddItem(Clan::ItemType type, uint32 count = 1);           // false si plein
     bool ConsumeItem(Clan::ItemType type, uint32 count = 1);       // false si quantite insuffisante
+    // Depose TOUT ce qu'on porte de ce type au stock de la maison (borne par la place
+    // restante). Retourne la quantite reellement deposee. Jamais de perte d'item.
+    uint32 DepositCarried(Clan::ItemType type);
+    // Vide le sac ENTIER au stock de la maison (les trois types en un seul voyage) et renvoie
+    // la recompense de depot ponderee par la rarete de ce qui a ete depose ; 0 si rien n'a pu
+    // l'etre. Abandonne au passage ce qui ne rentre plus dans un stock deja plein, faute de quoi
+    // un sac plein + un stock plein bouclerait indefiniment sur le retour au foyer.
+    float DepositAllCarried();
+    // Au moins un type est porte au maximum (= il faut rentrer livrer).
+    bool IsBagFull() const;
+    // Multiplicateur de RARETE d'une ressource pour le foyer : 1.0 quand la maison n'en a pas,
+    // decroissant jusqu'a REWARD_SCARCITY_FLOOR une fois HOUSE_STOCK_COMFORT atteint. Sert a
+    // mieux payer ce qui MANQUE, pour que les hommes varient leurs taches d'eux-memes.
+    float ScarcityMult(Clan::ItemType type) const;
 
     Clan::MindState BuildState() const;
     static bool IsNightNow();
@@ -168,10 +210,30 @@ private:
     float            _needBefore;      // niveau du besoin vise avant l'action
     ObjectGuid       _actionTarget;    // proie / partenaire / gameobject / agresseur cible
     uint32           _huntTimerMs;     // garde-fou anti-chasse infinie
+
+    // Mouvement a rejouer une fois la route parcourue (0 = aucune route en cours). La route
+    // s'arretant a son point de sortie, c'est WaypointPathEnded qui conduit le PNJ jusqu'a sa
+    // destination reelle avec l'id d'origine.
+    uint32                _roadPendingId;
+    Position              _roadPendingDest;
+    // Noeuds de la route, retenus entre la phase 1 (rejoindre l'entree, avec pathfinding) et
+    // la phase 2 (parcourir la route en spline exacte).
+    std::vector<Position> _roadNodes;
+    // Allure choisie a l'appel de MoveAlongRoad. Doit etre retenue : les 3 phases sont
+    // desynchronisees dans le temps et un changement d'allure entre elles ferait relancer la
+    // spline (MOVEMENTGENERATOR_FLAG_SPEED_UPDATE_PENDING) en plein trajet.
+    bool                  _roadWalk;
+    // Garde-fou GENERIQUE : temps ecoule depuis le debut de l'action en cours. Si un
+    // MovementInform n'arrive jamais (navmesh, GameObject despawne), _busy resterait vrai a vie
+    // et le membre serait gele pour de bon. Au-dela de ACTION_TIMEOUT_MS on solde en echec.
+    uint32           _actionTimerMs;
     // Vrai des que la proie est abattue (entre le tir et le prelevement sur la depouille).
     // Une chasse ainsi "engagee" ne doit plus etre gaspillee : le garde-fou de temps
     // recupere la viande au lieu d'echouer, sinon le PNJ tue une proie sans jamais manger.
     bool             _huntPreyKilled;
+    // L'action en cours a-t-elle reellement demarre ? Distingue "conditions non reunies" (rien
+    // n'a ete tente -> REWARD_UNAVAILABLE) de "engagee puis ratee" (du temps perdu -> REWARD_FAIL).
+    bool             _actionEngaged;
     bool             _busy;            // une action est en cours
     Reflex           _reflex;          // reflexe predateur en cours
     Position         _gravePoint;      // point de la tombe d'un ancetre dans le cimetiere
@@ -185,6 +247,12 @@ private:
     uint32 _diseaseTimerMs; // accumulateur vers le prochain tirage de contagion
     uint32 _rememberCdMs;   // cooldown avant qu'un nouveau recueillement soit recompense (anti-farm)
     uint32 _shopCdMs;       // cooldown avant de refaire les courses (anti-farm)
+    // Anti-boucle : derniere action soldee et nombre de fois qu'elle s'est enchainee a
+    // l'identique. Au-dela de REPEAT_TOLERANCE, la recompense recoit un malus croissant
+    // plafonne : le membre se lasse et va voir ailleurs, sans que l'action soit condamnee.
+    // Volontairement NON persiste : c'est une humeur de session, pas un acquis.
+    Clan::ActionType _lastAction;
+    uint8            _repeatStreak;
     bool   _equipDirty;     // un equipement d'action est affiche : il faudra le reposer
     bool   _sleepElevated;  // le dormeur a ete monte sur un lit (gravite coupee) : a redescendre
     bool   _combatLearned;  // le choix defendre/fuir courant est un choix appris (adulte)
