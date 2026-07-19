@@ -287,6 +287,23 @@ namespace Clan
     // solde en echec pour liberer le membre. Sans ca, _busy reste vrai a vie et le PNJ est gele.
     constexpr uint32 ACTION_TIMEOUT_MS       = 60000;
 
+    // ---------------------------------------------------------------------
+    // Montures empruntees pour parcourir une route declaree
+    // ---------------------------------------------------------------------
+    // VRAIS sorts de monture (avec incantation visible), et non un Unit::Mount() : le PNJ
+    // s'arrete a l'entree de la route, invoque sa monture, puis part. C'est ce cast qui rend
+    // la scene credible -- Mount() ferait apparaitre la monture instantanement.
+    constexpr uint32 ROAD_MOUNT_SPELLS[]     = { 458, 470, 472 };
+
+    // Marge ajoutee au temps d'incantation avant de lancer le deplacement. Bouger pendant le
+    // cast l'interrompt : sans cette marge, une desynchronisation d'un tick suffirait a faire
+    // partir le PNJ a pied.
+    constexpr uint32 ROAD_MOUNT_CAST_MARGIN_MS = 250;
+
+    // En-deca de cette longueur de route, on ne monte pas : l'incantation couterait plus de
+    // temps que la monture n'en fait gagner, et l'aller-retour monter/descendre serait ridicule.
+    constexpr float  ROAD_MOUNT_MIN_LENGTH   = 40.0f;
+
     // Distance en-deca de laquelle on est considere "au foyer" : la livraison se fait alors sur
     // place, sans MovePoint (un deplacement de distance nulle ne renvoie pas toujours son
     // MovementInform, ce qui figerait l'action).
@@ -456,9 +473,6 @@ namespace Clan
 
     // Sort du docteur
     constexpr uint32 const SPELL_HEAL_DOCTOR = 463444;
-
-    // Coup de feu tire sur la proie pendant la chasse.
-    constexpr uint32 const SPELL_HUNT_SHOOT = 1246847;
 }
 
 #endif // CUSTOM_CLANS_CLANDEFINES_H

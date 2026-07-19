@@ -123,7 +123,8 @@ namespace Clan
 		// SetVirtualItem : aucune declaration dans creature_equip_template n'est necessaire.
 		uint32 item = 0;
 		uint8  itemSlot = 0; // 0 = main droite, 1 = main gauche, 2 = a distance
-        uint32 sound = 0; // son
+        uint32 sound_male = 0; // son
+        uint32 sound_female = 0; // son
 	};
 
 	// Resume global du monde (pour la fenetre monde de l'addon).
@@ -270,8 +271,10 @@ namespace Clan
 		// Choisit un modele au hasard pour cette cause et y substitue les jetons.
 		std::string BuildEpitaph(DeathCause cause, std::string const& name, uint32 ageDays) const;
 
-		// --- Effets RP par action (aura / sort / emote) ---
-		void AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote, uint32 item, uint8 itemSlot, uint32 sound);
+		// --- Effets RP par action (aura / sort / emote / sons) ---
+		void AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote,
+                         uint32 item, uint8 itemSlot,
+                         uint32 sound_male, uint32 sound_female);
 		// Effets declares pour une action (nullptr si aucun).
 		ActionFx const* GetActionFx(ActionType action) const;
 

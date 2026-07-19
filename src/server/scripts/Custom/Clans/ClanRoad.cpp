@@ -21,108 +21,133 @@ namespace Clan
                 std::vector<Position> Nodes; // ordonnes par idx croissant
             };
 
-            // Resultat de la projection d'une position sur une polyligne.
-            struct Projection
-            {
-                uint32   Segment = 0;   // index du noeud de DEBUT du segment porteur
-                float    T = 0.0f;      // position sur ce segment, dans [0,1]
-                float    Distance = std::numeric_limits<float>::max(); // distance 2D au point projete
-                Position Point;         // le point projete lui-meme
-            };
+            std::unordered_map<uint32, PathData>           _paths;         // pathId -> geometrie
+            std::unordered_map<uint8, std::vector<uint32>> _pathsByAction; // ActionType -> pathIds
 
-            std::unordered_map<uint32, PathData>              _paths;         // pathId -> geometrie
-            std::unordered_map<uint8, std::vector<uint32>>    _pathsByAction; // ActionType -> pathIds
-
-            // Projette 'pos' sur la polyligne et retourne le point le plus proche.
+            // Index du noeud DECLARE le plus proche de 'pos' (a vol d'oiseau, en 2D).
             //
-            // On projette sur les SEGMENTS et pas sur les noeuds : viser le noeud le plus proche
-            // ferait rejoindre la route en biais vers un piquet arbitraire, alors que la projection
-            // segmentaire donne un raccordement perpendiculaire, naturel a l'oeil.
+            // On ne projette volontairement PAS sur les segments : un point interpole en plein
+            // milieu d'un troncon fait quitter la route entre deux noeuds, et le PNJ coupe alors
+            // a travers le decor pour rejoindre sa destination. En se limitant aux noeuds
+            // declares, il longe la route jusqu'a un point que tu as choisi toi-meme.
             //
-            // Calcul en 2D (XY) volontairement : le Z suit le relief et fausserait la notion de
-            // "proche de la route" sur un terrain en pente.
-            Projection ProjectOnPath(PathData const& path, Position const& pos)
+            // 2D volontairement : le Z suit le relief et fausserait la comparaison en pente.
+            uint32 NearestNode(PathData const& path, Position const& pos)
             {
-                Projection best;
+                uint32 best = 0;
+                float bestDist = std::numeric_limits<float>::max();
 
-                for (uint32 i = 0; i + 1 < path.Nodes.size(); ++i)
+                for (uint32 i = 0; i < path.Nodes.size(); ++i)
                 {
-                    Position const& a = path.Nodes[i];
-                    Position const& b = path.Nodes[i + 1];
-
-                    float const abx = b.GetPositionX() - a.GetPositionX();
-                    float const aby = b.GetPositionY() - a.GetPositionY();
-                    float const lenSq = abx * abx + aby * aby;
-                    if (lenSq < 0.01f) // noeuds confondus : segment degenere
-                        continue;
-
-                    // Produit scalaire normalise = position relative de la projection sur [a,b],
-                    // clampee pour rester DANS le segment (sinon on projetterait sur son prolongement).
-                    float t = ((pos.GetPositionX() - a.GetPositionX()) * abx
-                             + (pos.GetPositionY() - a.GetPositionY()) * aby) / lenSq;
-                    t = std::clamp(t, 0.0f, 1.0f);
-
-                    Position const point(a.GetPositionX() + abx * t,
-                                         a.GetPositionY() + aby * t,
-                                         a.GetPositionZ() + (b.GetPositionZ() - a.GetPositionZ()) * t);
-
-                    float const dist = pos.GetExactDist2d(point);
-                    if (dist < best.Distance)
+                    float const dist = pos.GetExactDist2d(path.Nodes[i]);
+                    if (dist < bestDist)
                     {
-                        best.Segment = i;
-                        best.T = t;
-                        best.Distance = dist;
-                        best.Point = point;
+                        bestDist = dist;
+                        best = i;
                     }
                 }
 
                 return best;
             }
 
-            // Projette 'pos' sur CHAQUE segment et retourne les candidats tries par distance a
-            // vol d'oiseau croissante. Sert de preselection avant l'evaluation navmesh, qui est
-            // trop chere pour etre appliquee a tous les segments d'une longue route.
-            std::vector<Projection> ProjectCandidates(PathData const& path, Position const& pos)
+            // Indices des noeuds tries par distance croissante a 'pos'. Preselection avant
+            // l'evaluation navmesh, trop chere pour etre appliquee a tous les noeuds.
+            std::vector<uint32> NodesByDistance(PathData const& path, Position const& pos)
             {
-                std::vector<Projection> candidates;
-                candidates.reserve(path.Nodes.size());
+                std::vector<uint32> indices(path.Nodes.size());
+                for (uint32 i = 0; i < indices.size(); ++i)
+                    indices[i] = i;
 
-                for (uint32 i = 0; i + 1 < path.Nodes.size(); ++i)
+                std::sort(indices.begin(), indices.end(), [&](uint32 l, uint32 r)
                 {
-                    Position const& a = path.Nodes[i];
-                    Position const& b = path.Nodes[i + 1];
+                    return pos.GetExactDist2d(path.Nodes[l]) < pos.GetExactDist2d(path.Nodes[r]);
+                });
 
-                    float const abx = b.GetPositionX() - a.GetPositionX();
-                    float const aby = b.GetPositionY() - a.GetPositionY();
-                    float const lenSq = abx * abx + aby * aby;
-                    if (lenSq < 0.01f) // noeuds confondus : segment degenere
+                return indices;
+            }
+
+            // Distance parcourue LE LONG de la route entre deux noeuds (et non a vol d'oiseau).
+            float LengthBetweenNodes(PathData const& path, uint32 from, uint32 to)
+            {
+                if (from > to)
+                    std::swap(from, to);
+
+                float length = 0.0f;
+                for (uint32 i = from; i < to; ++i)
+                    length += path.Nodes[i].GetExactDist2d(path.Nodes[i + 1]);
+
+                return length;
+            }
+
+            // Decalage lateral propre a un PNJ, dans [-LATERAL_OFFSET_MAX, +LATERAL_OFFSET_MAX].
+            //
+            // DETERMINISTE (derive du GUID) et non aleatoire : un meme membre garde ainsi
+            // toujours le meme cote de la route d'un trajet a l'autre, ce qui se lit comme une
+            // habitude plutot que comme du bruit.
+            float LateralOffset(Unit const* mover)
+            {
+                uint32 const spread = uint32(mover->GetGUID().GetCounter() % 1000);
+                return ((float(spread) / 999.0f) * 2.0f - 1.0f) * LATERAL_OFFSET_MAX;
+            }
+
+            // Ecarte chaque noeud perpendiculairement au SENS DE MARCHE.
+            //
+            // Le fait de se baser sur le sens de marche (et non sur une normale absolue) fait
+            // que deux PNJ se croisant en sens inverse se decalent chacun de leur cote : le
+            // comportement "on tient sa droite" apparait tout seul.
+            void ApplyLateralOffset(std::vector<Position>& route, float offset)
+            {
+                if (route.size() < 2)
+                    return;
+
+                std::vector<Position> shifted = route;
+
+                for (std::size_t i = 0; i < route.size(); ++i)
+                {
+                    // Direction locale : vers le noeud suivant ; pour le dernier, depuis le precedent.
+                    std::size_t const a = (i + 1 < route.size()) ? i : i - 1;
+                    std::size_t const b = (i + 1 < route.size()) ? i + 1 : i;
+
+                    float const dx = route[b].GetPositionX() - route[a].GetPositionX();
+                    float const dy = route[b].GetPositionY() - route[a].GetPositionY();
+                    float const len = std::sqrt(dx * dx + dy * dy);
+                    if (len < 0.01f) // noeuds confondus : pas de direction exploitable
                         continue;
 
-                    float t = ((pos.GetPositionX() - a.GetPositionX()) * abx
-                             + (pos.GetPositionY() - a.GetPositionY()) * aby) / lenSq;
-                    t = std::clamp(t, 0.0f, 1.0f);
-
-                    Projection candidate;
-                    candidate.Segment = i;
-                    candidate.T = t;
-                    candidate.Point = Position(a.GetPositionX() + abx * t,
-                                               a.GetPositionY() + aby * t,
-                                               a.GetPositionZ() + (b.GetPositionZ() - a.GetPositionZ()) * t);
-                    candidate.Distance = pos.GetExactDist2d(candidate.Point);
-                    candidates.push_back(candidate);
+                    // Perpendiculaire 2D au sens de marche.
+                    shifted[i] = Position(route[i].GetPositionX() + (-dy / len) * offset,
+                                          route[i].GetPositionY() + (dx / len) * offset,
+                                          route[i].GetPositionZ());
                 }
 
-                std::sort(candidates.begin(), candidates.end(),
-                    [](Projection const& l, Projection const& r) { return l.Distance < r.Distance; });
+                route = std::move(shifted);
+            }
 
-                return candidates;
+            // Recale le Z de chaque noeud sur le sol reel.
+            //
+            // Deux raisons, et la premiere est structurelle :
+            //  - le decalage lateral deplace X/Y mais conserve le Z du noeud declare : des que
+            //    la route est en devers, le point se retrouve sous le terrain ;
+            //  - un Z releve a la main en jeu est de toute facon approximatif.
+            //
+            // Et comme la route est parcourue SANS navmesh (ExactSplinePath), la spline suit ce
+            // Z a la lettre : la moindre erreur fait passer le PNJ dans le sol. Ce recalage
+            // n'est donc pas un confort, c'est ce qui rend le decalage lateral utilisable.
+            void SnapToGround(Unit const* mover, std::vector<Position>& route)
+            {
+                for (Position& node : route)
+                {
+                    float z = node.GetPositionZ();
+                    mover->UpdateAllowedPositionZ(node.GetPositionX(), node.GetPositionY(), z);
+                    node.Relocate(node.GetPositionX(), node.GetPositionY(), z);
+                }
             }
 
             // Longueur du chemin REELLEMENT parcourable entre 'mover' et 'dest', en contournant
             // le decor. Retourne -1 si la destination est injoignable.
             //
             // C'est la mesure qui remplace la distance a vol d'oiseau pour choisir ou rejoindre
-            // la route : elle seule sait qu'un mur separe le PNJ d'un point pourtant "proche".
+            // la route : elle seule sait qu'un mur separe le PNJ d'un noeud pourtant "proche".
             float NavmeshDistance(Unit const* mover, Position const& dest)
             {
                 PathGenerator generator(mover);
@@ -134,20 +159,6 @@ namespace Clan
                     return -1.0f;
 
                 return generator.GetPathLength();
-            }
-
-            // Distance parcourue LE LONG de la route entre deux projections (et non a vol d'oiseau).
-            float LengthAlongPath(PathData const& path, Projection const& from, Projection const& to)
-            {
-                auto distanceFromStart = [&path](Projection const& p)
-                {
-                    float d = 0.0f;
-                    for (uint32 i = 0; i < p.Segment; ++i)
-                        d += path.Nodes[i].GetExactDist2d(path.Nodes[i + 1]);
-                    return d + path.Nodes[p.Segment].GetExactDist2d(p.Point);
-                };
-
-                return std::fabs(distanceFromStart(to) - distanceFromStart(from));
             }
         }
 
@@ -235,7 +246,8 @@ namespace Clan
                 return route;
 
             PathData const* best = nullptr;
-            Projection bestEntry, bestExit;
+            uint32 bestEntry = 0;
+            uint32 bestExit = 0;
             float bestCost = std::numeric_limits<float>::max();
 
             for (uint32 pathId : itAction->second)
@@ -248,42 +260,41 @@ namespace Clan
                 if (path.MapId != mover->GetMapId() || path.Nodes.size() < 2)
                     continue;
 
-                // Le point de SORTIE reste choisi a vol d'oiseau : la destination (vendeur,
-                // medecin) est par construction au bord de la route, donc sans mur entre les
-                // deux. Seule l'ENTREE pose probleme, le PNJ pouvant partir de l'interieur
-                // d'une maison.
-                Projection const exit = ProjectOnPath(path, to);
+                // Point de SORTIE : le noeud declare le plus proche de la destination. C'est lui
+                // qui evite de quitter la route en plein milieu d'un troncon pour couper a
+                // travers champs -- le PNJ longe la route jusqu'a un point que tu as pose.
+                uint32 const exitIdx = NearestNode(path, to);
+                float const exitToDest = path.Nodes[exitIdx].GetExactDist2d(to);
 
-                // Candidats d'entree : un par segment, presele ctionnes a vol d'oiseau.
-                std::vector<Projection> candidates = ProjectCandidates(path, from);
+                // Point d'ENTREE : parmi les noeuds les plus proches a vol d'oiseau, celui dont
+                // le chemin navmesh est le plus court. C'est ce qui elimine le noeud "derriere
+                // le mur" quand le PNJ part de l'interieur d'une maison.
+                std::vector<uint32> const candidates = NodesByDistance(path, from);
 
-                // Puis on les departage au NAVMESH. C'est ici que le point "derriere le mur"
-                // se fait eliminer : son chemin reel contourne la maison, il est donc long,
-                // alors que celui accessible par la porte est court.
                 for (uint32 i = 0; i < candidates.size() && i < ENTRY_CANDIDATES; ++i)
                 {
-                    Projection const& entry = candidates[i];
+                    uint32 const entryIdx = candidates[i];
 
-                    float const joinDist = NavmeshDistance(mover, entry.Point);
+                    float const joinDist = NavmeshDistance(mover, path.Nodes[entryIdx]);
                     if (joinDist < 0.0f)
-                        continue; // point injoignable (PATHFIND_NOPATH)
+                        continue; // noeud injoignable (PATHFIND_NOPATH)
 
-                    // Garde-fou 2 : la route est trop loin pour etre rejointe. Mesure sur le
-                    // chemin REEL, donc un point a 5 yards derriere un mur compte pour ce que
-                    // sa traversee coute vraiment.
+                    // Garde-fou 2 : trop loin pour etre rejoint. Mesure sur le chemin REEL, donc
+                    // un noeud a 5 yards derriere un mur compte pour ce que le contournement
+                    // coute vraiment.
                     if (joinDist > MAX_JOIN_DIST)
                         continue;
 
-                    // Cout total : rejoindre la route + la longer + la quitter.
-                    // Aucun plafond de detour ici : on veut la route, meme si le champ est
-                    // plus court.
-                    float const cost = joinDist + LengthAlongPath(path, entry, exit) + exit.Distance;
+                    // Cout total : rejoindre la route + la longer + la quitter vers la
+                    // destination. Aucun plafond de detour : on veut la route, meme si couper
+                    // par le champ serait plus court.
+                    float const cost = joinDist + LengthBetweenNodes(path, entryIdx, exitIdx) + exitToDest;
                     if (cost < bestCost)
                     {
                         bestCost = cost;
                         best = &path;
-                        bestEntry = entry;
-                        bestExit = exit;
+                        bestEntry = entryIdx;
+                        bestExit = exitIdx;
                     }
                 }
             }
@@ -291,25 +302,23 @@ namespace Clan
             if (!best)
                 return route; // aucune route retenue -> pathfinding standard
 
-            // Point d'entree sur la route.
-            route.push_back(bestEntry.Point);
-
-            // Noeuds intermediaires, dans le sens de parcours. Le segment i relie Nodes[i] a
-            // Nodes[i+1] : en marche avant on enchaine donc Nodes[entree+1] .. Nodes[sortie],
-            // en marche arriere Nodes[entree] .. Nodes[sortie+1].
-            bool const forward = bestExit.Segment > bestEntry.Segment
-                || (bestExit.Segment == bestEntry.Segment && bestExit.T >= bestEntry.T);
-
-            if (forward)
-                for (uint32 i = bestEntry.Segment + 1; i <= bestExit.Segment; ++i)
+            // Le trajet n'est fait que de noeuds DECLARES, entree et sortie comprises, parcourus
+            // dans le sens qui va de l'une a l'autre.
+            if (bestEntry <= bestExit)
+                for (uint32 i = bestEntry; i <= bestExit; ++i)
                     route.push_back(best->Nodes[i]);
             else
-                for (uint32 i = bestEntry.Segment; i > bestExit.Segment; --i)
+                for (uint32 i = bestEntry + 1; i-- > bestExit; )
                     route.push_back(best->Nodes[i]);
 
-            // Point de sortie. La destination finale n'est PAS ajoutee : l'appelant rejoue son
-            // mouvement d'origine depuis ici, ce qui laisse sa machine a etats intacte.
-            route.push_back(bestExit.Point);
+            // On ecarte le trace de la ligne centrale pour que deux membres empruntant la meme
+            // route ne se marchent pas dessus. Applique APRES le choix des noeuds : les couts
+            // se raisonnent sur la route reelle, pas sur la variante decalee.
+            ApplyLateralOffset(route, LateralOffset(mover));
+
+            // Puis, obligatoirement EN DERNIER, on repose le trace sur le sol : le decalage
+            // ci-dessus a bouge X/Y en gardant le Z d'origine.
+            SnapToGround(mover, route);
 
             return route;
         }

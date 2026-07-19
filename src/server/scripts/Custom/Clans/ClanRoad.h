@@ -20,11 +20,16 @@ namespace Clan
     // Principe : une polyligne declaree en base par map, liee a une ou plusieurs ActionType.
     // Le PNJ rejoint la route, la longe, puis la quitte au plus pres de sa destination.
     //
-    // CHOIX DU POINT D'ENTREE : surtout PAS le point le plus proche a vol d'oiseau. Un PNJ a
-    // l'interieur d'une maison a pour plus proche voisin un point situe de l'autre cote du mur ;
+    // ENTREE ET SORTIE SONT TOUJOURS DES NOEUDS DECLARES, jamais des positions interpolees sur
+    // un segment. Quitter la route en plein milieu d'un troncon fait couper a travers le decor
+    // pour rejoindre la destination ; en s'en tenant aux noeuds, le PNJ longe la route jusqu'a
+    // un point que TU as pose. Le trace reste donc entierement sous ton controle.
+    //
+    // CHOIX DU POINT D'ENTREE : surtout PAS le noeud le plus proche a vol d'oiseau. Un PNJ a
+    // l'interieur d'une maison a pour plus proche voisin un noeud situe de l'autre cote du mur ;
     // le viser le ferait sortir puis revenir sur ses pas. On presele ctionne donc les candidats
     // a vol d'oiseau (calcul negligeable) puis on les departage a la LONGUEUR REELLE DU CHEMIN
-    // NAVMESH -- ce qui fait naturellement gagner le point accessible par la porte.
+    // NAVMESH -- ce qui fait naturellement gagner le noeud accessible par la porte.
     //
     // Ce systeme ne REMPLACE pas le pathfinding : les points de passage sont donnes a un
     // WaypointMovementGenerator qui calcule lui-meme le chemin navmesh entre chacun. Tous les
@@ -51,9 +56,20 @@ namespace Clan
         // on considere que le PNJ n'est pas "sur" la route.
         constexpr float MAX_JOIN_DIST = 60.0f;
 
-        // Nombre de points d'entree candidats soumis au pathfinder. La preselection a vol
+        // Nombre de noeuds d'entree candidats soumis au pathfinder. La preselection a vol
         // d'oiseau est gratuite, l'evaluation navmesh est chere : on la limite a ces K-la.
+        //
+        // A augmenter si tes routes ont beaucoup de noeuds tres rapproches : les K plus proches
+        // pourraient alors tous se trouver du meme cote d'un mur, et aucun ne serait joignable.
         constexpr uint32 ENTRY_CANDIDATES = 5;
+
+        // Amplitude du decalage lateral applique a la route, propre a chaque PNJ. Sans lui,
+        // tous empruntent exactement la meme ligne et se telescopent.
+        //
+        // A GARDER PETIT : le decalage sort les points de la ligne que tu as declaree, et la
+        // route est parcourue sans navmesh. 1.2 yd est sans danger sur une route large ; baisse
+        // cette valeur si tu as des passages etroits (ponts, portails).
+        constexpr float LATERAL_OFFSET_MAX = 1.2f;
 
         // Charge custom_clan_path / _node / _action. Appele depuis ClanDatabase::LoadRegistries.
         void Load();
@@ -67,8 +83,8 @@ namespace Clan
         // Retourne un vecteur VIDE si aucune route ne s'applique -> l'appelant doit alors faire
         // son MovePoint habituel. C'est le fallback "systeme standard".
         //
-        // Le vecteur retourne ne contient PAS la destination finale : il s'arrete au point de
-        // sortie de route. C'est a l'appelant d'y conduire le PNJ ensuite.
+        // Le vecteur retourne ne contient que des NOEUDS DECLARES, et PAS la destination
+        // finale : il s'arrete au noeud de sortie. C'est a l'appelant d'y conduire le PNJ.
         std::vector<Position> BuildRoute(Unit const* mover, ActionType action, Position const& to);
     }
 }

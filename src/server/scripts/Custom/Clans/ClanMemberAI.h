@@ -132,8 +132,12 @@ private:
     // relance ensuite le MovePoint d'origine avec 'pointId', de sorte que le switch de
     // MovementInform se declenche normalement et reste inchange.
     bool MoveAlongRoad(Position const& dest, uint32 pointId, bool walk = true);
-    void BeginRoadTravel(); // phase 2 : longer la route (declenche sur MOVE_TO_ROAD_ENTRY)
-    void ClearRoad();       // annule la route ET la retire de MOTION_SLOT_DEFAULT
+    void BeginRoadTravel();  // phase 2 : monter puis longer la route (sur MOVE_TO_ROAD_ENTRY)
+    void StartRoadPath();    // emet le MovePath (une fois la monture invoquee)
+    void ClearRoad();        // annule la route, demonte, et purge MOTION_SLOT_DEFAULT
+    // Invoque une monture RP pour la route. Retourne le delai a attendre avant de bouger
+    // (temps d'incantation) ; 0 si aucune monture n'est invoquee.
+    Milliseconds TryMountForRoad();
 
     bool StartSeekDoctor();
     bool StartHuntPredator(); // traquer un animal sauvage pour l'exterminer
@@ -223,6 +227,9 @@ private:
     // desynchronisees dans le temps et un changement d'allure entre elles ferait relancer la
     // spline (MOVEMENTGENERATOR_FLAG_SPEED_UPDATE_PENDING) en plein trajet.
     bool                  _roadWalk;
+    // Sort de monture actuellement actif pour la route (0 = a pied). Retenu pour pouvoir
+    // demonter exactement le meme sort en fin de trajet ou en cas d'interruption.
+    uint32                _roadMountSpell;
     // Garde-fou GENERIQUE : temps ecoule depuis le debut de l'action en cours. Si un
     // MovementInform n'arrive jamais (navmesh, GameObject despawne), _busy resterait vrai a vie
     // et le membre serait gele pour de bon. Au-dela de ACTION_TIMEOUT_MS on solde en echec.

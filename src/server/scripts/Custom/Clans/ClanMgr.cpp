@@ -190,9 +190,11 @@ std::string ClanMgr::BuildEpitaph(DeathCause cause, std::string const& name, uin
     return text;
 }
 
-void ClanMgr::AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote, uint32 item, uint8 itemSlot, uint32 sound)
+void ClanMgr::AddActionFx(uint8 action, uint32 aura, uint32 spell, uint32 emote,
+                          uint32 item, uint8 itemSlot,
+                          uint32 sound_male, uint32 sound_female)
 {
-    _actionFx[action] = { aura, spell, emote, item, itemSlot, sound };
+    _actionFx[action] = { aura, spell, emote, item, itemSlot, sound_male, sound_female };
 }
 
 ActionFx const* ClanMgr::GetActionFx(ActionType action) const
@@ -1071,9 +1073,6 @@ void ClanMgr::SpawnBirth(MemberState* state, WorldObject* summoner)
 
     if (TempSummon* child = summoner->SummonCreature(state->birthEntry, summoner->GetPosition()))
     {
-        // Pour le target
-        summoner->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
-
         state->home = child->GetPosition();
         state->mapId = child->GetMapId();
         if (npc_clan_member* ai = dynamic_cast<npc_clan_member*>(child->AI()))

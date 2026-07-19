@@ -67,7 +67,7 @@ namespace
 
 npc_clan_member::npc_clan_member(Creature* creature) : ScriptedAI(creature),
 _owner(nullptr), _currentAction(ActionType::Idle), _targetNeed(NeedType::None),
-_needBefore(0.0f), _huntTimerMs(0), _roadPendingId(0), _roadWalk(true),
+_needBefore(0.0f), _huntTimerMs(0), _roadPendingId(0), _roadWalk(true), _roadMountSpell(0),
 _actionTimerMs(0), _huntPreyKilled(false), _actionEngaged(false),
 _busy(false), _reflex(Reflex::None),
 _inventory {}, _talkCdMs(0), _starveTimerMs(0), _diseaseTimerMs(0), _rememberCdMs(0), _shopCdMs(0),
@@ -221,6 +221,15 @@ float npc_clan_member::DepositAllCarried()
 
 void npc_clan_member::JustAppeared()
 {
+    // Objet ACTIF : la grille qui porte le membre reste mise a jour meme sans joueur a
+    // proximite.
+    //
+    // C'est indispensable ici : tout ce module repose sur des PNJ qui vivent leur vie, que
+    // quelqu'un les regarde ou non.
+    me->setActive(true);
+    me->SetFarVisible(true);
+    me->SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
+
     // Bloque la regeneration de la vie.
     me->SetRegenerateHealth(false);
 
@@ -476,8 +485,11 @@ void npc_clan_member::_PlayCustomFx(Creature* creature)
         _equipDirty = true;
     }
 
-    if (fx->sound)
-        creature->PlayDistanceSound(fx->sound);
+    if (fx->sound_male && creature->GetGender() == GENDER_MALE)
+        creature->PlayDistanceSound(fx->sound_male);
+
+    if (fx->sound_female && creature->GetGender() == GENDER_FEMALE)
+        creature->PlayDistanceSound(fx->sound_female);
 }
 
 void npc_clan_member::SpawnGravestone()
@@ -1110,24 +1122,46 @@ void npc_clan_member::ReleaseMate()
 
 bool npc_clan_member::StartSeekMate()
 {
+    // Toute impossibilite de s'accoupler APAISE le besoin au lieu de le laisser en l'etat.
+    //
+    // Sans ca, un besoin urgent que rien ne peut satisfaire (veuvage sans celibataire eligible,
+    // population saturee, aucune maison attribuee, partenaire non apparu) fait re-choisir
+    // SeekMate a chaque decision : l'action echoue, le besoin reste au maximum, et le membre
+    // tourne en rond sans jamais rien faire d'autre -- il fallait le debloquer a la main via
+    // `.clan need`.
+    //
+    // Ce n'est PAS un abandon definitif : le besoin recroit avec le temps, donc le membre
+    // retentera plus tard, quand la situation aura peut-etre change (partenaire apparu, place
+    // liberee dans la population). On n'applique volontairement PAS de reproCooldownDays ici :
+    // aucun accouplement n'a eu lieu, ce serait une double peine.
+    //
+    // Le pendant de ce garde-fou existe deja cote ClanMgr::Reproduce, qui apaise lui aussi le
+    // besoin quand la naissance echoue (pop max, aucun template d'enfant, enfant deja vivant).
+    // Ce qui manquait, c'etait le cas ou l'action ne DEMARRE meme pas.
+    auto abortMating = [this]() -> bool
+    {
+        _owner->needs.Satisfy(NeedType::Repro, NEED_MAX);
+        return false;
+    };
+
     MemberState* mate = sClanMgr->FindMate(_owner);
     if (!mate || !mate->IsSpawned())
-        return false;
+        return abortMating();
 
     // Reproduction UNIQUEMENT dans la maison : sans maison attribuee, pas d'accouplement.
     // Le rendez-vous se tient dans la maison de l'initiateur (les deux partenaires s'y
     // rejoignent, y compris pour un couple inter-clan).
     GameObject* house = _owner->houseSpawnId ? me->GetMap()->GetGameObjectBySpawnId(_owner->houseSpawnId) : nullptr;
     if (!house)
-        return false;
+        return abortMating();
 
     Creature* mateCreature = ObjectAccessor::GetCreature(*me, mate->liveGuid);
     if (!mateCreature)
-        return false;
+        return abortMating();
 
     npc_clan_member* mateAI = dynamic_cast<npc_clan_member*>(mateCreature->AI());
     if (!mateAI)
-        return false;
+        return abortMating();
 
     _actionTarget = mate->liveGuid;
 
@@ -1586,6 +1620,58 @@ void npc_clan_member::BeginRoadTravel()
         return;
     }
 
+    // Le PNJ est a l'arret a l'entree de la route : c'est le seul moment ou il peut invoquer
+    // sa monture sans que le deplacement interrompe l'incantation.
+    Milliseconds const castTime = TryMountForRoad();
+    if (castTime > Milliseconds(0))
+    {
+        // On laisse l'incantation s'achever avant de partir. GROUP_ACTION : si l'action est
+        // abandonnee entre-temps, la tache est annulee avec elle et le trajet ne demarre pas.
+        _scheduler.Schedule(castTime, GROUP_ACTION, [this](TaskContext /*task*/)
+        {
+            StartRoadPath();
+        });
+        return;
+    }
+
+    StartRoadPath();
+}
+
+Milliseconds npc_clan_member::TryMountForRoad()
+{
+    _roadMountSpell = 0;
+
+    // Un enfant a cheval serait incoherent : ils vont a pied.
+    if (_owner->stage == LifeStage::Child)
+        return Milliseconds(0);
+
+    // Route trop courte : monter puis demonter couterait plus que le trajet ne fait gagner.
+    float length = 0.0f;
+    for (std::size_t i = 1; i < _roadNodes.size(); ++i)
+        length += _roadNodes[i - 1].GetExactDist2d(_roadNodes[i]);
+
+    if (length < ROAD_MOUNT_MIN_LENGTH)
+        return Milliseconds(0);
+
+    uint32 const spellId = ROAD_MOUNT_SPELLS[urand(0, uint32(std::size(ROAD_MOUNT_SPELLS)) - 1)];
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE);
+    if (!info)
+    {
+        TC_LOG_ERROR("scripts", "Clans: sort de monture {} introuvable, trajet a pied.", spellId);
+        return Milliseconds(0);
+    }
+
+    me->CastSpell(me, spellId, false);
+    _roadMountSpell = spellId;
+
+    return Milliseconds(info->CalcCastTime() + ROAD_MOUNT_CAST_MARGIN_MS);
+}
+
+void npc_clan_member::StartRoadPath()
+{
+    if (_roadNodes.size() < 2)
+        return;
+
     std::vector<WaypointNode> nodes;
     nodes.reserve(_roadNodes.size() - 1);
     for (std::size_t i = 1; i < _roadNodes.size(); ++i)
@@ -1596,8 +1682,13 @@ void npc_clan_member::BeginRoadTravel()
     // arret intermediaire. Sans navmesh -- ce qui est acceptable ICI et seulement ici : les
     // noeuds sont declares a la main sur la route, donc les segments droits qui les relient
     // sont degages par construction.
+    // A cheval on ne va pas au pas : la monture impose l'allure, quelle que soit celle demandee
+    // pour le trajet. Seule la phase 2 est concernee -- les phases 1 et 3 se font a pied et
+    // conservent _roadWalk.
+    bool const walk = _roadWalk && !_roadMountSpell;
+
     WaypointPath path(CLAN_ROAD_PATH_ID, std::move(nodes),
-        _roadWalk ? WaypointMoveType::Walk : WaypointMoveType::Run, WaypointPathFlags::ExactSplinePath);
+        walk ? WaypointMoveType::Walk : WaypointMoveType::Run, WaypointPathFlags::ExactSplinePath);
 
     // L'allure doit etre passee EXPLICITEMENT et etre la meme qu'en phase 1 : laissee a Default,
     // elle pouvait differer de celle du MovePoint precedent, et ce changement d'allure en cours
@@ -1605,7 +1696,11 @@ void npc_clan_member::BeginRoadTravel()
     // qui recalcule la spline depuis la position courante. D'ou les a-coups en courbe.
     //
     // MovePath copie le chemin (make_unique<WaypointPath>) : lui passer un objet local est sur.
-    me->GetMotionMaster()->MovePath(path, false, {}, {}, RoadSpeedMode(_roadWalk));
+    //
+    // 'walk' et NON _roadWalk : le mode de vitesse doit s'accorder au WaypointMoveType ci-dessus,
+    // sinon on recree exactement le desaccord d'allure decrit au-dessus -- monte, la course est
+    // imposee, et le laisser a ForceWalk relancerait la spline.
+    me->GetMotionMaster()->MovePath(path, false, {}, {}, RoadSpeedMode(walk));
 }
 
 void npc_clan_member::WaypointReached(uint32 /*waypointId*/, uint32 pathId)
@@ -1646,6 +1741,16 @@ void npc_clan_member::ClearRoad()
 {
     _roadPendingId = 0;
     _roadNodes.clear();
+
+    // On retire l'aura exacte qui a ete lancee (et pas un Dismount() generique) : c'est le
+    // pendant symetrique du CastSpell, et ca laisse intacte une eventuelle monture posee
+    // ailleurs. Ici aussi bien en fin de route qu'en cas d'interruption -- sans quoi un membre
+    // interrompu resterait a cheval pour de bon.
+    if (_roadMountSpell)
+    {
+        me->RemoveAurasDueToSpell(_roadMountSpell);
+        _roadMountSpell = 0;
+    }
 
     // Clear() ne touche PAS MOTION_SLOT_DEFAULT (cf. MotionMaster.h), or MovePath s'y installe.
     // Sans ce retrait explicite, une route en cours survit a l'abandon de l'action et le PNJ

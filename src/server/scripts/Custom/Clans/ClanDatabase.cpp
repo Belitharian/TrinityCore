@@ -73,13 +73,13 @@ namespace Clan
 
         // Effets RP (aura / sort / emote) + equipement affiche pendant une action.
         if (QueryResult result = WorldDatabase.Query(
-            "SELECT action_type, aura, spell, emote, item, item_slot, sound FROM custom_clan_action_fx"))
+            "SELECT action_type, aura, spell, emote, item, item_slot, sound_male, sound_female FROM custom_clan_action_fx"))
         {
             do
             {
                 Field* f = result->Fetch();
                 sClanMgr->AddActionFx(f[0].GetUInt8(), f[1].GetUInt32(), f[2].GetUInt32(), f[3].GetUInt32(),
-                    f[4].GetUInt32(), f[5].GetUInt8(), f[6].GetUInt32());
+                    f[4].GetUInt32(), f[5].GetUInt8(), f[6].GetUInt32(), f[7].GetUInt32());
             } while (result->NextRow());
         }
 
