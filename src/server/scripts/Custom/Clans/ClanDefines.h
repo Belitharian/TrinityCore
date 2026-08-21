@@ -84,7 +84,13 @@ namespace Clan
         Eat             = 14, // manger un repas du stock de la maison (rassasie la faim)
         Shopping        = 15, // (femmes) aller chez un vendeur, rapporter de la nourriture au stock
         Play            = 16, // (enfants) jouer / explorer pres de la maison
-        Count           = 17
+        // --- Ferme -------------------------------------------------------------------
+        FillWater       = 17, // (hommes) remplir une auge vide d'eau -> les vaches peuvent boire
+        FillStraw       = 18, // (hommes) remplir une auge vide de paille -> les vaches peuvent manger
+        Butcher         = 19, // (hommes) abattre une bete de la ferme (vache/poulet) -> viande crue
+        MilkCow         = 20, // (femmes) traire une vache -> lait (sac, puis stock de la maison)
+        DrinkMilk       = 21, // boire une ration de lait du stock de la maison (etanche la soif)
+        Count           = 22
     };
 
     // Types de ressources declarees dans la table custom_clan_resource.
@@ -102,7 +108,25 @@ namespace Clan
         Doctor      = 9,  // medecin (Creature neutre, hors clan) qui soigne les maladies
         Predator    = 10, // animal sauvage (Creature hostile) a exterminer
         Vendor      = 11, // vendeur (Creature) chez qui les femmes font les courses
-        Count       = 12
+        // --- Ferme -------------------------------------------------------------------
+        Cow         = 12, // vache (Creature) : vit dans l'enclos, se trait et s'abat
+        Chicken     = 13, // poulet (Creature) : vit pres de son abri, s'abat
+        Pig         = 14, // cochon (Creature) : declare mais pas encore exploite
+        TroughEmpty = 15, // auge VIDE (GameObject) : c'est elle que les hommes remplissent
+        TroughWater = 16, // auge remplie d'EAU (GameObject) : les vaches y boivent
+        TroughStraw = 17, // auge remplie de PAILLE (GameObject) : les vaches y mangent
+        Roost       = 18, // abri / perchoir des poulets (GameObject) : ils y dorment
+        Count       = 19
+    };
+
+    // Espece d'un animal de ferme (derivee du ResourceType par lequel son entry est declaree).
+    enum class AnimalKind : uint8
+    {
+        None    = 0,
+        Cow     = 1,
+        Chicken = 2,
+        Pig     = 3, // reserve : le cochon n'a pas encore de comportement propre
+        Count   = 4
     };
 
     // Categorie de role d'un membre (derive du sexe + de l'etape de vie). Determine les
@@ -127,7 +151,8 @@ namespace Clan
         RawFood = 0, // viande crue (a cuire)
         Wood    = 1, // bois (rallumage)
         Stone   = 2, // pierre / silex (rallumage)
-        Count   = 3
+        Milk    = 3, // lait tire des vaches (boisson : etanche la soif sans sortir du foyer)
+        Count   = 4
     };
 
     // Capacite de portage par type de ressource : au-dela, on ne ramasse plus.
@@ -161,17 +186,74 @@ namespace Clan
     // ---------------------------------------------------------------------
     // Dimensions de la Q-table
     // ---------------------------------------------------------------------
-    // Etat discret = (besoin le plus urgent) x (jour/nuit) x 8 bits de contexte, centres sur le
+    // Etat discret = (besoin le plus urgent) x (jour/nuit) x 12 bits de contexte, centres sur le
     // STOCK DE LA MAISON (et non plus l'inventaire individuel) :
     // houseHasMeal, houseHasRawFood, houseHasWood, houseHasStone, houseFireLit, diseased,
-    // predatorNearby, + bagFull (le seul bit qui parle de l'inventaire PORTE : sans lui, "chasser"
+    // predatorNearby, bagFull (le seul bit qui parle de l'inventaire PORTE : sans lui, "chasser"
     // signifiait tantot chasser tantot rentrer livrer, et l'agent melangeait deux vecus
-    // contradictoires dans la meme case de la Q-table).
-    constexpr uint8  ACTION_COUNT     = uint8(ActionType::Count);   // 17
+    // contradictoires dans la meme case de la Q-table), puis les 4 bits de la FERME :
+    // farmNeedsWater, farmNeedsStraw, farmAnimalReady, houseHasMilk.
+    constexpr uint8  ACTION_COUNT     = uint8(ActionType::Count);   // 22
     constexpr uint8  NEED_STATE_COUNT = uint8(NeedType::Count);     // 5 (None..Repro)
     constexpr uint8  TIME_STATE_COUNT = 2;                          // jour / nuit
-    constexpr uint16 FLAG_STATE_COUNT = 256;                        // 2^8 booleens de contexte
-    constexpr uint16 STATE_COUNT      = uint16(NEED_STATE_COUNT * TIME_STATE_COUNT * FLAG_STATE_COUNT); // 5*2*256 = 2560
+    constexpr uint16 FLAG_STATE_COUNT = 4096;                       // 2^12 booleens de contexte
+    constexpr uint32 STATE_COUNT      = uint32(NEED_STATE_COUNT) * TIME_STATE_COUNT * FLAG_STATE_COUNT; // 5*2*4096 = 40960
+
+    // ---------------------------------------------------------------------
+    // Representation apprise : approximation LINEAIRE (et non plus tabulaire)
+    // ---------------------------------------------------------------------
+    // Une Q-table tabulaire ne generalise pas : l'etat 0b00000000 et l'etat 0b00000001 sont
+    // deux cases sans aucun lien. "Quand j'ai faim, je mange" devait donc etre reappris
+    // jusqu'a 256 fois. Avec ~150 actions par vie (50 jours simules x 60 s) pour 43 520 cases,
+    // moins de 0.5% de la table etait touchee : l'agent n'apprenait quasiment rien.
+    //
+    // Ici Q(s,a) = w[a] . phi(s). Une lecon apprise dans un etat sert dans TOUS les etats
+    // similaires, et ajouter un drapeau de contexte coute ACTION_COUNT poids au lieu de
+    // doubler la table entiere. C'est ce qui rend extensible l'ajout de nouvelles ressources.
+    //
+    // Composition de phi(s) -- l'ordre DOIT correspondre a ClanMind::Features() :
+    //   1  biais
+    //   4  niveaux de besoin CONTINUS (faim/soif/energie/repro, normalises [0,1])
+    //   5  besoin le plus urgent, en one-hot
+    //   1  nuit
+    //  12  drapeaux de contexte
+    //  60  conjonctions (besoin urgent x drapeau)
+    //
+    // Les conjonctions sont indispensables : "affame ET un repas dispo" n'est pas la somme de
+    // "affame" et "un repas dispo". Sans elles, le lineaire ne peut pas representer les
+    // decisions qui dependent d'une combinaison -- c'est-a-dire la plupart.
+    constexpr uint8  FEATURE_BIAS_COUNT   = 1;
+    constexpr uint8  FEATURE_LEVEL_COUNT  = 4;                  // besoins continus
+    constexpr uint8  FEATURE_NIGHT_COUNT  = 1;                  // jour/nuit (un seul booleen)
+    constexpr uint8  FEATURE_FLAG_COUNT   = 12;                 // drapeaux de MindState
+    constexpr uint16 FEATURE_CONJ_COUNT   = uint16(NEED_STATE_COUNT * FEATURE_FLAG_COUNT); // 60
+    constexpr uint16 FEATURE_COUNT        = uint16(FEATURE_BIAS_COUNT + FEATURE_LEVEL_COUNT
+                                          + NEED_STATE_COUNT + FEATURE_NIGHT_COUNT
+                                          + FEATURE_FLAG_COUNT + FEATURE_CONJ_COUNT); // 83
+
+    // Amorce des priors dans les poids. Comme les poids sont PARTAGES entre etats, on ne peut
+    // plus ecrire directement une valeur dans une case : on fait converger par petits pas de
+    // gradient vers Q_SEED_PRIOR sur les etats ou l'instinct du role est encore sous le seuil.
+    constexpr uint8  Q_SEED_PASSES        = 4;
+    constexpr float  Q_SEED_RATE          = 0.30f;
+    // Nombre d'etats visites par passe d'amorce. Balayer les STATE_COUNT etats etait tenable a
+    // 8 drapeaux (2 560 etats) ; a 12 il y en a 40 960, et le seed -- paye a CHAQUE spawn et a
+    // chaque transition d'age -- couterait seize fois plus pour rien. Les poids etant partages,
+    // l'amorce n'a pas besoin de l'exhaustivite : un echantillon aleatoire tire le meme
+    // compromis, et son cout ne bouge plus quand on ajoute un drapeau de contexte.
+    // (Si STATE_COUNT tombe un jour sous ce seuil, SeedTopUp reprend le balayage complet.)
+    constexpr uint32 Q_SEED_SAMPLES       = 4096;
+
+    // Nombre TYPIQUE de features non nulles dans phi(s) : biais + besoin urgent + nuit +
+    // quelques drapeaux + leurs conjonctions. Mesure faite sur des etats reels : ~12.
+    //
+    // Sert a convertir un bruit exprime en ESPACE DE VALEUR vers un bruit PAR POIDS. En
+    // tabulaire, perturber une case de +/-x perturbait la valeur de +/-x, un pour un. En
+    // lineaire, une valeur est la SOMME des poids actifs : injecter +/-x dans chacun perturbe
+    // la valeur d'environ x*sqrt(N). Sans cette division, un bruit d'heritage de 0.10 produit
+    // un ecart-type de ~0.20 sur les valeurs -- du meme ordre que Q_SEED_PRIOR, ce qui noie
+    // completement l'instinct amorce et fait decider le hasard dans les etats peu appris.
+    constexpr uint16 FEATURE_TYPICAL_ACTIVE = 12;
 
     // ---------------------------------------------------------------------
     // Parametres d'apprentissage (Q-learning) - tous ajustables
@@ -228,11 +310,11 @@ namespace Clan
 
     // Maladie / poison / saignement : le membre peut en contracter, et apprend (Q-learning)
     // a aller se faire soigner par un medecin (PNJ neutre) quand il est afflige.
-    constexpr uint32 DISEASE_TICK_MS         = 30000;  // frequence du tirage de contagion ambiante
-    constexpr float  DISEASE_CHANCE          = 5.0f;   // % de contracter une maladie (type Disease) par tirage
-    constexpr float  DISEASE_CHANCE_COOK     = 3.0f;   // % de contracter une maladie (type Disease) par tirage
+    constexpr uint32 DISEASE_TICK_MS         = 60000;  // frequence du tirage de contagion ambiante
+    constexpr float  DISEASE_CHANCE          = 2.0f;   // % de contracter une maladie (type Disease) par tirage
+    constexpr float  DISEASE_CHANCE_COOK     = 1.0f;   // % de contracter une maladie (type Disease) par tirage
     constexpr float  DISEASE_CHANCE_DRINK    = 2.0f;   // % de contracter une maladie (type Disease) par tirage
-    constexpr float  DISEASE_CHANCE_PRED     = 8.0f;   // % d'infliger un saignement quand un animal attaque
+    constexpr float  DISEASE_CHANCE_PRED     = 3.0f;   // % d'infliger un saignement quand un animal attaque
 
     // Recompense negative appliquee quand une action ENGAGEE echoue (on s'est deplace, la cible a
     // disparu, le feu s'est eteint pendant la cuisson) : du temps a bel et bien ete gaspille.
@@ -266,6 +348,13 @@ namespace Clan
     constexpr float REWARD_EAT               = 1.00f;  // avoir mange un repas -> faim rassasiee
     constexpr float REWARD_SHOP              = 0.60f;  // avoir rapporte de la nourriture achetee au vendeur
     constexpr float REWARD_PLAY              = 0.30f;  // (enfant) avoir joue / explore
+    // Ferme. Remplir une auge ne rapporte RIEN d'immediat au clan : la recompense paie un
+    // service rendu au betail, dont le clan ne tire profit que plus tard (lait, viande). Elle
+    // doit donc rester du meme ordre que les autres taches d'entretien (bois, pierre), sans
+    // quoi les hommes deserteraient la chasse pour faire la navette entre les auges.
+    constexpr float REWARD_FILL_TROUGH       = 0.35f;  // auge vide remplie (eau ou paille)
+    constexpr float REWARD_BUTCHER           = 0.45f;  // bete de la ferme abattue -> viande crue
+    constexpr float REWARD_MILK              = 0.45f;  // vache traite -> lait
 
     // Ponderation par la RARETE : recolter (et deposer) ce qui MANQUE au foyer rapporte plus que
     // d'empiler ce qu'on a deja en abondance. Sans ca, le bois payait 0.30 que la maison en ait 0
@@ -319,6 +408,7 @@ namespace Clan
     // ---------------------------------------------------------------------
     // Perception / execution
     // ---------------------------------------------------------------------
+    constexpr float  PREDATOR_SEARCH_RANGE   = 10.0f;         // rayon de recherche des ressources
     constexpr float  RESOURCE_SEARCH_RANGE   = SIZE_OF_GRIDS; // rayon de recherche des ressources
 
     // Errance : au lieu de MoveRandom (qui vise un point navmesh parfois colle a un mur
@@ -362,7 +452,11 @@ namespace Clan
     constexpr uint32 SHOP_DURATION_MS        = 5000;   // duree de l'achat chez le vendeur
     constexpr uint32 SHOP_COOLDOWN_MS        = 30000;  // delai avant de pouvoir refaire les courses (anti-farm)
     constexpr uint32 SHOP_FOOD_AMOUNT        = 2;      // nb de repas rapportes par sortie courses
-    constexpr uint32 PLAY_DURATION_MS        = 4000;   // duree d'une session de jeu (enfant)
+    constexpr uint32 PLAY_DURATION_MS        = 10000;  // duree d'une session de jeu (enfant)
+    constexpr uint32 FILL_TROUGH_DURATION_MS = 5000;   // duree du remplissage d'une auge
+    constexpr uint32 BUTCHER_DURATION_MS     = 6000;   // duree de l'abattage / decoupe d'une bete
+    constexpr uint32 MILK_DURATION_MS        = 8000;   // duree de la traite d'une vache
+    constexpr uint32 DRINK_MILK_DURATION_MS  = 5000;   // duree d'une ration de lait (a la maison)
     // Rayon max autour du foyer ou un enfant peut jouer/errer. Au-dela il rentre (sauf pour
     // aller au medecin, gere par SeekDoctor). Empeche les enfants de partir a l'aventure.
     constexpr float  CHILD_HOME_RADIUS       = 15.0f;
@@ -370,7 +464,7 @@ namespace Clan
     // Feux et noeuds de ressource.
     // Tous les feux se consument puis s'eteignent : c'est ce qui oblige les PNJ a ramasser
     // bois + pierre et a les rallumer (et rend la cuisson non acquise).
-    constexpr uint32 FIRE_BURN_DURATION_MS   = 60000;  // combustion avant extinction (1 min)
+    constexpr uint32 FIRE_BURN_DURATION_MS   = 120000; // combustion avant extinction (2 min)
     constexpr uint32 WOOD_RESPAWN_MS         = 30000;  // respawn d'un noeud de bois epuise
     constexpr uint32 ROCK_RESPAWN_MS         = 40000;  // respawn d'un noeud de roche epuise
     // Duree pendant laquelle un noeud cible par un membre est "reserve" (les autres
@@ -404,10 +498,10 @@ namespace Clan
     // Vieillissement / reproduction (echelle de temps simulee) - ajustables
     // ---------------------------------------------------------------------
     // Duree reelle d'un "jour" simule. 60s => 1 minute reelle = 1 jour de vie.
-    constexpr uint32 REAL_SECONDS_PER_SIM_DAY = 60;
-    constexpr uint32 AGE_CHILD_TO_ADULT_DAYS  = 10;
-    constexpr uint32 AGE_ADULT_TO_ELDER_DAYS  = 40;
-    constexpr uint32 AGE_DEATH_DAYS           = 50;
+    constexpr uint32 REAL_SECONDS_PER_SIM_DAY = 60;  // Par defaut : 60
+    constexpr uint32 AGE_CHILD_TO_ADULT_DAYS  = 10;  // Par defaut : 10
+    constexpr uint32 AGE_ADULT_TO_ELDER_DAYS  = 40;  // Par defaut : 40
+    constexpr uint32 AGE_DEATH_DAYS           = 50;  // Par defaut : 50
     // Fenetre (en jours simules) avant la mort ou un Ancien annonce que "la fin est proche".
     constexpr uint32 AGE_DEATH_WARNING_DAYS   = 3;
     constexpr uint32 REPRO_COOLDOWN_DAYS      = 3;
@@ -418,14 +512,10 @@ namespace Clan
     // Echelle du modele pour un enfant.
     constexpr float  CHILD_SCALE              = 1.0f;
     // Tombes aleatoires
-    constexpr uint8  GRAVESTONE_COUNT         = 3;
-    constexpr uint32 GRAVESTONES[GRAVESTONE_COUNT] = { 2000007, 2000008, 2000009 };
+    constexpr uint8  GRAVESTONE_COUNT         = 4;
+    constexpr uint32 GRAVESTONES[GRAVESTONE_COUNT] = { 2000007, 2000008, 2000009, 2000011 };
     // Spot pour signaler les tombes
     constexpr uint32 GRAVESTONE_SPOT          = 1239999;
-    // (Plus de gossip sur les tombes : l'epitaphe part a l'addon, qui l'affiche dans sa
-    //  propre stele. Le gossip ne laissait piloter ni le fond, ni la police, ni la couleur
-    //  du texte -- tout cela vit dans le client.)
-    constexpr uint32 ASHES_DISPLAY_ID         = 38563;
 
     // Intervalle de sauvegarde periodique de l'etat (ms).
     constexpr uint32 SAVE_INTERVAL_MS = 45000;
@@ -433,7 +523,7 @@ namespace Clan
     // Identifiants MovementInform emis par l'IA (evite les collisions avec CustomAI).
     enum ClanMovePointId : uint32
     {
-        MOVE_TO_RESOURCE    = 5300000, // point d'eau (boire)
+        MOVE_TO_WELL    = 5300000, // point d'eau (boire)
         MOVE_TO_MATE        = 5300001,
         MOVE_TO_HOME        = 5300002, // lit / maison (dormir)
         MOVE_TO_WOOD        = 5300003,
@@ -455,7 +545,17 @@ namespace Clan
         // Phase 1 du suivi de route : rejoindre le point d'entree sur la route. Doit se faire
         // avec le pathfinding (le PNJ peut partir de l'interieur d'une maison), alors que la
         // route elle-meme est parcourue en spline exacte, sans navmesh.
-        MOVE_TO_ROAD_ENTRY  = 5300019
+        MOVE_TO_ROAD_ENTRY  = 5300019,
+        // Ferme
+        MOVE_TO_TROUGH_WATER = 5300020, // rejoindre une auge vide pour la remplir d'eau
+        MOVE_TO_TROUGH_STRAW = 5300028, // rejoindre une auge vide pour la remplir de paille
+        MOVE_TO_BUTCHER     = 5300021, // approche d'une bete de la ferme pour l'abattre
+        MOVE_TO_MILK        = 5300022, // approche d'une vache pour la traire
+        MOVE_TO_DRINK_MILK  = 5300023, // rentrer a la maison boire une ration de lait
+        MOVE_TO_ROOST       = 5300024, // poulet : rentrer dans son abri pour dormir
+        MOVE_TO_COW_SLEEP   = 5300025, // vache : rejoindre son coin de couchage
+        MOVE_TO_COW_FEED    = 5300026, // vache : rejoindre une auge de paille
+        MOVE_TO_COW_DRINK   = 5300027, // vache : rejoindre une auge d'eau
     };
 
     // Capacite du stock d'une maison, par type de ressource (viande/bois/pierre) et repas.
@@ -466,6 +566,48 @@ namespace Clan
 
     // Nom de script attache aux gabarits des membres (creature_template.ScriptName).
     constexpr char const* MEMBER_SCRIPT_NAME = "npc_clan_member";
+
+    // ---------------------------------------------------------------------
+    // Ferme
+    // ---------------------------------------------------------------------
+    // Entries fournies : auge vide (echangee au remplissage), auge d'eau, auge de paille,
+    // abri des poulets. Codees en dur car le comportement des animaux les manipule
+    // directement (transformation d'auge, retour aux perchoirs) : passer par le registre
+    // pour ca ne rendrait rien de configurable, seulement fragile.
+    constexpr uint32 FARM_GO_TROUGH_EMPTY   = 2000012;
+    constexpr uint32 FARM_GO_TROUGH_WATER   = 2000013;
+    constexpr uint32 FARM_GO_TROUGH_STRAW   = 2000014;
+    constexpr uint32 FARM_GO_ROOST          = 2000022;
+
+    // Item cree par la traite (a definir cote SQL). 0 = pas de dot dans le sac du joueur
+    // trayeur : le stock personnel est purement logique cote MemberState.
+    constexpr uint32 FARM_ITEM_MILK         = 0;
+
+    // Combien de rations de lait (stock ItemType::Milk) rapporte une seule traite.
+    constexpr uint32 MILK_YIELD_PER_MILKING = 3;
+    // Combien de viandes crues rapporte l'abattage d'une bete de la ferme (vache/poulet).
+    // La vache donne plus que le poulet.
+    constexpr uint32 BUTCHER_YIELD_COW      = 4;
+    constexpr uint32 BUTCHER_YIELD_CHICKEN  = 1;
+
+    // Distance a laquelle un animal de ferme considere une auge "atteinte" pour y boire/manger.
+    constexpr float  FARM_ANIMAL_REACH_DIST  = 2.5f;
+    // Rayon d'errance des animaux de ferme (autour de leur point d'origine).
+    constexpr float  FARM_ANIMAL_ROAM_RADIUS = 12.0f;
+    // Duree entre deux tics de vie d'un animal (choix errer / manger / boire / dormir).
+    constexpr uint32 FARM_ANIMAL_TICK_MS     = 4000;
+    // Delai de repop d'une bete abattue : elle reapparait plus tard, pour ne pas raser le troupeau.
+    constexpr uint32 FARM_CARCASS_RESPAWN_MS = 300000; // 5 minutes reelles
+    // Cooldown personnel apres avoir traite / rempli une auge (anti-spam par membre).
+    constexpr uint32 FARM_MILK_COOLDOWN_MS   = 20000;
+    constexpr uint32 FARM_FILL_COOLDOWN_MS   = 15000;
+    // Capacite du STOCK de LAIT au foyer (borne independante du stock general).
+    constexpr uint32 HOUSE_MILK_MAX          = 20;
+
+    // Duree pendant laquelle une bete "reservee" par un abatteur/trayeur n'est pas re-ciblee
+    // par un autre membre. Meme role que NODE_CLAIM_TTL_MS pour le bois/pierre : evite deux
+    // membres qui convergent sur la meme vache.
+    constexpr uint32 FARM_ANIMAL_CLAIM_TTL_MS = 20000;
 
     // Cle de phrase reservee (custom_clan_phrase.action_type) pour le presage de mort d'un
     // Ancien. Volontairement hors de la plage des ActionType pour ne pas entrer en collision.

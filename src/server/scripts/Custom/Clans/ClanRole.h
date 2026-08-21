@@ -60,6 +60,7 @@ namespace Clan
                 case ActionType::Sleep:
                 case ActionType::SeekDoctor:
                 case ActionType::Eat:        // manger un repas du stock : tout le monde mange
+                case ActionType::DrinkMilk:  // boire du lait du stock : etanche la soif comme un puits
                     return true;
                 default:
                     return false;
@@ -74,7 +75,9 @@ namespace Clan
                 return ActionType::SeekDoctor;
             switch (s.urgentNeed)
             {
-                case NeedType::Thirst: return ActionType::Drink;
+                // Soif : on prefere le lait du foyer s'il y en a (on ne sort pas si on peut boire
+                // sur place). Sinon on va boire a un puits.
+                case NeedType::Thirst: return s.houseHasMilk ? ActionType::DrinkMilk : ActionType::Drink;
                 case NeedType::Energy: return ActionType::Sleep;
                 default:               return ActionType::Count;
             }
@@ -102,6 +105,11 @@ namespace Clan
                 case ActionType::LightFire:
                 case ActionType::Cook:
                 case ActionType::Remember:
+                // Ferme : remplir les auges.
+                case ActionType::FillWater:
+                case ActionType::FillStraw:
+                // Ferme : abattre les betes sont l'affaire des hommes.
+                case ActionType::Butcher:
                     return true;
                 default:
                     return false;
@@ -122,13 +130,18 @@ namespace Clan
             switch (s.urgentNeed)
             {
                 case NeedType::Hunger:
-                    // On mange si un repas est pret ; sinon on chasse pour approvisionner
-                    // le foyer en viande crue (ce sont les femmes qui cuisinent).
-                    return s.houseHasMeal ? ActionType::Eat : ActionType::Hunt;
+                    // On mange si un repas est pret ; sinon on abat une bete de la ferme (plus
+                    // sur et plus rentable que la chasse), et a defaut on chasse.
+                    if (s.houseHasMeal)      return ActionType::Eat;
+                    if (s.farmAnimalReady)   return ActionType::Butcher;
+                    return ActionType::Hunt;
                 case NeedType::Repro:
                     return ActionType::SeekMate;
                 default: // rien d'urgent : on protege puis on remplit le stock de la maison
                     if (s.predatorNearby)      return ActionType::HuntPredator;
+                    // Ferme : nourrir/abreuver les betes est prioritaire sur les taches
+                    // exterieures. Sans ca, une auge vide laisserait le troupeau depeuple.
+                    if (s.farmTroughEmpty)     return ActionType::FillWater;
                     if (!s.houseHasRawFood)    return ActionType::Hunt;
                     if (!s.houseHasWood)       return ActionType::GatherWood;
                     if (!s.houseHasStone)      return ActionType::MineRock;
@@ -154,6 +167,11 @@ namespace Clan
                 case ActionType::Shopping:
                 case ActionType::SeekMate:
                 case ActionType::Remember:
+                // Ferme : seule la femme trait les vaches.
+                case ActionType::MilkCow:
+                // Ferme : remplir les auges.
+                case ActionType::FillWater:
+                case ActionType::FillStraw:
                     return true;
                 default:
                     return false;
@@ -185,6 +203,15 @@ namespace Clan
                     // borne par HOUSE_MEALS_MAX cote StartCook : inutile de le tester ici.
                     if (s.houseHasRawFood && s.houseFireLit)
                         return ActionType::Cook;
+                    // Ferme : nourrir/abreuver les betes est prioritaire sur les taches
+                    // de traite et d'acheter.
+                    if (s.farmTroughEmpty)
+                        return ActionType::FillWater;
+                    // Ferme : traire des qu'une vache est disponible ET qu'on n'a pas deja plein
+                    // de lait. Instinct place APRES l'entretien du feu / la cuisine (priorite au
+                    // foyer) mais AVANT les courses : le lait est un bien produit sur place.
+                    if (s.farmAnimalReady && !s.houseHasMilk)
+                        return ActionType::MilkCow;
                     // Rien a cuisiner : on va chercher de quoi manger chez le vendeur.
                     if (!s.houseHasRawFood)
                         return ActionType::Shopping;

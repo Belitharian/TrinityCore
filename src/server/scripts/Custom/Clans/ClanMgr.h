@@ -181,17 +181,20 @@ namespace Clan
 		uint32 mapId = 0;
 		Position position;
 
-		// Stock indexe par ItemType (RawFood / Wood / Stone) + repas cuisines prets a manger.
+		// Stock indexe par ItemType (RawFood / Wood / Stone / Milk) + repas cuisines prets.
+		// Le lait a sa propre borne (HOUSE_MILK_MAX) car c'est un consommable a rotation rapide,
+		// distinct des reserves lentes (bois/pierre/viande).
 		std::array<uint32, uint8(ItemType::Count)> stock = {};
 		uint32 meals = 0;
 
 		uint32 Get(ItemType t) const { return stock[uint8(t)]; }
-		// Depose n unites (borne a HOUSE_STOCK_MAX). false si deja plein (rien ajoute).
+		// Depose n unites. false si deja plein (rien ajoute). Le lait a sa propre borne.
 		bool Add(ItemType t, uint32 n = 1)
 		{
 			uint32& s = stock[uint8(t)];
-			if (s >= HOUSE_STOCK_MAX) return false;
-			s = std::min(HOUSE_STOCK_MAX, s + n);
+			uint32 const cap = (t == ItemType::Milk) ? HOUSE_MILK_MAX : HOUSE_STOCK_MAX;
+			if (s >= cap) return false;
+			s = std::min(cap, s + n);
 			return true;
 		}
 		// Preleve n unites. false si le stock est insuffisant (rien retire).
@@ -288,6 +291,43 @@ namespace Clan
 		uint32 GetAfflictionMask(Unit* who) const;
 		Creature* FindNearestDoctor(Creature* from) const;
 		Creature* FindNearestVendor(Creature* from) const; // vendeur (courses des femmes)
+
+		// --- Ferme --------------------------------------------------------------------
+		// Auge VIDE la plus proche (dans RESOURCE_SEARCH_RANGE), non deja reservee. Reserve la pour
+		// 'from' comme les noeuds (evite les trajets concurrents). nullptr si aucune.
+		GameObject* FindFarmEmptyTrough(Creature* from);
+		// Bete de la ferme (vache OU poulet) la plus proche a portee, non reservee.
+		// wantMilkable = true -> ne considere que les vaches vivantes (traite).
+		// Reserve la comme un noeud. nullptr si aucune.
+		Creature* FindFarmAnimal(Creature* from, bool wantMilkable);
+		// Transforme une auge VIDE en auge d'EAU (ou de PAILLE) : despawn de la vide, spawn
+		// de la remplie a la meme position, memes rotation/spawn window. Retourne le nouveau
+		// GameObject, ou nullptr si echec.
+		GameObject* FillTrough(GameObject* emptyTrough, bool water);
+		// Transforme une auge (eau OU paille) en auge VIDE (consommation par un animal).
+		void EmptyTrough(GameObject* filled);
+		// Existe-t-il au moins UNE auge vide dans la ferme du clan de 'from' ? (percu par la
+		// Q-table). Ne reserve rien : simple lecture.
+		bool FarmHasEmptyTrough(Creature* from) const;
+		bool FarmHasAnimal(Creature* from, bool wantMilkable) const;
+		// Enregistre / desenregistre un animal de ferme (appel des IA sur JustAppeared / JustDied).
+		// Le suivi permet a FindFarmAnimal de balayer directement les guids connus au lieu
+		// de refaire des GetClosestCreatureWithEntry par entry (coute moins cher a chaque tick).
+		void RegisterFarmAnimal(Creature* creature);
+		void UnregisterFarmAnimal(Creature* creature);
+		// Reservation d'un animal (meme mecanique que les noeuds de bois/pierre).
+		bool ClaimAnimal(Creature* animal, Creature* claimant);
+		void ReleaseAnimalClaim(ObjectGuid animalGuid);
+		// Espece d'un animal, deduite de son entry via le registre de ressources.
+		AnimalKind GetAnimalKind(uint32 entry) const;
+		AnimalKind GetAnimalKind(Creature* creature) const;
+		// Reservation d'une auge remplie par une bete qui s'en approche. Meme mecanique que
+		// les claims d'animaux : evite que tout le troupeau converge en meme temps sur la
+		// meme auge -- la premiere qui s'engage vers elle la marque, les autres iront ailleurs
+		// (ou attendront le prochain remplissage). Le TTL absorbe l'animal mort en chemin.
+		bool ClaimTrough(GameObject* trough, Creature* claimant);
+		bool IsTroughClaimed(ObjectGuid troughGuid, ObjectGuid by) const;
+		void ReleaseTroughClaim(ObjectGuid troughGuid);
 
 		// --- Resume monde (fenetre globale de l'addon) ---
 		WorldSummary GetWorldSummary() const;
@@ -404,6 +444,14 @@ namespace Clan
 		std::unordered_map<uint8, uint64> _houseByClan;                         // clanId -> spawnId maison (une par clan)
 		std::unordered_map<uint32, uint64> _bedByEntry;                         // entry membre -> spawnId lit attribue
 		std::unordered_map<uint64, uint64> _fireHouseBySpawn;                   // spawnId feu -> spawnId maison (custom_clan_fire)
+		// --- Ferme --------------------------------------------------------------------
+		// Animaux enregistres a la volee (JustAppeared / JustDied). On stocke le GUID pour
+		// pouvoir les balayer sans repasser par le registre de ressources.
+		std::unordered_map<ObjectGuid, uint32> _farmAnimals;                    // GUID -> entry
+		// Reservations d'animaux (evite deux membres qui convergent sur la meme bete).
+		std::unordered_map<ObjectGuid, NodeClaim> _farmAnimalClaims;
+		// Reservations d'auges remplies (par une bete qui s'en approche). Meme mecanique.
+		std::unordered_map<ObjectGuid, NodeClaim> _troughClaims;
 
 		uint32 _dayTimerMs = 0;                                                 // accumulateur vers le prochain jour simule
 		uint32 _saveTimerMs = 0;                                                // accumulateur vers la prochaine sauvegarde

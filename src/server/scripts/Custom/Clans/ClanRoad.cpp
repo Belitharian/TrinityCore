@@ -234,21 +234,40 @@ namespace Clan
         {
             std::vector<Position> route;
 
+            // Debug : trace toutes les tentatives. Sous-jacent TC_LOG_DEBUG -> affiche seulement
+            // si la Logger "scripts" est configuree en Debug ; muet en prod. En-tete d'appel
+            // repete a chaque log pour retrouver un run entier dans le fichier.
+            uint64 const moverLow = mover->GetGUID().GetCounter();
+            uint32 const actionId = uint32(action);
+
             auto itAction = _pathsByAction.find(uint8(action));
             if (itAction == _pathsByAction.end())
+            {
+                TC_LOG_DEBUG("scripts", "ClanRoad[{}] action={} : aucune route declaree pour cette action.",
+                    moverLow, actionId);
                 return route; // action non liee a une route -> pathfinding standard
+            }
 
             Position const from = mover->GetPosition();
+            float const straight = from.GetExactDist2d(to);
 
             // Garde-fou 1 : trajet trop court. Emprunter la route ferait faire un aller-retour
             // ridicule pour quelques metres.
-            if (from.GetExactDist2d(to) < MIN_TRIP_DIST)
+            if (straight < MIN_TRIP_DIST)
+            {
+                TC_LOG_DEBUG("scripts", "ClanRoad[{}] action={} : trajet trop court ({:.1f} < {:.1f}) -> pathfinding direct.",
+                    moverLow, actionId, straight, MIN_TRIP_DIST);
                 return route;
+            }
 
             PathData const* best = nullptr;
             uint32 bestEntry = 0;
             uint32 bestExit = 0;
             float bestCost = std::numeric_limits<float>::max();
+            uint32 bestPathId = 0;
+            uint32 pathsConsidered = 0;
+            uint32 rejectedFar = 0;
+            uint32 rejectedNoPath = 0;
 
             for (uint32 pathId : itAction->second)
             {
@@ -259,6 +278,7 @@ namespace Clan
                 PathData const& path = itPath->second;
                 if (path.MapId != mover->GetMapId() || path.Nodes.size() < 2)
                     continue;
+                ++pathsConsidered;
 
                 // Point de SORTIE : le noeud declare le plus proche de la destination. C'est lui
                 // qui evite de quitter la route en plein milieu d'un troncon pour couper a
@@ -277,13 +297,19 @@ namespace Clan
 
                     float const joinDist = NavmeshDistance(mover, path.Nodes[entryIdx]);
                     if (joinDist < 0.0f)
+                    {
+                        ++rejectedNoPath;
                         continue; // noeud injoignable (PATHFIND_NOPATH)
+                    }
 
                     // Garde-fou 2 : trop loin pour etre rejoint. Mesure sur le chemin REEL, donc
                     // un noeud a 5 yards derriere un mur compte pour ce que le contournement
                     // coute vraiment.
                     if (joinDist > MAX_JOIN_DIST)
+                    {
+                        ++rejectedFar;
                         continue;
+                    }
 
                     // Cout total : rejoindre la route + la longer + la quitter vers la
                     // destination. Aucun plafond de detour : on veut la route, meme si couper
@@ -295,12 +321,18 @@ namespace Clan
                         best = &path;
                         bestEntry = entryIdx;
                         bestExit = exitIdx;
+                        bestPathId = pathId;
                     }
                 }
             }
 
             if (!best)
+            {
+                TC_LOG_DEBUG("scripts",
+                    "ClanRoad[{}] action={} : aucune route retenue ({} path(s) examinee(s), {} rejet(s) trop loin, {} rejet(s) navmesh).",
+                    moverLow, actionId, pathsConsidered, rejectedFar, rejectedNoPath);
                 return route; // aucune route retenue -> pathfinding standard
+            }
 
             // Le trajet n'est fait que de noeuds DECLARES, entree et sortie comprises, parcourus
             // dans le sens qui va de l'une a l'autre.
@@ -310,6 +342,10 @@ namespace Clan
             else
                 for (uint32 i = bestEntry + 1; i-- > bestExit; )
                     route.push_back(best->Nodes[i]);
+
+            TC_LOG_DEBUG("scripts",
+                "ClanRoad[{}] action={} : route {} retenue (entry={}, exit={}, {} noeud(s), cout={:.1f}, direct={:.1f}).",
+                moverLow, actionId, bestPathId, bestEntry, bestExit, uint32(route.size()), bestCost, straight);
 
             // On ecarte le trace de la ligne centrale pour que deux membres empruntant la meme
             // route ne se marchent pas dessus. Applique APRES le choix des noeuds : les couts

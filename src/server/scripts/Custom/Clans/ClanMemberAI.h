@@ -131,13 +131,21 @@ private:
     // La route s'arrete a son point de SORTIE, pas sur 'dest' : c'est WaypointPathEnded qui
     // relance ensuite le MovePoint d'origine avec 'pointId', de sorte que le switch de
     // MovementInform se declenche normalement et reste inchange.
-    bool MoveAlongRoad(Position const& dest, uint32 pointId, bool walk = true);
+    bool MoveAlongRoad(Position const& dest, uint32 pointId, bool forceWalk = true);
     void BeginRoadTravel();  // phase 2 : monter puis longer la route (sur MOVE_TO_ROAD_ENTRY)
     void StartRoadPath();    // emet le MovePath (une fois la monture invoquee)
     void ClearRoad();        // annule la route, demonte, et purge MOTION_SLOT_DEFAULT
     // Invoque une monture RP pour la route. Retourne le delai a attendre avant de bouger
     // (temps d'incantation) ; 0 si aucune monture n'est invoquee.
     Milliseconds TryMountForRoad();
+
+    // Approche une cible en s'arretant a 'distance' d'elle.
+    //
+    // Remplace MotionMaster::MoveCloserAndStop, qui calcule un point d'arret correct en X/Y
+    // mais lui donne le Z de la CIBLE : des que la cible est en contrebas (talus, berge,
+    // ravin), la destination se retrouve sous le terrain et le PNJ passe sous la map.
+    // Ici le Z est recale sur le sol reel a l'aplomb du point d'arret.
+    void MoveCloserTo(uint32 pointId, WorldObject* target, float distance, bool forceWalk = true);
 
     bool StartSeekDoctor();
     bool StartHuntPredator(); // traquer un animal sauvage pour l'exterminer
@@ -150,6 +158,11 @@ private:
     // tant qu'elle etait une branche cachee de Hunt/GatherWood/MineRock, une recolte pouvait
     // rester bloquee a vie dans un sac plein des que la Q-valeur de l'action porteuse baissait.
     bool StartStoreHome();
+    // Ferme
+    bool StartFillTrough(bool water); // homme : remplir une auge vide (eau ou paille)
+    bool StartButcher();              // homme : abattre une bete de la ferme (vache/poulet)
+    bool StartMilkCow();              // femme : traire une vache
+    bool StartDrinkMilk();            // tout membre : boire une ration de lait du foyer
     // Met le membre en route vers sa maison pour y deposer sa recolte. Se replie sur le point
     // de foyer (_owner->home) si le GameObject maison est introuvable : un membre doit
     // TOUJOURS pouvoir livrer, sans quoi il accumule les echecs et n'ose plus rien recolter.
@@ -254,6 +267,8 @@ private:
     uint32 _diseaseTimerMs; // accumulateur vers le prochain tirage de contagion
     uint32 _rememberCdMs;   // cooldown avant qu'un nouveau recueillement soit recompense (anti-farm)
     uint32 _shopCdMs;       // cooldown avant de refaire les courses (anti-farm)
+    uint32 _milkCdMs;       // cooldown personnel entre deux traites (anti-farm)
+    uint32 _fillCdMs;       // cooldown personnel entre deux remplissages d'auge (anti-farm)
     // Anti-boucle : derniere action soldee et nombre de fois qu'elle s'est enchainee a
     // l'identique. Au-dela de REPEAT_TOLERANCE, la recompense recoit un malus croissant
     // plafonne : le membre se lasse et va voir ailleurs, sans que l'action soit condamnee.
@@ -272,22 +287,34 @@ private:
     bool   _mateAtMeet;     // le partenaire a signale son arrivee (via NotifyMateArrived)
 };
 
-inline Position GetFacingPosition(Position position, float range = 2.5f)
+// Position situee a 'range' metres devant 'position', selon l'orientation de celle-ci.
+//
+// 'mover' est l'unite qui ira s'y placer : elle sert a RECALER LE Z SUR LE SOL. Sans ce
+// recalage on conserverait l'altitude de la source, ce qui place le point sous ou au-dessus
+// du terrain des que celui-ci est en pente -- meme defaut que MotionMaster::MoveCloserAndStop
+// (cf. npc_clan_member::MoveCloserTo). Le decalage etant ici court (2 a 4 m), l'erreur reste
+// petite et le pathfinding la rattrape le plus souvent ; mais sur un puits ou un feu adosse a
+// une pente, elle suffit a faire viser sous le decor.
+//
+// Le recalage se fait avec le MOBILE et non avec l'objet vise : c'est pour lui que l'altitude
+// doit etre praticable (un GameObject n'a pas les memes contraintes de deplacement).
+inline Position GetFacingPosition(WorldObject const* mover, Position position, float range = 2.5f)
 {
-    // Recupere l'orientation du feu
     float orientation = position.GetOrientation();
 
-    // Calcule la position a #range m devant la position selon son orientation
-    float x = position.m_positionX + cos(orientation) * range;
-    float y = position.m_positionY + sin(orientation) * range;
-    float z = position.m_positionZ; // Garde la meme altitude
+    float x = position.m_positionX + std::cos(orientation) * range;
+    float y = position.m_positionY + std::sin(orientation) * range;
+    float z = position.m_positionZ;
+
+    if (mover)
+        mover->UpdateAllowedPositionZ(x, y, z);
 
     return Position(x, y, z);
 }
 
-inline Position GetFacingPosition(WorldObject* object, float range = 2.5f)
+inline Position GetFacingPosition(WorldObject const* mover, WorldObject* object, float range = 2.5f)
 {
-    return GetFacingPosition(object->GetPosition(), range);
+    return GetFacingPosition(mover, object->GetPosition(), range);
 }
 
 #endif // CUSTOM_CLANS_CLANMEMBERAI_H

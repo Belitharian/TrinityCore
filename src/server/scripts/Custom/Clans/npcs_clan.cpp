@@ -68,7 +68,7 @@ namespace
 			case ActionType::Wander:        return "Errer";
 			case ActionType::Hunt:          return "Chasser";
 			case ActionType::StoreHome:     return "Rentrer deposer";
-			case ActionType::Drink:     return "Boire(puits)";
+			case ActionType::Drink:         return "Boire(puits)";
 			case ActionType::Sleep:         return "Dormir";
 			case ActionType::SeekMate:      return "Chercher partenaire";
 			case ActionType::GatherWood:    return "Ramasser bois";
@@ -81,6 +81,11 @@ namespace
 			case ActionType::Eat:           return "Manger";
 			case ActionType::Shopping:      return "Acheter";
 			case ActionType::Play:          return "Jouer";
+			case ActionType::FillWater:     return "Remplir(eau)";
+			case ActionType::FillStraw:     return "Remplir(paille)";
+			case ActionType::Butcher:       return "Abattre";
+			case ActionType::MilkCow:       return "Traire";
+			case ActionType::DrinkMilk:     return "Boire(lait)";
 			default:                        return "Rien";
 		}
 	}
@@ -136,6 +141,11 @@ namespace
 		if (s == "eat"          || s == "manger")                        return ActionType::Eat;
 		if (s == "shopping"     || s == "acheter")                       return ActionType::Shopping;
 		if (s == "play"         || s == "jouer")                         return ActionType::Play;
+		if (s == "fillwater"    || s == "eau")                           return ActionType::FillWater;
+		if (s == "fillstraw"    || s == "paille")                        return ActionType::FillStraw;
+		if (s == "butcher"      || s == "abattre")                       return ActionType::Butcher;
+		if (s == "milk"         || s == "milkcow"   || s == "traire")    return ActionType::MilkCow;
+		if (s == "drinkmilk"    || s == "lait")                          return ActionType::DrinkMilk;
 		return ActionType::Count;
 	}
 }
@@ -467,7 +477,7 @@ public:
 			ai->GetItemCount(ItemType::RawFood), ai->GetItemCount(ItemType::Wood), ai->GetItemCount(ItemType::Stone),
 			cur.bagFull ? " | |cffff6060SAC PLEIN -> doit rentrer deposer|r" : "");
 
-		uint16 idx = cur.Index();
+		uint32 idx = cur.Index();
 		ActionType best = s->mind.BestAction(idx, ai->GetRole());
 		handler->PSendSysMessage("Etat courant (besoin=%s, %s) -> meilleure action: %s (Q=%.2f)",
 			NeedName(cur.urgentNeed), cur.night ? "nuit" : "jour",

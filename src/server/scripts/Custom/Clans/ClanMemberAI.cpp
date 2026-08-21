@@ -28,6 +28,7 @@
 #include "MovementDefines.h"
 #include "WaypointDefines.h"
 #include "ObjectAccessor.h"
+#include "PhasingHandler.h"
 #include "Random.h"
 #include "SpellDefines.h"
 #include "SpellInfo.h"
@@ -71,6 +72,7 @@ _needBefore(0.0f), _huntTimerMs(0), _roadPendingId(0), _roadWalk(true), _roadMou
 _actionTimerMs(0), _huntPreyKilled(false), _actionEngaged(false),
 _busy(false), _reflex(Reflex::None),
 _inventory {}, _talkCdMs(0), _starveTimerMs(0), _diseaseTimerMs(0), _rememberCdMs(0), _shopCdMs(0),
+_milkCdMs(0), _fillCdMs(0),
 _lastAction(ActionType::Count), _repeatStreak(0),
 _equipDirty(false), _sleepElevated(false), _combatLearned(false), _lastSeededStage(Clan::LifeStage::Adult),
 _selfAtMeet(false), _mateAtMeet(false)
@@ -494,9 +496,6 @@ void npc_clan_member::_PlayCustomFx(Creature* creature)
 
 void npc_clan_member::SpawnGravestone()
 {
-    // Deplace d'abord le corps vers un emplacement de cimetiere libre (si disponible),
-    // pour que la tombe apparaisse au cimetiere et non sur le lieu de la mort. Faute de
-    // place, on retombe sur le comportement d'origine (tombe sur place).
     Position dest = me->GetPosition();
     GraveyardSlot* slot = sClanMgr->AcquireGraveyardSlot();
 
@@ -514,26 +513,51 @@ void npc_clan_member::SpawnGravestone()
             // Texte grave une fois pour toutes (modele de custom_clan_epitaph + jetons).
             slot->epitaph = sClanMgr->BuildEpitaph(_owner->deathCause, me->GetName(), _owner->ageDays);
         }
-        me->NearTeleportTo(dest);
     }
-
-    me->SetDisplayId(ASHES_DISPLAY_ID);
 
     uint32 randomEntry = GRAVESTONES[urand(0, GRAVESTONE_COUNT - 1)];
     QuaternionData rot = QuaternionData::fromEulerAnglesZYX(dest.GetOrientation(), 0.0f, 0.0f);
 
-    if (GameObject* gravestone = me->SummonGameObject(randomEntry, dest, rot, 0s))
+    // La tombe appartient au MONDE, pas au defunt : on la cree directement sur la map, sans
+    // invocateur.
+    //
+    // me->SummonGameObject() la rattachait a 'me' via ToUnit()->AddGameObject() -- la pierre
+    // tombale etait donc detruite avec le cadavre qu'elle commemore, ce qui la faisait
+    // disparaitre a la decomposition du corps.
+    //
+    // Sans proprietaire ni delai de respawn, rien ne peut la faire despawn :
+    //   - la branche d'expiration de GameObject::Update est gardee par m_respawnTime > 0 ;
+    //   - isSummonedAndExpired vaut (GetOwner() || GetSpellId()) && ... , donc faux ici.
+    // C'est aussi ce qui evite le recours a une duree de vie artificiellement enorme.
+    Map* map = me->GetMap();
+    GameObject* gravestone = GameObject::CreateGameObject(randomEntry, map, dest, rot, 255, GO_STATE_READY);
+    if (gravestone)
+    {
+        // Meme phase que le defunt, sinon la tombe pourrait lui etre invisible.
+        PhasingHandler::InheritPhaseShift(gravestone, me);
+
+        if (!map->AddToMap(gravestone))
+        {
+            delete gravestone; // AddToMap n'en prend possession qu'en cas de succes
+            gravestone = nullptr;
+        }
+    }
+
+    if (gravestone)
     {
         // Lien pierre -> emplacement : c'est ainsi que le gossip retrouve l'epitaphe.
         if (slot)
             slot->graveGuid = gravestone->GetGUID();
 
-        Creature* worldFx = gravestone->SummonCreature(WORLD_TRIGGER, gravestone->GetPosition());
-        if (!worldFx)
-            return;
-
-        worldFx->CastSpell(worldFx, GRAVESTONE_SPOT);
+        // Effet visuel sur la tombe. Pas de 'return' en cas d'echec : ce n'est qu'un
+        // accessoire, et sortir ici sauterait la suppression du corps ci-dessous -- le
+        // cadavre resterait alors sur place indefiniment.
+        if (Creature* worldFx = gravestone->SummonCreature(WORLD_TRIGGER, gravestone->GetPosition()))
+            worldFx->CastSpell(worldFx, GRAVESTONE_SPOT);
     }
+
+    // Supprime le corps.
+    me->DespawnOrUnsummon(3s);
 }
 
 MindState npc_clan_member::BuildState() const
@@ -548,6 +572,14 @@ MindState npc_clan_member::BuildState() const
     if (me->GetHealthPct() <= HEALTH_LOW_PCT && _owner->needs.hunger >= EAT_HUNGER_MIN)
         s.urgentNeed = NeedType::Hunger;
 
+    // Niveaux CONTINUS normalises, en plus du besoin urgent discret : le cerveau lineaire sait
+    // exploiter l'intensite. Un affame a 51% et un affame a 99% cessaient d'etre distinguables
+    // une fois reduits au seul "besoin le plus urgent".
+    s.hunger01 = _owner->needs.hunger / NEED_MAX;
+    s.thirst01 = _owner->needs.thirst / NEED_MAX;
+    s.energy01 = _owner->needs.energy / NEED_MAX;
+    s.repro01  = _owner->needs.reproUrge / NEED_MAX;
+
     s.night = IsNightNow();
 
     // Etat percu centre sur le STOCK DE LA MAISON (partage) : c'est autour de lui que
@@ -558,6 +590,23 @@ MindState npc_clan_member::BuildState() const
         s.houseHasRawFood = h->Get(ItemType::RawFood) > 0;
         s.houseHasWood = h->Get(ItemType::Wood) > 0;
         s.houseHasStone = h->Get(ItemType::Stone) > 0;
+        s.houseHasMilk = h->Get(ItemType::Milk) > 0;
+    }
+
+    // Ferme : disponibilite du gibier domestique et etat des auges. On n'interroge le
+    // gestionnaire que si le role peut en tirer parti, pour ne pas payer les balayages a
+    // chaque tick pour tous les enfants du monde.
+    RoleCategory cat = _owner->stage == LifeStage::Child ? RoleCategory::Child
+                        : (_owner->gender == Clan::Gender::Female ? RoleCategory::Woman : RoleCategory::Man);
+    if (cat == RoleCategory::Man)
+    {
+        s.farmAnimalReady = sClanMgr->FarmHasAnimal(me, false);
+        s.farmTroughEmpty = sClanMgr->FarmHasEmptyTrough(me);
+        s.farmNeedsWater  = s.farmTroughEmpty; // pour l'instant, meme signal (cf. AnimalKind::Pig)
+    }
+    else if (cat == RoleCategory::Woman)
+    {
+        s.farmAnimalReady = sClanMgr->FarmHasAnimal(me, true); // seules les vaches nous interessent
     }
 
     // Le foyer de la maison est-il allume ? (feu rattache a la maison via custom_clan_fire.)
@@ -600,6 +649,10 @@ void npc_clan_member::UpdateAI(uint32 diff)
         _shopCdMs -= diff;
     else
         _shopCdMs = 0;
+
+    // Cooldowns de la ferme (anti-farm des taches d'auge et de traite).
+    if (_milkCdMs > diff) _milkCdMs -= diff; else _milkCdMs = 0;
+    if (_fillCdMs > diff) _fillCdMs -= diff; else _fillCdMs = 0;
 
     // Degats de survie (famine ET maladie, meme tick) : les deux rongent les PV et peuvent
     // tuer. La regeneration est suspendue tant que le membre a faim.
@@ -807,6 +860,11 @@ bool npc_clan_member::BeginAction(ActionType action)
         case ActionType::Eat:           started = StartEat();                           break;
         case ActionType::Shopping:      started = StartShopping();                      break;
         case ActionType::Play:          started = StartPlay();                          break;
+        case ActionType::FillWater:     started = StartFillTrough(true);                break;
+        case ActionType::FillStraw:     started = StartFillTrough(false);               break;
+        case ActionType::Butcher:       started = StartButcher();                       break;
+        case ActionType::MilkCow:       started = StartMilkCow();                       break;
+        case ActionType::DrinkMilk:     started = StartDrinkMilk();                     break;
         case ActionType::Wander:
             StartWander();
             started = true;
@@ -991,7 +1049,7 @@ bool npc_clan_member::StartHunt()
     _actionTarget = prey->GetGUID();
     _huntTimerMs = HUNT_TIMEOUT_MS; // Garde-fou decompte dans UpdateAI
 
-    me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_PREY, prey, HUNT_SHOOT_RANGE);
+    MoveCloserTo(MOVE_TO_PREY, prey, HUNT_SHOOT_RANGE);
     return true;
 }
 
@@ -1023,7 +1081,10 @@ bool npc_clan_member::StartRemember()
 
     _actionTarget.Clear(); // La tombe est une position, pas un objet cible
     _gravePoint = grave;   // donc il faut garder la position en memoire
-    me->GetMotionMaster()->MovePoint(MOVE_TO_GRAVE, GetFacingPosition(_gravePoint, 2.5f), true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+
+    Position const dest = GetFacingPosition(me, _gravePoint, 2.5f);
+    if (!MoveAlongRoad(dest, MOVE_TO_GRAVE))
+        me->GetMotionMaster()->MovePoint(MOVE_TO_GRAVE, dest, true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
 }
 
@@ -1034,7 +1095,9 @@ bool npc_clan_member::StartDrink()
         return false;
 
     _actionTarget = water->GetGUID();
-    me->GetMotionMaster()->MovePoint(MOVE_TO_RESOURCE, GetFacingPosition(water), true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+    Position const dest = GetFacingPosition(me, water);
+    if (!MoveAlongRoad(dest, MOVE_TO_WELL))
+        me->GetMotionMaster()->MovePoint(MOVE_TO_WELL, GetFacingPosition(me, water), true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
 }
 
@@ -1299,7 +1362,7 @@ bool npc_clan_member::StartGatherWood()
         return false;
 
     _actionTarget = wood->GetGUID();
-    me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_WOOD, wood, 2.0f, MovementWalkRunSpeedSelectionMode::ForceWalk);
+    MoveCloserTo(MOVE_TO_WOOD, wood, 2.0f);
     return true;
 }
 
@@ -1320,7 +1383,7 @@ bool npc_clan_member::StartMineRock()
         return false;
 
     _actionTarget = rock->GetGUID();
-    me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_ROCK, rock, 2.0f, MovementWalkRunSpeedSelectionMode::ForceWalk);
+    MoveCloserTo(MOVE_TO_ROCK, rock, 2.0f);
     return true;
 }
 
@@ -1336,7 +1399,7 @@ bool npc_clan_member::StartLightFire()
         return false;
 
     _actionTarget = fire->GetGUID();
-    Position const dest = GetFacingPosition(fire, 3.6f);
+    Position const dest = GetFacingPosition(me, fire, 3.6f);
     if (!MoveAlongRoad(dest, MOVE_TO_FIRE_LIGHT))
         me->GetMotionMaster()->MovePoint(MOVE_TO_FIRE_LIGHT, dest, true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
@@ -1355,7 +1418,7 @@ bool npc_clan_member::StartCook()
         return false;
 
     _actionTarget = fire->GetGUID();
-    Position const dest = GetFacingPosition(fire, 3.6f);
+    Position const dest = GetFacingPosition(me, fire, 3.6f);
     if (!MoveAlongRoad(dest, MOVE_TO_FIRE_COOK))
         me->GetMotionMaster()->MovePoint(MOVE_TO_FIRE_COOK, dest, true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
@@ -1398,7 +1461,7 @@ bool npc_clan_member::StartShopping()
 
     // Le vendeur est sur la route du village : on l'emprunte si elle s'applique, sinon
     // deplacement direct comme avant.
-    Position const dest = GetFacingPosition(vendor);
+    Position const dest = GetFacingPosition(me, vendor);
     if (!MoveAlongRoad(dest, MOVE_TO_VENDOR))
         me->GetMotionMaster()->MovePoint(MOVE_TO_VENDOR, dest, true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
@@ -1429,7 +1492,9 @@ bool npc_clan_member::StartPlay()
 
     // Jeu (enfants) : reste dans un rayon autour du FOYER, jamais l'aventure au loin.
     // (Le seul eloignement autorise est la visite au medecin, geree par SeekDoctor.)
-    me->GetMotionMaster()->MovePoint(MOVE_TO_PLAY, HomeAnchoredDestination(CHILD_HOME_RADIUS), true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+    Position const dest = HomeAnchoredDestination(CHILD_HOME_RADIUS);
+    if (!MoveAlongRoad(dest, MOVE_TO_PLAY))
+        me->GetMotionMaster()->MovePoint(MOVE_TO_PLAY, dest, true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
 
     _scheduler.Schedule(Milliseconds(PLAY_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
     {
@@ -1486,7 +1551,7 @@ bool npc_clan_member::GoDepositHome()
     // et il finissait par ne plus oser recolter du tout -- sa recolte bloquee a vie dans son sac.
     Position dest = _owner->home;
     if (GameObject* home = MyHouseObject())
-        dest = GetFacingPosition(home, 2.0f);
+        dest = GetFacingPosition(me, home, 2.0f);
 
     // Nettoyage du rendu transitoire de la recolte AVANT de marcher : sans ca, le PNJ rentre
     // en gardant l'emote de travail (agenouille a depecer, hache/pioche en main). FinishAction
@@ -1498,6 +1563,96 @@ bool npc_clan_member::GoDepositHome()
     // deplacement direct comme avant.
     if (!MoveAlongRoad(dest, MOVE_TO_STORE))
         me->GetMotionMaster()->MovePoint(MOVE_TO_STORE, dest, true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+    return true;
+}
+
+bool npc_clan_member::StartFillTrough(bool water)
+{
+    // Sac plein : on ne part pas remplir une auge sans avoir livre la recolte au foyer, sinon
+    // on gele le stock personnel. Regle deja imposee par DecisionTick pour l'homme, mais on
+    // double le garde-fou ici pour couvrir les invocations directes (ForceAction).
+    if (IsBagFull())
+        return false;
+
+    if (_fillCdMs > 0)
+        return false;
+
+    GameObject* trough = sClanMgr->FindFarmEmptyTrough(me);
+    if (!trough)
+        return false;
+
+    // Un homme sans maison ne devrait pas prendre soin de la ferme du clan (le stock de lait /
+    // viande ira dans une maison qui n'existe pas). Sans ce garde-fou, l'action reussit et
+    // rien n'est produit.
+    if (!MyHouse())
+        return false;
+
+    _actionTarget = trough->GetGUID();
+    // Deux ids distincts pour eau/paille : evite d'avoir a caser un booleen d'intention dans un
+    // champ deja utilise ailleurs (piege classique quand une action est interrompue puis reprise).
+    // MoveCloserTo (et non MovePoint direct) : cale le Z sur le sol reel du membre, comme pour
+    // toute approche d'un GameObject (cf. le bug MoveCloserAndStop -> PNJ sous la map), et prend
+    // automatiquement la route si l'action FillWater/FillStraw en declare une dans custom_clan_path.
+    uint32 pointId = water ? MOVE_TO_TROUGH_WATER : MOVE_TO_TROUGH_STRAW;
+    MoveCloserTo(pointId, trough, 2.0f);
+    return true;
+}
+
+bool npc_clan_member::StartButcher()
+{
+    // Sac plein de viande : plus rien a prelever (comme la chasse).
+    if (IsItemFull(ItemType::RawFood))
+        return false;
+
+    HouseState* house = MyHouse();
+    if (!house || house->Get(ItemType::RawFood) >= HOUSE_STOCK_MAX)
+        return false;
+
+    Creature* animal = sClanMgr->FindFarmAnimal(me, false); // vache OU poulet
+    if (!animal)
+        return false;
+
+    if (!sClanMgr->ClaimAnimal(animal, me))
+        return false;
+
+    _actionTarget = animal->GetGUID();
+    MoveCloserTo(MOVE_TO_BUTCHER, animal, 1.5f);
+    return true;
+}
+
+bool npc_clan_member::StartMilkCow()
+{
+    if (_milkCdMs > 0)
+        return false;
+
+    HouseState* house = MyHouse();
+    if (!house || house->Get(ItemType::Milk) >= HOUSE_MILK_MAX)
+        return false;
+
+    Creature* cow = sClanMgr->FindFarmAnimal(me, true);
+    if (!cow)
+        return false;
+
+    if (!sClanMgr->ClaimAnimal(cow, me))
+        return false;
+
+    _actionTarget = cow->GetGUID();
+    MoveCloserTo(MOVE_TO_MILK, cow, 1.5f);
+    return true;
+}
+
+bool npc_clan_member::StartDrinkMilk()
+{
+    HouseState* house = MyHouse();
+    if (!house || house->Get(ItemType::Milk) == 0)
+        return false;
+
+    // On rentre a la maison boire (le lait est un stock du foyer). MEME chemin que Eat :
+    // c'est un repli tranquille, on ne prend pas de route de village.
+    GameObject* home = MyHouseObject();
+    Position dest = home ? home->GetRandomNearPosition(1.0f) : _owner->home;
+    if (!MoveAlongRoad(dest, MOVE_TO_DRINK_MILK))
+        me->GetMotionMaster()->MovePoint(MOVE_TO_DRINK_MILK, dest, true, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
     return true;
 }
 
@@ -1560,6 +1715,52 @@ void npc_clan_member::StartWander()
     });
 }
 
+void npc_clan_member::MoveCloserTo(uint32 pointId, WorldObject* target, float distance, bool forceWalk /*= true*/)
+{
+    if (!target)
+        return;
+
+    MovementWalkRunSpeedSelectionMode const speed = forceWalk
+        ? MovementWalkRunSpeedSelectionMode::ForceWalk
+        : MovementWalkRunSpeedSelectionMode::ForceRun;
+
+    // Deja assez pres : on se contente de faire face, sans deplacement (meme comportement que
+    // MoveCloserAndStop, mais via SetFacing pour ne pas emettre de mouvement inutile).
+    float const travel = me->GetExactDist2d(target) - distance;
+    if (travel <= 0.0f)
+    {
+        me->SetFacingToObject(target);
+        me->GetMotionMaster()->MovePoint(pointId, me->GetPosition(), false, {}, {}, speed);
+        return;
+    }
+
+    // Point d'arret sur l'axe qui nous separe de la cible.
+    float const angle = me->GetAbsoluteAngle(target);
+    float const x = me->GetPositionX() + travel * std::cos(angle);
+    float const y = me->GetPositionY() + travel * std::sin(angle);
+
+    // LE point critique. MoveCloserAndStop passe ici target->GetPositionZ() : le Z de la cible
+    // alors que (x,y) se situe bien avant elle. Une proie en contrebas donnait donc une
+    // destination sous le terrain -- et le pathfinding, ne trouvant pas de polygone la-bas,
+    // repliait sur un trajet direct : le PNJ traversait le sol.
+    //
+    // On part du Z du MEMBRE (l'altitude d'ou il vient, donc du bon ordre de grandeur), puis
+    // on le recale sur le sol reel a l'aplomb de (x,y).
+    float z = me->GetPositionZ();
+    me->UpdateAllowedPositionZ(x, y, z);
+    Position const dest(x, y, z);
+
+    // Route declaree pour l'action courante ? On la prend, sinon deplacement direct.
+    // Sans ce test, une chasse / un abattage / une traite ne pouvait JAMAIS emprunter la route
+    // du village meme si elle s'y appliquait -- MoveCloserTo court-circuitait MoveAlongRoad.
+    // La route s'arrete a son point de sortie, puis WaypointPathEnded relance MovePoint(pointId,
+    // dest) : le switch de MovementInform reste inchange, forceWalk aussi (retenu par _roadWalk).
+    if (MoveAlongRoad(dest, pointId, forceWalk))
+        return;
+
+    me->GetMotionMaster()->MovePoint(pointId, dest, true, {}, {}, speed);
+}
+
 // ---------------------------------------------------------------------------------------
 // Suivi de route (custom_clan_path)
 // ---------------------------------------------------------------------------------------
@@ -1587,7 +1788,7 @@ static MovementWalkRunSpeedSelectionMode RoadSpeedMode(bool walk)
 //   Phase 1  MovePoint(MOVE_TO_ROAD_ENTRY)  navmesh ON   sortir de la maison, rejoindre la route
 //   Phase 2  MovePath(ExactSplinePath)      navmesh OFF  longer la route, en fluide
 //   Phase 3  MovePoint(pointId)             navmesh ON   quitter la route vers la destination
-bool npc_clan_member::MoveAlongRoad(Position const& dest, uint32 pointId, bool walk /*= true*/)
+bool npc_clan_member::MoveAlongRoad(Position const& dest, uint32 pointId, bool forceWalk /*= true*/)
 {
     // Le choix du point d'entree interroge le navmesh : on passe donc l'unite, pas sa position.
     std::vector<Position> route = Road::BuildRoute(me, _currentAction, dest);
@@ -1600,7 +1801,7 @@ bool npc_clan_member::MoveAlongRoad(Position const& dest, uint32 pointId, bool w
     _roadPendingId = pointId;
     _roadPendingDest = dest;
     _roadNodes = std::move(route);
-    _roadWalk = walk;
+    _roadWalk = forceWalk;
 
     // Phase 1 : rejoindre l'entree de la route AVEC pathfinding. C'est le seul troncon ou le
     // PNJ peut avoir du decor devant lui (il part potentiellement de l'interieur d'une maison),
@@ -1772,7 +1973,7 @@ bool npc_clan_member::StartSeekDoctor()
 
     // Le medecin est sur la route du village : on l'emprunte si elle s'applique, sinon
     // deplacement direct comme avant.
-    Position const dest = GetFacingPosition(doctor, 1.8f);
+    Position const dest = GetFacingPosition(me, doctor, 1.8f);
     if (!MoveAlongRoad(dest, MOVE_TO_DOCTOR, false))
         me->GetMotionMaster()->MovePoint(MOVE_TO_DOCTOR, dest);
     return true;
@@ -1799,7 +2000,7 @@ void npc_clan_member::MovementInform(uint32 /*type*/, uint32 id)
             _actionTimerMs = 0;  // le trajet progresse : on relance le garde-fou d'action
             BeginRoadTravel();
             break;
-        case MOVE_TO_RESOURCE: // Arrive a un point d'eau : on boit un moment
+        case MOVE_TO_WELL: // Arrive a un point d'eau : on boit un moment
         {
             SetFacingAction();
             PlayCustomFx();
@@ -1925,7 +2126,7 @@ void npc_clan_member::MovementInform(uint32 /*type*/, uint32 id)
                         return;
                     }
 
-                    me->GetMotionMaster()->MoveCloserAndStop(MOVE_TO_CARCASS, prey, 0.5f, MovementWalkRunSpeedSelectionMode::ForceWalk);
+                    MoveCloserTo(MOVE_TO_CARCASS, prey, 0.5f);
                 });
             break;
         }
@@ -1965,7 +2166,15 @@ void npc_clan_member::MovementInform(uint32 /*type*/, uint32 id)
                     FinishAction(true, REWARD_REMEMBER);
                 }
                 else
-                    FinishAction(true, REWARD_TIME_PENALTY);
+                {
+                    // Cooldown actif : le recueillement ne RAPPORTE rien, mais il ne doit pas
+                    // couter double. FinishAction applique deja REWARD_TIME_PENALTY a toute
+                    // action menee a bien ; repasser cette meme constante en 'shapedReward'
+                    // l'appliquait une seconde fois (-0.10 au lieu de -0.05), au point que le
+                    // bilan de l'action devenait durablement negatif et que l'agent finissait
+                    // par desapprendre completement la tradition.
+                    FinishAction(true, 0.0f);
+                }
             });
             break;
         }
@@ -2121,6 +2330,130 @@ void npc_clan_member::MovementInform(uint32 /*type*/, uint32 id)
             // La fin de l'action est pilotee par le minuteur arme dans StartPlay.
             break;
         }
+        case MOVE_TO_TROUGH_WATER: // (Hommes) Auge vide atteinte : on remplit d'eau
+        case MOVE_TO_TROUGH_STRAW: // (Hommes) Auge vide atteinte : on remplit de paille
+        {
+            GameObject* trough = ObjectAccessor::GetGameObject(*me, _actionTarget);
+            if (!trough)
+            {
+                FinishAction(false);
+                break;
+            }
+            SetFacingAction();
+            PlayCustomFx();
+
+            bool const water = (id == MOVE_TO_TROUGH_WATER);
+            _scheduler.Schedule(Milliseconds(FILL_TROUGH_DURATION_MS), GROUP_ACTION, [this, water](TaskContext /*task*/)
+            {
+                GameObject* trough = ObjectAccessor::GetGameObject(*me, _actionTarget);
+                if (!trough)
+                {
+                    FinishAction(false);
+                    return;
+                }
+                sClanMgr->FillTrough(trough, water);
+                _fillCdMs = FARM_FILL_COOLDOWN_MS;
+                FinishAction(true, REWARD_FILL_TROUGH);
+            });
+            break;
+        }
+        case MOVE_TO_BUTCHER: // (Hommes) Bete de la ferme atteinte : abattage et depe�age
+        {
+            Creature* animal = ObjectAccessor::GetCreature(*me, _actionTarget);
+            if (!animal || !animal->IsAlive())
+            {
+                sClanMgr->ReleaseAnimalClaim(_actionTarget);
+                FinishAction(false);
+                break;
+            }
+            SetFacingAction();
+            me->SetEmoteState(EMOTE_STATE_LOOT); // s'agenouille pour depecer
+            PlayCustomFx();
+
+            _scheduler.Schedule(Milliseconds(BUTCHER_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
+            {
+                Creature* animal = ObjectAccessor::GetCreature(*me, _actionTarget);
+                if (!animal)
+                {
+                    sClanMgr->ReleaseAnimalClaim(_actionTarget);
+                    FinishAction(false);
+                    return;
+                }
+
+                AnimalKind kind = sClanMgr->GetAnimalKind(animal);
+                uint32 yield = (kind == AnimalKind::Cow) ? BUTCHER_YIELD_COW : BUTCHER_YIELD_CHICKEN;
+
+                // Tue la bete puis la fait respawn avec un vrai delai (comme un noeud). Le
+                // registre d'animaux vivants sera refait quand elle reapparaitra (JustAppeared).
+                sClanMgr->UnregisterFarmAnimal(animal);
+                sClanMgr->ReleaseAnimalClaim(animal->GetGUID());
+                animal->KillSelf();
+                animal->DespawnOrUnsummon(0ms, Seconds(FARM_CARCASS_RESPAWN_MS / 1000));
+
+                float mult = ScarcityMult(ItemType::RawFood);
+                for (uint32 i = 0; i < yield; ++i)
+                    if (!AddItem(ItemType::RawFood))
+                        break; // sac plein : on abandonne le reste sur place plutot que de rien recolter
+                FinishAction(true, REWARD_BUTCHER * mult);
+            });
+            break;
+        }
+        case MOVE_TO_MILK: // (Femmes) Vache atteinte : traite
+        {
+            Creature* cow = ObjectAccessor::GetCreature(*me, _actionTarget);
+            if (!cow || !cow->IsAlive())
+            {
+                sClanMgr->ReleaseAnimalClaim(_actionTarget);
+                FinishAction(false);
+                break;
+            }
+            SetFacingAction();
+            PlayCustomFx();
+
+            _scheduler.Schedule(Milliseconds(MILK_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
+            {
+                Creature* cow = ObjectAccessor::GetCreature(*me, _actionTarget);
+                sClanMgr->ReleaseAnimalClaim(_actionTarget);
+                if (!cow || !cow->IsAlive())
+                {
+                    FinishAction(false);
+                    return;
+                }
+
+                // Le lait va DIRECTEMENT dans le stock du foyer : c'est le trait qui compte
+                // pour la Q-table (pas un aller-retour depot). Un aller-retour ferait aussi
+                // sens realiste, mais decouplerait la trayeuse de la recompense et complexifierait
+                // la chaine. On peut y revenir si l'on veut differencier "sac perso" et "foyer".
+                HouseState* house = MyHouse();
+                if (!house)
+                {
+                    FinishAction(false);
+                    return;
+                }
+                for (uint32 i = 0; i < MILK_YIELD_PER_MILKING; ++i)
+                    if (!house->Add(ItemType::Milk, 1))
+                        break;
+                _milkCdMs = FARM_MILK_COOLDOWN_MS;
+                FinishAction(true, REWARD_MILK);
+            });
+            break;
+        }
+        case MOVE_TO_DRINK_MILK: // Rentre boire une ration de lait
+        {
+            PlayCustomFx();
+            _scheduler.Schedule(Milliseconds(DRINK_MILK_DURATION_MS), GROUP_ACTION, [this](TaskContext /*task*/)
+            {
+                HouseState* house = MyHouse();
+                if (!house || !house->Take(ItemType::Milk, 1))
+                {
+                    FinishAction(false);
+                    return;
+                }
+                _owner->needs.Satisfy(NeedType::Thirst, NEED_MAX);
+                FinishAction(true);
+            });
+            break;
+        }
         default:
             break;
     }
@@ -2199,7 +2532,7 @@ void npc_clan_member::OnThreat(Unit* attacker)
         GameObject* fire = sClanMgr->FindNearestLitFire(me);
         Position safe;
         if (fire)
-            safe = GetFacingPosition(fire);
+            safe = GetFacingPosition(me, fire);
         else if (_owner->houseSpawnId)
         {
             GameObject* house = me->GetMap()->GetGameObjectBySpawnId(_owner->houseSpawnId);

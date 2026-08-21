@@ -366,6 +366,9 @@ void ClanMgr::LoadFromDB()
     _houseByClan.clear();
     _bedByEntry.clear();
     _fireHouseBySpawn.clear();
+    _farmAnimals.clear();
+    _farmAnimalClaims.clear();
+    _troughClaims.clear();
     _nextBirthId = BIRTH_ID_BASE;
 
     // (Re)initialise le cimetiere : tous les emplacements redeviennent libres. Les tombes
@@ -655,14 +658,14 @@ Creature* ClanMgr::FindNearestPrey(Creature* from) const
 Creature* ClanMgr::FindNearestPredator(Creature* from) const
 {
     Creature* best = nullptr;
-    float bestDist = RESOURCE_SEARCH_RANGE;
+    float bestDist = PREDATOR_SEARCH_RANGE;
 
     for (auto const& [entry, res] : _resourceByEntry)
     {
         if (res.type != ResourceType::Predator || res.kind != ObjectKind::Creature)
             continue;
 
-        if (Creature* pred = GetClosestCreatureWithEntry(from, entry, RESOURCE_SEARCH_RANGE, true))
+        if (Creature* pred = GetClosestCreatureWithEntry(from, entry, PREDATOR_SEARCH_RANGE, true))
         {
             float dist = from->GetDistance(pred);
             if (dist < bestDist)
@@ -1177,11 +1180,11 @@ void ClanMgr::AgingTick()
         }
 
         // Presage : un Ancien qui approche de sa mort annonce (une fois) que sa fin est proche.
-        if (state->stage == LifeStage::Elder && !state->deathOmenSaid
+        if (state->stage == LifeStage::Elder/* && !state->deathOmenSaid*/
             && state->ageDays >= AGE_DEATH_DAYS - AGE_DEATH_WARNING_DAYS
             && state->ageDays < AGE_DEATH_DAYS)
         {
-            state->deathOmenSaid = true;
+            //state->deathOmenSaid = true;
             if (Creature* c = ResolveLive(state))
                 if (std::string const* phrase = GetRandomPhrase(ActionType(PHRASE_DEATH_OMEN)))
                     c->Say(*phrase, LANG_UNIVERSAL);
@@ -1222,6 +1225,14 @@ void ClanMgr::RemoveMemberState(uint64 dbId)
 void ClanMgr::KillMember(MemberState* state)
 {
     uint64 dbId = state->dbId;
+
+    // Le cerveau disparait avec l'individu : RemoveMemberState efface la ligne de
+    // custom_clan_member. On le trace donc AVANT, sinon un membre au comportement aberrant
+    // emporte dans sa tombe la seule piece a conviction -- il faudrait avoir pense a relever
+    // sa qtable de son vivant, ce qu'on ne sait jamais a l'avance.
+    TC_LOG_DEBUG("scripts", "Cerveau du membre {} a sa mort ({} jours) : {}",
+        dbId, state->ageDays, state->mind.Serialize());
+
     RemoveMemberState(dbId);
     TC_LOG_INFO("scripts", "ClanMgr: membre {} est en mort definitive.", dbId);
 }
@@ -1233,4 +1244,256 @@ Creature* ClanMgr::ResolveLive(MemberState const* state) const
 
     Map* map = sMapMgr->FindMap(state->mapId, 0);
     return map ? map->GetCreature(state->liveGuid) : nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Ferme
+// ---------------------------------------------------------------------------
+AnimalKind ClanMgr::GetAnimalKind(uint32 entry) const
+{
+    auto it = _resourceByEntry.find(entry);
+    if (it == _resourceByEntry.end())
+        return AnimalKind::None;
+    switch (it->second.type)
+    {
+        case ResourceType::Cow:     return AnimalKind::Cow;
+        case ResourceType::Chicken: return AnimalKind::Chicken;
+        case ResourceType::Pig:     return AnimalKind::Pig;
+        default:                    return AnimalKind::None;
+    }
+}
+
+AnimalKind ClanMgr::GetAnimalKind(Creature* creature) const
+{
+    return creature ? GetAnimalKind(creature->GetEntry()) : AnimalKind::None;
+}
+
+void ClanMgr::RegisterFarmAnimal(Creature* creature)
+{
+    if (!creature)
+        return;
+    // Ignore les creatures qui ne sont pas declarees comme animal de ferme dans le registre :
+    // le script generique peut theoriquement etre attache par erreur a une autre entry.
+    if (GetAnimalKind(creature) == AnimalKind::None)
+        return;
+    _farmAnimals[creature->GetGUID()] = creature->GetEntry();
+}
+
+void ClanMgr::UnregisterFarmAnimal(Creature* creature)
+{
+    if (!creature)
+        return;
+    _farmAnimals.erase(creature->GetGUID());
+    _farmAnimalClaims.erase(creature->GetGUID());
+}
+
+bool ClanMgr::ClaimAnimal(Creature* animal, Creature* claimant)
+{
+    if (!animal || !claimant)
+        return false;
+
+    uint32 const now = GameTime::GetGameTimeMS();
+    auto it = _farmAnimalClaims.find(animal->GetGUID());
+    if (it != _farmAnimalClaims.end()
+        && it->second.by != claimant->GetGUID()
+        && (now - it->second.atMs) < FARM_ANIMAL_CLAIM_TTL_MS)
+        return false;
+
+    _farmAnimalClaims[animal->GetGUID()] = { claimant->GetGUID(), now };
+    return true;
+}
+
+void ClanMgr::ReleaseAnimalClaim(ObjectGuid animalGuid)
+{
+    _farmAnimalClaims.erase(animalGuid);
+}
+
+bool ClanMgr::ClaimTrough(GameObject* trough, Creature* claimant)
+{
+    if (!trough || !claimant)
+        return false;
+
+    uint32 const now = GameTime::GetGameTimeMS();
+    auto it = _troughClaims.find(trough->GetGUID());
+    if (it != _troughClaims.end()
+        && it->second.by != claimant->GetGUID()
+        && (now - it->second.atMs) < FARM_ANIMAL_CLAIM_TTL_MS)
+        return false;
+
+    _troughClaims[trough->GetGUID()] = { claimant->GetGUID(), now };
+    return true;
+}
+
+bool ClanMgr::IsTroughClaimed(ObjectGuid troughGuid, ObjectGuid by) const
+{
+    auto it = _troughClaims.find(troughGuid);
+    if (it == _troughClaims.end())
+        return false;
+    if (it->second.by == by)
+        return false; // c'est notre claim -- on ne se rejette pas nous-memes
+    uint32 const now = GameTime::GetGameTimeMS();
+    return (now - it->second.atMs) < FARM_ANIMAL_CLAIM_TTL_MS;
+}
+
+void ClanMgr::ReleaseTroughClaim(ObjectGuid troughGuid)
+{
+    _troughClaims.erase(troughGuid);
+}
+
+Creature* ClanMgr::FindFarmAnimal(Creature* from, bool wantMilkable)
+{
+    if (!from)
+        return nullptr;
+
+    uint32 const now = GameTime::GetGameTimeMS();
+    Creature* best = nullptr;
+    float bestDist = RESOURCE_SEARCH_RANGE;
+
+    for (auto it = _farmAnimals.begin(); it != _farmAnimals.end();)
+    {
+        Creature* animal = ObjectAccessor::GetCreature(*from, it->first);
+        if (!animal || !animal->IsAlive())
+        {
+            // Nettoyage passif : un animal despawne / mort peut n'avoir jamais notifie sa
+            // sortie (crash, kick, transitions de grille) -- on l'oublie a la premiere lecture.
+            it = _farmAnimals.erase(it);
+            continue;
+        }
+        ++it;
+
+        AnimalKind kind = GetAnimalKind(animal);
+        if (wantMilkable && kind != AnimalKind::Cow)
+            continue;
+        if (!wantMilkable && kind != AnimalKind::Cow && kind != AnimalKind::Chicken)
+            continue; // le cochon n'est pas encore exploite
+
+        if (from->GetDistance(animal) > RESOURCE_SEARCH_RANGE)
+            continue;
+
+        auto claim = _farmAnimalClaims.find(animal->GetGUID());
+        if (claim != _farmAnimalClaims.end() && claim->second.by != from->GetGUID()
+            && (now - claim->second.atMs) < FARM_ANIMAL_CLAIM_TTL_MS)
+            continue;
+
+        float d = from->GetDistance(animal);
+        if (d < bestDist)
+        {
+            bestDist = d;
+            best = animal;
+        }
+    }
+    return best;
+}
+
+bool ClanMgr::FarmHasAnimal(Creature* from, bool wantMilkable) const
+{
+    if (!from)
+        return false;
+    uint32 const now = GameTime::GetGameTimeMS();
+    for (auto const& [guid, entry] : _farmAnimals)
+    {
+        Creature* animal = ObjectAccessor::GetCreature(*from, guid);
+        if (!animal || !animal->IsAlive())
+            continue;
+        AnimalKind kind = GetAnimalKind(animal);
+        if (wantMilkable && kind != AnimalKind::Cow)
+            continue;
+        if (!wantMilkable && kind != AnimalKind::Cow && kind != AnimalKind::Chicken)
+            continue;
+        if (from->GetDistance(animal) > RESOURCE_SEARCH_RANGE)
+            continue;
+        auto claim = _farmAnimalClaims.find(guid);
+        if (claim != _farmAnimalClaims.end() && claim->second.by != from->GetGUID()
+            && (now - claim->second.atMs) < FARM_ANIMAL_CLAIM_TTL_MS)
+            continue;
+        return true;
+    }
+    return false;
+}
+
+GameObject* ClanMgr::FindFarmEmptyTrough(Creature* from)
+{
+    if (!from)
+        return nullptr;
+
+    uint32 const now = GameTime::GetGameTimeMS();
+    std::list<GameObject*> troughs;
+    from->GetGameObjectListWithEntryInGrid(troughs, FARM_GO_TROUGH_EMPTY, RESOURCE_SEARCH_RANGE);
+
+    GameObject* best = nullptr;
+    float bestDist = RESOURCE_SEARCH_RANGE;
+    for (GameObject* go : troughs)
+    {
+        auto claim = _nodeClaims.find(go->GetGUID());
+        if (claim != _nodeClaims.end() && claim->second.by != from->GetGUID()
+            && (now - claim->second.atMs) < NODE_CLAIM_TTL_MS)
+            continue;
+
+        float d = from->GetDistance(go);
+        if (d < bestDist)
+        {
+            bestDist = d;
+            best = go;
+        }
+    }
+
+    if (best)
+        _nodeClaims[best->GetGUID()] = { from->GetGUID(), now };
+    return best;
+}
+
+bool ClanMgr::FarmHasEmptyTrough(Creature* from) const
+{
+    if (!from)
+        return false;
+    std::list<GameObject*> troughs;
+    from->GetGameObjectListWithEntryInGrid(troughs, FARM_GO_TROUGH_EMPTY, RESOURCE_SEARCH_RANGE);
+    return !troughs.empty();
+}
+
+GameObject* ClanMgr::FillTrough(GameObject* emptyTrough, bool water)
+{
+    if (!emptyTrough)
+        return nullptr;
+
+    // Summon un GameObject a la meme place, temporaire (respawn geree par le monde --
+    // il sera "consomme" par l'animal qui viendra manger/boire, cf. EmptyTrough).
+    Map* map = emptyTrough->GetMap();
+    Position pos = emptyTrough->GetPosition();
+    QuaternionData rot = emptyTrough->GetLocalRotation();
+    _nodeClaims.erase(emptyTrough->GetGUID());
+    emptyTrough->DespawnOrUnsummon();
+
+    uint32 entry = water ? FARM_GO_TROUGH_WATER : FARM_GO_TROUGH_STRAW;
+    // Duree "infinie" (24h) : elle ne s'evapore pas, seul un animal la vide. Passer par
+    // SummonGameObject via le map necessite un summoner ; on cree l'objet a la main.
+    GameObject* filled = GameObject::CreateGameObject(entry, map, pos, rot, 255, GO_STATE_READY);
+    if (!filled)
+        return nullptr;
+    filled->SetRespawnTime(86400);
+    filled->SetSpawnedByDefault(false);
+    map->AddToMap(filled);
+    return filled;
+}
+
+void ClanMgr::EmptyTrough(GameObject* filled)
+{
+    if (!filled)
+        return;
+
+    // La transformation change le GUID de l'objet : toute reservation attachee a l'ancienne
+    // auge devient orpheline et bloquerait la case pour rien. On la libere.
+    _troughClaims.erase(filled->GetGUID());
+
+    Map* map = filled->GetMap();
+    Position pos = filled->GetPosition();
+    QuaternionData rot(filled->GetLocalRotation());
+    filled->DespawnOrUnsummon();
+
+    GameObject* empty = GameObject::CreateGameObject(FARM_GO_TROUGH_EMPTY, map, pos, rot, 255, GO_STATE_READY);
+    if (!empty)
+        return;
+    empty->SetRespawnTime(86400);
+    empty->SetSpawnedByDefault(false);
+    map->AddToMap(empty);
 }

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -32,6 +32,7 @@ void AddSC_scenario_dalaran_convo();
 void AddSC_npcs_dalaran_convo();
 
 void AddSC_npcs_clan();
+void AddSC_npc_clan_farm_animal();
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
@@ -53,4 +54,5 @@ void AddCustomScripts()
     AddSC_npcs_dalaran_convo();
 
     AddSC_npcs_clan();
+    AddSC_npc_clan_farm_animal();
 }

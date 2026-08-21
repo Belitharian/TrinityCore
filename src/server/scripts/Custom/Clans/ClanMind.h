@@ -15,10 +15,20 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// Cerveau d'apprentissage par renforcement (Q-learning tabulaire) d'un membre.
-// Chaque membre possede sa propre Q-table : etat discret -> valeur de chaque action.
-// L'agent explore (epsilon-greedy) puis exploite ce qu'il a appris. La table et le
-// niveau d'exploration sont serialisables pour survivre au redemarrage et etre herites.
+// Cerveau d'apprentissage par renforcement d'un membre.
+//
+// Representation LINEAIRE : Q(s,a) = w[a] . phi(s), et non plus une Q-table tabulaire.
+// Voir le pave FEATURE_COUNT dans ClanDefines.h pour le pourquoi (le tabulaire ne generalise
+// pas, et 43 520 cases pour ~150 pas d'apprentissage par vie ne s'apprennent jamais).
+//
+// Regle de mise a jour : EXPECTED SARSA (on-policy) et non plus Q-learning (off-policy).
+// La combinaison approximation de fonction + bootstrapping + off-policy est la "triade
+// mortelle", le cas connu ou les valeurs peuvent diverger. Passer on-policy retire une patte
+// du trepied, et au passage l'agent value le risque de sa propre exploration -- ce qui compte
+// dans un monde ou explorer peut tuer (famine, predateurs).
+//
+// L'agent explore (epsilon-greedy) puis exploite. Poids et niveau d'exploration sont
+// serialisables pour survivre au redemarrage et etre herites.
 
 #ifndef CUSTOM_CLANS_CLANMIND_H
 #define CUSTOM_CLANS_CLANMIND_H
@@ -37,6 +47,14 @@ namespace Clan
     struct MindState
     {
         NeedType urgentNeed      = NeedType::None;
+        // Niveaux de besoin CONTINUS, normalises [0,1]. Ils n'entrent PAS dans Index() (qui
+        // reste discret pour le debug et l'amorce), mais alimentent les features : le lineaire
+        // sait exploiter l'intensite, la ou le tabulaire devait se contenter du classement.
+        // Un affame a 51% et un affame a 99% cessent d'etre le meme etat.
+        float    hunger01        = 0.0f;
+        float    thirst01        = 0.0f;
+        float    energy01        = 0.0f;
+        float    repro01         = 0.0f;
         bool     night           = false;
         bool     houseHasMeal    = false; // un repas cuisine est dispo au stock (on peut manger)
         bool     houseHasRawFood = false; // de la viande crue est au stock (a cuisiner)
@@ -50,32 +68,52 @@ namespace Clan
         // sans lui, "chasser" recouvrait deux situations opposees (partir chasser / rentrer livrer)
         // et une recolte pouvait rester bloquee a vie dans un sac plein.
         bool     bagFull         = false;
+        // --- Drapeaux Ferme -------------------------------------------------------
+        // Un animal de ferme est A PORTEE et disponible (pas reserve, en vie). Un seul bit pour
+        // toutes les especes : distinguer vache/poulet doublerait les etats sans changer la
+        // decision (la Q-valeur ferait quand meme la moyenne des occurrences).
+        bool     farmAnimalReady = false;
+        // Une auge de la ferme du clan est VIDE (a remplir : eau OU paille, cf. instinct role).
+        bool     farmTroughEmpty = false;
+        // La ferme a besoin d'eau (au moins une auge vide -> l'instinct pousse a remplir en
+        // priorite l'auge d'eau). Redondant avec farmTroughEmpty pour l'instant : place en
+        // reserve, le comportement fin peut plus tard distinguer eau/paille.
+        bool     farmNeedsWater  = false;
+        bool     houseHasMilk    = false; // le stock de lait est non vide (on peut Boire du lait)
 
         // Index compact dans [0, STATE_COUNT[. L'ordre d'empilage DOIT correspondre a Decode().
-        uint16 Index() const
+        uint32 Index() const
         {
-            uint16 needIdx = uint16(urgentNeed);
+            uint32 needIdx = uint32(urgentNeed);
             if (needIdx >= NEED_STATE_COUNT)
                 needIdx = 0;
 
-            uint16 idx = needIdx;
-            idx = uint16(idx * TIME_STATE_COUNT + (night ? 1 : 0));
-            idx = uint16(idx * 2 + (houseHasMeal ? 1 : 0));
-            idx = uint16(idx * 2 + (houseHasRawFood ? 1 : 0));
-            idx = uint16(idx * 2 + (houseHasWood ? 1 : 0));
-            idx = uint16(idx * 2 + (houseHasStone ? 1 : 0));
-            idx = uint16(idx * 2 + (houseFireLit ? 1 : 0));
-            idx = uint16(idx * 2 + (diseased ? 1 : 0));
-            idx = uint16(idx * 2 + (predatorNearby ? 1 : 0));
-            idx = uint16(idx * 2 + (bagFull ? 1 : 0));
+            uint32 idx = needIdx;
+            idx = idx * TIME_STATE_COUNT + (night ? 1u : 0u);
+            idx = idx * 2 + (houseHasMeal ? 1u : 0u);
+            idx = idx * 2 + (houseHasRawFood ? 1u : 0u);
+            idx = idx * 2 + (houseHasWood ? 1u : 0u);
+            idx = idx * 2 + (houseHasStone ? 1u : 0u);
+            idx = idx * 2 + (houseFireLit ? 1u : 0u);
+            idx = idx * 2 + (diseased ? 1u : 0u);
+            idx = idx * 2 + (predatorNearby ? 1u : 0u);
+            idx = idx * 2 + (bagFull ? 1u : 0u);
+            idx = idx * 2 + (farmAnimalReady ? 1u : 0u);
+            idx = idx * 2 + (farmTroughEmpty ? 1u : 0u);
+            idx = idx * 2 + (farmNeedsWater ? 1u : 0u);
+            idx = idx * 2 + (houseHasMilk ? 1u : 0u);
             return idx;
         }
 
         // Inverse de Index() : reconstruit l'etat a partir de son indice (dernier bit empile
         // = premier lu). Sert au seed d'instinct (SeedTopUp) qui balaie tous les etats.
-        static MindState Decode(uint16 index)
+        static MindState Decode(uint32 index)
         {
             MindState s;
+            s.houseHasMilk    = (index & 1) != 0; index >>= 1;
+            s.farmNeedsWater  = (index & 1) != 0; index >>= 1;
+            s.farmTroughEmpty = (index & 1) != 0; index >>= 1;
+            s.farmAnimalReady = (index & 1) != 0; index >>= 1;
             s.bagFull         = (index & 1) != 0; index >>= 1;
             s.predatorNearby  = (index & 1) != 0; index >>= 1;
             s.diseased        = (index & 1) != 0; index >>= 1;
@@ -86,6 +124,18 @@ namespace Clan
             s.houseHasMeal    = (index & 1) != 0; index >>= 1;
             s.night           = (index & 1) != 0; index >>= 1;
             s.urgentNeed      = NeedType(index % NEED_STATE_COUNT);
+
+            // Les niveaux continus ne sont pas encodes dans l'index (il est discret). On donne
+            // au besoin urgent un niveau representatif : sans ca, un etat decode aurait tous
+            // ses niveaux a zero et l'amorce apprendrait sur un vecteur non representatif.
+            switch (s.urgentNeed)
+            {
+                case NeedType::Hunger: s.hunger01 = 1.0f; break;
+                case NeedType::Thirst: s.thirst01 = 1.0f; break;
+                case NeedType::Energy: s.energy01 = 1.0f; break;
+                case NeedType::Repro:  s.repro01  = 1.0f; break;
+                default: break;
+            }
             return s;
         }
     };
@@ -99,24 +149,38 @@ namespace Clan
         // autorisees par le role (homme/femme/enfant).
         ActionType ChooseAction(MindState const& state, ClanRole const* role) const;
 
-        // Met a jour la Q-table apres avoir observe une recompense et le nouvel etat. Le role
+        // Met a jour les poids apres avoir observe une recompense et le nouvel etat. Le role
         // borne l'estimation de la valeur future aux actions que l'agent peut reellement prendre.
         void Learn(MindState const& prev, ActionType action, float reward, MindState const& next, ClanRole const* role);
 
-        // Meilleure valeur Q apprise pour un etat, parmi les actions autorisees par le role.
+        // Meilleure valeur apprise pour un etat, parmi les actions autorisees par le role.
         float BestValue(MindState const& state, ClanRole const* role) const;
-        // Meilleure action apprise pour un etat (hors exploration), parmi les actions du role.
-        ActionType BestAction(uint16 stateIndex, ClanRole const* role) const;
-        float ValueOf(uint16 stateIndex, ActionType action) const;
+        // Valeur ESPEREE sous la politique epsilon-greedy courante : la cible d'Expected SARSA.
+        //   (1-eps) * max Q  +  eps * moyenne Q   (sur les seules actions du role)
+        float PolicyValue(MindState const& state, ClanRole const* role) const;
 
-        // Amorce non destructive : pour chaque etat, remonte l'action instinctive du role a au
-        // moins Q_SEED_PRIOR si elle est encore sous ce seuil (n'abaisse jamais un acquis).
-        // Appele a chaque (re)spawn et aux transitions d'age (le role change avec l'etape).
+        // Meilleure action apprise pour un etat (hors exploration), parmi les actions du role.
+        ActionType BestAction(MindState const& state, ClanRole const* role) const;
+        // Surcharge par indice d'etat DISCRET, conservee pour les commandes de debug. Attention :
+        // elle passe par Decode(), donc les niveaux de besoin continus y sont approximes.
+        ActionType BestAction(uint32 stateIndex, ClanRole const* role) const;
+        float ValueOf(uint32 stateIndex, ActionType action) const;
+
+        // Amorce non destructive : pour chaque etat, remonte l'action instinctive du role vers
+        // Q_SEED_PRIOR si elle est encore sous ce seuil. Appele a chaque (re)spawn et aux
+        // transitions d'age (le role change avec l'etape).
+        //
+        // En lineaire l'amorce ne peut plus etre exacte : les poids etant PARTAGES entre etats,
+        // remonter un etat en deplace legerement d'autres. On procede donc par petits pas de
+        // gradient (Q_SEED_PASSES x Q_SEED_RATE) -- le resultat approche les priors sans jamais
+        // ecraser brutalement ce qui a ete appris.
         void SeedTopUp(ClanRole const* role);
 
         float GetEpsilon() const { return _epsilon; }
 
-        // Serialisation texte (CSV) : epsilon suivi de STATE_COUNT*ACTION_COUNT valeurs.
+        // Serialisation texte (CSV) : epsilon, puis ACTION_COUNT*FEATURE_COUNT poids, puis les
+        // 2 valeurs de combat. Le garde-fou de dimension de Deserialize rejette automatiquement
+        // les anciennes chaines tabulaires -- aucune migration manuelle n'est necessaire.
         std::string Serialize() const;
         void Deserialize(std::string const& data);
 
@@ -130,7 +194,20 @@ namespace Clan
         float GetFleeValue() const { return _combatFlee; }
 
     private:
-        std::array<std::array<float, ACTION_COUNT>, STATE_COUNT> _q;
+        using FeatureVector = std::array<float, FEATURE_COUNT>;
+
+        // phi(s). L'ordre est decrit au-dessus de FEATURE_COUNT dans ClanDefines.h et DOIT y
+        // rester conforme : les poids serialises sont indexes par position.
+        static FeatureVector Features(MindState const& state);
+        // Produit scalaire w[a] . phi(s).
+        float Value(FeatureVector const& features, ActionType action) const;
+        // Applique un pas de gradient sur les poids d'une action : w[a] += rate * delta * phi.
+        // Le pas est normalise par ||phi||^2 : une mise a jour touche desormais des dizaines de
+        // poids a la fois, un alpha brut sur-corrigerait et ferait diverger les valeurs.
+        void ApplyGradient(ActionType action, FeatureVector const& features, float delta, float rate);
+
+        // Un vecteur de poids par action (et non plus une case par couple etat/action).
+        std::array<std::array<float, FEATURE_COUNT>, ACTION_COUNT> _w;
         float _epsilon;
         float _combatDefend = 0.0f; // valeur apprise de l'action "se defendre"
         float _combatFlee   = 0.0f; // valeur apprise de l'action "fuir"

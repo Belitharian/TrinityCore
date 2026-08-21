@@ -83,10 +83,16 @@ namespace Clan
         };
 
         // Ordre de priorite en cas d'egalite : soif > faim > fatigue > reproduction.
-        consider(NeedType::Repro,  reproUrge);
-        consider(NeedType::Energy, energy);
-        consider(NeedType::Hunger, hunger);
+        //
+        // La comparaison etant STRICTE (value > worstValue), c'est le PREMIER evalue qui
+        // l'emporte a egalite : l'ordre des appels ci-dessous est donc l'ordre de priorite.
+        // Il etait auparavant ecrit a l'envers (Repro en tete), ce qui donnait exactement la
+        // priorite inverse de celle annoncee -- un membre a Repro 80 / Soif 80 partait se
+        // reproduire au lieu d'aller boire.
         consider(NeedType::Thirst, thirst);
+        consider(NeedType::Hunger, hunger);
+        consider(NeedType::Energy, energy);
+        consider(NeedType::Repro,  reproUrge);
         return worst;
     }
 

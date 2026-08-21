@@ -563,6 +563,7 @@ namespace MMAP
                 // 2 (~0.5 yd) : tables/barrieres redeviennent des obstacles pleins que
                 // le chemin contourne ; les marches d'escalier basses restent franchissables.
                 config.walkableClimb = m_bigBaseUnit ? 1 : 2;
+                config.walkableRadius = 3;
                 break;
             default:
                 break;
