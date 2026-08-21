@@ -1,4 +1,4 @@
-ï»¿#ifndef BATTLE_FOR_THERAMORE_H_
+#ifndef BATTLE_FOR_THERAMORE_H_
 #define BATTLE_FOR_THERAMORE_H_
 
 #include "CreatureAIImpl.h"
@@ -139,6 +139,9 @@ enum BFTCreatures
 
 enum BFTMisc
 {
+    // Waves
+    EVENT_WAVES_CHECKER                 = 1000,
+
 	// Spells
 	SPELL_TELEPORT_DUMMY                = 51347,
 	SPELL_THERAMORE_EXPLOSION_SCENE     = 128446,
@@ -155,7 +158,6 @@ enum BFTMisc
 	SPELL_WATER_CHANNELLING             = 305033,
 	SPELL_COSMETIC_FIRE_LIGHT           = 320348,
 	SPELL_RUNIC_SHIELD                  = 346057,
-	SPELL_KILL_CREDIT                   = 347365,
 	SPELL_SHOW_OFF_FIRE                 = 364153,
 	SPELL_CHANNEL_BLUE_MOVING           = 381450,
 	SPELL_STASIS                        = 398620,
@@ -193,6 +195,7 @@ enum BFTMisc
 	CRITERIA_TREE_THE_BATTLE            = 1000017,
 	CRITERIA_TREE_RETRIEVE_JAINA        = 1000018,
 	CRITERIA_TREE_SURVIVE_THE_BATTLE    = 1000019,
+	CRITERIA_TREE_MAINTAIN_PROTECTION   = 1000088,
 	CRITERIA_TREE_SURVIVE_WAVES         = 1000020,
 	CRITERIA_TREE_HELP_THE_WOUNDED      = 1000021,
 	CRITERIA_TREE_FOLLOW_JAINA          = 1000022,
@@ -242,6 +245,7 @@ enum BFTMisc
 	EVENT_RETRIEVE_RHONIN               = 65809,
 	EVENT_REDUCE_IMPACT                 = 65810,
 	EVENT_DESTROY_SEA_WOLF              = 65823,
+    EVENT_MAINTAIN_THE_PROTECTION       = 65824,
 };
 
 enum BFTTalks
@@ -829,7 +833,7 @@ Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };
 Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f };
 Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f };
 
-/// Cherche l'ami avec le moins de PV dans la portÃ©e donnÃ©e
+/// Cherche l'ami avec le moins de PV dans la portée donnée
 inline Unit* FindLowestHealthFriend(Unit const* obj, float range, bool withSelf = false)
 {
 	Unit* lowest = nullptr;

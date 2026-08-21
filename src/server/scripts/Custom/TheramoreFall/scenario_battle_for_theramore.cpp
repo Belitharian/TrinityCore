@@ -2,12 +2,14 @@
 #include "EventMap.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
+#include "KillRewarder.h"
 #include "Map.h"
 #include "MotionMaster.h"
 #include "MiscPackets.h"
 #include "ObjectMgr.h"
 #include "PhasingHandler.h"
 #include "Player.h"
+#include "Scenario.h"
 #include "ScriptMgr.h"
 #include "TemporarySummon.h"
 #include "Weather.h"
@@ -75,40 +77,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 	struct scenario_battle_for_theramore_InstanceScript : public InstanceScript
 	{
 		scenario_battle_for_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map),
-			phase(BFTPhases::FindJaina), wavesInvoker(WAVE_01), eventId(1), woundedTroops(0), archmagesIndex(0),
+			phase(BFTPhases::FindJaina), eventId(1), woundedTroops(0), archmagesIndex(0),
 			waves(0)
 		{
 			SetHeaders(DataHeader);
 			LoadObjectData(creatureData, gameobjectData);
 		}
-
-		enum Invokers
-		{
-			// Waves
-			WAVE_01                     = 101,
-			WAVE_01_CHECK,
-			WAVE_02,
-			WAVE_02_CHECK,
-			WAVE_03,
-			WAVE_03_CHECK,
-			WAVE_04,
-			WAVE_04_CHECK,
-			WAVE_05,
-			WAVE_05_CHECK,
-			WAVE_06,
-			WAVE_06_CHECK,
-			WAVE_07,
-			WAVE_07_CHECK,
-			WAVE_08,
-			WAVE_08_CHECK,
-			WAVE_09,
-			WAVE_09_CHECK,
-			WAVE_10,
-			WAVE_10_CHECK,
-
-			WAVE_BREAKER,
-			WAVE_INTRO,
-		};
 
 		enum Spells
 		{
@@ -170,6 +144,36 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				phase = (BFTPhases)value;
 			else if (dataId == DATA_WOUNDED_TROOPS)
 				woundedTroops = value;
+		}
+
+		void OnUnitDeath(Unit* unit) override
+		{
+			InstanceScript::OnUnitDeath(unit);
+
+			Creature* creature = unit->ToCreature();
+			if (!creature || creature->IsPet() || creature->IsCritter())
+				return;
+
+			// Un joueur a tapé : KillRewarder a déjà crédité le criteria
+			if (!creature->GetTapList().empty())
+				return;
+
+            Map::PlayerList const& players = instance->GetPlayers();
+            MapReference const* reference = players.front();
+            Player* player = reference->GetSource();
+
+            if (!player)
+                return;
+
+            switch (creature->GetEntry())
+            {
+                case NPC_ROKNAH_GRUNT:
+                case NPC_ROKNAH_LOA_SINGER:
+                case NPC_ROKNAH_HAG:
+                case NPC_ROKNAH_FELCASTER:
+                    KillRewarder::Reward(player, creature, creature->GetCreatureTemplate()->KillCredit[0]);
+                    break;
+            }
 		}
 
 		void OnCompletedCriteriaTree(CriteriaTree const* tree) override
@@ -423,14 +427,23 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					events.ScheduleEvent(122, 3s);
 					break;
 				}
-				// Step 9 : The Battle - After 10 Waves
+				// Step 9 : The Battle - After 10 waves
 				case CRITERIA_TREE_SURVIVE_WAVES:
 				{
 					DespawnDummies();
 					if (Creature* kalecgos = GetKalecgos())
 						kalecgos->AI()->SetData(DATA_KALECGOS_CANCEL_EVENT, 0U);
-					break;
+                    events.CancelEvent(EVENT_WAVES_CHECKER);
+                    break;
 				}
+                // Step 9 : The Battle - After the protection broke
+                case CRITERIA_TREE_MAINTAIN_PROTECTION:
+                {
+                    HordeMembersInvoker(Waves[waves]);
+                    waves++;
+                    events.ScheduleEvent(EVENT_WAVES_CHECKER, 1s);
+                    break;
+                }
 				// Step 10 : Help the wounded - Parent
 				case CRITERIA_TREE_HELP_THE_WOUNDED:
 				{
@@ -527,6 +540,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		{
 			InstanceScript::OnCreatureCreate(creature);
 
+            creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
+            creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
+            creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
+
 			if (creature->IsCivilian())
 			{
 				creature->PauseMovement();
@@ -535,15 +552,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				civilians.push_back(creature->GetGUID());
 			}
 
-			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
-			creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
-			creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
-
 			switch (creature->GetEntry())
 			{
-                case NPC_TRAINING_DUMMY:
-                    citizens.push_back(creature->GetGUID());
-                    break;
 				case NPC_THERAMORE_CITIZEN_MALE:
 				case NPC_THERAMORE_CITIZEN_FEMALE:
 					creature->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
@@ -1310,77 +1320,28 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						kalecgos->AI()->SetData(DATA_KALECGOS_COMBAT_EVENT, 0U);
 					}
 					GetJaina()->CastSpell(actorsRelocation[0].destination, SPELL_TELEPORT);
-					Next(2s);
+                    TriggerGameEvent(EVENT_MAINTAIN_THE_PROTECTION);
 					break;
 
 				#pragma endregion
 
-				// For the Alliance
-				#pragma region FOR_THE_ALLIANCE
-
-				case WAVE_01:
-				case WAVE_02:
-				case WAVE_03:
-				case WAVE_04:
-				case WAVE_05:
-				case WAVE_06:
-				case WAVE_07:
-				case WAVE_08:
-				case WAVE_09:
-				case WAVE_10:
-					//#ifdef CUSTOM_DEBUG
-					//	for (uint8 i = 0; i < HORDE_WAVES_COUNT; i++)
-					//	{
-					//		DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
-					//		events.ScheduleEvent(WAVE_BREAKER, 1s);
-					//	}
-					//#else
-						HordeMembersInvoker(Waves[waves]);
-						waves++;
-						events.ScheduleEvent(++wavesInvoker, 1s);
-					//#endif
-					break;
-
-				case WAVE_01_CHECK:
-				case WAVE_02_CHECK:
-				case WAVE_03_CHECK:
-				case WAVE_04_CHECK:
-				case WAVE_05_CHECK:
-				case WAVE_06_CHECK:
-				case WAVE_07_CHECK:
-				case WAVE_08_CHECK:
-				case WAVE_09_CHECK:
-				case WAVE_10_CHECK:
-				{
-					uint32 deadCounter = 0;
-					if (Creature* jaina = GetJaina())
-					{
-						for (uint8 i = 0; i < HORDE_WAVES_COUNT; ++i)
-						{
-							Creature* temp = ObjectAccessor::GetCreature(*jaina, hordeMembers[i]);
-							if (!temp || temp->isDead())
-								++deadCounter;
-						}
-					}
-						
-					// Quand le nombre de membres vivants est inférieur ou égal au nombre de membres morts
-					if (deadCounter >= HORDE_WAVES_COUNT)
-					{
-						DoCastSpellOnPlayers(SPELL_KILL_CREDIT);
-						events.ScheduleEvent(++wavesInvoker, 2s);
-					}
-					else
-					{
-						events.ScheduleEvent(wavesInvoker, 1s);
-					}
-
-					break;
-				}
-
-				case WAVE_BREAKER:
-					break;
-
-				#pragma endregion
+                // Waves
+                case EVENT_WAVES_CHECKER:
+                {
+                    // Quand le nombre de membres vivants est inf?rieur ou ?gal au nombre de membres morts
+                    uint32 deadCounter = HordeMembersChecker();
+                    if (deadCounter >= HORDE_WAVES_COUNT)
+                    {
+                        HordeMembersInvoker(Waves[waves]);
+                        waves++;
+                        events.ScheduleEvent(EVENT_WAVES_CHECKER, 2s);
+                    }
+                    else
+                    {
+                        events.RescheduleEvent(EVENT_WAVES_CHECKER, 1s);
+                    }
+                    break;
+                }
 
 				// Help the wounded
 				#pragma region HELP_THE_WOUNDED
@@ -1690,7 +1651,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		EventMap events;
 		TaskScheduler scheduler;
 		BFTPhases phase;
-		uint32 wavesInvoker;
 		uint32 eventId;
 		uint32 woundedTroops;
 		uint8 archmagesIndex;
@@ -1875,6 +1835,22 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			if (Creature* jaina = GetJaina())
 				jaina->AI()->DoAction(waveId);
 		}
+
+        uint32 HordeMembersChecker()
+        {
+            uint32 deadCounter = 0;
+            if (Creature* jaina = GetJaina())
+            {
+                for (uint8 i = 0; i < HORDE_WAVES_COUNT; ++i)
+                {
+                    Creature* temp = ObjectAccessor::GetCreature(*jaina, hordeMembers[i]);
+                    if (!temp || temp->isDead())
+                        ++deadCounter;
+                }
+            }
+
+            return deadCounter;
+        }
 
 		void MassDespawn(uint32 entry)
 		{

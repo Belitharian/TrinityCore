@@ -4391,6 +4391,23 @@ private:
 	uint32 absorbedAmount;
 };
 
+// Ember Blast - 325877
+class spell_ember_blast : public SpellScript
+{
+    void FilterTargets(std::list<WorldObject*>& targets)
+    {
+        targets.remove_if([](WorldObject* target)
+        {
+            return target->GetTypeId() == TYPEID_PLAYER;
+        });
+    }
+
+    void Register() override
+    {
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_ember_blast::FilterTargets, EFFECT_0, TARGET_UNIT_DEST_AREA_ENEMY);
+    }
+};
+
 void AddSC_npcs_dalaran_purge()
 {
 	// Neutral
@@ -4445,6 +4462,7 @@ void AddSC_npcs_dalaran_purge()
 	RegisterSpellScript(spell_atonement_aura_stormwind_cleric);
 	RegisterSpellScript(spell_delphuric_beam);
 	RegisterSpellScript(spell_etheral_guard);
+	RegisterSpellScript(spell_ember_blast);
 
 	// Gameobjects
 	RegisterGameObjectAI(go_portal_savor);

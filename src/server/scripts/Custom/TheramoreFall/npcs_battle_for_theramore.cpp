@@ -1,4 +1,4 @@
-﻿#include "AreaTrigger.h"
+#include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
@@ -278,7 +278,7 @@ struct npc_theramore_troop : public CustomAI
 					context.Repeat(1ms, 2s);
 					break;
 				case 2:
-					me->PlayDirectSound(soundEmote, player);
+					me->PlayDistanceSound(soundEmote, player);
 					context.Repeat(3s, 5s);
 					break;
 				case 3:
@@ -1075,7 +1075,7 @@ struct npc_theramore_faithful : public npc_theramore_troop
 				}
 				power_word_shield.Repeat(3s);
 			})
-			// Sorts de soin aléatoires
+			// Sorts de soin al�atoires
             .Schedule(1s, GROUP_NORMAL, [this](TaskContext flash_heal)
             {
                 if (Unit* target = FindLowestHealthFriend(me, STANDARD_RANGE, true))
@@ -2585,6 +2585,9 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 					me->CombatStop();
 					me->SetOrientation(me->GetAbsoluteAngle(LookAtPos));
 					me->SetFacingToPoint(LookAtPos);
+
+                    if (Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f))
+                        training->KillSelf();
 
 					scheduler.CancelGroup(COSMETIC_GROUP_NORMAL);
 				}

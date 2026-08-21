@@ -1,4 +1,4 @@
-﻿#ifndef DALARAN_PURGE_H_
+#ifndef DALARAN_PURGE_H_
 #define DALARAN_PURGE_H_
 
 #include "CreatureAIImpl.h"
@@ -160,6 +160,9 @@ enum DLPSpells
 
 enum DLPMisc
 {
+    // Conversations
+    CONVERSATION_DALARAN_PURGE          = 50000,
+
 	// Events
 	EVENT_FIND_JAINA_01                 = 65817,
 	EVENT_ASSIST_JAINA                  = 65818,
@@ -301,6 +304,7 @@ const Position HathorelPos01    = { -805.92f, 4430.16f, 598.65f, 1.76f };
 const Position HathorelPos02    = { -876.22f, 4489.65f, 580.05f, 2.37f };
 const Position SorinPoint01     = { -856.22f, 4477.19f, 653.60f, 4.78f };
 const Position EndPortalPos01   = { -893.05f, 4506.48f, 580.45f, 5.59f };
+const Position ElementalPos01   = { -854.50f, 4598.81f, 748.78f, 4.60f };
 
 WaypointPath const RathaellaPath01 =
 {

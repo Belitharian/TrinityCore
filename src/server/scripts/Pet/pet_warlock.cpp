@@ -258,11 +258,12 @@ class spell_chaos_salvo : public AuraScript
 
     void HandleEffectPeriodic(AuraEffect const* /*aurEff*/) const
     {
-        if (Unit* target = GetTarget())
-        {
-            GetCaster()->CastSpell(target, SPELL_CHAOS_SALVO_PERIODIC,
-                TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
-        }
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        caster->CastSpell(GetTarget(), SPELL_CHAOS_SALVO_PERIODIC,
+            TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
     }
 
     void Register() override

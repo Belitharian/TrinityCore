@@ -1,4 +1,4 @@
-﻿#include "CreatureGroups.h"
+#include "CreatureGroups.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
@@ -562,36 +562,22 @@ class scenario_dalaran_purge : public InstanceMapScript
 				// Dalaran
 				#pragma region DALARAN
 
-				case 1:
-                    Talk(GetJaina(), SAY_PURGE_JAINA_01);
-					Next(2s);
-					break;
-				case 2:
-					Talk(GetJaina(), SAY_PURGE_JAINA_02);
-					Next(6s);
-					break;
-				case 3:
-					Talk(GetAethas(), SAY_PURGE_AETHAS_03);
-					Next(5s);
-					break;
-				case 4:
-					Talk(GetJaina(), SAY_PURGE_JAINA_04);
-					Next(5s);
-					break;
-				case 5:
-					Talk(GetAethas(), SAY_PURGE_AETHAS_05);
-					Next(3s);
-					break;
-				case 6:
-					Talk(GetJaina(), SAY_PURGE_JAINA_06);
-					Next(5s);
-					break;
-				case 7:
-					Talk(GetJaina(), SAY_PURGE_JAINA_07);
-					if (Creature* aethas = GetAethas())
-						GetElemental()->CastSpell(GetAethas(), SPELL_FROSTBOLT);
-					Next(2s);
-					break;
+                case 1:
+                {
+                    Creature* jaina = GetJaina();
+                    if (!jaina)
+                        break;
+
+                    Conversation* purge = Conversation::CreateConversation(
+                        CONVERSATION_DALARAN_PURGE, jaina, jaina->GetPosition(), ObjectGuid::Empty);
+
+                    // @Case 2 -> 7 supprime
+                    eventId = 7;
+
+                    LocaleConstant privateOwnerLocale = purge->GetPrivateObjectOwnerLocale();
+                    Next(purge ? purge->GetLastLineEndTime(privateOwnerLocale) : 27600ms);
+                    break;
+                }
 				case 8:
                 {
                     Creature* jaina = GetJaina();
@@ -652,11 +638,15 @@ class scenario_dalaran_purge : public InstanceMapScript
                     }
 					Next(1s);
 					break;
-				case 13:
-					GetJaina()->SetVisible(false);
-					GetAethas()->SetVisible(false);
-					TriggerGameEvent(EVENT_ASSIST_JAINA);
-					break;
+                case 13:
+                {
+                    if (Creature* elemental = GetCreature(DATA_SUMMONED_WATER_ELEMENTAL))
+                        elemental->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, ElementalPos01);
+                    GetJaina()->SetVisible(false);
+                    GetAethas()->SetVisible(false);
+                    TriggerGameEvent(EVENT_ASSIST_JAINA);
+                    break;
+                }
 				// DELETED
 				case 14:
 					break;

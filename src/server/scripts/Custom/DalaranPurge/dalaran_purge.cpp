@@ -1,3 +1,5 @@
+#include "Conversation.h"
+#include "ConversationAI.h"
 #include "Custom/CustomAI/CustomAI.h"
 #include "Custom/FakeParty/FakeParty.h"
 #include "GameObject.h"
@@ -186,6 +188,7 @@ struct npc_magister_rommath_purge : public CustomAI
         SPELL_DRAGON_BREATH         = 255890,
         SPELL_BLAZING_BARRIER       = 295238,
         SPELL_EMBER_BLAST           = 325877,
+        SPELL_EMBER_BLAST_AURA      = 325873,
         SPELL_BLAZING_SURGE         = 329509,
         SPELL_SCORCHING_DETONATION  = 401525,
     };
@@ -256,6 +259,9 @@ public:
             {
                 if (m_instance)
                 {
+                    if (GameObject* passage = m_instance->GetGameObject(DATA_SECRET_PASSAGE))
+                        passage->UseDoorOrButton();
+
                     if (GameObject* portal = m_instance->GetGameObject(DATA_PORTAL_TO_PRISON))
                         portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
                 }
@@ -399,6 +405,7 @@ public:
                 {
                     CastStop({ SPELL_BLAZING_SURGE, SPELL_EVOCATION });
                     DoCast(target, SPELL_EMBER_BLAST);
+                    target->AddAura(SPELL_EMBER_BLAST_AURA, target);
                 }
                 emberBlast.Repeat(15s, 40s);
             })
@@ -439,6 +446,63 @@ public:
             && entry != NPC_JAINA_PROUDMOORE_PATROL
             && entry != NPC_VEREESA_WINDRUNNER;
     }
+};
+
+/*
+ * Conversation 50000 - La purge de Dalaran.
+ */
+class conversation_dalaran_purge : public ConversationAI
+{
+	public:
+	explicit conversation_dalaran_purge(Conversation* conversation) : ConversationAI(conversation) { }
+
+	enum PurgeConversation
+	{
+		LINE_JAINA_01       = 19,   // Aethas Saccage-Soleil !
+		LINE_JAINA_02       = 24,   // Vous avez trahi le Kirin Tor...
+		LINE_AETHAS_03      = 26,   // Vous n'y etes pas du tout, Jaina...
+		LINE_JAINA_04       = 25,   // Vous avez ferme les yeux...
+		LINE_AETHAS_05      = 28,   // C'est aussi NOTRE ville, Portvaillant.
+		LINE_JAINA_06       = 29,   // Je vois. Je vais expulser les Saccage-Soleil...
+		LINE_JAINA_07       = 30,   // Vous, Aethas, vous venez avec moi.
+
+		ACTOR_IDX_JAINA     = 0,
+		ACTOR_IDX_AETHAS    = 1,
+	};
+
+	void OnStart() override
+	{
+        LocaleConstant privateOwnerLocale = conversation->GetPrivateObjectOwnerLocale();
+
+		// Les deux protagonistes se font face des la premiere replique.
+		conversation->m_Events.AddEvent([conversation = conversation]()
+		{
+			Creature* jaina = conversation->GetActorCreature(ACTOR_IDX_JAINA);
+			Creature* aethas = conversation->GetActorCreature(ACTOR_IDX_AETHAS);
+			if (!jaina || !aethas)
+				return;
+
+			jaina->SetFacingToObject(aethas);
+			aethas->SetFacingToObject(jaina);
+
+		}, 0ms);
+
+		if (Milliseconds const* frostbolt = conversation->GetLineStartTime(privateOwnerLocale, LINE_JAINA_07))
+		{
+			conversation->m_Events.AddEvent([conversation = conversation]()
+			{
+				InstanceScript* instance = conversation->GetInstanceScript();
+				if (!instance)
+					return;
+
+				Creature* elemental = instance->GetCreature(DATA_SUMMONED_WATER_ELEMENTAL);
+				Creature* aethas = conversation->GetActorCreature(ACTOR_IDX_AETHAS);
+				if (elemental && aethas)
+					elemental->CastSpell(aethas, SPELL_FROSTBOLT);
+
+			}, *frostbolt);
+		}
+	}
 };
 
 enum Spells
@@ -515,5 +579,7 @@ void AddSC_dalaran_purge()
 	RegisterDalaranAI(npc_aethas_sunreaver_purge);
 	RegisterDalaranAI(npc_magister_rommath_purge);
 
-	RegisterSpellScript(spell_meteor_storm);
+    RegisterConversationAI(conversation_dalaran_purge);
+
+    RegisterSpellScript(spell_meteor_storm);
 }
