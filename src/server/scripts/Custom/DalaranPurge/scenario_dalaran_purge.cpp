@@ -641,7 +641,9 @@ class scenario_dalaran_purge : public InstanceMapScript
                 case 13:
                 {
                     if (Creature* elemental = GetCreature(DATA_SUMMONED_WATER_ELEMENTAL))
-                        elemental->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, ElementalPos01);
+                        elemental->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, ElementalPos01, true,
+                                                                ElementalPos01.GetOrientation(), {},
+                                                                MovementWalkRunSpeedSelectionMode::ForceWalk);
                     GetJaina()->SetVisible(false);
                     GetAethas()->SetVisible(false);
                     TriggerGameEvent(EVENT_ASSIST_JAINA);
