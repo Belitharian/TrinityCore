@@ -1,4 +1,4 @@
-﻿#include "AreaTriggerAI.h"
+#include "AreaTriggerAI.h"
 #include "Conversation.h"
 #include "ConversationAI.h"
 #include "Object.h"
@@ -386,7 +386,7 @@ class spell_freezing_blast : public SpellScript
 		if (!caster)
 			return;
 
-		// 3 positions en ligne droite devant, espacées de 6y
+		// 3 positions en ligne droite devant, espac�es de 6y
 		for (int i = 1; i <= 3; ++i)
 		{
 			float dist = 6.0f * i;
@@ -526,7 +526,7 @@ class conversation_dalaran_start : public ConversationAI
 
 			jaina->GetMotionMaster()->MovePath(ActorsPath01, false);
 
-		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_START_01) + 3s);
+		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_START_01));
 
 		conversation->m_Events.AddEvent([ai = this, conversation = conversation]()
 		{
@@ -585,13 +585,13 @@ class conversation_dalaran_part01 : public ConversationAI
 		{
             ai->instance->SetData(DATA_PHASE, (uint32)Phases::Visions_KalecgosJaina);
 
-		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_07) + 2s);
+		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_07));
 
         conversation->m_Events.AddEvent([ai = this, conversation = conversation]()
 		{
             ai->instance->TriggerGameEvent(EVENT_FIND_KALECGOS_ASSIST_JAINA);
 
-		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_09) + 3s);
+		}, conversation->GetLineEndTime(privateOwnerLocale, CONVERSATION_LINE_09));
 	}
 
 	private:
