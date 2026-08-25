@@ -134,7 +134,7 @@ struct npc_pet_sha_ancestor : public PassiveAI
         caster->CastSpell(caster, SPELL_SHAMAN_CALL_ANCESTORS_BUFF);
 
         if (me->ToTempSummon()->IsGuardian())
-            static_cast<Guardian*>(me)->SetBonusDamage(caster->SpellBaseHealingBonusDone(SPELL_SCHOOL_MASK_HOLY));
+            static_cast<Guardian*>(me)->SetBonusDamage(caster->SpellBaseHealingBonusDone(SPELL_SCHOOL_MASK_NATURE));
     }
 
     void OnDespawn() override
