@@ -1,4 +1,4 @@
-﻿#include "GameObject.h"
+#include "GameObject.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
 #include "MotionMaster.h"
@@ -58,7 +58,7 @@ struct npc_jaina_theramore : public CustomAI
 			case DATA_WAVE_WEST:
 				me->AI()->Talk(SAY_BATTLE_WEST);
 				break;
-			// Ne rien faire par défaut
+			// Ne rien faire par d�faut
 			default:
 				break;
 		}
@@ -864,6 +864,9 @@ struct npc_kalecgos_dragon : public CustomAI
 			{
 				scheduler.Schedule(8s, 12s, [this](TaskContext talk_combat)
 				{
+                    if (!me->isActiveObject())
+                        return;
+
 					if (roll_chance(30))
                         TalkInCombat(SAY_KALECGOS_SPELL_01);
                     talk_combat.Repeat(8s, 12s);
@@ -874,6 +877,9 @@ struct npc_kalecgos_dragon : public CustomAI
 			{
 				scheduler.Schedule(1s, [this](TaskContext circle_path)
 				{
+                    if (!me->isActiveObject())
+                        return;
+
 					me->GetMotionMaster()->MoveCirclePath
 					(
 						TheramorePoint01.GetPositionX(),
@@ -893,6 +899,7 @@ struct npc_kalecgos_dragon : public CustomAI
 				me->GetMotionMaster()->Clear();
 				me->GetMotionMaster()->MoveIdle();
 				scheduler.CancelAll();
+                me->setActive(false);
 				break;
 			}
 		}

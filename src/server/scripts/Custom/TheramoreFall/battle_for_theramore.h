@@ -91,7 +91,8 @@ enum BFTData
 	DATA_WAVE_DOCKS,
 	DATA_WAVE_WEST,
 	DATA_WAVE_BOAT,
-	DATA_DECORATION_DUMMIES,
+	DATA_DECORATION_ENTRANCE,
+	DATA_DECORATION_WEST,
 };
 
 enum BFTCreatures
@@ -120,6 +121,7 @@ enum BFTCreatures
 	NPC_ROKNAH_HAG                      = 64734,
 	NPC_ROKNAH_FELCASTER                = 65507,
 	NPC_WAVE_CALLER_GRUHTA              = 65510,
+    NPC_PORTAL_TO_ORGRIMMAR             = 216644,
 	NPC_HORDE_BOMBARDIER                = 149639,
 	NPC_HORDE_DEMOLISHER                = 144289,
 
@@ -165,7 +167,9 @@ enum BFTMisc
 	SPELL_COSMETIC_EAT_SOUP             = 364139,
 	SPELL_COSMETIC_DRINK                = 162443,
     SPELL_COSMETIC_DEATH                = 387851,
+    SPELL_COSMETIC_FREEZE               = 114959,
 	SPELL_THROW_BOMB                    = 414422,
+	SPELL_THROW_BOULDER                 = 258181,
 
 	// GameObjects
 	GOB_POWDER_BARREL                   = 294148,
@@ -822,7 +826,7 @@ Position const QuillPoint01     = { -3751.32f, -4438.13f, 31.26f, 3.33f };
 Position const TervoshPoint01   = { -3720.83f, -4551.10f, 25.82f, 1.35f };
 Position const KalecgosPoint01  = { -3730.39f, -4550.39f, 27.11f, 0.54f };
 Position const PortalPoint01    = { -3712.42f, -4539.62f, 25.82f, 3.59f };
-Position const PortalPoint02    = { -3782.81f, -4256.24f,  6.52f, 4.69f };
+Position const PortalPoint02    = { -3783.51f, -4171.07f,  7.77f, 4.73f };
 Position const PortalPoint03    = { -3750.82f, -4449.65f, 64.90f, 0.63f };
 Position const HedricPoint01    = { -3717.79f, -4522.24f, 25.82f, 5.16f };
 Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f };
@@ -832,6 +836,7 @@ Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f };
 Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };
 Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f };
 Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f };
+Position const VereesaPoint01   = { -3703.94f, -4555.59f, 25.82f, 3.61f };
 
 /// Cherche l'ami avec le moins de PV dans la portée donnée
 inline Unit* FindLowestHealthFriend(Unit const* obj, float range, bool withSelf = false)

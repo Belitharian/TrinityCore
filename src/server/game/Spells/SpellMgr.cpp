@@ -5473,6 +5473,18 @@ void SpellMgr::LoadSpellInfoCorrections()
         });
     });
 
+    // Boulder Throw Missile
+    ApplySpellFix({ 276061 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(13);
+    });
+
+    // Boulder Throw
+    ApplySpellFix({ 258181 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(13);
+    });
+
     for (SpellInfo const& s : mSpellInfoMap)
     {
         SpellInfo* spellInfo = &const_cast<SpellInfo&>(s);

@@ -67,6 +67,52 @@ class HordeBombardierThrowBomb : public BasicEvent
 		Unit* _caster;
 };
 
+class HordeDemolisherThrowBoulder : public BasicEvent
+{
+    public:
+    HordeDemolisherThrowBoulder(Unit* caster) : _caster(caster)
+    {
+        p1 = { -3771.834717f, -4261.928711f, 7.074570f, 4.655093f };
+        p2 = { -3793.766357f, -4260.671387f, 6.944610f, 4.655093f };
+    }
+
+    bool Execute(uint64 /*execTime*/, uint32 /*diff*/) override
+    {
+        Position randomPos = GetRandomPointOnStrip(_caster, p1, p2, 4.0f, _caster->GetMap());
+        _caster->CastSpell(randomPos, SPELL_THROW_BOULDER, TRIGGERED_FULL_MASK);
+        _caster->m_Events.AddEvent(this, _caster->m_Events.CalculateTime(Seconds(urand(8, 10))));
+        return false;
+    }
+
+    Position GetRandomPointOnStrip(Unit* unit, Position const& p1, Position const& p2, float widthMeters, Map* map)
+    {
+        float dx = p2.GetPositionX() - p1.GetPositionX();
+        float dy = p2.GetPositionY() - p1.GetPositionY();
+        float len = std::sqrt(dx * dx + dy * dy);
+
+        float ux = dx / len, uy = dy / len;   // direction normalisée
+        float px = -uy, py = ux;              // perpendiculaire 2D
+
+        float t = frand(0.0f, 1.0f);
+        float offset = frand(-widthMeters / 2.0f, widthMeters / 2.0f);
+
+        float x = p1.GetPositionX() + dx * t + px * offset;
+        float y = p1.GetPositionY() + dy * t + py * offset;
+        float z = p1.GetPositionZ() + (p2.GetPositionZ() - p1.GetPositionZ()) * t;
+
+        // recalage sur le vrai sol plutôt que l'interpolation linéaire
+        float groundZ = map->GetHeight(unit->GetPhaseShift(), x, y, z + 2.0f, true);
+        if (groundZ > INVALID_HEIGHT)
+            z = groundZ;
+
+        return Position(x, y, z, 0.f);
+    }
+
+    private:
+    Unit* _caster;
+    Position p1, p2;
+};
+
 class scenario_battle_for_theramore : public InstanceMapScript
 {
 	public:
@@ -88,7 +134,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		{
 			SPELL_WATER_BUCKET          = 42336,
 			SPELL_MASS_TELEPORT         = 60516,
-			SPELL_MAGIC_QUILL           = 171980,
+			SPELL_MAGIC_QUILL           = 424726,
 			SPELL_TIED_UP               = 167469,
 			SPELL_CLOSE_PORTAL          = 203542,
 			SPELL_DISSOLVE              = 255295,
@@ -99,7 +145,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			SPELL_FROST_BREATH          = 300548,
 			SPELL_CHILLING_BLAST        = 337053,
 			SPELL_ICY_GLARE             = 338517,
-			SPELL_VANISH                = 342048,
+			SPELL_VANISH                = 199483,
 			SPELL_BIG_EXPLOSION         = 348750,
 			SPELL_TELEPORT              = 357601,
 			SPELL_SCORCHED_EARTH        = 373139,
@@ -330,6 +376,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							}
 						}
 					}
+                    GetJaina()->SummonGameObject(GOB_PORTAL_TO_ORGRIMMAR, PortalPoint02, QuaternionData::QuaternionData(), 0s);
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Preparation);
 					#ifndef CUSTOM_DEBUG
 						events.ScheduleEvent(71, 1s);
@@ -384,7 +431,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, jaina);
 						jaina->SetBoundingRadius(20.f);
 						jaina->SetRegenerateHealth(false);
-						jaina->SummonGameObject(GOB_PORTAL_TO_ORGRIMMAR, PortalPoint02, QuaternionData::QuaternionData(), 0s);
 					}
 					if (Creature* rhonin = GetRhonin())
 					{
@@ -411,7 +457,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						if (Creature* tank = instance->GetCreature(tanks[i]))
 							tank->KillSelf();
 					}
-					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle_Survive);
+                    HordeMembersInvoker(DATA_DECORATION_WEST, true);
+                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle_Survive);
 					events.ScheduleEvent(91, 10s);
 					break;
 				}
@@ -857,7 +904,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case 40:
 					Talk(GetKnight(), SAY_WARN_11);
 					SetTarget(GetKnight());
-					Next(3s);
+					Next(4s);
 					break;
 				case 41:
 					Talk(GetJaina(), SAY_WARN_12);
@@ -899,7 +946,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				case 48:
 					Talk(GetJaina(), SAY_WARN_19);
-					Next(8s);
+					Next(7s);
 					break;
 				case 49:
 					Talk(GetPerith(), SAY_WARN_20);
@@ -938,16 +985,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					Next(2s);
 					break;
 				case 57:
-					Talk(GetJaina(), SAY_WARN_27);
-					GetJaina()->AI()->DoCast(SPELL_ARCANE_CANALISATION);
-					if (Creature* quill = GetJaina()->SummonCreature(NPC_INVISIBLE_STALKER, QuillPoint01, TEMPSUMMON_TIMED_DESPAWN, 10s))
-						quill->AddAura(SPELL_MAGIC_QUILL, quill);
+                    if (Creature* jaina = GetJaina())
+                    {
+                        Talk(jaina, SAY_WARN_27);
+                        jaina->CastSpell(jaina, SPELL_MAGIC_QUILL);
+                    }
 					Next(10s);
 					break;
 				case 58:
 					if (Creature* jaina = GetJaina())
 					{
-						jaina->RemoveAurasDueToSpell(SPELL_ARCANE_CANALISATION);
+						jaina->RemoveAurasDueToSpell(SPELL_MAGIC_QUILL);
 						jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						jaina->SetFacingToObject(GetPerith());
 					}
@@ -1018,7 +1066,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case 71:
 					Talk(GetJaina(), SAY_PRE_BATTLE_2);
 					EnsurePlayerHaveShaker();
-					HordeMembersInvoker(DATA_DECORATION_DUMMIES, true);
+					HordeMembersInvoker(DATA_DECORATION_ENTRANCE, true);
 					if (Creature* hedric = GetHedric())
 					{
 						hedric->SetVisible(true);
@@ -1077,7 +1125,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					Talk(GetRhonin(), SAY_PRE_BATTLE_5);
 					SetTarget(GetRhonin());
 					ClosePortal(DATA_PORTAL_TO_DALARAN);
-					Next(2s);
+					Next(2800ms);
 					break;
 				case 79:
 					Talk(GetJaina(), SAY_PRE_BATTLE_6);
@@ -1096,11 +1144,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case 82:
 					Talk(GetJaina(), SAY_PRE_BATTLE_9);
 					SetTarget(GetJaina());
-					Next(3s);
+					Next(7s);
 					break;
 				case 83:
 					Talk(GetJaina(), SAY_PRE_BATTLE_10);
-					Next(7s);
+					Next(6s);
 					break;
 				case 84:
 					Talk(GetRhonin(), SAY_PRE_BATTLE_11);
@@ -1110,12 +1158,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case 85:
 					Talk(GetJaina(), SAY_PRE_BATTLE_12);
 					SetTarget(GetTervosh());
-					Next(2s);
+					Next(6s);
 					break;
 				case 86:
 					Talk(GetVereesa(), SAY_PRE_BATTLE_13);
 					SetTarget(GetVereesa());
-					Next(2s);
+					Next(10s);
 					break;
 				case 87:
 					if (Creature* jaina = GetJaina())
@@ -1125,7 +1173,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						jaina->SetTarget(ObjectGuid::Empty);
 						jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					}
-					Next(2s);
+					Next(8s);
 					break;
 				case 88:
 					if (Creature* jaina = GetJaina())
@@ -1136,15 +1184,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					}
 					if (Creature* vereesa = GetVereesa())
 					{
-						vereesa->CastSpell(vereesa, SPELL_VANISH);
+                        vereesa->SetWalk(true);
+                        vereesa->CastSpell(vereesa, SPELL_VANISH);
+                        vereesa->GetMotionMaster()->MovePoint(0, VereesaPoint01);
 						vereesa->SetFaction(FACTION_FRIENDLY);
-						vereesa->SetVisible(false);
 					}
 					Next(5s);
 					break;
 				case 89:
 					ClearTarget();
-					GetJaina()->AI()->DoCast(SPELL_MASS_TELEPORT);
+					GetJaina()->CastSpell(GetJaina(), SPELL_MASS_TELEPORT);
+                    GetVereesa()->SetVisible(false);
 					Next(4600ms);
 					break;
 				case 90:
@@ -1503,7 +1553,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case 148:
 					SetTarget(GetJaina());
 					Talk(GetJaina(), SAY_IRIS_WARN_06);
-					Next(6s);
+					Next(8s);
 					break;
 				case 149:
 					Talk(GetJaina(), SAY_IRIS_WARN_07);
@@ -1638,7 +1688,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						rhonin->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						rhonin->RemoveAllAuras();
 					}
-					Next(5s);
+					Next(12s);
 					break;
 				case 172:
 					TriggerGameEvent(EVENT_REDUCE_IMPACT);
@@ -1801,12 +1851,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 					enum Spells
 					{
-						SPELL_CHANNEL_WATER     = 365307,
+						SPELL_CHANNEL_WATER     = 237594,
 						SPELL_CHANNEL_FROST     = 1271695
 					};
 
 					switch (horde->GetEntry())
 					{
+                        case NPC_PORTAL_TO_ORGRIMMAR:
+                            horde->SetUninteractible(true);
+                            break;
 						case NPC_ROKNAH_LOA_SINGER:
 							horde->CastSpell(horde, SPELL_CHANNEL_WATER);
 							break;
@@ -1814,19 +1867,21 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							horde->CastSpell(horde, SPELL_CHANNEL_FROST);
 							break;
 						case NPC_HORDE_BOMBARDIER:
-							horde->SetLevel(90);
 							horde->SetWalk(false);
 							horde->SetCanFly(true);
 							horde->SetDisableGravity(true);
 							horde->GetMotionMaster()->MoveRandom(20.0f);
 							horde->SetSpeedRate(MOVE_RUN, 2.f);
 							horde->SetSpeedRate(MOVE_FLIGHT, 2.f);
-							horde->m_Events.AddEvent(new HordeBombardierThrowBomb(horde), horde->m_Events.CalculateTime(Seconds(urand(2, 8))));
+							horde->m_Events.AddEvent(new HordeBombardierThrowBomb(horde),
+                                                     horde->m_Events.CalculateTime(Seconds(urand(2, 8))));
 							break;
-						case NPC_HORDE_DEMOLISHER:
-							horde->SetLevel(90);
-							break;
-					}
+                        case NPC_HORDE_DEMOLISHER:
+                            if (waveId == DATA_DECORATION_WEST)
+                                horde->m_Events.AddEvent(new HordeDemolisherThrowBoulder(horde),
+                                                        horde->m_Events.CalculateTime(Seconds(urand(2, 8))));
+                            break;
+                    }
 
 					dummyMembers.push_back(horde->GetGUID());
 				}
@@ -1891,7 +1946,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				if (roll_chance(80))
 				{
 					troop->SetVisible(false);
-					if (Creature* wounded = troop->SummonCreature(NPC_THERAMORE_WOUNDED_TROOP, troop->GetPosition(), TempSummonType::TEMPSUMMON_MANUAL_DESPAWN))
+					if (Creature* wounded = troop->SummonCreature(NPC_THERAMORE_WOUNDED_TROOP,
+                                                                  troop->GetPosition(),
+                                                                  TempSummonType::TEMPSUMMON_MANUAL_DESPAWN))
 					{
 						uint32 health = troop->GetMaxHealth();
 						Powers power = troop->GetPowerType();
@@ -1904,6 +1961,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						wounded->SetDisplayId(troop->GetDisplayId());
 						wounded->SetImmuneToNPC(true);
                         wounded->AddAura(SPELL_COSMETIC_DEATH, wounded);
+                        wounded->AddAura(SPELL_COSMETIC_FREEZE, wounded);
 						wounded->SetVignette(VIGNETTE_ALLIANCE_TROOPS);
 					}
 				}
@@ -1925,10 +1983,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 
 			if (GameObject* portal = GetGameObject(DATA_PORTAL_TO_ORGRIMMAR))
-			{
-				portal->m_Events.KillAllEvents(true);
 				portal->Delete();
-			}
 
 			if (Creature* kalecgos = GetKalecgos())
 			{

@@ -665,11 +665,11 @@ class scenario_dalaran_purge : public InstanceMapScript
 					break;
 				case 16:
 					Talk(GetVereesa(), SAY_FIRST_STEP_VEREESA_01);
-					Next(5s);
+					Next(8s);
 					break;
 				case 17:
 					Talk(GetJaina(), SAY_FIRST_STEP_JAINA_02);
-					Next(4s);
+					Next(6s);
 					break;
 				case 18:
 					if (Creature* jaina = GetJaina())
@@ -865,6 +865,7 @@ class scenario_dalaran_purge : public InstanceMapScript
                     if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
                     {
                         Talk(narasi, SAY_INFILTRATE_NARASI_01);
+                        narasi->SetImmuneToPC(true);
                         narasi->SetImmuneToNPC(false);
                         narasi->SetReactState(REACT_AGGRESSIVE);
                     }
@@ -945,7 +946,7 @@ class scenario_dalaran_purge : public InstanceMapScript
                         jaina->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos03);
                         jaina->DespawnOrUnsummon(11s);
                     }
-                    Next(2s);
+                    Next(2800ms);
 					break;
 				case 41:
 					if (Creature* rommath = GetRommath())
@@ -1044,7 +1045,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 		Player* GetNearestPlayer(Creature* creature)
 		{
 			Player* player = instance->GetPlayers().begin()->GetSource();
-			if (player && player->IsWithinDist(creature, 5.f, false))
+			if (player && player->IsWithinDist(creature, 10.f, false))
 				return player;
 			return nullptr;
 		}
