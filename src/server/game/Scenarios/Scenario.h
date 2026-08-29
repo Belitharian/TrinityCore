@@ -78,6 +78,10 @@ class TC_GAME_API Scenario : public CriteriaHandler
         void SendBootPlayer(Player const* player) const;
         void SendScenarioEvent(Player* player, uint32 eventId);
 
+        // Progression brute d'un criteria : permet a un script de lire un
+        // compteur sans redupliquer la comptabilite de son cote.
+        uint64 GetCriteriaProgressCounter(uint32 criteriaId);
+
     protected:
         Map const* _map;
         GuidUnorderedSet _players;
@@ -89,6 +93,7 @@ class TC_GAME_API Scenario : public CriteriaHandler
         bool CanCompleteCriteriaTree(CriteriaTree const* tree) override;
         void CompletedCriteriaTree(CriteriaTree const* tree, Player* referencePlayer) override;
         void OnCompletedCriteriaTree(CriteriaTree const* tree);
+        void NotifyCompletedCriteriaTree(CriteriaTree const* tree);
         void AfterCriteriaTreeUpdate(CriteriaTree const* /*tree*/, Player* /*referencePlayer*/) override { }
 
         void DoForAllPlayers(std::function<void(Player*)> const& worker) const;
@@ -108,6 +113,7 @@ class TC_GAME_API Scenario : public CriteriaHandler
         ObjectGuid const _guid;
         ScenarioStepEntry const* _currentstep;
         std::map<ScenarioStepEntry const*, ScenarioStepState> _stepStates;
+        std::unordered_set<uint32> _completedTrees;
 };
 
 #endif // Scenario_h__

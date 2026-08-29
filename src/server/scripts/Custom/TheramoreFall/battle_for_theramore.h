@@ -1,50 +1,101 @@
+/*
+ * Battle for Theramore - Scenario header
+ *
+ * Definitions partagees par le scenario "La Chute de Theramore" :
+ *   - Constantes (tailles de tableaux, IDs creatures / spells / gameobjects,
+ *     events, criteres, vignettes)
+ *   - Positions, waypoints et tables de (re)localisation des acteurs
+ *   - Phases du scenario (BFTPhases) et helper de registration d'AI
+ *
+ * Flow general (voir BFTPhases pour le detail) :
+ *   Acte 1 : FindJaina -> TheCouncil -> Waiting -> UnknownTauren
+ *            Les joueurs rejoignent Jaina dans la tour, le conseil se tient,
+ *            puis Perith Stormhoove arrive annoncer l'attaque de la Horde.
+ *   Acte 2 : Evacuation -> ALittleHelp -> Preparation
+ *            Evacuation des civils, reparation des tanks, extinction des feux,
+ *            arrivee des archimages de Dalaran par le portail.
+ *   Acte 3 : TheBattle -> TheBattle_Survive
+ *            Vagues de la Horde (voir HORDE_WAVES_COUNT) sous la protection
+ *            du bouclier de Rhonin.
+ *   Acte 4 : HelpTheWounded -> WaitForAmara -> RetrieveRhonin
+ *            Soins aux blesses, extinction des incendies, retour d'Amara,
+ *            puis montee a la tour et scene de l'explosion de la bombe.
+ *
+ * NOTE encodage : tous les commentaires sont en francais SANS accents
+ * (l'encodage TrinityCore casse sur les caracteres non-ASCII).
+ */
+
 #ifndef BATTLE_FOR_THERAMORE_H_
 #define BATTLE_FOR_THERAMORE_H_
 
 #include "CreatureAIImpl.h"
 #include "Position.h"
 
-//#define CUSTOM_DEBUG
+// Decommenter pour raccourcir les cinematiques et sauter directement aux
+// phases de combat pendant les tests (voir les #ifdef CUSTOM_DEBUG du .cpp).
+#define CUSTOM_DEBUG
 
 constexpr char const* BFTScriptName             = "scenario_battle_for_theramore";
 constexpr char const* DataHeader                = "BFT";
 
-static constexpr uint8 PERITH_LOCATION          = 3;
-static constexpr uint8 ARCHMAGES_LOCATION       = 6;
-static constexpr uint8 ARCHMAGES_RELOCATION     = 6;
-static constexpr uint8 ACTORS_RELOCATION        = 10;
-static constexpr uint8 BARRIERS_LOCATION        = 2;
-static constexpr uint8 FIRE_LOCATION            = 32;
-static constexpr uint8 TOWER_BARRIERS_LOCATION  = 8;
-static constexpr uint8 HORDE_WAVES_COUNT        = 10;
-static constexpr uint8 NUMBER_OF_WOUNDED        = 6;
-static constexpr uint8 NUMBER_OF_CITIZENS       = 8;
-static constexpr uint8 NUMBER_OF_TROOPS         = 5;
-static constexpr uint8 NUMBER_OF_FIRES          = 8;
+// Marque posee par HordeMembersInvoker sur les combattants d'une vague. Seuls
+// ces PNJ creditent le criteria de la barre de progression : les figurants
+// cosmetiques et le reste de la Horde presente sur la carte sont exclus.
+constexpr char const* WaveMemberStringId        = "WaveMembers";
 
+// =========================================================================
+// Tailles des tableaux de donnees declares plus bas
+// =========================================================================
+// Chaque constante dimensionne un tableau ET sert de borne aux boucles qui
+// le parcourent : modifier une valeur impose de mettre le tableau a jour
+// (les static_assert en fin de fichier verrouillent la correspondance).
+
+static constexpr uint8 PERITH_LOCATION          = 3;    // Acteurs qui accompagnent Perith Stormhoove
+static constexpr uint8 ARCHMAGES_LOCATION       = 6;    // Archimages de Dalaran sortant du portail
+static constexpr uint8 ARCHMAGES_RELOCATION     = 6;    // Positions des archimages apres la bataille
+static constexpr uint8 ACTORS_RELOCATION        = 10;   // Acteurs teleportes en debut de phase Evacuation
+static constexpr uint8 BARRIERS_LOCATION        = 2;    // Barrieres mystiques (DATA_MYSTIC_BARRIER_01/02) - non utilisee actuellement
+static constexpr uint8 FIRE_LOCATION            = 32;   // Foyers d'incendie repartis dans la ville
+static constexpr uint8 TOWER_BARRIERS_LOCATION  = 8;    // Barrieres d'energie autour de la tour
+static constexpr uint8 HORDE_WAVES_COUNT        = 10;   // Nombre de vagues de la Horde (tableau Waves)
+static constexpr uint8 HORDE_WAVE_SIZE          = 10;   // Membres par vague (creature_summon_groups, groupes 100 a 103)
+static constexpr uint8 NUMBER_OF_WOUNDED        = 6;    // Blesses a soigner pendant HelpTheWounded
+static constexpr uint8 NUMBER_OF_CITIZENS       = 8;    // Civils a evacuer pendant Evacuation
+static constexpr uint8 NUMBER_OF_TROOPS         = 5;    // Troupes alliees a motiver pendant Preparation
+static constexpr uint8 NUMBER_OF_FIRES          = 8;    // Feux a eteindre pendant HelpTheWounded_Extinguish
+
+// =========================================================================
+// Phases logiques du scenario
+// =========================================================================
+// La phase courante est stockee dans l'InstanceScript et lue par les AIs via
+// instance->GetData(DATA_SCENARIO_PHASE). Les suffixes _Xxx sont des
+// sous-etapes internes a une meme etape de scenario.
 enum class BFTPhases
 {
 	None,
-	FindJaina,
-	TheCouncil,
-	Waiting,
-	UnknownTauren,
-	Evacuation,
-	ALittleHelp,
-	Preparation,
-	Preparation_Rhonin,
-	TheBattle,
-	TheBattle_RetrieveJaina,
-	TheBattle_Survive,
-	HelpTheWounded,
-	HelpTheWounded_Extinguish,
-	WaitForAmara,
-	WaitForAmara_JoinJaina,
-	WaitForAmara_WaitAmara,
-	RetrieveRhonin,
-	RetrieveRhonin_JoinRhonin,
+	FindJaina,                     // Les joueurs cherchent Jaina dans la tour
+	TheCouncil,                    // Conseil de guerre : dialogues Jaina / Tervosh / Kinndy / Kalecgos
+	Waiting,                       // Temps mort avant l'arrivee de Perith
+	UnknownTauren,                 // Perith Stormhoove annonce l'attaque de la Horde
+	Evacuation,                    // Les joueurs escortent les civils hors de la ville
+	ALittleHelp,                   // Reparation des tanks + premiers incendies
+	Preparation,                   // Arrivee des archimages, discours aux troupes
+	Preparation_Rhonin,            // Rhonin a distribue son bouclier runique aux joueurs
+	TheBattle,                     // Debut de la bataille
+	TheBattle_RetrieveJaina,       // Les joueurs rejoignent Jaina sur la ligne de front
+	TheBattle_Survive,             // Vagues de la Horde sous la protection de Rhonin
+	HelpTheWounded,                // Apres la bataille : soigner / teleporter les blesses
+	HelpTheWounded_Extinguish,     // Eteindre les incendies au seau d'eau
+	WaitForAmara,                  // Attente du retour d'Amara Leeson
+	WaitForAmara_JoinJaina,        // Regroupement autour de Jaina
+	WaitForAmara_WaitAmara,        // Amara revient par le portail
+	RetrieveRhonin,                // Jaina ouvre le portail vers le sommet de la tour
+	RetrieveRhonin_JoinRhonin,     // Rejoindre Rhonin -> scene de l'explosion
 };
 
+// =========================================================================
+// Data IDs (InstanceScript::Get/SetData, GetCreature, GetGameObject)
+// =========================================================================
 enum BFTData
 {
 	// NPCs
@@ -67,14 +118,13 @@ enum BFTData
 	DATA_CAPTAIN_DROK,
 	DATA_WAVE_CALLER_GRUHTA,
 
-	DATA_SCENARIO_PHASE,
-	DATA_WOUNDED_TROOPS,
-	DATA_WAVE_GROUP_ID,
+	DATA_SCENARIO_PHASE,                // Phase courante (BFTPhases)
+	DATA_WOUNDED_TROOPS,                // Compteur de blesses soignes
+	DATA_WAVE_GROUP_ID,                 // Point de spawn de la vague en cours (DATA_WAVE_*)
 
-	// Kalecgos Events
-	DATA_KALECGOS_CIRCLE_EVENT,
-	DATA_KALECGOS_COMBAT_EVENT,
-	DATA_KALECGOS_CANCEL_EVENT,
+	// Kalecgos Events - pilotage de npc_kalecgos_dragon (survol de la ville)
+	DATA_KALECGOS_CIRCLE_EVENT,         // Demarre le vol en cercle au-dessus de Theramore
+	DATA_KALECGOS_CANCEL_EVENT,         // Stoppe tout et desactive la creature
 
 	// GameObjects
 	DATA_PORTAL_TO_STORMWIND,
@@ -85,20 +135,26 @@ enum BFTData
 	DATA_ENERGY_BARRIER,
 	DATA_POWDER_BARREL,
 
-	// Invokers
-	DATA_WAVE_DOORS                     = 100,
-	DATA_WAVE_CITADEL,
-	DATA_WAVE_DOCKS,
-	DATA_WAVE_WEST,
-	DATA_WAVE_BOAT,
-	DATA_DECORATION_ENTRANCE,
-	DATA_DECORATION_WEST,
+	// Invokers - identifiants des groupes de spawn (voir HordeMembersInvoker).
+	// Numerotes a partir de 100 pour ne jamais entrer en collision avec les
+	// data IDs d'objets ci-dessus.
+	DATA_WAVE_DOORS                     = 100,  // Vague arrivant par les portes principales
+	DATA_WAVE_CITADEL,                          // Vague arrivant par la citadelle
+	DATA_WAVE_DOCKS,                            // Vague arrivant par les docks
+	DATA_WAVE_WEST,                             // Vague arrivant par l'ouest
+	DATA_WAVE_BOAT,                             // Vague debarquant du bateau
+	DATA_DECORATION_ENTRANCE,                   // Figurants cosmetiques a l'entree
+	DATA_DECORATION_WEST,                       // Figurants cosmetiques a l'ouest
 };
 
+// =========================================================================
+// Creatures (entry IDs)
+// =========================================================================
 enum BFTCreatures
 {
     NPC_TRAINING_DUMMY                  = 500032,
 
+	// --- Alliance / Theramore ---
 	NPC_JAINA_PROUDMOORE                = 64560,
 	NPC_RHONIN                          = 64564,
 	NPC_KALECGOS                        = 64565,
@@ -116,15 +172,21 @@ enum BFTCreatures
 	NPC_THERAMORE_CITIZEN_MALE          = 143773,
 	NPC_THERAMORE_CITIZEN_FEMALE        = 143776,
 
+	// --- Horde (assaillants) ---
 	NPC_ROKNAH_GRUNT                    = 64732,
 	NPC_ROKNAH_LOA_SINGER               = 64733,
 	NPC_ROKNAH_HAG                      = 64734,
 	NPC_ROKNAH_FELCASTER                = 65507,
 	NPC_WAVE_CALLER_GRUHTA              = 65510,
+	// Entry "credit" du criteria de la barre de progression : aucune
+	// creature ne la porte, les quatre entries de vague la creditent a la
+	// main depuis OnUnitDeath (voir CRITERIA_SURVIVE_WAVES).
+	NPC_WAVE_MEMBER_CREDIT              = 64736,
     NPC_PORTAL_TO_ORGRIMMAR             = 216644,
 	NPC_HORDE_BOMBARDIER                = 149639,
 	NPC_HORDE_DEMOLISHER                = 144289,
 
+	// --- Creatures custom du serveur (plage 500000+) ---
 	NPC_ARCHMAGE_TERVOSH 	            = 500000,
 	NPC_KINNDY_SPARKSHINE 	            = 500001,
 	NPC_PAINED 	                        = 500002,
@@ -139,12 +201,12 @@ enum BFTCreatures
 	NPC_THERAMORE_FIRE_CREDIT           = 500013
 };
 
+// =========================================================================
+// Constantes diverses : events internes, sorts, GO, criteres, vignettes...
+// =========================================================================
 enum BFTMisc
 {
-    // Waves
-    EVENT_WAVES_CHECKER                 = 1000,
-
-	// Spells
+	// Spells (cosmetiques et utilitaires du scenario)
 	SPELL_TELEPORT_DUMMY                = 51347,
 	SPELL_THERAMORE_EXPLOSION_SCENE     = 128446,
 	SPELL_CHAT_BUBBLE                   = 140812,
@@ -182,7 +244,8 @@ enum BFTMisc
 	GOB_ENERGY_BARRIER_TOWER            = 396264,
 	GOB_LAVISH_REFRESHMENT_TABLE        = 1550006,
 
-	// Criteria Trees
+	// Criteria Trees - chaque criteria tree valide une etape du scenario et
+	// declenche la transition correspondante dans OnCompletedCriteriaTree.
 	CRITERIA_TREE_FIND_JAINA            = 1000000,
 	CRITERIA_TREE_LOCALIZE_JAINA        = 1000001,
 	CRITERIA_TREE_THE_COUNCIL           = 1000002,
@@ -200,6 +263,9 @@ enum BFTMisc
 	CRITERIA_TREE_RETRIEVE_JAINA        = 1000018,
 	CRITERIA_TREE_SURVIVE_THE_BATTLE    = 1000019,
 	CRITERIA_TREE_MAINTAIN_PROTECTION   = 1000088,
+	// Noeud ProgressBar : il n'est jamais atteint par UpdateCriteria, mais
+	// par la remontee de parents de Scenario::CompletedCriteriaTree. Son
+	// compteur est celui de CRITERIA_SURVIVE_WAVES.
 	CRITERIA_TREE_SURVIVE_WAVES         = 1000020,
 	CRITERIA_TREE_HELP_THE_WOUNDED      = 1000021,
 	CRITERIA_TREE_FOLLOW_JAINA          = 1000022,
@@ -214,7 +280,12 @@ enum BFTMisc
 	CRITERIA_TREE_DESTROY_SEA_WOLF      = 1000074,
 	CRITERIA_TREE_KILL_CAPTAIN_DROK     = 1000075,
 
-    // VisualKit
+	// Criteria (et non criteria tree) : compteur de membres de vague tues,
+	// lu directement par le script pour enchainer les vagues.
+	CRITERIA_SURVIVE_WAVES              = 100011,
+
+    // Vignettes - marqueurs affiches sur la minimap / au-dessus des PNJ.
+    // VIGNETTE_NONE sert a effacer la vignette d'une creature.
     VIGNETTE_NONE                       = 0,
     VIGNETTE_ALLIANCE_TROOPS            = 50000,
     VIGNETTE_INTERACTION                = 50001,
@@ -229,14 +300,14 @@ enum BFTMisc
 	SOUND_FEARFUL_CROWD                 = 15003,
 	SOUND_COUNTERSPELL                  = 3227,
 
-	// Point Id
+	// Point IDs passes a MovePoint -> recus par MovementInform
 	MOVEMENT_INFO_POINT_NONE            = 0,
 	MOVEMENT_INFO_POINT_01              = 89644940,
 	MOVEMENT_INFO_POINT_02              = 89644941,
 	MOVEMENT_INFO_POINT_03              = 89644942,
 	MOVEMENT_INFO_POINT_04              = 89644943,
 
-	// Events
+	// Events de scenario (TriggerGameEvent / SetData) declenches par les AIs
 	EVENT_FIND_JAINA_01                 = 65800,    // Find Jaina - Tower
 	EVENT_THE_COUNCIL                   = 65801,
 	EVENT_WAITING                       = 65802,
@@ -252,8 +323,17 @@ enum BFTMisc
     EVENT_MAINTAIN_THE_PROTECTION       = 65824,
 };
 
+// =========================================================================
+// Talks (groupId / textId des dialogues scriptes)
+// =========================================================================
+// Les valeurs (right side) sont les groupId des entrees creature_text en BDD.
+// Elles se repetent d'un PNJ a l'autre : c'est normal, chaque PNJ possede sa
+// propre table, donc SAY_REUNION_1 (Jaina, 0) et SAY_REUNION_2 (Kinndy, 0)
+// ne pointent pas sur le meme texte. Les noms (left side) suivent l'ordre
+// chronologique du scenario, pas l'ordre des groupId.
 enum BFTTalks
 {
+	// --- Retrouvailles dans la tour (phase TheCouncil) ---
 	SAY_REUNION_1         = 0,
 	SAY_REUNION_2         = 0,
 	SAY_REUNION_3         = 1,
@@ -273,6 +353,7 @@ enum BFTTalks
 	SAY_REUNION_16        = 4,
 	SAY_REUNION_17        = 5,
 
+	// --- Avertissement de Perith + evacuation (UnknownTauren / Evacuation) ---
 	SAY_WARN_1            = 0,
 	SAY_WARN_2            = 6,
 	SAY_WARN_3            = 1,
@@ -311,6 +392,7 @@ enum BFTTalks
 	SAY_WARN_36           = 6,
 	SAY_WARN_37           = 22,
 
+	// --- Preparatifs avant l assaut (phases Preparation) ---
 	SAY_PRE_BATTLE_1      = 0,
 	SAY_PRE_BATTLE_2      = 23,
 	SAY_PRE_BATTLE_3      = 1,
@@ -327,6 +409,7 @@ enum BFTTalks
 	SAY_PRE_BATTLE_14     = 30,
 	SAY_PRE_BATTLE_15     = 31,
 
+	// --- Bataille (TheBattle / TheBattle_Survive) ---
 	SAY_BATTLE_01         = 32,
 	SAY_BATTLE_02         = 33,
 	SAY_BATTLE_03         = 34,
@@ -334,12 +417,14 @@ enum BFTTalks
 	SAY_BATTLE_05         = 0,
 	SAY_BATTLE_06         = 0,
 	
+	// --- Annonces de vagues : une replique par point d arrivee ---
 	SAY_BATTLE_ALERT      = 36,
 	SAY_BATTLE_CITADEL    = 37,
 	SAY_BATTLE_GATE       = 38,
 	SAY_BATTLE_DOCKS      = 39,
 	SAY_BATTLE_WEST       = 62,
 
+	// --- Apres la bataille (HelpTheWounded / WaitForAmara) ---
 	SAY_POST_BATTLE_01    = 43,
 	SAY_POST_BATTLE_02    = 2,
 	SAY_POST_BATTLE_03    = 44,
@@ -356,6 +441,7 @@ enum BFTTalks
 	SAY_POST_BATTLE_14    = 8,
 	SAY_POST_BATTLE_15    = 51,
 
+	// --- Avertissement sur l iris / la bombe (RetrieveRhonin) ---
 	SAY_IRIS_WARN_01      = 6,
 	SAY_IRIS_WARN_02      = 52,
 	SAY_IRIS_WARN_03      = 7,
@@ -368,6 +454,7 @@ enum BFTTalks
 	SAY_IRIS_WARN_10      = 0,
 	SAY_IRIS_WARN_11      = 56,
 
+	// --- Explosion de la bombe (scene finale) ---
 	SAY_IRIS_XPLOSION_01  = 57,
 	SAY_IRIS_XPLOSION_02  = 3,
 	SAY_IRIS_XPLOSION_03  = 58,
@@ -379,6 +466,7 @@ enum BFTTalks
 	SAY_IRIS_XPLOSION_09  = 60,
 	SAY_IRIS_XPLOSION_10  = 8,
 
+	// --- Repliques ponctuelles ---
 	SAY_WOUNDED_TROOP     = 61,
 
 	SAY_JAINA_SPELL_01    = 40,
@@ -388,6 +476,14 @@ enum BFTTalks
 	SAY_KALECGOS_SPELL_01 = 0,
 };
 
+// =========================================================================
+// Helpers de spawn / relocalisation
+// =========================================================================
+
+// Associe un acteur (entry de creature OU data ID selon la table) a un point
+// de spawn et a une destination vers laquelle il se dirige ensuite.
+// Les tables de pure relocalisation laissent "position" a zero : seul
+// "destination" est utilise (NearTeleportTo / SetHomePosition).
 struct Location
 {
 	uint32 dataId;
@@ -395,12 +491,15 @@ struct Location
 	Position const destination;
 };
 
+// Un GameObject a besoin de son quaternion d'orientation en plus de sa position.
 struct GameObjectLocation
 {
 	Position const position;
 	QuaternionData const quaternion;
 };
 
+// Barrieres d'energie invoquees par Rhonin autour de la tour (phase
+// WaitForAmara_JoinJaina) : 4 en haut, 4 a mi-hauteur.
 GameObjectLocation const TowerBarriers[TOWER_BARRIERS_LOCATION] =
 {
 	{ { -3775.72f, -4424.06f, 73.0f, 2.25690f }, {-0.0f, -0.0f, -0.9127f, -0.4084f}},
@@ -413,6 +512,9 @@ GameObjectLocation const TowerBarriers[TOWER_BARRIERS_LOCATION] =
 	{ { -3728.52f, -4444.50f, 50.0f, 6.28106f }, { -0.0f, -0.0f,  0.0000f,  0.7071f } },
 };
 
+// Escorte de Perith Stormhoove : spawnee derriere la porte de la tour, puis
+// elle avance jusqu'a sa destination pour la scene UnknownTauren.
+// Ici "dataId" contient une entry de creature (SummonCreature).
 Location const perithLocation[PERITH_LOCATION] =
 {
 	{ NPC_KNIGHT_OF_THERAMORE,  { -3733.33f, -4422.51f, 30.51f, 3.92f }, { -3746.61f, -4435.87f, 30.55f, 3.17f } },
@@ -420,6 +522,9 @@ Location const perithLocation[PERITH_LOCATION] =
 	{ NPC_PERITH_STORMHOOVE,    { -3731.74f, -4422.76f, 30.49f, 3.92f }, { -3744.75f, -4435.91f, 30.55f, 3.49f } }
 };
 
+// Archimages de Dalaran : tous spawnes sur PortalPoint01 (d'ou "position" a
+// zero, elle n'est jamais lue) puis envoyes a leur place devant le portail.
+// L'ordre du tableau est l'ordre de sortie du portail (voir archmagesIndex).
 Location const archmagesLocation[ARCHMAGES_LOCATION] =
 {
 	{ NPC_RHONIN,		        { 0.f, 0.f, 0.f, 0.f }, { -3718.51f, -4542.53f, 25.82f, 3.59f } },
@@ -430,6 +535,9 @@ Location const archmagesLocation[ARCHMAGES_LOCATION] =
 	{ NPC_THADER_WINDERMERE,	{ 0.f, 0.f, 0.f, 0.f }, { -3717.01f, -4538.31f, 25.82f, 3.59f } }
 };
 
+// Relocalisation des acteurs principaux au demarrage de la bataille : ils
+// sont teleportes en place le long de la ligne de front.
+// Ici "dataId" contient un DATA_* (GetCreature), pas une entry.
 Location const actorsRelocation[ACTORS_RELOCATION] =
 {
 	{ DATA_JAINA_PROUDMOORE,     { 0.f, 0.f, 0.f, 0.f }, { -3658.39f, -4372.87f,  9.35f, 0.69f } },
@@ -444,6 +552,8 @@ Location const actorsRelocation[ACTORS_RELOCATION] =
 	{ DATA_KALECGOS,             { 0.f, 0.f, 0.f, 0.f }, { -3730.39f, -4550.39f, 27.11f, 0.54f } }
 };
 
+// Regroupement des archimages autour de Jaina apres la bataille
+// (phase WaitForAmara). "dataId" contient un DATA_*.
 Location const archmagesRelocation[ARCHMAGES_RELOCATION] =
 {
 	{ DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3629.75f, -4462.69f, 13.62f, 0.58f } },
@@ -454,6 +564,13 @@ Location const archmagesRelocation[ARCHMAGES_RELOCATION] =
 	{ DATA_ARCHMAGE_TERVOSH,     { 0.f, 0.f, 0.f, 0.f }, { -3626.40f, -4453.89f, 14.24f, 0.44f } }
 };
 
+// =========================================================================
+// Chemins scriptes (WaypointPath)
+// =========================================================================
+// Le premier champ de chaque path est son identifiant : c'est la valeur
+// recue dans WaypointPathEnded(pointId, pathId) cote AI, d'ou la
+// numerotation qui repart de 1 pour chaque PNJ.
+// Tervosh s'approche de la table du conseil (debut de TheCouncil).
 WaypointPath const TervoshPath01 =
 {
 	1,
@@ -469,6 +586,7 @@ WaypointPath const TervoshPath01 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Tervosh monte a l'etage de la tour (fin du conseil).
 WaypointPath const TervoshPath02 =
 {
 	2,
@@ -488,6 +606,7 @@ WaypointPath const TervoshPath02 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Retour de Tervosh dans la salle du conseil (phase UnknownTauren).
 WaypointPath const TervoshPath03 =
 {
 	3,
@@ -513,6 +632,7 @@ WaypointPath const TervoshPath03 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Sortie de Kinndy de la salle du conseil ; reutilise ensuite par Pained.
 WaypointPath const KinndyPath01 =
 {
 	1,
@@ -538,6 +658,7 @@ WaypointPath const KinndyPath01 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Retour de Kinndy dans la salle du conseil (phase UnknownTauren).
 WaypointPath const KinndyPath02 =
 {
 	2,
@@ -557,6 +678,7 @@ WaypointPath const KinndyPath02 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Descente de Kalecgos depuis la tour jusqu'a la porte est (bataille).
 WaypointPath const KalecPath01 =
 {
 	1,
@@ -583,6 +705,8 @@ WaypointPath const KalecPath01 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Aller de la place vers la table de banquet (Kalecgos, puis Amara).
+// Son premier noeud sert aussi de point de teleport pour Kalecgos.
 WaypointPath const KalecPath02 =
 {
 	2,
@@ -597,6 +721,7 @@ WaypointPath const KalecPath02 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Retour de la place vers la table de banquet (Kalecgos, puis Amara).
 WaypointPath const KalecPath03 =
 {
 	3,
@@ -611,6 +736,7 @@ WaypointPath const KalecPath03 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Rhonin quitte la table de banquet pour rejoindre le groupe.
 WaypointPath const RhoninPath01 =
 {
 	1,
@@ -626,6 +752,7 @@ WaypointPath const RhoninPath01 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Amara Leeson quitte la table de banquet pour rejoindre le groupe.
 WaypointPath const AmaraPath01 =
 {
 	1,
@@ -642,6 +769,8 @@ WaypointPath const AmaraPath01 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Trajet de sortie de la tour, partage par l'officier de Theramore puis
+// par Perith Stormhoove.
 WaypointPath const OfficerPath01 =
 {
 	1,
@@ -661,6 +790,7 @@ WaypointPath const OfficerPath01 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Hedric rejoint le portail de Dalaran a l'arrivee des archimages.
 WaypointPath const HedricPath01
 {
 	1,
@@ -676,6 +806,7 @@ WaypointPath const HedricPath01
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Hedric suit Jaina sur le meme trajet jusqu'a la place.
 WaypointPath const HedricPath02
 {
 	2,
@@ -701,6 +832,8 @@ WaypointPath const HedricPath02
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Longue marche de Jaina depuis la porte est jusqu'a la place de la
+// citadelle, apres la bataille (phase HelpTheWounded).
 WaypointPath const JainaPath01 =
 {
 	1,
@@ -734,6 +867,7 @@ WaypointPath const JainaPath01 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Jaina remonte de la table de banquet vers la place (fin de WaitForAmara).
 WaypointPath const JainaPath02 =
 {
 	2,
@@ -749,6 +883,9 @@ WaypointPath const JainaPath02 =
 	WaypointPathFlags::ExactSplinePath
 };
 
+// Survol de Theramore par Kalecgos sous forme de dragon.
+// NOTE : actuellement inutilise, npc_kalecgos_dragon pilote son vol via
+// MoveCirclePath autour de TheramorePoint01.
 WaypointPath const KalecgosPath01 =
 {
 	1,
@@ -764,6 +901,12 @@ WaypointPath const KalecgosPath01 =
 	WaypointPathFlags::FlyingPath
 };
 
+// =========================================================================
+// Positions cosmetiques
+// =========================================================================
+// Foyers d'incendie allumes dans toute la ville a partir de la phase
+// ALittleHelp : chaque position recoit un NPC_THERAMORE_FIRE_CREDIT
+// portant l'aura de feu, que les joueurs eteignent au seau d'eau.
 Position const FireLocation[FIRE_LOCATION]
 {
 	{ -3678.40f, -4371.85f, 11.68f, 2.03f },
@@ -800,6 +943,8 @@ Position const FireLocation[FIRE_LOCATION]
 	{ -3793.71f, -4471.57f, 14.37f, 0.00f }
 };
 
+// Positions de repli des archimages autour de la table de banquet
+// (utilisees par la boucle de relocalisation de fin de scenario).
 Position const UnitLocation[ARCHMAGES_RELOCATION] =
 {
 	{ -3615.08f, -4470.40f, 14.24f, 2.61f },
@@ -810,35 +955,44 @@ Position const UnitLocation[ARCHMAGES_RELOCATION] =
 	{ -3613.38f, -4458.41f, 13.62f, 5.84f }
 };
 
-Position const KinndyPoint01    = { -3748.06f, -4442.12f, 30.55f, 1.24f };
-Position const KinndyPoint02    = { -3725.93f, -4543.47f, 25.82f, 0.11f };
-Position const JainaPoint01     = { -3751.32f, -4438.13f, 30.55f, 0.40f };
-Position const JainaPoint02     = { -3731.47f, -4547.05f, 27.11f, 0.25f };
-Position const JainaPoint03     = { -3658.39f, -4372.87f,  9.35f, 0.69f };
-Position const JainaPoint04     = { -3636.94f, -4355.86f,  7.44f, 0.69f };
-Position const JainaPoint05     = { -3747.73f, -4447.16f, 64.91f, 3.83f };
-Position const JainaPoint06     = { -3619.56f, -4461.36f, 13.62f, 2.96f };
-Position const RhoninPoint01    = { -3622.97f, -4461.50f, 13.62f, 0.44f };
-Position const RhoninPoint02    = { -3744.36f, -4453.88f, 64.98f, 5.41f };
-Position const PainedPoint01    = { -3747.93f, -4442.05f, 30.54f, 1.54f };
-Position const OfficerPoint01   = { -3748.43f, -4432.99f, 30.54f, 4.66f };
-Position const QuillPoint01     = { -3751.32f, -4438.13f, 31.26f, 3.33f };
-Position const TervoshPoint01   = { -3720.83f, -4551.10f, 25.82f, 1.35f };
-Position const KalecgosPoint01  = { -3730.39f, -4550.39f, 27.11f, 0.54f };
-Position const PortalPoint01    = { -3712.42f, -4539.62f, 25.82f, 3.59f };
-Position const PortalPoint02    = { -3783.51f, -4171.07f,  7.77f, 4.73f };
-Position const PortalPoint03    = { -3750.82f, -4449.65f, 64.90f, 0.63f };
-Position const HedricPoint01    = { -3717.79f, -4522.24f, 25.82f, 5.16f };
-Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f };
-Position const HedricPoint03    = { -3625.58f, -4447.94f, 14.24f, 4.99f };
-Position const ExplodingPoint01 = { -3648.24f, -4364.96f,  9.68f, 3.78f };
-Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f };
-Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f };
-Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f };
-Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f };
-Position const VereesaPoint01   = { -3703.94f, -4555.59f, 25.82f, 3.61f };
+// =========================================================================
+// Positions clefs du scenario
+// =========================================================================
+Position const KinndyPoint01    = { -3748.06f, -4442.12f, 30.55f, 1.24f }; // Kinndy rejoint la table du conseil
+Position const KinndyPoint02    = { -3725.93f, -4543.47f, 25.82f, 0.11f }; // Kinndy sur la place, phase Evacuation
+Position const JainaPoint01     = { -3751.32f, -4438.13f, 30.55f, 0.40f }; // Jaina a la table du conseil (declenche EVENT_THE_COUNCIL)
+Position const JainaPoint02     = { -3731.47f, -4547.05f, 27.11f, 0.25f }; // Jaina sur la place, phase ALittleHelp
+Position const JainaPoint03     = { -3658.39f, -4372.87f,  9.35f, 0.69f }; // Jaina sur la ligne de front (porte est)
+Position const JainaPoint04     = { -3636.94f, -4355.86f,  7.44f, 0.69f }; // Cible du teleport de Jaina pendant la bataille
+Position const JainaPoint05     = { -3747.73f, -4447.16f, 64.91f, 3.83f }; // Jaina au sommet de la tour (RetrieveRhonin)
+Position const JainaPoint06     = { -3619.56f, -4461.36f, 13.62f, 2.96f }; // Jaina a la table de banquet (WaitForAmara)
+Position const RhoninPoint01    = { -3622.97f, -4461.50f, 13.62f, 0.44f }; // Rhonin a la table de banquet
+Position const RhoninPoint02    = { -3744.36f, -4453.88f, 64.98f, 5.41f }; // Rhonin au sommet de la tour, en train de canaliser
+Position const PainedPoint01    = { -3747.93f, -4442.05f, 30.54f, 1.54f }; // Pained a la table du conseil
+Position const OfficerPoint01   = { -3748.43f, -4432.99f, 30.54f, 4.66f }; // Officier de Theramore dans la tour (inutilise)
+Position const QuillPoint01     = { -3751.32f, -4438.13f, 31.26f, 3.33f }; // Plume magique au-dessus de la table (inutilise)
+Position const TervoshPoint01   = { -3720.83f, -4551.10f, 25.82f, 1.35f }; // Tervosh sur la place, phase Evacuation
+Position const KalecgosPoint01  = { -3730.39f, -4550.39f, 27.11f, 0.54f }; // Kalecgos sur la place, phase Evacuation
+Position const PortalPoint01    = { -3712.42f, -4539.62f, 25.82f, 3.59f }; // Portail de Dalaran (arrivee des archimages)
+Position const PortalPoint02    = { -3783.51f, -4171.07f,  7.77f, 4.73f }; // Portail d'Orgrimmar (arrivee de la Horde)
+Position const PortalPoint03    = { -3750.82f, -4449.65f, 64.90f, 0.63f }; // Portail de Stormwind au sommet de la tour
+Position const HedricPoint01    = { -3717.79f, -4522.24f, 25.82f, 5.16f }; // Hedric sur la place, phase Evacuation
+Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f }; // Hedric recule devant le portail de Dalaran
+Position const HedricPoint03    = { -3625.58f, -4447.94f, 14.24f, 4.99f }; // Hedric a la table de banquet
+Position const ExplodingPoint01 = { -3648.24f, -4364.96f,  9.68f, 3.78f }; // Point d'impact des explosions cosmetiques
+Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f }; // Thalen Songweaver pendant la bataille
+Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f }; // Thalen Songweaver apres la bataille
+Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f }; // Table de banquet invoquee pour le repas
+Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f }; // Centre du cercle de vol de Kalecgos dragon
+Position const VereesaPoint01   = { -3703.94f, -4555.59f, 25.82f, 3.61f }; // Vereesa Windrunner devant le portail
 
-/// Cherche l'ami avec le moins de PV dans la portée donnée
+// =========================================================================
+// Helpers
+// =========================================================================
+
+// Cherche l'allie avec le pourcentage de PV le plus bas dans la portee donnee.
+// Renvoie nullptr si aucun allie n'est trouve, ou si le seul candidat est le
+// lanceur lui-meme et que withSelf vaut false.
 inline Unit* FindLowestHealthFriend(Unit const* obj, float range, bool withSelf = false)
 {
 	Unit* lowest = nullptr;
@@ -851,7 +1005,7 @@ inline Unit* FindLowestHealthFriend(Unit const* obj, float range, bool withSelf 
 
 	for (Unit* u : friendList)
 	{
-		// Si la cible est le lanceur, on saute
+		// Si la cible est le lanceur lui-meme, on la saute
 		if (!withSelf && u->GetGUID() == obj->GetGUID())
 		{
 			continue;
@@ -868,6 +1022,30 @@ inline Unit* FindLowestHealthFriend(Unit const* obj, float range, bool withSelf 
 	return lowest;
 }
 
+// =========================================================================
+// Verrous de coherence tableaux / constantes
+// =========================================================================
+// Chaque tableau est parcouru avec la constante correspondante comme borne :
+// si les deux divergent, on lit hors des bornes. Ces assertions font echouer
+// la compilation plutot que de laisser passer le probleme.
+static_assert(sizeof(TowerBarriers) / sizeof(TowerBarriers[0]) == TOWER_BARRIERS_LOCATION,
+	"TowerBarriers count must match TOWER_BARRIERS_LOCATION");
+static_assert(sizeof(perithLocation) / sizeof(perithLocation[0]) == PERITH_LOCATION,
+	"perithLocation count must match PERITH_LOCATION");
+static_assert(sizeof(archmagesLocation) / sizeof(archmagesLocation[0]) == ARCHMAGES_LOCATION,
+	"archmagesLocation count must match ARCHMAGES_LOCATION");
+static_assert(sizeof(actorsRelocation) / sizeof(actorsRelocation[0]) == ACTORS_RELOCATION,
+	"actorsRelocation count must match ACTORS_RELOCATION");
+static_assert(sizeof(archmagesRelocation) / sizeof(archmagesRelocation[0]) == ARCHMAGES_RELOCATION,
+	"archmagesRelocation count must match ARCHMAGES_RELOCATION");
+static_assert(sizeof(FireLocation) / sizeof(FireLocation[0]) == FIRE_LOCATION,
+	"FireLocation count must match FIRE_LOCATION");
+static_assert(sizeof(UnitLocation) / sizeof(UnitLocation[0]) == ARCHMAGES_RELOCATION,
+	"UnitLocation count must match ARCHMAGES_RELOCATION");
+
+// =========================================================================
+// Helper de registration pour les AIs des creatures du scenario
+// =========================================================================
 template <class AI>
 class TheramoreCreatureScript : public CreatureScript
 {

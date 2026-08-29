@@ -1,3 +1,30 @@
+/*
+ * Battle for Theramore - AIs des personnages principaux
+ *
+ * Regroupe les acteurs nommes du scenario "La Chute de Theramore" :
+ *   - npc_jaina_theramore    : Jaina, pivot du scenario (declencheurs de
+ *                              proximite, rotation feu/givre, annonces de vagues)
+ *   - npc_archmage_tervosh   : mage de feu, barriere ardente + Conflagration
+ *   - npc_amara_leeson       : mage de feu, triple barriere a l'engagement
+ *   - npc_rhonin             : mage arcanique, gossip du bouclier runique
+ *   - npc_kinndy_sparkshine  : PNJ de dialogue, purement scripte
+ *   - npc_tari_cogg          : mage arcanique, Evocation defensive a 20% PV
+ *   - npc_pained             : garde du corps de Jaina, purement scripte
+ *   - npc_kalecgos_theramore : Kalecgos sous forme humanoide (mage de givre)
+ *   - npc_ziradormi_theramore: PNJ de teleport hors scenario
+ *   - npc_kalecgos_dragon    : Kalecgos dragon survolant la ville en combat
+ *
+ * Les AIs ne pilotent JAMAIS le scenario : elles remontent des evenements a
+ * l'InstanceScript (TriggerGameEvent / SetData) qui, lui, decide des
+ * transitions de phase. Elles lisent la phase courante via
+ * instance->GetData(DATA_SCENARIO_PHASE).
+ *
+ * Les chemins (WaypointPathEnded) et points (MovementInform) referencent les
+ * paths et MOVEMENT_INFO_POINT_* definis dans battle_for_theramore.h.
+ *
+ * Commentaires en francais sans accents (encodage TC).
+ */
+
 #include "GameObject.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
@@ -9,8 +36,26 @@
 #include "CustomAI.h"
 #include "battle_for_theramore.h"
 
+// =========================================================================
+// npc_jaina_theramore - Lady Jaina Proudmoore
+// =========================================================================
+// Trois roles distincts selon la phase :
+//   1. Declencheur de scenario : MoveInLineOfSight leve l'EVENT_FIND_JAINA_*
+//      correspondant a la phase courante quand un joueur l'approche.
+//   2. Combattante : rotation mage feu/givre pendant la bataille, avec
+//      annonces vocales des vagues via DoAction(DATA_WAVE_*).
+//   3. Pompier : pendant HelpTheWounded elle eteint automatiquement les
+//      foyers (NPC_THERAMORE_FIRE_CREDIT) qui passent a portee.
 struct npc_jaina_theramore : public CustomAI
 {
+	// Distance a laquelle Jaina reagit (joueurs comme foyers d'incendie).
+	static constexpr float TRIGGER_DISTANCE       = 4.0f;
+	// Orientation prise a l'arrivee sur la place, face aux joueurs.
+	static constexpr float JAINA_SQUARE_FACING    = 3.13f;
+	// Echelles cosmetiques du portail de Stormwind et de son trigger d'eclairs.
+	static constexpr float PORTAL_SCALE           = 0.8f;
+	static constexpr float LIGHTNING_TRIGGER_SCALE = 1.8f;
+
 	npc_jaina_theramore(Creature* creature) : CustomAI(creature, true, AI_Type::Melee),
 		instance(nullptr)
 	{
@@ -38,6 +83,8 @@ struct npc_jaina_theramore : public CustomAI
 		textOnCooldown = false;
 	}
 
+	// Annonce vocale de la vague qui arrive. Appele par l'InstanceScript au
+	// moment du spawn, avec l'identifiant du point d'arrivee de la vague.
 	void DoAction(int32 actionId) override
 	{
 		switch (actionId)
@@ -58,12 +105,14 @@ struct npc_jaina_theramore : public CustomAI
 			case DATA_WAVE_WEST:
 				me->AI()->Talk(SAY_BATTLE_WEST);
 				break;
-			// Ne rien faire par défaut
+			// Les autres groupes (decorations, bateau) n'ont pas de replique
 			default:
 				break;
 		}
 	}
 
+	// Le trait de givre cosmetique tue le credit d'incendie qu'il touche :
+	// c'est ce qui fait disparaitre le feu quand Jaina passe a cote.
 	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{
 		if (target->GetEntry() == NPC_THERAMORE_FIRE_CREDIT
@@ -81,9 +130,11 @@ struct npc_jaina_theramore : public CustomAI
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
+		// Jaina ouvre systematiquement avec ses elementaires d'eau.
 		DoCastSelf(SPELL_SUMMON_WATER_ELEMENTALS);
 
 		scheduler
+			// Filler : Fireball sur la victime, avec replique a cooldown.
 			.Schedule(1s, [this](TaskContext fireball)
 			{
 				TalkInCombat(SAY_JAINA_SPELL_01);
@@ -107,29 +158,37 @@ struct npc_jaina_theramore : public CustomAI
 			});
 	}
 
+	// Path 1 : marche d'apres-bataille jusqu'a la place (JainaPath01)
+	// Path 2 : depart vers le sommet de la tour (JainaPath02)
 	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
 	{
 		if (pathId == 1)
 		{
+			// Arrivee sur la place : on fige Jaina face aux joueurs et on
+			// declenche le dialogue d'apres-bataille.
 			me->StopMoving();
 			me->GetMotionMaster()->Clear();
 			me->GetMotionMaster()->MoveIdle();
-			me->SetFacingTo(3.13f);
+			me->SetFacingTo(JAINA_SQUARE_FACING);
 
 			instance->TriggerGameEvent(EVENT_FIND_JAINA_04);
 		}
 		else if (pathId == 2)
 		{
+			// Faux teleport : Jaina disparait 2 secondes puis reapparait au
+			// sommet de la tour ou elle ouvre le portail vers Stormwind.
 			me->SetVisible(false);
 			scheduler.Schedule(2s, [this](TaskContext /*context*/)
 			{
 				me->SetVisible(true);
 				me->NearTeleportTo(JainaPoint05);
 				if (GameObject* portal = me->SummonGameObject(GOB_PORTAL_TO_STORMWIND, PortalPoint03, QuaternionData::fromEulerAnglesZYX(PortalPoint03.GetOrientation(), 0.f, 0.f), 0s))
-					portal->SetObjectScale(0.8f);
+					portal->SetObjectScale(PORTAL_SCALE);
+				// Trigger invisible agrandi : il ne sert qu'a porter l'effet
+				// d'eclairs au-dessus du portail.
 				if (TempSummon* summon = me->SummonCreature(WORLD_TRIGGER, PortalPoint03, TEMPSUMMON_MANUAL_DESPAWN))
 				{
-					summon->SetObjectScale(1.8f);
+					summon->SetObjectScale(LIGHTNING_TRIGGER_SCALE);
 					summon->CastSpell(summon, SPELL_LIGHTNING_FX, true);
 				}
 				DoCastSelf(SPELL_PORTAL_CHANNELING_01);
@@ -139,6 +198,7 @@ struct npc_jaina_theramore : public CustomAI
 		}
 	}
 
+	// MOVEMENT_INFO_POINT_01 : Jaina est arrivee a la table du conseil.
 	void MovementInform(uint32 type, uint32 id) override
 	{
         CustomAI::MovementInform(type, id);
@@ -156,6 +216,10 @@ struct npc_jaina_theramore : public CustomAI
 		}
 	}
 
+	// Detection de proximite : deux usages en un seul hook.
+	//   - pendant HelpTheWounded, Jaina eteint les foyers qui passent a portee
+	//   - le reste du temps, l'approche d'un joueur declenche l'evenement de
+	//     scenario correspondant a la phase courante
 	void MoveInLineOfSight(Unit* who) override
 	{
 		ScriptedAI::MoveInLineOfSight(who);
@@ -163,8 +227,10 @@ struct npc_jaina_theramore : public CustomAI
 		BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
 		if (phase == BFTPhases::HelpTheWounded)
 		{
-			if (who->IsWithinDist(me, 4.f) && who->GetEntry() == NPC_THERAMORE_FIRE_CREDIT)
+			if (who->IsWithinDist(me, TRIGGER_DISTANCE) && who->GetEntry() == NPC_THERAMORE_FIRE_CREDIT)
 			{
+				// Cast direct et instantane : purement cosmetique, il sert
+				// juste a supprimer le credit d'incendie (voir SpellHitTarget).
 				CastSpellExtraArgs args(true);
 				args.SetTriggerFlags(TRIGGERED_CAST_DIRECTLY);
 
@@ -183,13 +249,16 @@ struct npc_jaina_theramore : public CustomAI
 			if (player->IsGameMaster())
 				return;
 
-			if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 4.f))
+			if (player->IsFriendlyTo(me) && player->IsWithinDist(me, TRIGGER_DISTANCE))
 			{
+				// La vignette a rempli son role (guider le joueur) : on l'efface.
                 me->SetVignette(VIGNETTE_NONE);
 
 				switch (phase)
 				{
 					case BFTPhases::FindJaina:
+						// Premiere rencontre : Jaina rengaine et se fige pour
+						// la cinematique du conseil.
                         me->SetSheath(SHEATH_STATE_UNARMED);
                         me->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 						instance->TriggerGameEvent(EVENT_FIND_JAINA_01);
@@ -214,8 +283,20 @@ struct npc_jaina_theramore : public CustomAI
 	}
 };
 
+// =========================================================================
+// npc_archmage_tervosh - Archimage Tervosh (mage de feu)
+// =========================================================================
+// Rotation feu classique : Fireball en filler, Scorch / Flamestrike sur
+// cibles secondaires, barriere ardente maintenue en permanence, et Tongues
+// of Flame uniquement quand assez d'ennemis sont au contact.
+// Ses trois paths correspondent aux allers-retours de la scene du conseil.
 struct npc_archmage_tervosh : public CustomAI
 {
+	// Nombre d'ennemis a portee sous lequel Tongues of Flame ne vaut pas le cast.
+	static constexpr float TONGUES_OF_FLAME_RANGE = 12.0f;
+	// Chance d'appliquer Conflagration sur une cible touchee par un sort de feu.
+	static constexpr uint32 CONFLAGRATION_CHANCE  = 40;
+
 	npc_archmage_tervosh(Creature* creature) : CustomAI(creature, true)
 	{
         SetCanRandomMovement(false);
@@ -231,6 +312,9 @@ struct npc_archmage_tervosh : public CustomAI
 		SPELL_TONGUES_OF_FLAME      = 412486
 	};
 
+	// Path 1 : approche de la table du conseil
+	// Path 2 : montee a l'etage (il disparait le temps de la scene suivante)
+	// Path 3 : retour dans la salle du conseil, il se remet a lire
 	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
 	{
 		switch (pathId)
@@ -249,6 +333,8 @@ struct npc_archmage_tervosh : public CustomAI
 		}
 	}
 
+	// Chaque sort de feu direct a une chance d'allumer un DoT Conflagration
+	// sur la cible, si elle ne l'a pas deja.
 	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
 	{
 		switch (spellInfo->Id)
@@ -258,7 +344,7 @@ struct npc_archmage_tervosh : public CustomAI
 			case SPELL_SCORCH:
 			{
 				Unit* victim = target->ToUnit();
-				if (victim && !victim->HasAura(SPELL_CONFLAGRATION) && roll_chance(40))
+				if (victim && !victim->HasAura(SPELL_CONFLAGRATION) && roll_chance(CONFLAGRATION_CHANCE))
 					DoCast(victim, SPELL_CONFLAGRATION, true);
 			}
 			break;
@@ -270,6 +356,8 @@ struct npc_archmage_tervosh : public CustomAI
 		DoCastSelf(SPELL_BLAZING_BARRIER);
 
 		scheduler
+			// Maintien de la barriere : tant qu'elle tient on repasse toutes
+			// les secondes, sinon on la relance et on repart sur son cooldown.
 			.Schedule(30s, [this](TaskContext blazing_barrier)
 			{
 				if (!me->HasAura(SPELL_BLAZING_BARRIER))
@@ -294,9 +382,11 @@ struct npc_archmage_tervosh : public CustomAI
 					DoCast(target, SPELL_FLAMESTRIKE);
 				pyroblast.Repeat(22s, 35s);
 			})
+			// AoE de melee : on attend d'avoir au moins un ennemi au contact,
+			// sinon on repasse plus tot sans consommer le cooldown complet.
 			.Schedule(12s, 18s, [this](TaskContext lava_spin)
 			{
-				if (EnemiesInRange(12.0f))
+				if (EnemiesInRange(TONGUES_OF_FLAME_RANGE))
 				{
 					CastStop(SPELL_TONGUES_OF_FLAME);
 					DoCast(SPELL_TONGUES_OF_FLAME);
@@ -305,6 +395,7 @@ struct npc_archmage_tervosh : public CustomAI
 				else
 					lava_spin.Repeat(10s);
 			})
+			// Filler
 			.Schedule(5ms, [this](TaskContext fireball)
 			{
 				DoCastVictim(SPELL_FIREBALL);
@@ -313,6 +404,13 @@ struct npc_archmage_tervosh : public CustomAI
 	}
 };
 
+// =========================================================================
+// npc_amara_leeson - Archimage Amara Leeson (mage de feu)
+// =========================================================================
+// Version plus offensive que Tervosh : elle empile ses trois barrieres a
+// l'engagement puis enchaine sans interruption.
+// Path 2 marque son retour par le portail (declenche EVENT_WAIT_ARCHMAGE_LESSON) ;
+// les paths 1 et 3 la font simplement disparaitre en coulisses.
 struct npc_amara_leeson : public CustomAI
 {
 	npc_amara_leeson(Creature* creature) : CustomAI(creature, true)
@@ -336,6 +434,8 @@ struct npc_amara_leeson : public CustomAI
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
+		// Les trois barrieres sont cumulables : Amara est concue pour tenir
+		// la ligne de front sans soutien.
 		DoCastSelf(SPELL_BLAZING_BARRIER, true);
 		DoCastSelf(SPELL_PRISMATIC_BARRIER, true);
 		DoCastSelf(SPELL_ICE_BARRIER, true);
@@ -366,17 +466,41 @@ struct npc_amara_leeson : public CustomAI
 	{
 		if (pathId == 1 || pathId == 3)
 		{
+			// Sortie de scene : Amara part en mission, elle est masquee
+			// jusqu'a son retour.
 			me->SetVisible(false);
 		}
 		else if (pathId == 2)
 		{
+			// Retour d'Amara : le scenario peut passer a l'etape suivante.
 			instance->TriggerGameEvent(EVENT_WAIT_ARCHMAGE_LESSON);
 		}
 	}
 };
 
+// =========================================================================
+// npc_rhonin - Rhonin (mage arcanique)
+// =========================================================================
+// Deux facettes :
+//   - hors combat : gossip unique qui distribue le bouclier runique a tous
+//     les joueurs (SPELL_RUNIC_SHIELD) et valide le criteria correspondant
+//   - en combat : rotation arcane a charges. Arcane Blast empile jusqu'a
+//     ARCANE_CHARGES_MAX puis Arcane Barrage consomme les charges. Arcane
+//     Pulse prend la main des que le corps a corps devient dense.
 struct npc_rhonin : public CustomAI
 {
+	// Nombre de charges d'Arcane Blast avant de depenser en Arcane Barrage.
+	static constexpr uint8 ARCANE_CHARGES_MAX     = 4;
+	// Chance de declencher le combo Time Warp -> Arcane Barrage sur un Blast.
+	static constexpr uint32 TIME_WARP_CHANCE      = 40;
+	// Rayon et nombre d'ennemis requis pour declencher Arcane Pulse.
+	static constexpr float ARCANE_PULSE_RANGE     = 9.0f;
+	static constexpr uint32 ARCANE_PULSE_MIN_FOES = 3;
+	// Seuil de mana (en %) sous lequel Rhonin part en Evocation.
+	static constexpr float EVOCATION_MANA_PCT     = 10.0f;
+	// Rayon de dispersion des cristaux arcaniques autour de leur cible.
+	static constexpr float CRYSTAL_SPREAD_RADIUS  = 4.0f;
+
 	enum Misc
 	{
 		// Gossip
@@ -390,6 +514,8 @@ struct npc_rhonin : public CustomAI
 		SPELL_SHIELD_PLAYERS        = 388194,
 	};
 
+	// Groupes de taches du scheduler : GROUP_NORMAL est retarde en bloc
+	// pendant qu'Arcane Pulse tourne, pour eviter le chevauchement de casts.
 	enum Groups
 	{
 		GROUP_NORMAL,
@@ -417,7 +543,7 @@ struct npc_rhonin : public CustomAI
 	}
 
 	InstanceScript* instance;
-	uint8 arcaneCharges;
+	uint8 arcaneCharges;                    // Charges accumulees par Arcane Blast
 
 	bool OnGossipHello(Player* player) override
 	{
@@ -426,6 +552,8 @@ struct npc_rhonin : public CustomAI
 		return true;
 	}
 
+	// Le gossip est a usage unique : il distribue le bouclier a tous les
+	// joueurs, credite le criteria puis se desactive definitivement.
 	bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
 	{
 		ClearGossipMenuFor(player);
@@ -438,6 +566,7 @@ struct npc_rhonin : public CustomAI
 				me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 				instance->DoCastSpellOnPlayers(SPELL_RUNIC_SHIELD);
 				DoCast(SPELL_ARCANE_CAST_INSTANT);
+				// Credite le criteria "parler a Rhonin" pour le joueur.
 				KillRewarder::Reward(player, me);
 				break;
 		}
@@ -446,13 +575,16 @@ struct npc_rhonin : public CustomAI
 		return true;
 	}
 
+	// Gestion des charges arcaniques + combo Time Warp.
 	void OnSpellCast(SpellInfo const* spell) override
 	{
 		switch (spell->Id)
 		{
 			case SPELL_ARCANE_BLAST:
 				arcaneCharges++;
-				if (roll_chance(40) && !me->HasAura(SPELL_TEMPORAL_DISPLACEMENT))
+				// Temporal Displacement sert de "cooldown" au combo : tant
+				// qu'il est actif, Time Warp ne peut pas se redeclencher.
+				if (roll_chance(TIME_WARP_CHANCE) && !me->HasAura(SPELL_TEMPORAL_DISPLACEMENT))
 				{
 					CastStop();
 					me->AddAura(SPELL_TIME_WARP, me);
@@ -461,6 +593,7 @@ struct npc_rhonin : public CustomAI
 				}
 				break;
 			case SPELL_ARCANE_BARRAGE:
+				// Barrage depense toutes les charges accumulees.
 				arcaneCharges = 0;
 				break;
 			default:
@@ -470,20 +603,23 @@ struct npc_rhonin : public CustomAI
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
+		// Bouclier surdimensionne : Rhonin doit survivre a toute la bataille.
 		DoCastSelf(SPELL_PRISMATIC_BARRIER, CastSpellExtraArgs(SPELLVALUE_BASE_POINT0, 256E3));
 
 		scheduler
+			// Coeur de la rotation : on empile puis on depense.
 			.Schedule(1s, GROUP_NORMAL, [this](TaskContext arcane_blast)
 			{
-				if (arcaneCharges < 4)
+				if (arcaneCharges < ARCANE_CHARGES_MAX)
 					DoCastVictim(SPELL_ARCANE_BLAST);
 				else
 					DoCastVictim(SPELL_ARCANE_BARRAGE);
 				arcane_blast.Repeat(2800ms);
 			})
+			// Surveillance du mana : Evocation des que la barre est trop basse.
 			.Schedule(3s, GROUP_NORMAL, [this](TaskContext evocation)
 			{
-				if (me->GetPowerPct(POWER_MANA) < 10.0f)
+				if (me->GetPowerPct(POWER_MANA) < EVOCATION_MANA_PCT)
 					DoCast(SPELL_EVOCATION);
 				evocation.Repeat(3s);
 			})
@@ -492,11 +628,13 @@ struct npc_rhonin : public CustomAI
 				DoCastVictim(SPELL_ARCANE_SALVO);
 				arcane_projectiles.Repeat(14s, 25s);
 			})
+			// Cristal arcanique : totem immobile et intouchable qui bouclier
+			// les joueurs autour de lui pendant sa duree de vie.
 			.Schedule(5s, GROUP_NORMAL, [this](TaskContext arcane_cristal)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-					const Position pos = target->GetRandomNearPosition(4.f);
+					const Position pos = target->GetRandomNearPosition(CRYSTAL_SPREAD_RADIUS);
 					if (Creature* crystal = me->SummonCreature(NPC_ARCANIC_CRYSTAL, pos, TEMPSUMMON_TIMED_DESPAWN, 31s))
 					{
 						crystal->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
@@ -510,9 +648,12 @@ struct npc_rhonin : public CustomAI
 				}
 				arcane_cristal.Repeat(1min);
 			})
+			// Arcane Pulse prend la priorite quand le corps a corps se remplit :
+			// on decale GROUP_NORMAL pour lui laisser la place, sinon on
+			// repasse quasi immediatement pour ne pas rater la fenetre.
 			.Schedule(5s, GROUP_ARCANE_PULSE, [this](TaskContext arcane_pulse)
 			{
-				if (EnemiesInRange(9.f) >= 3)
+				if (EnemiesInRange(ARCANE_PULSE_RANGE) >= ARCANE_PULSE_MIN_FOES)
 				{
 					scheduler.DelayGroup(GROUP_NORMAL, 5s);
 
@@ -525,6 +666,8 @@ struct npc_rhonin : public CustomAI
 			});
 	}
 
+	// Path 1 : Rhonin quitte la place et "se teleporte" au sommet de la tour
+	// ou il canalise le portail que les joueurs viendront rejoindre.
 	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
 	{
 		if (pathId == 1)
@@ -534,6 +677,7 @@ struct npc_rhonin : public CustomAI
 			{
 				me->SetVisible(true);
 				me->NearTeleportTo(RhoninPoint02);
+				// Vignette pour guider les joueurs vers le sommet de la tour.
                 me->SetVignette(VIGNETTE_RHONIN);
 				DoCastSelf(SPELL_PORTAL_CHANNELING_03);
 			});
@@ -541,29 +685,51 @@ struct npc_rhonin : public CustomAI
 	}
 };
 
+// =========================================================================
+// npc_kinndy_sparkshine - Kinndy Sparkshine
+// =========================================================================
+// PNJ purement scripte : aucune rotation de combat, seulement l'orientation
+// finale de ses deux trajets de la scene du conseil.
 struct npc_kinndy_sparkshine : public CustomAI
 {
+	// Orientations d'arrivee de chacun des deux trajets.
+	static constexpr float FACING_PATH_01 = 4.62f;
+	static constexpr float FACING_PATH_02 = 1.24f;
+
 	npc_kinndy_sparkshine(Creature* creature) : CustomAI(creature, true, AI_Type::Stay)
 	{
         SetCanRandomMovement(false);
     }
 
+	// Path 1 : sortie de la salle du conseil (elle disparait en coulisses)
+	// Path 2 : retour a sa place pour la scene suivante
 	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
 	{
 		if (pathId == 1)
 		{
-			me->SetFacingTo(4.62f);
+			me->SetFacingTo(FACING_PATH_01);
 			me->SetVisible(false);
 		}
 		else if(pathId == 2)
 		{
-			me->SetFacingTo(1.24f);
+			me->SetFacingTo(FACING_PATH_02);
 		}
 	}
 };
 
+// =========================================================================
+// npc_tari_cogg - Tari Cogg (mage arcanique)
+// =========================================================================
+// Caster statique (AI_Type::Stay) : elle ne se deplace jamais et n'attaque
+// pas au corps a corps. Sa mecanique propre est l'Evocation defensive
+// declenchee une seule fois par combat quand elle passe sous le seuil bas.
 struct npc_tari_cogg : public CustomAI
 {
+	// Seuil de PV (en %) declenchant l'Evocation defensive.
+	static constexpr uint8 EVOCATION_HEALTH_PCT = 20;
+	// Portee de recherche d'une cible en train d'incanter (cible de Supernova).
+	static constexpr float SUPERNOVA_RANGE      = 30.0f;
+
 	npc_tari_cogg(Creature* creature) : CustomAI(creature, true, AI_Type::Stay), evocating(false)
 	{
         SetCanRandomMovement(false);
@@ -579,7 +745,7 @@ struct npc_tari_cogg : public CustomAI
 		SPELL_ARCANE_SALVO          = 378850,
 	};
 
-	bool evocating;
+	bool evocating;                         // Evocation en cours (voir OnChannelFinished)
 
 	void Reset() override
 	{
@@ -590,12 +756,15 @@ struct npc_tari_cogg : public CustomAI
 
 		evocating = false;
 
+		// Buff d'intelligence remis en place a chaque reset.
 		scheduler.Schedule(1s, [this](TaskContext /*context*/)
 		{
 			DoCastSelf(SPELL_RUNIC_INTELLECT);
 		});
 	}
 
+	// Tari ne se deplace pas et ne frappe pas : elle prend simplement sa
+	// cible et reste plantee a caster.
 	void AttackStart(Unit* who) override
 	{
 		if (!who)
@@ -609,24 +778,28 @@ struct npc_tari_cogg : public CustomAI
 		}
 	}
 
-	void EnterEvadeMode(EvadeReason why)
+	void EnterEvadeMode(EvadeReason why = EvadeReason::Other) override
 	{
 		CustomAI::EnterEvadeMode(why);
 
+		// Ses zones au sol ne doivent pas survivre a la fin du combat.
 		me->RemoveAllAreaTriggers();
 	}
 
+	// Immunisee aux effets des sorts recus : on neutralise le hook par defaut.
 	void SpellHit(WorldObject* /*caster*/, SpellInfo const* /*spellInfo*/) override { }
 
 	void OnChannelFinished(SpellInfo const* spell) override
 	{
+		// Une fois l'Evocation terminee, le declencheur redevient armable si
+		// Tari repasse sous le seuil plus tard dans le combat.
 		if (spell->Id == SPELL_EVOCATION)
 			evocating = false;
 	}
 
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
-		if (me->HealthBelowPctDamaged(20, damage))
+		if (me->HealthBelowPctDamaged(EVOCATION_HEALTH_PCT, damage))
 		{
 			if (evocating)
 				return;
@@ -636,7 +809,8 @@ struct npc_tari_cogg : public CustomAI
 			// On interrompt tous les sorts
 			CastStop();
 
-			// On lance Evocation
+			// On lance Evocation : les base points forcent le pourcentage de
+			// mana et de PV rendus par tick, quel que soit le sort en BDD.
 			DoCast(me, SPELL_EVOCATION,
 				CastSpellExtraArgs(TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD)
 				.AddSpellBP0(10)
@@ -647,9 +821,11 @@ struct npc_tari_cogg : public CustomAI
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		scheduler
+			// Supernova sert d'interruption : on ne la lance que sur une
+			// cible reellement en train d'incanter.
 			.Schedule(5s, 8s, [this](TaskContext supernova)
 			{
-				if (Unit* target = DoSelectCastingUnit(SPELL_SUPERNOVA, 30.f))
+				if (Unit* target = DoSelectCastingUnit(SPELL_SUPERNOVA, SUPERNOVA_RANGE))
 				{
 					CastStop({ SPELL_ARCANE_SALVO });
 					DoCast(target, SPELL_SUPERNOVA);
@@ -674,6 +850,7 @@ struct npc_tari_cogg : public CustomAI
 				}
 				arcane_salvo.Repeat(8s, 14s);
 			})
+			// Filler
 			.Schedule(2s, [this](TaskContext arcane_bolt)
 			{
 				DoCastVictim(SPELL_ARCANE_BOLT);
@@ -682,6 +859,11 @@ struct npc_tari_cogg : public CustomAI
 	}
 };
 
+// =========================================================================
+// npc_pained - Pained, garde du corps de Jaina
+// =========================================================================
+// Aucune mecanique de combat : elle ne sert qu'a declencher l'arrivee de
+// Perith Stormhoove une fois sortie de la salle du conseil.
 struct npc_pained : public ScriptedAI
 {
 	npc_pained(Creature* creature) : ScriptedAI(creature)
@@ -691,6 +873,7 @@ struct npc_pained : public ScriptedAI
 
 	InstanceScript* instance;
 
+	// Path 1 : Pained quitte la salle, ce qui lance la scene du tauren inconnu.
 	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
 	{
 		if (pathId == 1)
@@ -701,6 +884,13 @@ struct npc_pained : public ScriptedAI
 	}
 };
 
+// =========================================================================
+// npc_kalecgos_theramore - Kalecgos, forme humanoide (mage de givre)
+// =========================================================================
+// Rotation givre orientee controle : Frozen Beam et Comet Storm sur cibles
+// choisies, et Ice Nova reservee aux cibles en mouvement (anti-kiting).
+// Path 1 le fait disparaitre dans un teleport puis une dissolution : c'est
+// le moment ou il prend sa forme de dragon (npc_kalecgos_dragon).
 struct npc_kalecgos_theramore : public CustomAI
 {
 	npc_kalecgos_theramore(Creature* creature) : CustomAI(creature, true)
@@ -722,10 +912,14 @@ struct npc_kalecgos_theramore : public CustomAI
 
 	InstanceScript* instance;
 
+	// Path 1 : sequence de sortie en deux temps (teleport puis dissolution)
+	// Path 3 : retour a la table de banquet, il sort de scene
 	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
 	{
 		if (pathId == 1)
 		{
+			// Une seule tache repetee une fois : l'effet de teleport doit
+			// s'afficher entierement (4800ms) avant la dissolution.
 			scheduler.Schedule(1s, [this](TaskContext context)
 			{
 				switch (context.GetRepeatCounter())
@@ -769,6 +963,9 @@ struct npc_kalecgos_theramore : public CustomAI
 				}
 				comet_barrage.Repeat(18s, 25s);
 			})
+			// Anti-kiting : on cherche la premiere cible en mouvement dans la
+			// liste de menace et on la gele. Si personne ne bouge, on
+			// repasse chaque seconde jusqu'a trouver un candidat.
 			.Schedule(5s, [this](TaskContext ice_nova)
 			{
 				for (auto* ref : me->GetThreatManager().GetUnsortedThreatList())
@@ -788,12 +985,21 @@ struct npc_kalecgos_theramore : public CustomAI
 	}
 };
 
+// =========================================================================
+// npc_ziradormi_theramore - Ziradormi (PNJ utilitaire)
+// =========================================================================
+// Hors scenario : simple gossip qui renvoie le joueur au point de depart de
+// l'instance. Enregistre avec RegisterCreatureAI (et non RegisterTheramoreAI)
+// pour rester utilisable en dehors de l'InstanceScript.
 struct npc_ziradormi_theramore : public CustomAI
 {
 	enum Misc
 	{
 		GOSSIP_MENU_DEFAULT = 65007,
 	};
+
+	// Destination du teleport : entree de l'instance (map 5000).
+	static constexpr uint32 THERAMORE_MAP_ID = 5000;
 
 	npc_ziradormi_theramore(Creature* creature) : CustomAI(creature)
 	{
@@ -813,7 +1019,7 @@ struct npc_ziradormi_theramore : public CustomAI
 		switch (gossipListId)
 		{
 			case 0:
-				player->TeleportTo(5000, -3735.03f, -4425.95f, 30.55f, 0.f, TELE_REVIVE_AT_TELEPORT);
+				player->TeleportTo(THERAMORE_MAP_ID, -3735.03f, -4425.95f, 30.55f, 0.f, TELE_REVIVE_AT_TELEPORT);
 				break;
 		}
 
@@ -825,54 +1031,58 @@ struct npc_ziradormi_theramore : public CustomAI
 	{
 		CustomAI::Reset();
 
+		// Bulle de dialogue permanente : signale qu'elle est interactible.
 		me->AddAura(SPELL_CHAT_BUBBLE, me);
 	}
 };
 
+// =========================================================================
+// npc_kalecgos_dragon - Kalecgos, forme draconique
+// =========================================================================
+// Creature purement cosmetique qui tourne en rond au-dessus de Theramore
+// pendant la bataille. Elle est pilotee entierement par l'InstanceScript
+// via SetData(DATA_KALECGOS_*_EVENT).
+//
+// Le cercle de vol est reprogramme a chaque tour complet : m_loopTime est
+// la duree d'un tour, calculee a partir du perimetre et de la vitesse de
+// course, pour que le prochain MoveCirclePath tombe pile a la fin du
+// precedent (sinon le mouvement se fige apres un tour).
 struct npc_kalecgos_dragon : public CustomAI
 {
+	// Rayon du cercle de vol autour de TheramorePoint01.
 	const float m_circleRadius = 95.0f;
+	// Nombre de points d'interpolation du cercle (fluidite du survol).
+	static constexpr uint8 CIRCLE_STEPS      = 16;
+	// Chance de lacher une replique de combat a chaque fenetre.
+	static constexpr uint32 COMBAT_TALK_CHANCE = 30;
 
 	npc_kalecgos_dragon(Creature* creature) : CustomAI(creature), m_loopTime(0)
 	{
 		instance = me->GetInstanceScript();
-
         SetCanRandomMovement(false);
     }
 
-	enum Spells
-	{
-		SPELL_FROST_BREATH = 300548,
-	};
-
 	InstanceScript* instance;
-	uint64 m_loopTime;
+	uint64 m_loopTime;                      // Duree d'un tour complet, en ms
 
 	void Reset() override
 	{
 		CustomAI::Reset();
 
+		// Recalculer m_loopTime au moment de DATA_KALECGOS_CIRCLE_EVENT
+		// reglerait le probleme : a valider en jeu.
 		float perimeter = 2.f * float(M_PI) * m_circleRadius;
 		m_loopTime = (perimeter / me->GetSpeed(MOVE_RUN)) * 1000.f;
 	}
 
+	// Toutes les taches commencent par verifier isActiveObject : quand
+	// DATA_KALECGOS_CANCEL_EVENT desactive la creature, les taches deja
+	// planifiees s'arretent d'elles-memes sans se replanifier.
 	void SetData(uint32 id, uint32 /*value*/) override
 	{
 		switch (id)
 		{
-			case DATA_KALECGOS_COMBAT_EVENT:
-			{
-				scheduler.Schedule(8s, 12s, [this](TaskContext talk_combat)
-				{
-                    if (!me->isActiveObject())
-                        return;
-
-					if (roll_chance(30))
-                        TalkInCombat(SAY_KALECGOS_SPELL_01);
-                    talk_combat.Repeat(8s, 12s);
-				});
-				break;
-			}
+			// Vol en cercle, relance a chaque tour complet.
 			case DATA_KALECGOS_CIRCLE_EVENT:
 			{
 				scheduler.Schedule(1s, [this](TaskContext circle_path)
@@ -887,27 +1097,33 @@ struct npc_kalecgos_dragon : public CustomAI
 						TheramorePoint01.GetPositionZ(),
 						m_circleRadius,
 						true,
-						16
+						CIRCLE_STEPS
 					);
 					circle_path.Repeat(Milliseconds(m_loopTime));
 				});
 				break;
 			}
+			// Arret complet : le survol est termine, la creature est retiree
+			// de la liste des objets actifs.
 			case DATA_KALECGOS_CANCEL_EVENT:
 			{
 				me->CastStop();
 				me->GetMotionMaster()->Clear();
 				me->GetMotionMaster()->MoveIdle();
-				scheduler.CancelAll();
                 me->setActive(false);
-				break;
+                scheduler.CancelAll();
+                break;
 			}
 		}
 	}
 };
 
+// =========================================================================
+// Registration
+// =========================================================================
 void AddSC_battle_for_theramore()
 {
+	// Utilisable en dehors de l'instance
 	RegisterCreatureAI(npc_ziradormi_theramore);
 
 	RegisterTheramoreAI(npc_jaina_theramore);

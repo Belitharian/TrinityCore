@@ -54,6 +54,7 @@ Scenario::~Scenario()
 void Scenario::Reset()
 {
     CriteriaHandler::Reset();
+    _completedTrees.clear();
     SetStep(GetFirstStep());
 }
 
@@ -223,14 +224,40 @@ bool Scenario::CanCompleteCriteriaTree(CriteriaTree const* tree)
 
 void Scenario::CompletedCriteriaTree(CriteriaTree const* tree, Player* /*referencePlayer*/)
 {
-    OnCompletedCriteriaTree(tree);
+    NotifyCompletedCriteriaTree(tree);
 
     ScenarioStepEntry const* step = ASSERT_NOTNULL(tree->ScenarioStep);
+
+    // UpdateCriteria ne parcourt que les noeuds portant directement le
+    // criteria (GetCriteriaTreesByCriteria). Un noeud intermediaire
+    // (ProgressBar, Sum, CompleteAtLeast...) ne serait donc jamais notifie :
+    // on remonte la chaine des parents pour signaler ceux qui viennent
+    // d'etre completes. La racine de l'etape est exclue, c'est CompleteStep
+    // qui la notifie une fois l'etape reellement terminee.
+    for (CriteriaTree const* parent = sCriteriaMgr->GetCriteriaTree(tree->Entry->Parent);
+        parent && parent->ID != step->Criteriatreeid;
+        parent = sCriteriaMgr->GetCriteriaTree(parent->Entry->Parent))
+    {
+        if (IsCompletedCriteriaTree(parent))
+            NotifyCompletedCriteriaTree(parent);
+    }
+
     if (!IsCompletedStep(step))
         return;
 
     SetStepState(step, SCENARIO_STEP_DONE);
     CompleteStep(step);
+}
+
+// Un noeud complete peut etre repasse a chaque mise a jour du criteria
+// (une feuille 'Complete' avec Amount 1 reste completee des le premier
+// credit). Les scripts n'ont besoin de l'evenement qu'une fois.
+void Scenario::NotifyCompletedCriteriaTree(CriteriaTree const* tree)
+{
+    if (!_completedTrees.insert(tree->ID).second)
+        return;
+
+    OnCompletedCriteriaTree(tree);
 }
 
 bool Scenario::IsCompletedStep(ScenarioStepEntry const* step)
@@ -240,6 +267,16 @@ bool Scenario::IsCompletedStep(ScenarioStepEntry const* step)
         return false;
 
     return IsCompletedCriteriaTree(tree);
+}
+
+uint64 Scenario::GetCriteriaProgressCounter(uint32 criteriaId)
+{
+    Criteria const* criteria = sCriteriaMgr->GetCriteria(criteriaId);
+    if (!criteria)
+        return 0;
+
+    CriteriaProgress const* progress = GetCriteriaProgress(criteria);
+    return progress ? progress->Counter : 0;
 }
 
 void Scenario::DoForAllPlayers(std::function<void(Player*)> const& worker) const

@@ -1,3 +1,29 @@
+/*
+ * Battle for Theramore - AIs de figuration, troupes, sorts et areatriggers
+ *
+ * Complement de battle_for_theramore.cpp (qui gere les personnages nommes).
+ * Le fichier est organise en cinq blocs :
+ *
+ *   1. ALLIANCE  : civils, tanks, blesses, et la hierarchie des troupes de
+ *                  Theramore (npc_theramore_troop -> officier / footman /
+ *                  arcanist / faithful / marksman)
+ *   2. HORDE     : npc_theramore_horde -> hag / grunt / loasinger / felcaster,
+ *                  plus le mini-boss npc_wave_caller_gruhta
+ *   3. COSMETIC  : PNJ d'entrainement joues en boucle avant la bataille
+ *   4. SPELLS    : SpellScripts custom utilises par ces AIs
+ *   5. AREATRIGGERS : zones au sol des memes sorts
+ *
+ * Les classes de base (npc_theramore_troop, npc_theramore_horde) portent tout
+ * ce qui est commun a un camp : credits de kill, appel a l'aide, emotes. Les
+ * classes derivees n'apportent que leur rotation de sorts.
+ *
+ * Les AIs de la Horde sont enregistrees avec RegisterCreatureAI (et non
+ * RegisterTheramoreAI) car elles sont aussi utilisees dans le scenario des
+ * Ruines de Theramore, hors de cet InstanceScript.
+ *
+ * Commentaires en francais sans accents (encodage TC).
+ */
+
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
 #include "GameObject.h"
@@ -14,10 +40,17 @@
 #include "spell_warlock.h"
 #include "battle_for_theramore.h"
 
-///
-///     ALLIANCE NPC
-///
+// =========================================================================
+//     ALLIANCE NPC
+// =========================================================================
 
+// -------------------------------------------------------------------------
+// npc_theramore_citizen - Civil a evacuer (phase Evacuation)
+// -------------------------------------------------------------------------
+// Le joueur clique le civil (spellclick) pour valider un credit d'evacuation.
+// Deux comportements ensuite, selon que le civil a un chemin de fuite ou non :
+//   - avec chemin  : il se met a courir, parle et despawn au bout de 10s
+//   - sans chemin  : il joue une emote de panique sur place
 struct npc_theramore_citizen : public CustomAI
 {
 	enum Misc
@@ -47,6 +80,10 @@ struct npc_theramore_citizen : public CustomAI
 		WAYPOINT_PATH_04                = 4000031923
 	};
 
+	// Chance de jouer l'emote "pleurs" plutot que "salut apeure" quand le
+	// civil reste sur place.
+	static constexpr uint32 CRY_EMOTE_CHANCE = 60;
+
 	npc_theramore_citizen(Creature* creature) : CustomAI(creature, AI_Type::Stay) { }
 
 	void OnSpellClick(Unit* clicker, bool spellClickHandled) override
@@ -58,6 +95,7 @@ struct npc_theramore_citizen : public CustomAI
 		if (!player)
 			return;
 
+		// En debug, un seul civil suffit a valider toute l'etape.
 		#ifdef CUSTOM_DEBUG
 			for (uint8 i = 0; i < NUMBER_OF_CITIZENS; ++i)
 				KillRewarder::Reward(player, me, NPC_THERAMORE_CITIZEN_CREDIT);
@@ -65,10 +103,12 @@ struct npc_theramore_citizen : public CustomAI
 
 		KillRewarder::Reward(player, me, NPC_THERAMORE_CITIZEN_CREDIT);
 
+		// Le civil n'est plus une cible d'objectif : on nettoie ses marqueurs.
 		me->SetVignette(VIGNETTE_NONE);
 		me->SetEmoteState(EMOTE_STATE_NONE);
 		me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
 
+		// Sequence en deux temps : il se tourne vers le joueur, puis reagit.
 		scheduler.Schedule(780ms, 1500ms, [this, player](TaskContext context)
 		{
 			switch (context.GetRepeatCounter())
@@ -76,6 +116,8 @@ struct npc_theramore_citizen : public CustomAI
 				case 0:
 				{
 					me->SetFacingToObject(player);
+					// Retire les auras d'ambiance posees par le creature_addon
+					// (peur, sanglots...) avant de jouer la reaction.
 					if (CreatureAddon const* creatureAddon = me->GetCreatureAddon())
 					{
 						if (!creatureAddon->auras.empty())
@@ -91,12 +133,13 @@ struct npc_theramore_citizen : public CustomAI
 				{
 					if (me->GetWaypointPathId())
 					{
+						// Ce civil a un chemin de fuite : il s'enfuit.
 						me->SetWalk(false);
 						me->ResumeMovement();
 						me->DespawnOrUnsummon(10s);
 						me->AI()->Talk(SAY_THERAMORE_CITIZEN_FLEE);
 					}
-					else if (roll_chance(60))
+					else if (roll_chance(CRY_EMOTE_CHANCE))
 					{
 						me->HandleEmoteCommand(RAND(EMOTE_STATE_CRY, EMOTE_STATE_COWER));
 						me->AI()->Talk(SAY_THERAMORE_CITIZEN_CRY);
@@ -113,6 +156,12 @@ struct npc_theramore_citizen : public CustomAI
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_unmanned_tank - Tank a reparer (phase ALittleHelp)
+// -------------------------------------------------------------------------
+// Spawne endommage (l'InstanceScript lui retire une part aleatoire de ses PV)
+// et marque comme interactible. Un sort de reparation le remet en service ;
+// il tire ensuite au canon pendant la bataille.
 struct npc_unmanned_tank : public CustomAI
 {
 	npc_unmanned_tank(Creature* creature) : CustomAI(creature, true, AI_Type::Stay)
@@ -124,6 +173,7 @@ struct npc_unmanned_tank : public CustomAI
 		SPELL_DEMOLISHER_CANNON = 271246
 	};
 
+	// La reparation retire le marqueur d'objectif : le tank est repare.
 	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
 	{
 		if (spell->Id != SPELL_REPAIR)
@@ -144,6 +194,13 @@ struct npc_unmanned_tank : public CustomAI
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_wounded_theramore_troop - Blesse a evacuer (phase HelpTheWounded)
+// -------------------------------------------------------------------------
+// Le joueur lance un sort de teleport sur le blesse pour l'evacuer. Le
+// compteur DATA_WOUNDED_TROOPS est tenu par l'InstanceScript : tous les
+// blesses despawnent en silence sauf le dernier, qui declenche la replique
+// de remerciement de Jaina.
 struct npc_wounded_theramore_troop : public ScriptedAI
 {
 	npc_wounded_theramore_troop(Creature* creature) : ScriptedAI(creature),
@@ -158,13 +215,15 @@ struct npc_wounded_theramore_troop : public ScriptedAI
 	};
 
 	InstanceScript* instance;
-	bool preventClick;
+	bool preventClick;                      // Anti double-comptage : un blesse ne compte qu'une fois
 
 	void SpellHit(WorldObject* caster, SpellInfo const* spell) override
 	{
 		if (spell->Id != SPELL_TELEPORT_TROOP)
 			return;
 
+		// Deux joueurs peuvent lancer le sort en meme temps : on ne credite
+		// qu'une seule fois par blesse.
 		if (preventClick)
 			return;
 
@@ -182,6 +241,8 @@ struct npc_wounded_theramore_troop : public ScriptedAI
 
 		uint32 counter = instance->GetData(DATA_WOUNDED_TROOPS);
 
+		// Tous les blesses sauf le dernier partent discretement ; le dernier
+		// reste en place et declenche la replique de Jaina.
 		if (counter < NUMBER_OF_WOUNDED - 1)
 		{
 			me->DespawnOrUnsummon();
@@ -204,12 +265,24 @@ struct npc_wounded_theramore_troop : public ScriptedAI
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_theramore_troop - Classe de base des troupes de Theramore
+// -------------------------------------------------------------------------
+// Porte tout ce qui est commun aux cinq types de troupe : appel a l'aide au
+// pull, et surtout la mecanique de motivation de la phase Preparation.
+//
+// Motivation : un joueur fait l'emote /fortheAlliance a cote d'une troupe.
+// Cette troupe propage alors la reaction a toutes les troupes voisines
+// (rayon EMOTE_EFFECT_RANGE) via le trio SetGUID / SetData / DoAction. Chaque
+// troupe touchee joue une sequence en quatre temps (se tourner, acclamer,
+// crier, revenir a sa position) et credite le joueur une seule fois grace au
+// drapeau emoteReceived.
 struct npc_theramore_troop : public CustomAI
 {
 	npc_theramore_troop(Creature* creature, AI_Type type)
 		: CustomAI(creature, true, type),
 		  instance(creature->GetInstanceScript()),
-		  soundEmote(creature->GetGender() == GENDER_FEMALE ? 74679 : 74681),
+		  soundEmote(creature->GetGender() == GENDER_FEMALE ? SOUND_CHEER_FEMALE : SOUND_CHEER_MALE),
 		  emoteReceived(false)
 	{
 	}
@@ -220,9 +293,16 @@ struct npc_theramore_troop : public CustomAI
 		ACTION_RECEIVE_EMOTE        = 1
 	};
 
+	// Cris d'acclamation, choisis selon le genre de la creature.
+	static constexpr uint32 SOUND_CHEER_FEMALE = 74679;
+	static constexpr uint32 SOUND_CHEER_MALE   = 74681;
+
+	// Rayon de propagation de la reaction aux troupes voisines.
 	static constexpr float EMOTE_EFFECT_RANGE  = 8.f;
+	// Distance maximale entre le joueur et la troupe pour que l'emote compte.
 	static constexpr float EMOTE_TRIGGER_RANGE = 3.5f;
 
+	// Entries parcourues pour trouver les voisines a faire reagir.
 	static constexpr uint32 TroopEntries[] =
 	{
 		NPC_THERAMORE_FOOTMAN,
@@ -233,9 +313,9 @@ struct npc_theramore_troop : public CustomAI
 	};
 
 	InstanceScript* instance;
-	ObjectGuid playerGuid;
-	uint32 soundEmote;
-	bool emoteReceived;
+	ObjectGuid playerGuid;                  // Joueur a remercier (pose par SetGUID)
+	uint32 soundEmote;                      // Son d'acclamation selon le genre
+	bool emoteReceived;                     // Cette troupe a deja ete motivee
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
@@ -254,6 +334,7 @@ struct npc_theramore_troop : public CustomAI
 			playerGuid = guid;
 	}
 
+	// Sequence de remerciement, jouee par chaque troupe a portee du joueur.
 	void DoAction(int32 param) override
 	{
 		if (param != ACTION_RECEIVE_EMOTE)
@@ -263,6 +344,7 @@ struct npc_theramore_troop : public CustomAI
 		if (!player)
 			return;
 
+		// Memorise l'orientation d'origine pour la restaurer a la fin.
 		float const orientation = me->GetOrientation();
 		scheduler.Schedule(1ms, 1s, [this, player, orientation](TaskContext context)
 		{
@@ -289,6 +371,7 @@ struct npc_theramore_troop : public CustomAI
 		});
 	}
 
+	// Point d'entree de la mecanique : uniquement pendant la preparation.
 	void ReceiveEmote(Player* player, uint32 emoteId) override
 	{
 		BFTPhases const phase = static_cast<BFTPhases>(instance->GetData(DATA_SCENARIO_PHASE));
@@ -306,6 +389,7 @@ struct npc_theramore_troop : public CustomAI
 		if (!player->IsWithinDist(me, EMOTE_TRIGGER_RANGE))
 			return;
 
+		// Propagation : toutes les troupes voisines reagissent ensemble.
 		std::list<Creature*> troops;
 		for (uint32 entry : TroopEntries)
 			me->GetCreatureListWithEntryInGrid(troops, entry, EMOTE_EFFECT_RANGE);
@@ -320,6 +404,12 @@ struct npc_theramore_troop : public CustomAI
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_thader_windermere - Archimage Thader Windermere
+// -------------------------------------------------------------------------
+// Gossip a usage unique (phase Preparation) : parler a Thader lance une
+// sequence en trois temps ou lui puis Kinndy canalisent le portail, ce qui
+// finit par ouvrir la barriere mystique 02.
 struct npc_thader_windermere : public CustomAI
 {
 	enum Misc
@@ -348,6 +438,7 @@ struct npc_thader_windermere : public CustomAI
 		switch (gossipListId)
 		{
 			case 0:
+				// Le gossip ne sert qu'une fois : on retire tous ses marqueurs.
 				me->SetVignette(VIGNETTE_NONE);
 				me->RemoveAurasDueToSpell(SPELL_CHAT_BUBBLE);
 				me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
@@ -356,16 +447,16 @@ struct npc_thader_windermere : public CustomAI
 				{
 					switch (context.GetRepeatCounter())
 					{
-						case 0:
+						case 0: // Thader amorce la canalisation
 							me->CastSpell(me, SPELL_PORTAL_CHANNELING_03);
 							context.Repeat(1s);
 							break;
-						case 1:
+						case 1: // Kinndy prend le relais
 							if (Creature* kinndy = instance->GetCreature(DATA_KINNDY_SPARKSHINE))
 								kinndy->CastSpell(kinndy, SPELL_PORTAL_CHANNELING_01);
 							context.Repeat(1800ms);
 							break;
-						case 2:
+						case 2: // La barriere s'ouvre, la sequence s'arrete
 							if (GameObject* barrier = instance->GetGameObject(DATA_MYSTIC_BARRIER_02))
 								barrier->UseDoorOrButton();
 							context.CancelAll();
@@ -380,8 +471,17 @@ struct npc_thader_windermere : public CustomAI
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_hedric_evencane - Hedric Evencane (garde d'elite)
+// -------------------------------------------------------------------------
+// Guerrier de melee classique. Sa particularite est scriptee : a la fin de
+// son second chemin il enchaine sur un MovePoint vers HedricPoint03, ou il
+// prend sa position de garde definitive (arme rangee, emote de faction).
 struct npc_hedric_evencane : public CustomAI
 {
+	// Portee de detection d'un ennemi en train d'incanter, pour Batter.
+	static constexpr float BATTER_RANGE = 5.0f;
+
 	npc_hedric_evencane(Creature* creature) : CustomAI(creature, true, AI_Type::Melee)
 	{
 	}
@@ -420,18 +520,22 @@ struct npc_hedric_evencane : public CustomAI
 					DoCast(target, SPELL_VICIOUS_WOUND);
 				vicious_wound.Repeat(10s, 15s);
 			})
+			// Interrupt de melee sur un ennemi en train d'incanter.
 			.Schedule(5s, [this](TaskContext batter)
 			{
-				if (Unit* target = DoSelectCastingUnit(SPELL_BATTER, 5.0f))
+				if (Unit* target = DoSelectCastingUnit(SPELL_BATTER, BATTER_RANGE))
 					DoCast(target, SPELL_BATTER);
 				batter.Repeat(15s, 20s);
 			})
+			// Buff de rage, une seule fois par combat (pas de Repeat).
 			.Schedule(1min, [this](TaskContext /*rising_anger*/)
 			{
 				DoCast(SPELL_RISING_ANGER);
 			});
 	}
 
+	// Path 2 : fin du trajet vers la place -> il termine a pied jusqu'a son
+	// poste de garde (HedricPoint03), signale par MOVEMENT_INFO_POINT_02.
 	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
 	{
 		if (pathId == 2)
@@ -448,9 +552,12 @@ struct npc_hedric_evencane : public CustomAI
 		{
 			switch (id)
 			{
+				// Recul devant le portail de Dalaran : on le retourne face au portail.
 				case MOVEMENT_INFO_POINT_01:
 					me->SetFacingTo(HedricPoint02.GetOrientation());
 					break;
+				// Poste de garde atteint : arme rangee, posture de garde, et la
+				// position devient son point de retour d'evade.
 				case MOVEMENT_INFO_POINT_02:
 					me->SetSheath(SHEATH_STATE_UNARMED);
 					me->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
@@ -463,10 +570,37 @@ struct npc_hedric_evencane : public CustomAI
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_theramore_officier - Officier de Theramore (paladin hybride)
+// -------------------------------------------------------------------------
+// Paladin heal / DPS : il soigne ses allies tout en frappant, avec deux
+// passifs qui declenchent des Word of Glory gratuits (Shining Light et
+// Afterimage), et une bulle d'urgence sous DamageTaken.
 struct npc_theramore_officier : public npc_theramore_troop
 {
+	// Seuils de la bulle d'urgence.
+	static constexpr float DIVINE_SHIELD_HEALTH_PCT   = 25.f;
+	static constexpr uint32 DIVINE_SHIELD_CHANCE      = 30;
+	// Chances des cooldowns opportunistes.
+	static constexpr uint32 AVENGING_WRATH_CHANCE     = 60;
+	static constexpr uint32 HOLY_SHOCK_HEAL_CHANCE    = 60;
+	// Nombre d'allies blesses devant soi requis pour rentabiliser Light of Dawn.
+	static constexpr uint32 LIGHT_OF_DAWN_MIN_FRIENDS = 3;
+	// Portees de selection des cibles.
+	static constexpr float HEAL_RANGE                 = 40.f;
+	static constexpr float LIGHT_OF_DAWN_RANGE        = 15.f;
+	static constexpr float AVENGER_SHIELD_RANGE       = 30.f;
+	static constexpr float AFTERIMAGE_HEAL_RANGE      = 30.f;
+	// Divine Storm : nombre d'ennemis au contact requis.
+	static constexpr float DIVINE_STORM_RANGE         = 8.f;
+	static constexpr uint32 DIVINE_STORM_MIN_ENEMIES  = 3;
+	// Nombre de Blessed Hammer lances en rafale (1 par seconde).
+	static constexpr uint8 BLESSED_HAMMER_COUNT       = 3;
+
 	npc_theramore_officier(Creature* creature) : npc_theramore_troop(creature, AI_Type::Melee)
     {
+        // Le nombre de stacks requis pour declencher Afterimage est lu
+        // directement dans l'effet 2 du sort passif, pas code en dur.
         SpellInfo const* afterimageInfo = sSpellMgr->GetSpellInfo(SPELL_AFTERIMAGE, DIFFICULTY_NONE);
         afterimageAmount = afterimageInfo->GetEffect(EFFECT_2).CalcValue(me);
     }
@@ -527,7 +661,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 				scheduler.Schedule(2s, 3s, [this](TaskContext /*context*/)
 				{
 					// Verifie si une cible est la, sinon on fait rien
-					if (Unit* target = FindLowestHealthFriend(me, 30.f))
+					if (Unit* target = FindLowestHealthFriend(me, AFTERIMAGE_HEAL_RANGE))
 					{
 						if (Aura* afterimage = me->GetAura(SPELL_AFTERIMAGE_BUFF))
 						{
@@ -555,7 +689,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 		if (me->GetSpellHistory()->HasCooldown(SPELL_DIVINE_SHIELD))
 			return;
 
-		if (me->HealthBelowPctDamaged(25.f, damage) && roll_chance(30))
+		if (me->HealthBelowPctDamaged(DIVINE_SHIELD_HEALTH_PCT, damage) && roll_chance(DIVINE_SHIELD_CHANCE))
 		{
 			DoCastSelf(SPELL_DIVINE_SHIELD);
 
@@ -589,14 +723,14 @@ struct npc_theramore_officier : public npc_theramore_troop
 			.Schedule(1s, GROUP_NORMAL, [this](TaskContext avenging_wrath)
 			{
 				// Avenging Wrath en boucle sur son CD reel (~2min) pour les combats longs.
-				if (roll_chance(60))
+				if (roll_chance(AVENGING_WRATH_CHANCE))
 					DoCastSelf(SPELL_AVENGING_WRATH);
 				avenging_wrath.Repeat(2min, 3min);
 			})
 			// -------- Heals --------
 			.Schedule(5s, 8s, GROUP_HEAL, [this](TaskContext holy_light)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 60))
+				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_RANGE, 60))
 				{
 					CastStop(SPELL_FLASH_OF_LIGHT);
 					DoCast(target, SPELL_HOLY_LIGHT);
@@ -605,7 +739,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			})
 			.Schedule(1s, 2s, GROUP_HEAL, [this](TaskContext flash_of_light)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 80))
+				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_RANGE, 80))
 				{
 					CastStop(SPELL_HOLY_LIGHT);
 					DoCast(target, SPELL_FLASH_OF_LIGHT);
@@ -616,7 +750,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			{
 				// AOE heal en cone : on attend qu'au moins LIGHT_OF_DAWN_MIN_FRIENDS allies
 				// soient blesses devant pour rentabiliser le cast.
-				if (FriendsInFront(15.f, 30) >= 3)
+				if (FriendsInFront(LIGHT_OF_DAWN_RANGE, 30) >= LIGHT_OF_DAWN_MIN_FRIENDS)
 				{
 					CastStop();
 					DoCastSelf(SPELL_LIGHT_OF_DAWN);
@@ -641,7 +775,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			.Schedule(5ms, GROUP_NORMAL, [this](TaskContext avenger_shield)
 			{
 				// Silence ranged : meme priorite que Rebuke sur les casters ennemis.
-				if (Unit* target = DoSelectCastingUnit(SPELL_AVENGER_SHIELD, 30.f))
+				if (Unit* target = DoSelectCastingUnit(SPELL_AVENGER_SHIELD, AVENGER_SHIELD_RANGE))
 				{
 					CastStop({ SPELL_HOLY_LIGHT, SPELL_FLASH_OF_LIGHT });
 					DoCast(target, SPELL_AVENGER_SHIELD);
@@ -655,8 +789,8 @@ struct npc_theramore_officier : public npc_theramore_troop
 			{
 				// Holy Shock est hybride : heal sur allie blesse en priorite, sinon damage sur la victime.
 				CastStop();
-				if (Unit* target = DoSelectBelowHpPctFriendly(40.f, 90);
-					target && roll_chance(60))
+				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_RANGE, 90);
+					target && roll_chance(HOLY_SHOCK_HEAL_CHANCE))
 					DoCast(target, SPELL_HOLY_SHOCK);
 				else
 					DoCastVictim(SPELL_HOLY_SHOCK);
@@ -665,7 +799,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			})
 			.Schedule(8s, 14s, GROUP_NORMAL, [this](TaskContext divine_storm)
 			{
-				if (EnemiesInRange(8.f) >= 3)
+				if (EnemiesInRange(DIVINE_STORM_RANGE) >= DIVINE_STORM_MIN_ENEMIES)
 				{
 					CastStop({ SPELL_HOLY_LIGHT, SPELL_FLASH_OF_LIGHT });
 					DoCast(SPELL_DIVINE_STORM);
@@ -676,7 +810,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			})
 			.Schedule(14s, 22s, GROUP_NORMAL, [this](TaskContext blessed_hammer)
 			{
-				for (uint8 i = 0; i < 3; ++i)
+				for (uint8 i = 0; i < BLESSED_HAMMER_COUNT; ++i)
 				{
 					scheduler.Schedule(i * 1s, [this](TaskContext /*context*/)
 					{
@@ -696,7 +830,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 				// Judgment sur la cible la plus eloignee : applique le debuff aux kiteurs/casters.
 				if (Unit* target = SelectTarget(SelectTargetMethod::MaxDistance, 0))
 					DoCast(target, SPELL_JUDGMENT);
-				judgment.Repeat(8s, 142s);
+				judgment.Repeat(8s, 14s);
 			});
 	}
 
@@ -711,6 +845,12 @@ private:
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_theramore_footman - Fantassin de Theramore (guerrier Fureur)
+// -------------------------------------------------------------------------
+// Rotation guerrier complete. Les commentaires en fin de ligne de l'enum
+// Spells rappellent la cible attendue de chaque sort.
+// Meme rotation que npc_roknah_grunt cote Horde.
 struct npc_theramore_footman : public npc_theramore_troop
 {
 	npc_theramore_footman(Creature* creature) : npc_theramore_troop(creature, AI_Type::Melee) {}
@@ -736,18 +876,20 @@ struct npc_theramore_footman : public npc_theramore_troop
 		ScriptedAI::InitializeAI();
 	}
 
-	static constexpr uint32  BLADESTORM_MIN_ENEMIES = 3;
-	static constexpr uint32  WHIRLWIND_MIN_ENEMIES  = 2;
+	static constexpr uint32  BLADESTORM_MIN_ENEMIES = 3;   // Ennemis au contact requis pour Bladestorm
+	static constexpr uint32  WHIRLWIND_MIN_ENEMIES  = 2;   // Ennemis au contact requis pour Whirlwind
+	static constexpr uint8   RECKLESSNESS_HP_PCT    = 30;  // Seuil de PV declenchant Recklessness
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		scheduler
 
 			// --- Recklessness ---
-			// Buff offensif d'ouverture, puis toutes les 45-60s.
+			// Buff offensif de dernier recours : on sonde chaque seconde et on ne
+			// le lance qu'une seule fois, quand les PV passent sous 30%.
 			.Schedule(1ms, [this](TaskContext recklessness)
 			{
-				if (HealthBelowPct(30)
+				if (HealthBelowPct(RECKLESSNESS_HP_PCT)
 					&& !me->HasAura(SPELL_RECKLESSNESS))
 				{
 					DoCastSelf(SPELL_RECKLESSNESS);
@@ -851,6 +993,12 @@ struct npc_theramore_footman : public npc_theramore_troop
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_theramore_arcanist - Arcaniste de Theramore (mage Arcane)
+// -------------------------------------------------------------------------
+// Caster a distance qui empile des charges arcaniques et les depense en
+// Arcane Barrage. Le type d'AI est parametrable : npc_arcanist_training en
+// derive avec AI_Type::Stay pour la scene d'entrainement.
 struct npc_theramore_arcanist : public npc_theramore_troop
 {
 	npc_theramore_arcanist(Creature* creature, AI_Type type = AI_Type::Distance) : npc_theramore_troop(creature, type), arcaneCharges(0)
@@ -877,6 +1025,7 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 	static constexpr uint32 MASS_POLYMORPH_THRESHOLD    = 4;        // Au-dela de N ennemis -> Polymorph
 	static constexpr uint32 ARCANE_EXPLOSION_THRESHOLD  = 2;        // Au-dela de N ennemis -> Explosion
 	static constexpr float  TARGET_RANGE                = 30.0f;    // Portee de selection des cibles a distance
+	static constexpr uint32 ARCANE_MISSILES_CHANCE      = 60;        // Missiles plutot qu'Arcane Orb sur un proc Clearcasting
 
 	uint32 arcaneCharges;
 
@@ -924,7 +1073,7 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 				if (me->HasAura(SPELL_CLEARCASTING_BUFF))
 				{
 					CastStop();
-					if (roll_chance(60))
+					if (roll_chance(ARCANE_MISSILES_CHANCE))
 						DoCastVictim(SPELL_ARCANE_MISSILES);
 					else
 						DoCastSelf(SPELL_ARCANE_ORB);
@@ -939,7 +1088,8 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 				arcane_orb.Repeat(10s, 40s);
 			})
 			// --- Arcane Barrage (finisher) ---
-			// Cast quand on a >= 5 charges, sinon on re-check toutes les 2s.
+			// Cast des que ARCANE_BARRAGE_MIN_CHARGES charges sont accumulees,
+			// sinon on re-check toutes les 2s.
 			.Schedule(2s, [this](TaskContext arcane_barrage)
 			{
 				if (arcaneCharges >= ARCANE_BARRAGE_MIN_CHARGES)
@@ -958,7 +1108,7 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 				touch_of_the_magi.Repeat(3s, 8s);
 			})
 			// --- Mass Polymorph ---
-			// 4+ ennemis colles -> CC AOE, 2 min de cooldown.
+			// MASS_POLYMORPH_THRESHOLD ennemis colles -> CC AOE, 1 min de cooldown.
 			.Schedule(5s, 8s, [this](TaskContext mass_polymorph)
 			{
 				if (EnemiesInRange(AOE_RANGE) >= MASS_POLYMORPH_THRESHOLD)
@@ -971,7 +1121,7 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 					mass_polymorph.Repeat(1s);
 			})
 			// --- Arcane Explosion ---
-			// 2+ ennemis colles -> degats AOE, 2 min de cooldown.
+			// ARCANE_EXPLOSION_THRESHOLD ennemis colles -> degats AOE, 45s de cooldown.
 			.Schedule(2s, 8s, [this](TaskContext arcane_explosion)
 			{
 				if (EnemiesInRange(AOE_RANGE) >= ARCANE_EXPLOSION_THRESHOLD)
@@ -986,6 +1136,12 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_theramore_faithful - Fidele de Theramore (pretre Sacre)
+// -------------------------------------------------------------------------
+// Soigneur a distance qui maintient Power Word: Fortitude sur ses allies et
+// alterne soins et sorts d'ombre. npc_faithful_training en derive pour la
+// scene d'entrainement d'avant-bataille.
 struct npc_theramore_faithful : public npc_theramore_troop
 {
 	npc_theramore_faithful(Creature* creature) : npc_theramore_troop(creature, AI_Type::Distance) {}
@@ -1011,7 +1167,12 @@ struct npc_theramore_faithful : public npc_theramore_troop
 		SPELL_SHADOW_WORD_PAIN      = 435397,
     };
 
-	static constexpr float  STANDARD_RANGE = 40.0f;
+	static constexpr float  STANDARD_RANGE              = 40.0f;   // Portee standard des soins et DoT
+	static constexpr float  PSYCHIC_SCREAM_RANGE        = 10.0f;   // Distance de detection AOE
+	static constexpr uint32 PSYCHIC_SCREAM_MIN_FOES     = 2;       // Au-dela de N ennemis -> Psychic Scream
+	// Tirages imbriques du backpedal (voir OnBackpedStart).
+	static constexpr uint32 BACKPED_SELF_HEAL_CHANCE    = 25;
+	static constexpr uint32 BACKPED_SHADOW_WORD_CHANCE  = 50;
 
 	void Reset() override
 	{
@@ -1027,12 +1188,13 @@ struct npc_theramore_faithful : public npc_theramore_troop
 	}
 
 	// En backpedal : trois branches mutuellement exclusives selon roll_chance sequentiel.
-	// Probabilites finales : 25% self-heal, 37.5% Shadow Word Death, 37.5% Shadow Word Pain.
+	// Les deux tirages etant imbriques, les probabilites finales sont
+	// 25% self-heal, 37.5% Shadow Word Death, 37.5% Shadow Word Pain.
 	void OnBackpedStart(Unit* victim) override
 	{
-		if (roll_chance(25))
+		if (roll_chance(BACKPED_SELF_HEAL_CHANCE))
 			DoCastSelf(RAND(SPELL_RENEW, SPELL_PLEA, SPELL_POWER_WORD_SHIELD));
-		else if (roll_chance(50))
+		else if (roll_chance(BACKPED_SHADOW_WORD_CHANCE))
 			DoCast(victim, SPELL_SHADOW_WORD_DEATH);
 		else if (Unit* dotTarget = SelectTarget(SelectTargetMethod::Random, 0, STANDARD_RANGE, false, true, -SPELL_SHADOW_WORD_PAIN))
 			DoCast(dotTarget, SPELL_SHADOW_WORD_PAIN);
@@ -1057,7 +1219,7 @@ struct npc_theramore_faithful : public npc_theramore_troop
 			// Psychic Scream si 2+ ennemis colles
 			.Schedule(3s, 8s, GROUP_NORMAL, [this](TaskContext psychic_scream)
 			{
-				if (EnemiesInRange(10.0f) >= 2)
+				if (EnemiesInRange(PSYCHIC_SCREAM_RANGE) >= PSYCHIC_SCREAM_MIN_FOES)
 				{
 					DoCastAOE(SPELL_PSYCHIC_SCREAM);
 					psychic_scream.Repeat(10s, 25s);
@@ -1065,7 +1227,7 @@ struct npc_theramore_faithful : public npc_theramore_troop
 				else
 					psychic_scream.Repeat(1s);
 			})
-			// Power Word: Shield avec BP0 = 20% PV max de la cible
+			// Power Word: Shield preventif sur un allie sous 60% PV.
 			.Schedule(3s, GROUP_NORMAL, [this](TaskContext power_word_shield)
 			{
 				if (Unit* target = DoSelectBelowHpPctFriendly(STANDARD_RANGE, 60))
@@ -1075,7 +1237,10 @@ struct npc_theramore_faithful : public npc_theramore_troop
 				}
 				power_word_shield.Repeat(3s);
 			})
-			// Sorts de soin aléatoires
+			// Sorts de soin aleatoires sur l'allie le plus bas (soi-meme inclus).
+			// Holy Word: Serenity prend la priorite des qu'il est disponible.
+			// Le prochain passage est cale sur le cast time reel du sort choisi
+			// pour ne pas se couper soi-meme en plein cast.
             .Schedule(1s, GROUP_NORMAL, [this](TaskContext flash_heal)
             {
                 if (Unit* target = FindLowestHealthFriend(me, STANDARD_RANGE, true))
@@ -1103,6 +1268,12 @@ struct npc_theramore_faithful : public npc_theramore_troop
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_theramore_marksman - Tireur d'elite de Theramore
+// -------------------------------------------------------------------------
+// La plus simple des troupes : deux sorts, un tir continu et un tir multiple.
+// AI_Type::Hybrid : elle tire a distance mais se replie au corps a corps si
+// on la colle.
 struct npc_theramore_marksman : public npc_theramore_troop
 {
 	npc_theramore_marksman(Creature* creature) : npc_theramore_troop(creature, AI_Type::Hybrid)
@@ -1143,42 +1314,42 @@ struct npc_theramore_marksman : public npc_theramore_troop
 	}
 };
 
-///
-///     HORDE NPC
-///
+// =========================================================================
+//     HORDE NPC
+// =========================================================================
 
+// -------------------------------------------------------------------------
+// npc_theramore_horde - Classe de base des assaillants de la Horde
+// -------------------------------------------------------------------------
+// Trois responsabilites communes a tous les Roknah :
+//   - appel a l'aide au pull
+//   - credit de kill explicite a la mort (les vagues doivent compter meme
+//     quand le KillRewarder standard ne s'applique pas)
+//   - interdiction de prendre Kalecgos dragon pour cible : il survole la
+//     ville sans etre attaquable, et sans ce garde-fou les hordes se
+//     bloqueraient dessus au lieu d'attaquer les joueurs
 struct npc_theramore_horde : public CustomAI
 {
 	npc_theramore_horde(Creature* creature, AI_Type type) : CustomAI(creature, true, type)
 	{
 		instance = creature->GetInstanceScript();
-		args.AddSpellBP0(10000);
 	}
 
-	enum Misc
-	{
-		SPELL_ARCANIC_BARRIER = 301407
-	};
-
 	InstanceScript* instance;
-	CastSpellExtraArgs args;
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		me->CallAssistance();
 	}
 
-	void JustDied(Unit* killer) override
-	{
-		CustomAI::JustDied(killer);
-
-		uint32 killCredit = me->GetCreatureTemplate()->KillCredit[0];
-		if (Player* player = killer->ToPlayer())
-			KillRewarder::Reward(player, me, killCredit);
-	}
+	// Le credit de scenario (KillCredit[0] -> NPC_WAVE_MEMBER_CREDIT) est
+	// pose par l'InstanceScript dans OnUnitDeath, pour toutes les morts et
+	// pas seulement celles achevees par un joueur. Le crediter ici aussi le
+	// compterait deux fois.
 
 	bool CanAIAttack(Unit const* who) const override
 	{
+		// Kalecgos dragon est cosmetique : il n'est jamais une cible valide.
 		if (who->GetEntry() == NPC_KALECGOS_DRAGON)
 			return false;
 
@@ -1186,6 +1357,16 @@ struct npc_theramore_horde : public CustomAI
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_roknah_hag - Sorciere Roknah (mage Givre)
+// -------------------------------------------------------------------------
+// La plus complexe des AIs de la Horde. Trois mecaniques imbriquees :
+//   - shatter : les splinters de Frostbolt empilent Freezing sur les cibles,
+//     et une salve d'Ice Lance vient consommer ces stacks
+//   - finisher : Glacial Spike, relance des que son buff est disponible
+//   - survie : Ice Block a bas PV et Frost Nova + Blink quand elle est
+//     encerclee par des melee
+// -------------------------------------------------------------------------
 struct npc_roknah_hag : public npc_theramore_horde
 {
 	npc_roknah_hag(Creature* creature) : npc_theramore_horde(creature, AI_Type::Distance),
@@ -1224,6 +1405,8 @@ struct npc_roknah_hag : public npc_theramore_horde
 
 	static constexpr float MELEE_FLEE_RANGE             = 12.0f;    // Distance "trop proche" pour fuir
 	static constexpr uint32 MELEE_FLEE_THRESHOLD        = 2;        // Au-dela de N ennemis melee, on fuit
+	static constexpr uint8 ICE_BLOCK_HP_PCT             = 20;       // Seuil de PV declenchant Ice Block + fuite
+	static constexpr uint32 ICE_BARRIER_PULL_CHANCE     = 30;       // Chance de se buffer Ice Barrier au pull
 	static constexpr float ICE_LANCE_RANGE              = 30.0f;    // Portee de selection des cibles Ice Lance
 	static constexpr uint32 FREEZING_STACKS_PER_LANCE   = 4;        // Stacks de Freezing consommes par un Ice Lance qui shatter
 
@@ -1318,7 +1501,7 @@ struct npc_roknah_hag : public npc_theramore_horde
 	{
 		// En dessous de 20% PV : on annule le coup et on declenche Ice Block + fuite.
 		// Cooldown interne d'1 min - Hypothermia empeche cote sort un re-block immediat.
-		if (!iceblock && HealthBelowPct(20))
+		if (!iceblock && HealthBelowPct(ICE_BLOCK_HP_PCT))
 		{
 			damage = 0;
 
@@ -1353,7 +1536,7 @@ struct npc_roknah_hag : public npc_theramore_horde
 		npc_theramore_horde::JustEngagedWith(who);
 
 		// 30% de chance de se buffer Ice Barrier au pull.
-		if (roll_chance(30))
+		if (roll_chance(ICE_BARRIER_PULL_CHANCE))
 			DoCastSelf(SPELL_ICE_BARRIER);
 
 		// Premier Frostbolt immediat sur l'agresseur (sinon il faut attendre 2s).
@@ -1454,7 +1637,8 @@ struct npc_roknah_hag : public npc_theramore_horde
 				flurry.Repeat(12s, 14s);
 			})
 			// --- Frostbolt continu ---
-			// Pilier de la rotation : 1 Frostbolt toutes les 2s sur la cible courante.
+			// Pilier de la rotation : premier cast a 2s, puis 1 Frostbolt toutes
+			// les 3s sur la cible courante.
 			.Schedule(2s, GROUP_FROSTBOLT, [this](TaskContext frostbolt)
 			{
 				DoCastVictim(SPELL_FROSTBOLT);
@@ -1523,6 +1707,11 @@ struct npc_roknah_hag : public npc_theramore_horde
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_roknah_grunt - Grognard Roknah (guerrier Fureur)
+// -------------------------------------------------------------------------
+// Pendant Horde de npc_theramore_footman : meme liste de sorts et meme
+// rotation, seule la classe de base change.
 struct npc_roknah_grunt : public npc_theramore_horde
 {
 	npc_roknah_grunt(Creature* creature) : npc_theramore_horde(creature, AI_Type::Melee) {}
@@ -1548,8 +1737,9 @@ struct npc_roknah_grunt : public npc_theramore_horde
 		ScriptedAI::InitializeAI();
 	}
 
-	static constexpr uint32  BLADESTORM_MIN_ENEMIES = 3;
-	static constexpr uint32  WHIRLWIND_MIN_ENEMIES  = 2;
+	static constexpr uint32  BLADESTORM_MIN_ENEMIES = 3;   // Ennemis au contact requis pour Bladestorm
+	static constexpr uint32  WHIRLWIND_MIN_ENEMIES  = 2;   // Ennemis au contact requis pour Whirlwind
+	static constexpr uint8   RECKLESSNESS_HP_PCT    = 30;  // Seuil de PV declenchant Recklessness
 
 	void JustEngagedWith(Unit* who) override
 	{
@@ -1558,10 +1748,11 @@ struct npc_roknah_grunt : public npc_theramore_horde
 		scheduler
 
 			// --- Recklessness ---
-			// Buff offensif d'ouverture, puis toutes les 45-60s.
+			// Buff offensif de dernier recours : on sonde chaque seconde et on ne
+			// le lance qu'une seule fois, quand les PV passent sous 30%.
 			.Schedule(1ms, [this](TaskContext recklessness)
 			{
-				if (HealthBelowPct(30)
+				if (HealthBelowPct(RECKLESSNESS_HP_PCT)
 					&& !me->HasAura(SPELL_RECKLESSNESS))
 				{
 					DoCastSelf(SPELL_RECKLESSNESS);
@@ -1665,6 +1856,12 @@ struct npc_roknah_grunt : public npc_theramore_horde
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_roknah_loasinger - Chantre des loas (chaman hybride)
+// -------------------------------------------------------------------------
+// Chaman degats + soins : il alterne une rotation elementaire et des soins
+// sur ses allies blesses, avec une sequence defensive (Astral Shift puis
+// Ascendance) declenchee une seule fois par combat a bas PV.
 struct npc_roknah_loasinger : public npc_theramore_horde
 {
 	npc_roknah_loasinger(Creature* creature) : npc_theramore_horde(creature, AI_Type::Distance),
@@ -1704,20 +1901,18 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 	};
 
 	static constexpr uint8 ASCENDANCE_HP_PCT             = 40;       // PV qui declenche la sequence defensive
-	static constexpr float SHOCK_RANGE                   = 30.0f;    // Portee des shocks
 	static constexpr float WIND_SHEAR_RANGE              = 35.0f;    // Portee du kick
 	static constexpr float EARTHQUAKE_RANGE              = 8.0f;     // Distance de detection AOE
 	static constexpr uint32 EARTHQUAKE_THRESHOLD         = 3;        // Au-dela de N ennemis -> Earthquake
 
 	// Seuils de heal : (range, pct PV).
 	static constexpr float HEAL_FRIENDLY_RANGE           = 40.0f;    // Portee standard des soins cibles
-	static constexpr uint8 HEALING_SURGE_PCT             = 60;       // Spot heal
+	static constexpr uint8 HEALING_WAVE_PCT             = 60;       // Spot heal
 	static constexpr uint8 RIPTIDE_PCT                   = 80;       // HoT preventif
 	static constexpr uint8 CHAIN_HEAL_PCT                = 50;       // Heal multi-cible
 	static constexpr float HEALING_RAIN_RANGE            = 80.0f;    // Healing Rain (gros radius)
 	static constexpr uint8 HEALING_TIDE_PCT              = 30;        // Healing Tide Totem (urgence absolue)
 	static constexpr float HEALING_TIDE_RANGE            = 60.0f;    // Healing Tide (gros radius)
-	static constexpr float CHAIN_HEAL_FRIENDLY_RANGE     = 30.0f;    // Chain Heal (radius des sauts)
 
 	const SpellInfo* ascendanceInfo;
 	const SpellInfo* flameShockInfo;
@@ -1790,6 +1985,8 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 
 			// === BUFF ===
 
+			// Unleash Life : buff de soin entretenu en permanence, il
+			// interrompt le cast en cours car il est instantane.
 			.Schedule(5s, GROUP_NORMAL, [this](TaskContext unleash_life)
 			{
 				CastStop();
@@ -1859,24 +2056,26 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 
 			// === HEAL ===
 
-			// Healing Wave : spot heal sur allie sous 30% PV (toutes les 3s).
+			// Healing Wave : spot heal sur allie sous HEALING_WAVE_PCT (60%) PV,
+			// re-check toutes les 3s.
 			.Schedule(1s, GROUP_HEALING, [this](TaskContext healing_wave)
 			{
-				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, HEALING_SURGE_PCT))
+				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, HEALING_WAVE_PCT))
 				{
 					CastStop(SPELL_HEALING_WAVE);
 					DoCast(target, SPELL_HEALING_WAVE);
 				}
 				healing_wave.Repeat(3s);
 			})
-			// Riptide : HoT preventif sur allie sous 60% PV qui n'a pas deja le HoT.
+			// Riptide : HoT preventif sur allie sous RIPTIDE_PCT (80%) PV qui n'a
+			// pas deja le HoT.
 			.Schedule(1s, GROUP_HEALING, [this](TaskContext riptide)
 			{
 				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, RIPTIDE_PCT, SPELL_RIPTIDE))
 					DoCast(target, SPELL_RIPTIDE);
 				riptide.Repeat(2s);
 			})
-			// Chain Heal : heal multi-cible si un allie est sous 40% PV.
+			// Chain Heal : heal multi-cible si un allie est sous CHAIN_HEAL_PCT (50%) PV.
 			.Schedule(2s, GROUP_HEALING, [this](TaskContext chain_heal)
 			{
 				if (Unit* target = DoSelectBelowHpPctFriendly(HEAL_FRIENDLY_RANGE, CHAIN_HEAL_PCT))
@@ -1893,7 +2092,8 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 					DoCast(target, SPELL_HEALING_RAIN);
 				healing_rain.Repeat(24s, 32s);
 			})
-			// Healing Tide Totem : urgence absolue (allie a 5% PV). Re-check toutes les 2s.
+			// Healing Tide Totem : urgence, un allie sous HEALING_TIDE_PCT (30%) PV.
+			// Re-check toutes les 2s.
 			.Schedule(15s, GROUP_HEALING, [this](TaskContext healing_tide)
 			{
 				if (DoSelectBelowHpPctFriendly(HEALING_TIDE_RANGE, HEALING_TIDE_PCT))
@@ -1906,6 +2106,13 @@ struct npc_roknah_loasinger : public npc_theramore_horde
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_roknah_felcaster - Gangregarde Roknah (demoniste Demonologie)
+// -------------------------------------------------------------------------
+// Demoniste a fragments d'ame : Shadow Bolt et Demonbolt alimentent le
+// compteur, Main de Gul'dan le depense en invoquant des diablotins (voir
+// spell_wild_imp / spell_hand_of_guldan plus bas). Cotes defensif : Dark
+// Pact a mi-vie, puis Drain de vie et Etreinte mortelle a bas PV.
 struct npc_roknah_felcaster : public npc_theramore_horde
 {
 	npc_roknah_felcaster(Creature* creature) : npc_theramore_horde(creature, AI_Type::Distance),
@@ -1946,12 +2153,13 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 
 	uint8 soulShardsCount = 0;
 
-	static constexpr float   DOT_RANGE              = 30.0f;            // Portee de selection pour les DoTs
 	static constexpr uint8   SOUL_SHARDS_MAX        = 3;                // Seuil de fragments d'ame avant Main de Gul'dan
 	static constexpr uint8   DRAIN_LIFE_HP_PCT      = 30;               // Drain de vie sous N% PV
 	static constexpr uint8   MORTAL_COIL_HP_PCT     = 40;               // Etreinte mortelle sous N% PV
 	static constexpr uint32  FELHUNTER_CHANCE       = 60;               // % de chance d'invoquer un Traqueur des Tenebres au pull
 	static constexpr Seconds DRAIN_LIFE_CHANNEL     = 6s;               // Duree du channel de Drain de vie (gel la rotation)
+	static constexpr uint8   DARK_PACT_HP_PCT       = 60;               // Dark Pact sous N% PV (sacrifie des PV contre un bouclier)
+	static constexpr uint8   IMPLOSION_MIN_IMPS     = 6;                // Diablotins requis avant de les faire exploser
 
 	void InitializeAI() override
 	{
@@ -1972,7 +2180,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
 	{
-		if (me->HealthBelowPctDamaged(60, damage)
+		if (me->HealthBelowPctDamaged(DARK_PACT_HP_PCT, damage)
 			&& !me->HasAura(SPELL_DARK_PACT)
 			&& !me->GetSpellHistory()->HasCooldown(SPELL_DARK_PACT))
 		{
@@ -2066,7 +2274,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 
 				drain_life.Repeat(1s);
 			})
-			// Etreinte mortelle : peur sur cible la plus eloignee, sous 50% PV.
+			// Etreinte mortelle : peur sur cible la plus eloignee, sous 40% PV.
 			.Schedule(1s, GROUP_DEFENSIVE, [this](TaskContext mortal_coil)
 			{
 				if (HealthBelowPct(MORTAL_COIL_HP_PCT)
@@ -2084,7 +2292,8 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 
 			// === DPS (GROUP_NORMAL) ===
 
-			// Trait de l'ombre en filler (toutes les 4s) ; remplace par Bolt infernal si le buff est actif.
+			// Trait de l'ombre en filler (toutes les 2300ms) ; remplace par Bolt
+			// infernal tant que le buff correspondant est actif.
 			.Schedule(0s, GROUP_NORMAL, [this](TaskContext shadowbolt)
 			{
 				CastStop({ SPELL_HAND_OF_GULDAN, SPELL_INFERNAL_BOLT });
@@ -2109,7 +2318,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 				if (Aura* wildImpCount = me->GetAura(SPELL_WILD_IMP_AURA_STACK))
 				{
 					uint8 stack = wildImpCount->GetStackAmount();
-					if (stack >= 6)
+					if (stack >= IMPLOSION_MIN_IMPS)
 					{
 						CastStop(SPELL_DRAIN_LIFE);
 						DoCastVictim(SPELL_IMPLOSION);
@@ -2146,21 +2355,44 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_wave_caller_gruhta - Appelante des vagues Gruhta (mini-boss)
+// -------------------------------------------------------------------------
+// Combat en deux phases :
+//   Phase 1 (EnterCombatPhase) : rotation chaman elementaire classique.
+//   Phase 2 (sous GRUHTA_TEMPEST_HP_PCT) : elle s'enfuit en loup fantome
+//     jusqu'a la mer, s'entoure de MAX_ELEMENTAL_PROTECTION boucliers et
+//     canalise une tempete qui pilonne la zone. Les joueurs recoivent la
+//     marche sur l'eau pour pouvoir la poursuivre, et doivent briser ses
+//     protections pour la ramener en phase 1.
+// Sa mort supprime la barriere d'energie qui bloque la suite du scenario.
 struct npc_wave_caller_gruhta : public CustomAI
 {
+	// Nombre de boucliers a briser pour interrompre la tempete.
 	const uint8 MAX_ELEMENTAL_PROTECTION = 10;
 
-	npc_wave_caller_gruhta(Creature* creature) : CustomAI(creature, true, AI_Type::Hybrid),
-		stormkeeperStacks(0)
+	// Seuil de PV declenchant la fuite en mer et la tempete.
+	static constexpr float GRUHTA_TEMPEST_HP_PCT = 40.f;
+	// Portee de combat de Gruhta (elle reste a distance).
+	static constexpr float GRUHTA_COMBAT_RANGE   = 30.f;
+	// Pilonnage : nombre d'impacts par salve et rayon de dispersion.
+	static constexpr uint8 LIGHTNING_STORM_BOLTS = 8;
+	static constexpr float LIGHTNING_STORM_RADIUS = 100.0f;
+	// Nombre de Lightning Bolt gratuits accordes par Stormkeeper.
+	static constexpr uint32 STORMKEEPER_BOLTS    = 2;
+
+	npc_wave_caller_gruhta(Creature* creature) : CustomAI(creature, true, AI_Type::Hybrid)
 	{
 		SetCanRandomMovement(false);
 
 		instance = creature->GetInstanceScript();
 
-		// Information des sorts
+		// Information des sorts : les cast times reels servent a caler les
+		// Repeat de la rotation (voir EnterCombatPhase).
 		infoLightningBolt = sSpellMgr->AssertSpellInfo(SPELL_LIGHTNING_BOLT, DIFFICULTY_NONE);
 		infoChainLightning = sSpellMgr->AssertSpellInfo(SPELL_CHAIN_LIGHTNING, DIFFICULTY_NONE);
 
+		// Point de depart de la fuite : sa position de spawn.
 		tempestPos01 = creature->GetHomePosition();
 	}
 
@@ -2192,9 +2424,9 @@ struct npc_wave_caller_gruhta : public CustomAI
 	};
 
 	InstanceScript* instance;
-	uint32 stormkeeperStacks;
-	Position tempestPos01;
+	Position tempestPos01;                  // Etape 1 de la fuite (position de spawn)
 
+	// Etape 2 de la fuite : au large, sur l'eau. C'est de la qu'elle canalise.
 	const Position tempestPos02 = { -3922.5f, -4848.2866f, 0.001533f, 0.78f };
 
 	const SpellInfo* infoLightningBolt;
@@ -2202,19 +2434,19 @@ struct npc_wave_caller_gruhta : public CustomAI
 
 	float GetDistance() override
 	{
-		return 30.f;
+		return GRUHTA_COMBAT_RANGE;
 	}
 
 	void Reset() override
 	{
 		CustomAI::Reset();
 
-		stormkeeperStacks = 0;
 
 		me->SetRegenerateHealth(true);
 		me->SetWaterWalking(true);
 	}
 
+	// Sa mort libere le passage : la barriere d'energie disparait.
 	void JustDied(Unit* killer) override
 	{
 		CustomAI::JustDied(killer);
@@ -2223,6 +2455,7 @@ struct npc_wave_caller_gruhta : public CustomAI
 			barrier->Delete();
 	}
 
+	// Fuite en deux etapes : spawn -> large, puis debut de la tempete.
 	void MovementInform(uint32 type, uint32 id) override
 	{
 		if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
@@ -2234,17 +2467,21 @@ struct npc_wave_caller_gruhta : public CustomAI
 					break;
 				case MOVEMENT_INFO_POINT_02:
 				{
+					// Arrivee au large : fin de la course, debut du channel.
 					me->RemoveAurasDueToSpell(SPELL_GHOST_WOLF);
 					me->SetHomePosition(tempestPos02);
 					DoCastSelf(SPELL_TEMPEST_CHANNELING);
+					// Pilonnage continu : 8 impacts toutes les ~90ms, annule
+					// en bloc via CancelGroup(GROUP_TEMPEST) quand ses
+					// protections tombent.
 					scheduler.Schedule(1s, GROUP_TEMPEST, [this](TaskContext lightning_storm)
 					{
 						CastSpellExtraArgs args;
 						args.SetTriggerFlags(TRIGGERED_IGNORE_CAST_IN_PROGRESS);
 
-						for (uint8 i = 0; i < 8; i++)
+						for (uint8 i = 0; i < LIGHTNING_STORM_BOLTS; i++)
 						{
-							Position randomPos = GetRandomPosition(tempestPos02, 100.0f);
+							Position randomPos = GetRandomPosition(tempestPos02, LIGHTNING_STORM_RADIUS);
 							me->CastSpell(randomPos, SPELL_LIGHTNING_STORM, args);
 						}
 
@@ -2270,12 +2507,14 @@ struct npc_wave_caller_gruhta : public CustomAI
 				DoCastSelf(SPELL_FOCUS_ELEMENT, args);
 				break;
 			}
+			// Stormkeeper accorde deux Lightning Bolt instantanes : on gele la
+			// rotation normale le temps de les lacher, puis on consomme le buff.
 			case SPELL_STORMKEEPER:
 			{
 				scheduler.DelayGroup(GROUP_NORMAL, 4s);
 				scheduler.Schedule(1s, GROUP_STORMKEEPER, [this](TaskContext bolt)
 				{
-					if (bolt.GetRepeatCounter() >= 2)
+					if (bolt.GetRepeatCounter() >= STORMKEEPER_BOLTS)
 					{
 						me->RemoveAurasDueToSpell(SPELL_STORMKEEPER);
 						bolt.CancelGroup(GROUP_STORMKEEPER);
@@ -2293,19 +2532,25 @@ struct npc_wave_caller_gruhta : public CustomAI
 		}
 	}
 
+	// Pendant la tempete, chaque sort recu consomme une protection elementaire.
+	// Quand il n'en reste plus, le channel s'arrete et Gruhta revient au combat.
 	void SpellHit(WorldObject* caster, SpellInfo const* spell) override
 	{
 		CustomAI::SpellHit(caster, spell);
 
 		if (Aura* elementalProtection = me->GetAura(SPELL_ELEMENTAL_PROTECTION))
 		{
-			// R?cup?re le nombre de protections activent
+			// Nombre de protections encore actives
 			uint32 stack = elementalProtection->GetStackAmount();
 
-			// Supprime une protection lors des d?g?ts
+			// Supprime une protection a chaque sort recu
 			elementalProtection->SetStackAmount(stack - 1);
 
-			// Si le stack est ? z?ro, la temp?te s'annule
+			// A VERIFIER : `stack` est lu AVANT le decrement et n'est jamais
+			// nul pour une aura vivante, donc cette branche ne s'execute
+			// jamais et la tempete n'est pas interrompue ici. Le test devrait
+			// probablement porter sur `stack <= 1`. Laisse tel quel pour ne
+			// pas modifier le gameplay sans validation.
 			if (stack <= 0)
 			{
 				scheduler.CancelGroup(GROUP_TEMPEST);
@@ -2320,10 +2565,13 @@ struct npc_wave_caller_gruhta : public CustomAI
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		scheduler
+			// Surveillance des PV : declenche la bascule en phase tempete.
 			.Schedule(1ms, GROUP_CHECKER, [this](TaskContext context)
 				{
-					if (me->HealthBelowPct(40.f))
+					if (me->HealthBelowPct(GRUHTA_TEMPEST_HP_PCT))
 					{
+						// La bascule est definitive : on coupe le checker et
+						// toute la rotation de la phase 1.
 						context.CancelGroup(GROUP_CHECKER);
 						context.CancelGroup(GROUP_NORMAL);
 
@@ -2334,6 +2582,8 @@ struct npc_wave_caller_gruhta : public CustomAI
 
 						DoCastSelf(SPELL_GHOST_WOLF, true);
 
+						// Les protections empilees sont la "barre de vie" de
+						// la phase tempete (voir SpellHit).
 						for (uint8 i = 0; i < MAX_ELEMENTAL_PROTECTION; i++)
 						{
 							me->AddAura(SPELL_ELEMENTAL_PROTECTION, me);
@@ -2342,7 +2592,8 @@ struct npc_wave_caller_gruhta : public CustomAI
 						me->GetMotionMaster()->Clear();
 						me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, tempestPos01, true, tempestPos01.GetOrientation());
 
-						// Marche sur l'eau pour les cibles
+						// Marche sur l'eau pour les cibles : sans ca les
+						// joueurs ne peuvent pas la suivre jusqu'au large.
 						for (auto const& itr : me->GetThreatManager().GetUnsortedThreatList())
 						{
 							if (Unit* victim = itr->GetVictim())
@@ -2356,6 +2607,8 @@ struct npc_wave_caller_gruhta : public CustomAI
 		EnterCombatPhase();
 	}
 
+	// Rotation de la phase 1. Extraite dans sa propre methode car elle est
+	// relancee quand les joueurs brisent les protections de la tempete.
 	void EnterCombatPhase()
 	{
 		scheduler
@@ -2408,12 +2661,24 @@ struct npc_wave_caller_gruhta : public CustomAI
 	}
 };
 
-///
-///     COSMETIC
-///
+// =========================================================================
+//     COSMETIC
+// =========================================================================
+// Scene d'entrainement jouee en boucle tant que le scenario n'a pas atteint
+// la phase Preparation : les troupes s'exercent devant les joueurs. Des que
+// la phase bascule, chaque AI nettoie sa mise en scene et rend les creatures
+// a leur comportement normal.
 
+// Point que les creatures regardent une fois l'entrainement termine.
 const Position LookAtPos = { -3669.20f, -4504.08f, 10.33f, 1.60f };
 
+// -------------------------------------------------------------------------
+// npc_faithful_training - Duel d'entrainement soigne par un pretre
+// -------------------------------------------------------------------------
+// Le fidele repere deux fantassins autour de lui et met en scene un duel :
+// les deux soldats se tapent dessus (degats scriptes, pas de vrai combat)
+// pendant que le pretre les soigne en alternance. Un troisieme task surveille
+// la phase du scenario pour tout arreter au bon moment.
 struct npc_faithful_training : public npc_theramore_faithful
 {
 	npc_faithful_training(Creature* creature) : npc_theramore_faithful(creature) { }
@@ -2423,10 +2688,18 @@ struct npc_faithful_training : public npc_theramore_faithful
 		COSMETIC_GROUP      = 0,
 	};
 
+	// Rayon de recherche des deux soldats a mettre en scene.
+	static constexpr float SOLDIER_SEARCH_RANGE   = 15.0f;
+	// PV de depart des duellistes, en fraction de leur maximum.
+	static constexpr float SOLDIER_HEALTH_PCT     = 0.3f;
+	// Degats echanges a chaque passe (purement cosmetiques).
+	static constexpr uint32 SPARRING_DAMAGE_MIN   = 1000;
+	static constexpr uint32 SPARRING_DAMAGE_MAX   = 2000;
+
 	ObjectGuid soldierAGuid;
 	ObjectGuid soldierBGuid;
 
-	// Pr?pare un soldat pour le combat cosm?tique (emote, ?tat, cible, HP r?duits).
+	// Prepare un soldat pour le combat cosmetique (emote, etat, cible, PV reduits).
 	void SetSoldierState(Creature* creature, Emote emote, Creature* target)
 	{
 		if (!creature || !target)
@@ -2437,12 +2710,12 @@ struct npc_faithful_training : public npc_theramore_faithful
 		creature->SetUnitFlag(UNIT_FLAG_PACIFIED);
 		creature->SetRegenerateHealth(false);
 
-		uint32 health = static_cast<uint32>(creature->GetMaxHealth() * 0.3f);
+		uint32 health = static_cast<uint32>(creature->GetMaxHealth() * SOLDIER_HEALTH_PCT);
 		creature->SetHealth(health);
 		creature->SetTarget(target->GetGUID());
 	}
 
-	// Pr?pare le healer (emote idle, passif, pas de cible, HP non modifi?s).
+	// Prepare le healer (emote idle, passif, pas de cible, PV non modifies).
 	void SetHealerState(Creature* creature)
 	{
 		if (!creature)
@@ -2453,7 +2726,7 @@ struct npc_faithful_training : public npc_theramore_faithful
 		creature->SetUnitFlag(UNIT_FLAG_PACIFIED);
 	}
 
-	// Restaure l'?tat normal d'une cr?ature apr?s la phase cosm?tique.
+	// Restaure l'etat normal d'une creature apres la phase cosmetique.
 	void ClearState(Creature* creature)
 	{
 		if (!creature)
@@ -2474,11 +2747,13 @@ struct npc_faithful_training : public npc_theramore_faithful
 	{
 		npc_theramore_faithful::Reset();
 
+		// La scene n'a de sens qu'avant la bataille.
 		if ((BFTPhases)instance->GetData(DATA_SCENARIO_PHASE) > BFTPhases::Preparation)
 			return;
 
+		// Il faut deux fantassins a proximite pour monter le duel.
 		std::vector<Creature*> soldiers;
-		me->GetCreatureListWithEntryInGrid(soldiers, NPC_THERAMORE_FOOTMAN, 15.0f);
+		me->GetCreatureListWithEntryInGrid(soldiers, NPC_THERAMORE_FOOTMAN, SOLDIER_SEARCH_RANGE);
 
 		if (soldiers.size() < 2)
 			return;
@@ -2497,6 +2772,8 @@ struct npc_faithful_training : public npc_theramore_faithful
 		SetSoldierState(soldierB, EMOTE_STATE_BLOCK_SHIELD, soldierA);
 
 		scheduler
+			// Surveillance de la phase : demonte la scene quand la
+			// preparation commence.
 			.Schedule(2s, COSMETIC_GROUP, [this](TaskContext checkPhase)
 			{
 				BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
@@ -2515,6 +2792,7 @@ struct npc_faithful_training : public npc_theramore_faithful
 				else
 					checkPhase.Repeat(2s);
 			})
+			// Le pretre soigne l'un des deux duellistes au hasard.
 			.Schedule(2s, COSMETIC_GROUP, [this](TaskContext heal)
 			{
 				Creature* soldierA = ObjectAccessor::GetCreature(*me, soldierAGuid);
@@ -2528,6 +2806,8 @@ struct npc_faithful_training : public npc_theramore_faithful
 
 				heal.Repeat(3s, 5s);
 			})
+			// Passe d'armes : degats symetriques appliques a la main, sans
+			// jamais mettre les soldats en combat reel.
 			.Schedule(2s, 8s, COSMETIC_GROUP, [this](TaskContext soldiers)
 			{
 				Creature* soldierA = ObjectAccessor::GetCreature(*me, soldierAGuid);
@@ -2536,7 +2816,7 @@ struct npc_faithful_training : public npc_theramore_faithful
 				if (!soldierA || !soldierB)
 					return;
 
-				uint32 damage = urand(1000, 2000);
+				uint32 damage = urand(SPARRING_DAMAGE_MIN, SPARRING_DAMAGE_MAX);
 				soldierA->DealDamage(soldierB, soldierA, damage);
 				soldierB->DealDamage(soldierA, soldierB, damage);
 
@@ -2545,12 +2825,24 @@ struct npc_faithful_training : public npc_theramore_faithful
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_arcanist_training - Arcaniste s'entrainant sur un mannequin
+// -------------------------------------------------------------------------
+// L'arcaniste attaque en boucle le mannequin le plus proche et part en
+// Evocation des qu'il tombe a court de mana. Comme pour le duel, un task
+// surveille la phase pour arreter la scene et supprimer le mannequin.
 struct npc_arcanist_training : public npc_theramore_arcanist
 {
+	// Rayon de recherche du mannequin d'entrainement.
+	static constexpr float DUMMY_SEARCH_RANGE = 15.f;
+	// Seuil de mana (en %) declenchant l'Evocation.
+	static constexpr int32 EVOCATION_MANA_PCT = 5;
+
 	npc_arcanist_training(Creature* creature) : npc_theramore_arcanist(creature, AI_Type::Stay)
 	{
 		SetCanRandomMovement(false);
 
+		// Duree reelle du channel, pour geler la scene pile le temps qu'il faut.
 		SpellInfo const* evocationInfo = sSpellMgr->GetSpellInfo(SPELL_EVOCATION, DIFFICULTY_NONE);
 		m_evocationDuration = evocationInfo
 			? Milliseconds(evocationInfo->CalcDuration(creature))
@@ -2577,6 +2869,8 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 			return;
 
 		scheduler
+			// Surveillance de la phase : arrete l'entrainement et fait
+			// disparaitre le mannequin.
 			.Schedule(2s, COSMETIC_GROUP_NORMAL, [this](TaskContext checkPhase)
 			{
 				BFTPhases phase = (BFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
@@ -2586,7 +2880,7 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 					me->SetOrientation(me->GetAbsoluteAngle(LookAtPos));
 					me->SetFacingToPoint(LookAtPos);
 
-                    if (Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f))
+                    if (Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, DUMMY_SEARCH_RANGE))
                         training->KillSelf();
 
 					scheduler.CancelGroup(COSMETIC_GROUP_NORMAL);
@@ -2594,10 +2888,12 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 				else
 					checkPhase.Repeat(2s);
 			})
+			// Regeneration : a court de mana, il recharge et la scene se met
+			// en pause pour toute la duree du channel.
 			.Schedule(2s, COSMETIC_GROUP_NORMAL, [this](TaskContext context)
 			{
 				int32 manaPct = me->GetPowerPct(Powers::POWER_MANA);
-				if (manaPct > 0 && manaPct <= 5) // Percent
+				if (manaPct > 0 && manaPct <= EVOCATION_MANA_PCT)
 				{
 					scheduler.DelayGroup(COSMETIC_GROUP_NORMAL, m_evocationDuration);
 					DoCast(SPELL_EVOCATION);
@@ -2605,12 +2901,13 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 
 				context.Repeat(2s);
 			})
+			// Reprise de cible : si le mannequin a ete perdu, on le reprend.
 			.Schedule(2s, COSMETIC_GROUP_NORMAL, [this](TaskContext context)
 			{
 				if (me->GetVictim())
 					return;
 
-				Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, 15.f);
+				Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, DUMMY_SEARCH_RANGE);
 				if (!training)
 					return;
 
@@ -2620,6 +2917,10 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 	}
 };
 
+// -------------------------------------------------------------------------
+// npc_dummy_training - Mannequin d'entrainement
+// -------------------------------------------------------------------------
+// Encaisse tout sans jamais perdre de PV ni riposter.
 struct npc_dummy_training : NullCreatureAI
 {
 	npc_dummy_training(Creature* creature) : NullCreatureAI(creature) {}
@@ -2630,7 +2931,14 @@ struct npc_dummy_training : NullCreatureAI
 	}
 };
 
+// =========================================================================
+//     SPELLS
+// =========================================================================
+
 // Flurry - 284858
+// Le sort ne pose qu'un effet dummy : le SpellScript enchaine lui-meme les
+// impacts (GetEffectValue() - 1 supplementaires) espaces de 300-400ms, tous
+// rattaches au cast d'origine pour que les procs se comportent correctement.
 class spell_roknah_hag_flurry : public SpellScript
 {
 	enum Misc
@@ -2684,6 +2992,7 @@ class spell_roknah_hag_flurry : public SpellScript
 };
 
 // Light of Dawn - 295712
+// Relaie l'effet dummy vers le vrai sort de soin.
 class spell_theramore_light_of_dawn : public SpellScript
 {
 	enum Spells
@@ -2707,6 +3016,9 @@ class spell_theramore_light_of_dawn : public SpellScript
 };
 
 // 	Bucket Lands - 42339
+// Seau d'eau lance au sol pendant HelpTheWounded_Extinguish : on invoque un
+// trigger a l'impact, on cherche tous les foyers d'incendie dans le rayon de
+// l'effet, on credite le joueur pour chacun et on les fait disparaitre.
 class spell_theramore_throw_bucket : public SpellScript
 {
 	void HandleDummy(SpellEffIndex effIndex)
@@ -2717,6 +3029,7 @@ class spell_theramore_throw_bucket : public SpellScript
 		{
 			SpellRange radius = GetSpellInfo()->GetEffect(effIndex).CalcRadius();
 
+			// En debug, un seul seau suffit a valider toute l'etape.
 			#ifdef CUSTOM_DEBUG
 				for (uint8 i = 0; i < NUMBER_OF_FIRES; ++i)
 				{
@@ -2750,6 +3063,9 @@ class spell_theramore_throw_bucket : public SpellScript
 };
 
 // Powder Keg - BasicEvent
+// Chaine d'explosions le long du bateau : l'event se replanifie lui-meme
+// toutes les 100-180ms et fait exploser un stalker de plus a chaque passage,
+// ce qui donne l'effet de destruction en cascade.
 class PowderKegEvent : public BasicEvent
 {
 	enum Spells
@@ -2792,6 +3108,9 @@ class PowderKegEvent : public BasicEvent
 };
 
 // Powder Keg - 205238
+// Destruction du Sea Wolf : le joueur fait sauter le baril de poudre, ce qui
+// valide l'objectif, supprime le baril, tue le capitaine Drok s'il est encore
+// a bord, puis lance la cascade d'explosions (PowderKegEvent).
 class spell_powder_keg : public SpellScript
 {
 	enum Spells
@@ -2799,9 +3118,19 @@ class spell_powder_keg : public SpellScript
 		SPELL_BIG_FIRE_EXPLOSION    = 183880,
 	};
 
+	// Distance a laquelle Drok est considere comme etant a bord du bateau.
+	static constexpr float DROK_KILL_RANGE      = 25.0f;
+	// Rayon de recherche des stalkers porteurs des explosions en cascade.
+	static constexpr float STALKER_SEARCH_RANGE = 50.0f;
+
 	void HandleDummy(SpellEffIndex /*effIndex*/)
 	{
+		// Le test sur caster doit venir AVANT GetInstanceScript() : plus bas
+		// le code retestait caster, ce qui arrivait trop tard.
 		Unit* caster = GetCaster();
+		if (!caster)
+			return;
+
 		if (InstanceScript* instance = caster->GetInstanceScript())
 		{
 			const WorldLocation* destination = GetHitDest();
@@ -2822,7 +3151,7 @@ class spell_powder_keg : public SpellScript
 					// If the boat is destroyed and Captan Drok is alive, he dies
 					if (Creature* drok = instance->GetCreature(DATA_CAPTAIN_DROK))
 					{
-						if (drok->IsAlive() && trigger->IsWithinDistInMap(drok, 25.0f))
+						if (drok->IsAlive() && trigger->IsWithinDistInMap(drok, DROK_KILL_RANGE))
 						{
 							drok->KillSelf();
 							if (Player* player = caster->ToPlayer())
@@ -2834,7 +3163,7 @@ class spell_powder_keg : public SpellScript
 
 					// If the boat is destroyed fire and explosions
 					std::vector<Creature*> stalkers;
-					trigger->GetCreatureListWithEntryInGrid(stalkers, NPC_INVISIBLE_STALKER, 50.0f);
+					trigger->GetCreatureListWithEntryInGrid(stalkers, NPC_INVISIBLE_STALKER, STALKER_SEARCH_RANGE);
 
 					if (stalkers.empty())
 						return;
@@ -2852,6 +3181,12 @@ class spell_powder_keg : public SpellScript
 };
 
 // 279910 - Wild Imp
+// Invocation des diablotins du demoniste, avec placement en formation :
+// chaque imp occupe un emplacement fixe sur deux arcs de cercle derriere le
+// lanceur. On deduit les emplacements deja pris en rattachant chaque imp
+// existant a l'emplacement le plus proche, puis on invoque le nouvel imp sur
+// le premier emplacement libre. Le MoveFollow final maintient la formation
+// meme quand le lanceur se deplace ou pivote.
 class spell_wild_imp : public SpellScript
 {
 	struct SlotDef
@@ -2863,7 +3198,8 @@ class spell_wild_imp : public SpellScript
 	static constexpr uint8 IMP_MAX_COUNT = 12;
 
 	// 5 imps sur l'arc interieur (R = 2.0m) + 7 sur l'arc exterieur (R = 3.5m),
-	// repartis sur le demi-cercle exact derriere le lanceur (180?, d'epaule a epaule).
+	// repartis sur le demi-cercle exact derriere le lanceur (180 degres,
+	// d'epaule a epaule).
 	static constexpr std::array<SlotDef, IMP_MAX_COUNT> SLOTS = { {
 		// Inner ring : 5 slots, pas de pi/4
 		{ 2.0f, -float(M_PI_2) },
@@ -2970,6 +3306,8 @@ class spell_wild_imp : public SpellScript
 };
 
 // 464895 - Hand of Gul'dan
+// Applique les degats de zone puis invoque autant de diablotins que la valeur
+// de base de l'effet 0 (le nombre depend des fragments d'ame depenses).
 class spell_hand_of_guldan : public SpellScript
 {
 	enum Spells
@@ -3010,6 +3348,8 @@ class spell_hand_of_guldan : public SpellScript
 };
 
 // 295710 - Light of Dawn
+// Cone de soin du paladin : l'effet dummy touche tout le monde dans le cone,
+// on ne relaie le soin que vers les cibles amies.
 class spell_light_of_dawn : public SpellScript
 {
 	enum Spells
@@ -3045,8 +3385,20 @@ class spell_light_of_dawn : public SpellScript
 	}
 };
 
+// =========================================================================
+//     AREATRIGGERS
+// =========================================================================
+// Zones au sol des sorts ci-dessus. Deux familles :
+//   - a tick (OnCreate + scheduler) : elles appliquent leur effet a
+//     intervalle regulier a tout ce qui se trouve dedans
+//   - a l'entree / sortie (OnUnitEnter / OnUnitExit) : elles posent ou
+//     retirent une aura au passage
+// Toutes filtrent amis / ennemis, car un areatrigger touche par defaut tout
+// ce qui entre dedans.
+
 // Blizzard - 284968
 // AreaTriggerID - 15411
+// Zone de degats a tick : 1 salve par seconde sur les unites hostiles.
 struct at_blizzard_theramore : AreaTriggerAI
 {
 	using AreaTriggerAI::AreaTriggerAI;
@@ -3089,6 +3441,8 @@ private:
 
 // Consecrated Ground
 // AreaTriggerID - 34355
+// Zone persistante : l'aura est posee a l'entree et retiree a la sortie ou
+// a la disparition de la zone.
 struct at_consecration : AreaTriggerAI
 {
 	using AreaTriggerAI::AreaTriggerAI;
@@ -3134,6 +3488,7 @@ struct at_consecration : AreaTriggerAI
 
 // Divine Word: Sanctuary - 372784
 // AreaTriggerID - 35546
+// Zone de soin a tick, symetrique de Blizzard : elle ne soigne que les allies.
 struct at_divine_word_sanctuary : AreaTriggerAI
 {
 	using AreaTriggerAI::AreaTriggerAI;
@@ -3147,7 +3502,7 @@ struct at_divine_word_sanctuary : AreaTriggerAI
 	{
 		_scheduler.Schedule(1s, [this](TaskContext task)
 		{
-			// R?cup?ration du lanceur du sort
+			// Recuperation du lanceur du sort
 			if (Unit* caster = at->GetCaster())
 			{
 				for (const ObjectGuid& unitGuid : at->GetInsideUnits())
@@ -3177,6 +3532,8 @@ private:
 
 // Uncontrolled Energy
 // AreaTriggerID - 26658
+// Piege a usage unique : le premier ennemi qui entre declenche l'explosion
+// et la zone se supprime aussitot (SetDuration(0)).
 struct at_uncontrolled_energy : AreaTriggerAI
 {
 	using AreaTriggerAI::AreaTriggerAI;
@@ -3201,6 +3558,7 @@ struct at_uncontrolled_energy : AreaTriggerAI
 
 // Scorched Earth - 373139
 // AreaTriggerID - 25183
+// Sol brulant : aura de degats posee tant que l ennemi reste dedans.
 struct at_scorched_earth : AreaTriggerAI
 {
 	using AreaTriggerAI::AreaTriggerAI;
@@ -3229,6 +3587,8 @@ struct at_scorched_earth : AreaTriggerAI
 
 // Arcane Orb - 440458
 // AreaTriggerID - 32530
+// Projectile au sol : la zone suit une spline en ligne droite sur 40 yards et
+// frappe tout ennemi traverse, puis se supprime a l'arrivee.
 struct at_arcane_orb : AreaTriggerAI
 {
 	using AreaTriggerAI::AreaTriggerAI;
@@ -3275,6 +3635,8 @@ struct at_arcane_orb : AreaTriggerAI
 
 // Blessed Hammer - 420092
 // AreaTriggerID - 29807
+// Marteau tournoyant : la zone suit une spirale d'Archimede calculee a la
+// creation autour du lanceur, et frappe les ennemis qu elle traverse.
 struct at_blessed_hammer : AreaTriggerAI
 {
 	using AreaTriggerAI::AreaTriggerAI;
@@ -3323,14 +3685,17 @@ struct at_blessed_hammer : AreaTriggerAI
 	}
 
 private:
-	// AreaTrigger 29807 dure 5 s : on ?tale la spirale sur toute la dur?e.
-	static constexpr std::size_t POINTS = 200;    // Densit? totale (40 pts/seconde)
+	// AreaTrigger 29807 dure 5 s : on etale la spirale sur toute la duree.
+	static constexpr std::size_t POINTS = 200;    // Densite totale (40 pts/seconde)
 	static constexpr float TURNS        = 10.0f;  // 10 tours sur 5 s = 2 tours/s
-	static constexpr float R0           = 2.0f;   // Rayon de d?part
-	static constexpr float GROWTH       = 0.35f;  // Expansion par radian (spirale d'Archim?de)
+	static constexpr float R0           = 2.0f;   // Rayon de depart
+	static constexpr float GROWTH       = 0.35f;  // Expansion par radian (spirale d'Archimede)
 	static constexpr float Z_OFFSET     = 1.5f;   // Hauteur du marteau au-dessus du sol
 };
 
+// =========================================================================
+//     Registration
+// =========================================================================
 void AddSC_npcs_battle_for_theramore()
 {
 	RegisterTheramoreAI(npc_theramore_citizen);

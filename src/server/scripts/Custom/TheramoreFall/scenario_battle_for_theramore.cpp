@@ -1,8 +1,51 @@
+/*
+ * Battle for Theramore - InstanceScript principal
+ *
+ * Pilote le scenario "La Chute de Theramore" de bout en bout.
+ *
+ * DEUX MOTEURS COMPLEMENTAIRES
+ *
+ *   1. OnCompletedCriteriaTree : les criteria trees valident les etapes
+ *      cotees joueur (trouver Jaina, evacuer les civils, survivre...). A
+ *      chaque validation on fait avancer DATA_SCENARIO_PHASE et on amorce la
+ *      cinematique suivante.
+ *
+ *   2. Update / EventMap : la cinematique elle-meme est une chaine d'events
+ *      numerotes. Next(delay) incremente eventId et planifie eventId + 1,
+ *      donc l'ordre NUMERIQUE des case est l'ordre chronologique du scenario.
+ *      Un event sans Next() est un point d'arret : la suite repart d'un
+ *      criteria tree ou d'un TriggerGameEvent leve par une AI.
+ *
+ * PLAN DES EVENTS (les #pragma region suivent ce decoupage)
+ *
+ *      1 -  23  THE_COUNCIL          Conseil de guerre dans la tour
+ *     24        WAITING              Temps mort avant l'arrivee de Perith
+ *     25 -  70  THE_UNKNOWN_TAUREN   Perith annonce l'attaque de la Horde
+ *     71 -  90  A_LITTLE_HELP        Arrivee des archimages, mise en place
+ *     91 - 100  THE_BATTLE           Trahison de Thalen, debut de la bataille
+ *    122 - 141  HELP_THE_WOUNDED     Dialogues d'apres-bataille (2 parties)
+ *    142 - 160  WAIT_FOR_AMARA       Retour d'Amara Leeson (2 parties)
+ *    161 - 172  RETRIEVE_RHONIN      Montee a la tour, scene de l'explosion
+ *
+ * Les identifiants 101 a 121 ne sont pas utilises (marge laissee libre entre
+ * la bataille et l'apres-bataille).
+ *
+ * POURQUOI DES NUMEROS PLUTOT QUE DES CONSTANTES NOMMEES
+ * Les valeurs sont porteuses de sens ici : Next() s'appuie sur eventId + 1,
+ * et certaines etapes annulent une plage entiere d'un coup (voir
+ * CRITERIA_TREE_HELP_THE_WOUNDED, qui coupe les events 128 a 140). Masquer
+ * les numeros derriere des noms rendrait ces deux mecanismes illisibles.
+ *
+ * Commentaires en francais sans accents (encodage TC).
+ */
+
 #include "CriteriaHandler.h"
+#include "DB2Structure.h"
 #include "EventMap.h"
 #include "GameObject.h"
+#include "InstanceScenario.h"
 #include "InstanceScript.h"
-#include "KillRewarder.h"
+#include "Log.h"
 #include "Map.h"
 #include "MotionMaster.h"
 #include "MiscPackets.h"
@@ -15,6 +58,13 @@
 #include "Weather.h"
 #include "battle_for_theramore.h"
 
+// =========================================================================
+// Tables de correspondance NPC / GO <-> Data ID
+// =========================================================================
+
+// Nombre d'acteurs de dialogue en tete de creatureData : SetTarget et
+// ClearTarget ne parcourent que ces 14 premieres entrees, les suivantes
+// (Kalecgos dragon, Drok, Gruhta) ne participent pas aux cinematiques.
 uint8 const eventCreatureDataCount = 14;
 
 const ObjectData creatureData[] =
@@ -51,6 +101,16 @@ const ObjectData gameobjectData[] =
 	{ 0,                        0                           }   // END
 };
 
+// =========================================================================
+// Evenements d'ambiance de la Horde (bombardement de fond)
+// =========================================================================
+// Les deux classes suivent le meme schema : Execute lance un tir puis se
+// replanifie elle-meme toutes les 8-10s. Elles renvoient toujours false pour
+// que l'EventProcessor ne les detruise pas, et elles vivent aussi longtemps
+// que la creature porteuse.
+
+// Bombardier aerien : il tourne au-dessus de la ville et lache ses bombes
+// sur lui-meme (le sort gere la zone d'impact).
 class HordeBombardierThrowBomb : public BasicEvent
 {
 	public:
@@ -67,30 +127,40 @@ class HordeBombardierThrowBomb : public BasicEvent
 		Unit* _caster;
 };
 
+// Demolisseur : il pilonne une bande de terrain fixe (le mur ouest). Chaque
+// tir vise un point tire au hasard dans cette bande, ce qui donne un
+// bombardement disperse mais toujours dans la meme zone.
 class HordeDemolisherThrowBoulder : public BasicEvent
 {
     public:
     HordeDemolisherThrowBoulder(Unit* caster) : _caster(caster)
     {
+        // Extremites de la bande pilonnee.
         p1 = { -3771.834717f, -4261.928711f, 7.074570f, 4.655093f };
         p2 = { -3793.766357f, -4260.671387f, 6.944610f, 4.655093f };
     }
 
+    // Largeur de la bande pilonnee, de part et d'autre de l'axe p1-p2.
+    static constexpr float STRIP_WIDTH = 4.0f;
+
     bool Execute(uint64 /*execTime*/, uint32 /*diff*/) override
     {
-        Position randomPos = GetRandomPointOnStrip(_caster, p1, p2, 4.0f, _caster->GetMap());
+        Position randomPos = GetRandomPointOnStrip(_caster, p1, p2, STRIP_WIDTH, _caster->GetMap());
         _caster->CastSpell(randomPos, SPELL_THROW_BOULDER, TRIGGERED_FULL_MASK);
         _caster->m_Events.AddEvent(this, _caster->m_Events.CalculateTime(Seconds(urand(8, 10))));
         return false;
     }
 
+    // Tire un point au hasard dans le rectangle centre sur le segment p1-p2 :
+    // on avance d'une fraction t le long du segment, puis on decale
+    // lateralement d'au plus widthMeters / 2.
     Position GetRandomPointOnStrip(Unit* unit, Position const& p1, Position const& p2, float widthMeters, Map* map)
     {
         float dx = p2.GetPositionX() - p1.GetPositionX();
         float dy = p2.GetPositionY() - p1.GetPositionY();
         float len = std::sqrt(dx * dx + dy * dy);
 
-        float ux = dx / len, uy = dy / len;   // direction normalisée
+        float ux = dx / len, uy = dy / len;   // direction normalisee
         float px = -uy, py = ux;              // perpendiculaire 2D
 
         float t = frand(0.0f, 1.0f);
@@ -100,7 +170,8 @@ class HordeDemolisherThrowBoulder : public BasicEvent
         float y = p1.GetPositionY() + dy * t + py * offset;
         float z = p1.GetPositionZ() + (p2.GetPositionZ() - p1.GetPositionZ()) * t;
 
-        // recalage sur le vrai sol plutôt que l'interpolation linéaire
+        // Recalage sur le vrai sol plutot que sur l'interpolation lineaire :
+        // sans ca les rochers tombent dans le decor sur terrain accidente.
         float groundZ = map->GetHeight(unit->GetPhaseShift(), x, y, z + 2.0f, true);
         if (groundZ > INVALID_HEIGHT)
             z = groundZ;
@@ -110,9 +181,12 @@ class HordeDemolisherThrowBoulder : public BasicEvent
 
     private:
     Unit* _caster;
-    Position p1, p2;
+    Position p1, p2;                        // Extremites de la bande pilonnee
 };
 
+// =========================================================================
+// InstanceScript
+// =========================================================================
 class scenario_battle_for_theramore : public InstanceMapScript
 {
 	public:
@@ -154,6 +228,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			SPELL_AREA_TRIGGER_VISUAL   = 473554,
 		};
 
+		// Ordre d'arrivee des vagues de la Horde : l'index `waves` avance d'un
+		// cran a chaque appel de NextWave, declenche par OnUnitDeath. Chaque
+		// valeur designe un groupe de spawn (voir HordeMembersInvoker).
 		uint32 Waves[HORDE_WAVES_COUNT] =
 		{
 			DATA_WAVE_WEST,
@@ -175,12 +252,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			else if (dataId == DATA_WOUNDED_TROOPS)
 				return woundedTroops;
 			else if (dataId == DATA_WAVE_GROUP_ID)
-				return Waves[waves];
+				return Waves[waves < HORDE_WAVES_COUNT ? waves : HORDE_WAVES_COUNT - 1];
 			return 0;
 		}
 
 		void OnPlayerEnter(Player* /*player*/) override
 		{
+			// Orage permanent : ambiance de la ville assiegee.
 			ForceWeather(WEATHER_STATE_THUNDERS, true);
 		}
 
@@ -192,36 +270,62 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				woundedTroops = value;
 		}
 
+		// Comptabilite des vagues : seul et unique point de credit.
+		//
+		// Le chemin automatique (KillRewarder::Reward) ne credite le scenario
+		// qu'avec l'entry reelle de la victime et ignore KillCredit, donc les
+		// quatre entries de vague ne peuvent pas y alimenter le meme criteria.
+		// Et le faire depuis npc_theramore_horde::JustDied laissait de cote
+		// toutes les morts non achevees par un joueur. On credite donc
+		// NPC_WAVE_MEMBER_CREDIT ici, une fois par mort, quel que soit le
+		// tueur.
+		//
+		// Le filtre est le string id pose au spawn : sans lui, n'importe quel
+		// PNJ de la Horde present sur la carte ferait avancer la barre.
 		void OnUnitDeath(Unit* unit) override
 		{
 			InstanceScript::OnUnitDeath(unit);
 
 			Creature* creature = unit->ToCreature();
-			if (!creature || creature->IsPet() || creature->IsCritter())
+			if (!creature || !creature->HasStringId(WaveMemberStringId))
 				return;
 
-			// Un joueur a tapé : KillRewarder a déjà crédité le criteria
-			if (!creature->GetTapList().empty())
+			InstanceScenario* scenario = instance->GetInstanceScenario();
+			if (!scenario)
 				return;
 
-            Map::PlayerList const& players = instance->GetPlayers();
-            MapReference const* reference = players.front();
-            Player* player = reference->GetSource();
+			// CriteriaHandler::UpdateCriteria refuse un referencePlayer nul et
+			// ignore les joueurs en mode MJ. Le criteria est a l'echelle du
+			// scenario, pas du joueur : n'importe quel eligible fait l'affaire.
+			Player* creditPlayer = GetCriteriaCreditPlayer();
+			if (!creditPlayer)
+			{
+				TC_LOG_ERROR("scripts", "BFT: aucun joueur eligible dans l'instance, le credit de vague est perdu "
+					"(mode MJ actif ?).");
+				return;
+			}
 
-            if (!player)
-                return;
+			scenario->UpdateCriteria(CriteriaType::KillCreature, NPC_WAVE_MEMBER_CREDIT, 1, 0, creature, creditPlayer);
 
-            switch (creature->GetEntry())
-            {
-                case NPC_ROKNAH_GRUNT:
-                case NPC_ROKNAH_LOA_SINGER:
-                case NPC_ROKNAH_HAG:
-                case NPC_ROKNAH_FELCASTER:
-                    KillRewarder::Reward(player, creature, creature->GetCreatureTemplate()->KillCredit[0]);
-                    break;
-            }
+			// La barre de progression appartient au criteria tree : c'est lui qui
+			// decide de la fin de la bataille (CRITERIA_TREE_SURVIVE_WAVES). Le
+			// script ne repond qu'a une autre question, qu'aucun criteria ne sait
+			// exprimer : le terrain est-il degage pour envoyer la suite ?
+			if (!IsWaveCleared())
+				return;
+
+			if (waves < HORDE_WAVES_COUNT)
+				NextWave();
+			else
+				CompleteWaves();
 		}
 
+		// =================================================================
+		// Progression du scenario
+		// =================================================================
+		// Point d'entree principal : chaque criteria tree valide represente
+		// une etape terminee par les joueurs. On y fait avancer la phase et
+		// on amorce la cinematique suivante (events.ScheduleEvent).
 		void OnCompletedCriteriaTree(CriteriaTree const* tree) override
 		{
 			switch (tree->ID)
@@ -452,7 +556,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						gruhta->setActive(true);
 						gruhta->SetVisible(true);
 					}
-					for (uint8 i = 0; i < tanks.size() - 1; i++)
+					// Tous les tanks sauf le dernier sont detruits au debut de
+					// l'assaut. size() etant non signe, un vecteur vide ferait
+					// deborder la borne : la garde ci-dessous l'evite.
+					for (uint8 i = 0; !tanks.empty() && i < tanks.size() - 1; i++)
 					{
 						if (Creature* tank = instance->GetCreature(tanks[i]))
 							tank->KillSelf();
@@ -480,20 +587,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					DespawnDummies();
 					if (Creature* kalecgos = GetKalecgos())
 						kalecgos->AI()->SetData(DATA_KALECGOS_CANCEL_EVENT, 0U);
-                    events.CancelEvent(EVENT_WAVES_CHECKER);
                     break;
 				}
                 // Step 9 : The Battle - After the protection broke
                 case CRITERIA_TREE_MAINTAIN_PROTECTION:
-                {
-                    HordeMembersInvoker(Waves[waves]);
-                    waves++;
-                    events.ScheduleEvent(EVENT_WAVES_CHECKER, 1s);
+                    NextWave();
                     break;
-                }
 				// Step 10 : Help the wounded - Parent
 				case CRITERIA_TREE_HELP_THE_WOUNDED:
 				{
+					// Les joueurs ont fini avant la fin des dialogues : on
+					// coupe toute la partie II (events 128 a 140) d'un bloc.
 					for (uint8 i = 128; i < 141; i++)
 						events.CancelEvent(i);
                     GetJaina()->SetVignette(VIGNETTE_LADY_JAINA_PROUDMOORE);
@@ -583,10 +687,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 		}
 
+		// Classement des creatures au spawn : chaque groupe est memorise dans
+		// sa propre liste de GUID, ce qui permet ensuite de les manipuler en
+		// masse (marqueurs d'objectif, teleports, despawns).
 		void OnCreatureCreate(Creature* creature) override
 		{
 			InstanceScript::OnCreatureCreate(creature);
 
+			// Portee de visibilite maximale : la bataille se joue a l'echelle
+			// de toute la ville, on ne veut aucun pop-in.
             creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
             creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
             creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
@@ -619,6 +728,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case NPC_THERAMORE_ARCANIST:
 				case NPC_THERAMORE_FAITHFUL:
 				case NPC_THERAMORE_OFFICER:
+					// Seules les troupes statiques comptent : celles qui
+					// patrouillent ou appartiennent a une formation ont deja
+					// leur propre comportement et ne doivent pas etre
+					// deplacees par les scripts de phase.
 					if (creature->GetWaypointPathId() || creature->IsFormationLeader() || creature->GetFormation())
 						break;
 					troops.push_back(creature->GetGUID());
@@ -626,6 +739,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case NPC_CAPTAIN_DROK:
 				case NPC_WAVE_CALLER_GRUHTA:
 				case NPC_KALECGOS_DRAGON:
+					// Acteurs de la bataille : masques et inactifs jusqu'a ce
+					// que le scenario les revele.
 					creature->setActive(false);
 					creature->SetVisible(false);
 					break;
@@ -658,6 +773,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 		}
 
+		// =================================================================
+		// Chaine d'events cinematiques
+		// =================================================================
+		// L'affectation `eventId = events.ExecuteEvent()` est volontaire :
+		// elle memorise l'event en cours pour que Next() puisse planifier le
+		// suivant sans que chaque case ait a se nommer lui-meme.
 		void Update(uint32 diff) override
 		{
 			scheduler.Update(diff);
@@ -665,7 +786,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			events.Update(diff);
 			switch (eventId = events.ExecuteEvent())
 			{
-				// The Council
+				// The Council (1 - 23)
+				// Conseil de guerre dans la tour : Tervosh et Kinndy rejoignent
+				// Jaina et Kalecgos, longue passe de dialogues, puis tout le
+				// monde se disperse et Jaina rejoint la table (event 23, point
+				// d'arret : la suite depend de MOVEMENT_INFO_POINT_01).
 				#pragma region THE_COUNCIL
 
 				case 1:
@@ -682,6 +807,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						kinndy->SetWalk(true);
 						kinndy->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, KinndyPoint01, true, 1.09f);
 					}
+					// En debug on saute les dialogues 3 a 19 et on reprend
+					// directement a la dispersion des acteurs.
 					#ifdef CUSTOM_DEBUG
 						events.ScheduleEvent(20, 2s);
 					#else
@@ -769,6 +896,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					Talk(GetKalec(), SAY_REUNION_17);
 					Next(4s);
 					break;
+				// Dispersion : chacun repart vers son poste. Point d'entree
+				// DEBUG (voir case 2).
 				case 20:
 					ClearTarget();
 					if (Creature* kalecgos = GetKalec())
@@ -786,6 +915,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					GetKinndy()->GetMotionMaster()->MovePath(KinndyPath01, false);
 					Next(6s);
 					break;
+				// Point d'arret : Jaina rejoint la table du conseil. C'est son
+				// AI qui leve EVENT_THE_COUNCIL en arrivant sur le point.
 				case 23:
 					GetJaina()->SetWalk(true);
 					GetJaina()->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, JainaPoint01, true, JainaPoint01.GetOrientation());
@@ -793,7 +924,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 				#pragma endregion
 
-				// Waiting
+				// Waiting (24)
+				// Simple validation d'etape : laisse aux joueurs le temps de
+				// souffler avant l'arrivee de Perith.
 				#pragma region WAITING
 
 				case 24:
@@ -802,9 +935,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 				#pragma endregion
 
-				// The Unknown Tauren
+				// The Unknown Tauren (25 - 70)
+				// Perith Stormhoove et son escorte entrent dans la tour et
+				// annoncent l'attaque de la Horde. Longue scene de dialogue
+				// entre Pained, Jaina, le chevalier et Perith, entrecoupee de
+				// deplacements. Se termine event 70 sur la sortie de Pained.
 				#pragma region THE_UNKNOWN_TAUREN
 
+				// Spawn de l'escorte de Perith. En debug on la fait disparaitre
+				// aussitot et on saute directement a la fin de la scene.
 				case 25:
 					for (uint8 i = 0; i < PERITH_LOCATION; i++)
 					{
@@ -984,6 +1123,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					}
 					Next(2s);
 					break;
+				// Jaina redige l'ordre d'evacuation : la plume magique est un
+				// visuel de channel, retire a l'event suivant.
 				case 57:
                     if (Creature* jaina = GetJaina())
                     {
@@ -1053,6 +1194,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					Talk(GetJaina(), SAY_WARN_37);
 					Next(3s);
 					break;
+				// Point d'arret : Pained sort de la salle. C'est son AI qui
+				// leve EVENT_THE_UNKNOWN_TAUREN a la fin du chemin.
 				case 70:
 					GetJaina()->SetFacingTo(0.39f);
 					GetPained()->GetMotionMaster()->MovePath(KinndyPath01, false);
@@ -1060,7 +1203,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 				#pragma endregion
 
-				// A Little Help
+				// A Little Help (71 - 90)
+				// Arrivee des renforts de Dalaran : Hedric ouvre la scene, le
+				// portail s'ouvre, les six archimages en sortent un a un
+				// (event 77, qui se repete lui-meme), discours et harangue,
+				// puis teleport de masse et mise en place complete du champ
+				// de bataille (event 90).
 				#pragma region A_LITTLE_HELP
 
 				case 71:
@@ -1105,6 +1253,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					}
 					Next(500ms);
 					break;
+				// Sortie du portail, un archimage a la fois : l'event se
+				// repete toutes les ~900ms tant qu'il en reste, puis passe la
+				// main au suivant une fois la table epuisee.
 				case 77:
 					if (archmagesIndex >= ARCHMAGES_LOCATION)
 						Next(2s);
@@ -1179,7 +1330,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (Creature* jaina = GetJaina())
 					{
 						Talk(jaina, SAY_PRE_BATTLE_15);
-						if (Player* player = instance->GetPlayers().begin()->GetSource())
+						if (Player* player = GetFirstPlayer())
 							SetTarget(player);
 					}
 					if (Creature* vereesa = GetVereesa())
@@ -1197,6 +1348,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
                     GetVereesa()->SetVisible(false);
 					Next(4600ms);
 					break;
+				// Mise en place du champ de bataille : Kalecgos dragon prend
+				// son vol, tous les acteurs sont teleportes a leur poste
+				// (actorsRelocation) et recoivent leur role de la bataille
+				// (vignette, gossip, channel). Point d'arret : la suite passe
+				// par CRITERIA_TREE_RETRIEVE_JAINA.
 				case 90:
 					EnsureBarrierHaveDamage();
 					if (Creature* kalecgos = GetKalecgos())
@@ -1251,7 +1407,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 				#pragma endregion
 
-				// The Battle
+				// The Battle (91 - 100)
+				// Trahison de Thalen Songweaver : il passe cote Horde, brise
+				// la barriere mystique, blesse Thader et s'enfuit. La bataille
+				// commence, Kalecgos entre en combat et le premier groupe
+				// debarque du bateau.
 				#pragma region THE_BATTLE
 
 				case 91:
@@ -1261,6 +1421,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				// DELETED
 				//case 92:
 				//    break;
+				// Thalen bascule cote Horde et fait tomber le premier meteore.
 				case 93:
 					if (Creature* thalen = GetThalen())
 					{
@@ -1327,6 +1488,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					}
 					Next(2s);
 					break;
+				// Thalen se dissout (fuite) et laisse Thader agonisant, que
+				// Kinndy vient soigner : c'est ce tableau que les joueurs
+				// trouvent en arrivant.
 				case 99:
 					if (Creature* thalen = GetThalen())
 					{
@@ -1354,6 +1518,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					GetBarrier02()->ResetDoorOrButton();
 					Next(3s);
 					break;
+				// Premier debarquement et bascule en mode combat : la boucle
+				// de vagues demarre avec EVENT_MAINTAIN_THE_PROTECTION.
 				case 100:
 					HordeMembersInvoker(DATA_WAVE_BOAT);
 					if (Creature* thalen = GetThalen())
@@ -1364,39 +1530,21 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						thalen->CastSpell(thalen, SPELL_ARCANIC_CELL, true);
 						thalen->SetEmoteState(EMOTE_STATE_STUN_NO_SHEATHE);
 					}
-					if (Creature* kalecgos = GetKalecgos())
-					{
-						kalecgos->SetVisible(true);
-						kalecgos->AI()->SetData(DATA_KALECGOS_COMBAT_EVENT, 0U);
-					}
 					GetJaina()->CastSpell(actorsRelocation[0].destination, SPELL_TELEPORT);
                     TriggerGameEvent(EVENT_MAINTAIN_THE_PROTECTION);
 					break;
 
 				#pragma endregion
 
-                // Waves
-                case EVENT_WAVES_CHECKER:
-                {
-                    // Quand le nombre de membres vivants est inf?rieur ou ?gal au nombre de membres morts
-                    uint32 deadCounter = HordeMembersChecker();
-                    if (deadCounter >= HORDE_WAVES_COUNT)
-                    {
-                        HordeMembersInvoker(Waves[waves]);
-                        waves++;
-                        events.ScheduleEvent(EVENT_WAVES_CHECKER, 2s);
-                    }
-                    else
-                    {
-                        events.RescheduleEvent(EVENT_WAVES_CHECKER, 1s);
-                    }
-                    break;
-                }
-
-				// Help the wounded
+				// Help the wounded (122 - 141)
+				// Deux blocs de dialogue apres la bataille. La partie I
+				// (122-127) se joue toujours ; la partie II (128-140) n'est
+				// lancee que si les joueurs suivent Jaina, et elle est annulee
+				// en bloc s'ils terminent l'etape avant la fin (voir
+				// CRITERIA_TREE_HELP_THE_WOUNDED).
 				#pragma region HELP_THE_WOUNDED
 
-				// PART I
+				// PART I - Jaina et Hedric constatent les degats
 				case 122:
 					if (Creature* jaina = GetJaina())
 					{
@@ -1437,7 +1585,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						hedric->GetMotionMaster()->MovePath(HedricPath02, false);
 					break;
 
-				// PART II
+				// PART II - Jaina et Kinndy, pendant que les joueurs soignent
+				// les blesses (bloc annulable, voir plus haut)
 				case 128:
 					if (Creature* jaina = GetJaina())
 					{
@@ -1517,10 +1666,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 				#pragma endregion
 
-				// Wait for Archmage Leeson returns
+				// Wait for Archmage Leeson returns (142 - 160)
+				// Partie I (142-155) : Kalecgos previent Jaina du danger que
+				// represente l'iris, puis tout le monde regagne la table de
+				// banquet et Amara revient par le portail.
+				// Partie II (156-160) : dialogue avec Amara, puis Jaina se
+				// leve, ce qui enchaine sur la montee a la tour.
 				#pragma region WAIT_FOR_AMARA
 
-				// Part I
+				// Part I - Avertissement de Kalecgos
 				case 142:
 					GetKalec()->GetMotionMaster()->MovePath(KalecPath02, false, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
 					Next(8s);
@@ -1590,7 +1744,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					}
 					break;
 
-				// Part II
+				// Part II - Retour d'Amara Leeson
 				case 156:
 					if (Creature* jaina = GetJaina())
 					{
@@ -1621,7 +1775,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 				#pragma endregion
 
-				// Retrieve Rhonin
+				// Retrieve Rhonin (161 - 172)
+				// Dernier acte au sommet de la tour : Jaina et Rhonin
+				// comprennent que la bombe va exploser. L'event 172 leve
+				// EVENT_REDUCE_IMPACT, qui bascule les joueurs dans la scene
+				// finale (voir scene_theramore_explosion en bas de fichier).
 				#pragma region RETRIEVE_RHONIN
 
 				case 161:
@@ -1698,21 +1856,32 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 		}
 
-		EventMap events;
-		TaskScheduler scheduler;
-		BFTPhases phase;
-		uint32 eventId;
-		uint32 woundedTroops;
-		uint8 archmagesIndex;
-		uint8 waves;
-		GuidVector citizens;
-		GuidVector civilians;
-		GuidVector tanks;
-		GuidVector troops;
-		GuidVector hordeMembers;
-		GuidVector dummyMembers;
+		// =================================================================
+		// Etat interne
+		// =================================================================
+		EventMap events;                  // Chaine des events cinematiques
+		TaskScheduler scheduler;          // Taches recurrentes (auras, explosions d'ambiance)
+		BFTPhases phase;                  // Phase courante du scenario
+		uint32 eventId;                   // Dernier event execute (sert a Next() pour planifier eventId + 1)
+		uint32 woundedTroops;             // Blesses deja evacues par les joueurs
+		uint8 archmagesIndex;             // Prochain archimage a faire sortir du portail (event 77)
+		uint8 waves;                      // Index de la prochaine vague dans Waves[]
 
+		// Listes de GUID constituees dans OnCreatureCreate, manipulees en
+		// masse par les transitions de phase.
+		GuidVector citizens;              // Civils cliquables pendant Evacuation
+		GuidVector civilians;             // Tous les civils (masques au debut de la bataille)
+		GuidVector tanks;                 // Tanks a reparer pendant ALittleHelp
+		GuidVector troops;                // Troupes statiques (motivation, blesses, banquet)
+		GuidVector dummyMembers;          // Figurants Horde cosmetiques, despawnes en fin de bataille
+		GuidVector waveMembers;           // Combattants de la vague en cours (voir IsWaveCleared)
+
+		// =================================================================
 		// Accesseurs
+		// =================================================================
+		// Raccourcis de lecture sur les acteurs du scenario. Ils peuvent
+		// renvoyer nullptr : les appels directs sans test (GetJaina()->...)
+		// supposent que l'acteur est vivant a ce stade du scenario.
 		#pragma region ACCESSORS
 
 		Creature* GetJaina()        { return GetCreature(DATA_JAINA_PROUDMOORE); }
@@ -1736,20 +1905,70 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 		#pragma endregion
 
-		// Utils
+		// =================================================================
+		// Utilitaires
+		// =================================================================
 		#pragma region UTILS
+
+		// Rayon de dispersion et decalage vertical du teleport groupe.
+		static constexpr float TELEPORT_SPREAD_RADIUS = 8.0f;
+		static constexpr float TELEPORT_Z_OFFSET      = 3.0f;
+		// Proportion des troupes survivantes qui laissent un blesse a evacuer.
+		static constexpr uint32 WOUNDED_SPAWN_CHANCE  = 80;
 
 		void Talk(Creature* creature, uint8 id)
 		{
 			creature->AI()->Talk(id);
 		}
 
+		// Joueur au nom duquel crediter un criteria de scenario.
+		//
+		// CriteriaHandler::UpdateCriteria sort immediatement si referencePlayer
+		// est nul, et ignore aussi les joueurs en mode MJ : passer le premier
+		// venu suffit a perdre silencieusement tous les credits pendant un test.
+		// On prefere donc un joueur hors mode MJ, avec repli sur le premier.
+		Player* GetCriteriaCreditPlayer() const
+		{
+			Player* fallback = nullptr;
+			for (MapReference const& reference : instance->GetPlayers())
+			{
+				Player* player = reference.GetSource();
+				if (!player)
+					continue;
+
+				if (!player->IsGameMaster())
+					return player;
+
+				if (!fallback)
+					fallback = player;
+			}
+
+			return fallback;
+		}
+
+		// Retourne le premier joueur encore en jeu dans l'instance, ou nullptr.
+		// Centralise le pattern instance->GetPlayers().begin()->GetSource(),
+		// qui n'est pas null-safe : la liste est vide des que le dernier
+		// joueur a quitte l'instance.
+		Player* GetFirstPlayer() const
+		{
+			auto const& playerList = instance->GetPlayers();
+			if (playerList.empty())
+				return nullptr;
+			return playerList.begin()->GetSource();
+		}
+
+		// Enchaine sur l'event suivant de la chaine. C'est ce +1 qui rend
+		// l'ordre numerique des case significatif.
 		void Next(const Milliseconds& time)
 		{
 			eventId++;
 			events.ScheduleEvent(eventId, time);
 		}
 
+		// Met en scene un dialogue : tous les acteurs presents se tournent
+		// vers celui qui parle. Le locuteur lui-meme est exclu pour ne pas se
+		// cibler soi-meme.
 		void SetTarget(Unit* unit)
 		{
 			ObjectGuid guid = unit->GetGUID();
@@ -1763,6 +1982,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					if (creature->GetGUID() == guid)
 						continue;
 
+					// Hedric n'entre en scene qu'a partir de la preparation :
+					// avant, il est cense etre ailleurs et ne doit pas suivre
+					// les dialogues du regard.
 					if (creature->GetEntry() == NPC_HEDRIC_EVENCANE
 						&& phase < BFTPhases::Preparation)
 					{
@@ -1774,6 +1996,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 		}
 
+		// Fin de dialogue : tout le monde relache sa cible.
 		void ClearTarget()
 		{
 			for (uint8 i = 0; i < eventCreatureDataCount; i++)
@@ -1783,6 +2006,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 		}
 
+		// Ferme un portail proprement : on supprime le GameObject et on laisse
+		// un trigger jouer l'effet visuel de fermeture a sa place.
 		void ClosePortal(uint32 dataId)
 		{
 			if (GameObject* portal = GetGameObject(dataId))
@@ -1800,10 +2025,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 		}
 
+		// Teleport groupe : seuls les joueurs a moins de minDist du caster
+		// suivent. La destination est tiree au hasard autour du centre et
+		// remontee de quelques metres pour eviter de faire apparaitre
+		// quelqu'un dans le sol.
 		void TeleportPlayers(Creature* caster, const Position center, float minDist)
 		{
-			Position pos = caster->GetRandomPoint(center, 8.f);
-			pos.m_positionZ += 3.0f;
+			Position pos = caster->GetRandomPoint(center, TELEPORT_SPREAD_RADIUS);
+			pos.m_positionZ += TELEPORT_Z_OFFSET;
 
 			instance->DoOnPlayers([caster, center, minDist, pos](Player* player)
 			{
@@ -1814,21 +2043,38 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			});
 		}
 
+		// Fait apparaitre un groupe de spawn de la Horde.
+		//   waveId  : identifiant du groupe (DATA_WAVE_* / DATA_DECORATION_*)
+		//   dummies : true pour un groupe purement decoratif (invulnerable,
+		//             en posture de combat, sans jamais attaquer) - c'est ce
+		//             qui peuple l'horizon pendant la bataille
+		// Seuls les groupes listes dans Waves[] sont comptabilises : ils portent
+		// WaveMemberStringId, qui est ce qui les fait crediter la barre de
+		// progression (voir OnUnitDeath), et ils remplacent le contenu de
+		// waveMembers - seule la vague en cours retient l'enchainement, un
+		// trainard d'une vague precedente ne bloque rien. Le debarquement du
+		// bateau et les figurants restent hors du decompte.
 		void HordeMembersInvoker(uint32 waveId, bool dummies = false)
 		{
 			std::list<TempSummon*> members;
 
-			hordeMembers.clear();
+			bool const scored = std::ranges::find(Waves, waveId) != std::ranges::end(Waves);
+			if (scored)
+				waveMembers.clear();
 
 			instance->SummonCreatureGroup(waveId, &members);
 			for (TempSummon* horde : members)
 			{
+                if (Unit* target = SelectNearestHostileInRange(horde))
+                    horde->AI()->AttackStart(target);
+
 				horde->SetRegenerateHealth(false);
 
-				if (Unit* target = SelectNearestHostileInRange(horde))
-					horde->AI()->AttackStart(target);
-
-				hordeMembers.push_back(horde->GetGUID());
+				if (scored)
+				{
+					horde->SetScriptStringId(WaveMemberStringId);
+					waveMembers.push_back(horde->GetGUID());
+				}
 
 				if (dummies)
 				{
@@ -1887,26 +2133,83 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				}
 			}
 
+			// Jaina annonce vocalement le point d'arrivee de la vague.
 			if (Creature* jaina = GetJaina())
 				jaina->AI()->DoAction(waveId);
+
+			// Chaque vague doit compter HORDE_WAVE_SIZE membres : c'est ce qui
+			// fait tomber le total sur l'Amount du noeud ProgressBar. Un groupe
+			// de spawn incomplet plafonnerait la barre sous les 100 %.
+			if (scored && waveMembers.size() != HORDE_WAVE_SIZE)
+				TC_LOG_ERROR("scripts", "BFT: le groupe de spawn {} a fait apparaitre {} membres au lieu de {}.",
+					waveId, waveMembers.size(), HORDE_WAVE_SIZE);
 		}
 
-        uint32 HordeMembersChecker()
-        {
-            uint32 deadCounter = 0;
-            if (Creature* jaina = GetJaina())
-            {
-                for (uint8 i = 0; i < HORDE_WAVES_COUNT; ++i)
-                {
-                    Creature* temp = ObjectAccessor::GetCreature(*jaina, hordeMembers[i]);
-                    if (!temp || temp->isDead())
-                        ++deadCounter;
-                }
-            }
+		// La vague en cours est nettoyee quand plus aucun de ses membres n'est
+		// vivant.
+		//
+		// Une creature introuvable est lachee elle aussi : elle ne peut plus
+		// etre tuee, la retenir bloquerait la bataille pour toujours. Mais elle
+		// n'est jamais passee par OnUnitDeath, donc elle n'a rien credite : ce
+		// cas est le seul par lequel la barre peut perdre un point, on le trace.
+		bool IsWaveCleared()
+		{
+			std::erase_if(waveMembers, [this](ObjectGuid const& guid)
+			{
+				Creature* member = instance->GetCreature(guid);
+				if (!member)
+				{
+					TC_LOG_ERROR("scripts", "BFT: membre de vague {} disparu sans mourir, credit perdu.", guid.ToString());
+					return true;
+				}
 
-            return deadCounter;
-        }
+				return !member->IsAlive();
+			});
 
+			return waveMembers.empty();
+		}
+
+		// Envoie la vague suivante.
+		void NextWave()
+		{
+			if (waves >= HORDE_WAVES_COUNT)
+				return;
+
+			HordeMembersInvoker(Waves[waves]);
+			waves++;
+		}
+
+		// Dixieme vague nettoyee : la bataille est finie, quoi qu'affiche la
+		// barre. HORDE_WAVES_COUNT * HORDE_WAVE_SIZE doit tomber exactement sur
+		// l'Amount du noeud ProgressBar, donc un ecart ici est un bug, pas une
+		// tolerance : on le comble pour ne pas bloquer les joueurs, mais on le
+		// signale. Les TC_LOG_ERROR de HordeMembersInvoker et IsWaveCleared
+		// disent lequel des deux cas s'est produit.
+		void CompleteWaves()
+		{
+			InstanceScenario* scenario = instance->GetInstanceScenario();
+			if (!scenario)
+				return;
+
+			CriteriaTree const* tree = sCriteriaMgr->GetCriteriaTree(CRITERIA_TREE_SURVIVE_WAVES);
+			if (!tree)
+				return;
+
+			uint64 const progress = scenario->GetCriteriaProgressCounter(CRITERIA_SURVIVE_WAVES);
+			if (progress >= tree->Entry->Amount)
+				return;
+
+			TC_LOG_ERROR("scripts", "BFT: les {} vagues sont nettoyees mais la barre est a {}/{}. {} credits ont fuite.",
+				HORDE_WAVES_COUNT, progress, tree->Entry->Amount, tree->Entry->Amount - progress);
+
+			// miscValue2 est l'increment applique au criteria : un seul appel
+			// suffit pour combler l'ecart.
+			scenario->UpdateCriteria(CriteriaType::KillCreature, NPC_WAVE_MEMBER_CREDIT,
+				tree->Entry->Amount - progress, 0);
+		}
+
+		// Supprime toutes les creatures d'une entry donnee sur la grille
+		// (utilise pour nettoyer les credits d'incendie en fin d'etape).
 		void MassDespawn(uint32 entry)
 		{
 			std::list<Creature*> results;
@@ -1921,6 +2224,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 		}
 
+		// Retire les figurants Horde cosmetiques une fois la bataille finie.
 		void DespawnDummies()
 		{
 			for (ObjectGuid guid : dummyMembers)
@@ -1930,6 +2234,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 		}
 
+		// Prepare l'etape HelpTheWounded : une bonne partie des troupes
+		// survivantes est remplacee par un clone "blesse" a leur place. Le
+		// clone reprend l'apparence et les ressources de l'original, mais avec
+		// tres peu de PV et les auras cosmetiques d'agonie ; l'original est
+		// simplement masque et reapparaitra au banquet.
 		void SpawnWoundedTroops()
 		{
 			Creature* jaina = GetJaina();
@@ -1943,7 +2252,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				if (!troop || troop->isDead())
 					continue;
 
-				if (roll_chance(80))
+				if (roll_chance(WOUNDED_SPAWN_CHANCE))
 				{
 					troop->SetVisible(false);
 					if (Creature* wounded = troop->SummonCreature(NPC_THERAMORE_WOUNDED_TROOP,
@@ -1968,6 +2277,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 		}
 
+		// Bascule de la ville en mode "apres-bataille" : on sort tout le monde
+		// du combat, on ferme le portail de la Horde, et on reinstalle les
+		// survivants autour de la table de banquet (troupes qui mangent,
+		// archimages a leur place, Thader fige, Kinndy en pleurs).
 		void RelocateTroops()
 		{
 			SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, GetRhonin());
@@ -1991,6 +2304,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				kalecgos->SetVisible(false);
 			}
 
+			// On ne rapatrie que les premiers survivants : il n'y a que
+			// ARCHMAGES_RELOCATION places assises autour de la table.
+			//
+			// A VERIFIER : l'index de la place utilisee est `i` (position dans
+			// `troops`) alors que le compteur de places est `counter`. Des
+			// qu'une troupe morte est sautee, les deux divergent et UnitLocation
+			// est indexe au-dela de ses bornes. Utiliser `counter` comme index
+			// (et l'incrementer apres le test) corrigerait le probleme, mais
+			// changerait le placement : a valider en jeu avant de toucher.
 			uint8 counter = 0;
 			for (uint8 i = 0; i < troops.size(); i++)
 			{
@@ -2046,6 +2368,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				}
 			}
 		}
+
+		// --- Helpers "Ensure*" -------------------------------------------
+		// Les trois helpers EnsurePlayerHave* suivent le meme schema : une
+		// tache qui se replanifie tant que le scenario est dans la bonne
+		// tranche de phases, et qui s'arrete d'elle-meme en sortant (pas de
+		// Repeat -> la tache meurt). Ils garantissent qu'un joueur qui se
+		// connecte en cours d'etape recoit bien son buff / son objet.
 
 		void EnsurePlayersAreInPhase(uint32 phaseId)
 		{
@@ -2103,6 +2432,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			});
 		}
 
+		// Explosions d'ambiance sur la barriere pendant toute la bataille.
+		// Taggee (uint32)BFTPhases::TheBattle pour pouvoir etre annulee en bloc
+		// quand la barriere cede (event 94).
 		void EnsureBarrierHaveDamage()
 		{
 			scheduler.Schedule(1s, (uint32)BFTPhases::TheBattle, [this](TaskContext explosion)
@@ -2116,6 +2448,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			});
 		}
 
+		// Force une meteo cote client, ou rend la main a la meteo de zone.
 		void ForceWeather(uint32 weatherEntry, bool apply)
 		{
 			instance->DoOnPlayers([weatherEntry, apply](Player* player)
@@ -2127,6 +2460,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			});
 		}
 
+		// Cible d'ouverture d'une horde qui vient de spawner : sans ca elle
+		// resterait plantee a son point d'arrivee.
 		Unit* SelectNearestHostileInRange(Creature* creature) const
 		{
 			Unit* target = nullptr;
@@ -2145,6 +2480,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
 	}
 };
 
+// =========================================================================
+// scene_theramore_explosion - Scene finale (destruction de Theramore)
+// =========================================================================
+// Cinematique jouee cote client. Le serveur n'intervient que sur trois
+// points : il fige le joueur pendant la scene, il fait apparaitre le modele
+// de la bombe au moment ou la scene le demande ("DropBombServer"), et il
+// teleporte le joueur vers les Ruines de Theramore a la fin - que la scene
+// se termine normalement ou qu'elle soit annulee.
 class scene_theramore_explosion : public SceneScript
 {
 	public:
@@ -2156,9 +2499,12 @@ class scene_theramore_explosion : public SceneScript
 		SPELL_DROP_BOMBE        = 128438
 	};
 
+	// Centre de la zone d'arrivee dans les Ruines de Theramore.
 	const Position Center = { -3002.74f, -4342.11f, 6.044930f, 3.76716f };
+	// Point de largage de la bombe, tres haut au-dessus de la ville.
 	const Position BombPosition = { -3819.17f, -4350.76f, 270.0f, 0.0f };
 
+	// Rayon de dispersion des joueurs a l'arrivee.
 	const float Distance = 8.f;
 
 	void OnSceneTriggerEvent(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/, std::string const& triggerName) override
@@ -2191,6 +2537,8 @@ class scene_theramore_explosion : public SceneScript
 		player->TeleportTo(GetRandomPosition(), TELE_REVIVE_AT_TELEPORT);
 	}
 
+	// Tirage uniforme dans un disque de rayon Distance : la racine carree sur
+	// le rayon evite que les joueurs s'agglutinent au centre.
 	WorldLocation GetRandomPosition()
 	{
 		float alpha = 2 * float(M_PI) * float(rand_norm());
@@ -2201,6 +2549,9 @@ class scene_theramore_explosion : public SceneScript
 	}
 };
 
+// =========================================================================
+// Registration
+// =========================================================================
 void AddSC_scenario_battle_for_theramore()
 {
 	new scenario_battle_for_theramore();
