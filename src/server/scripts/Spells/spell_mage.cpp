@@ -478,7 +478,7 @@ class spell_mage_cauterize_AuraScript : public AuraScript
 		});
 	}
 
-	void HandleAbsorb(AuraEffect* /*aurEff*/, DamageInfo& dmgInfo, uint32& /*absorbAmount*/)
+	void HandleAbsorb(AuraEffect* /*aurEff*/, DamageInfo& dmgInfo, uint32& absorbAmount)
 	{
 		AuraEffect const* effect1 = GetEffect(EFFECT_1);
 		if (!effect1 ||
@@ -487,10 +487,11 @@ class spell_mage_cauterize_AuraScript : public AuraScript
 			dmgInfo.GetDamage() > GetTarget()->GetMaxHealth() * 2 ||
 			GetTarget()->HasAura(SPELL_MAGE_CAUTERIZED))
 		{
-			PreventDefaultAction();
+			absorbAmount = 0;
 			return;
 		}
 
+		PreventDefaultAction();
 		GetTarget()->SetHealth(GetTarget()->CountPctFromMaxHealth(effect1->GetAmount()));
 		GetTarget()->CastSpell(GetTarget(), GetEffectInfo(EFFECT_2).TriggerSpell, TRIGGERED_FULL_MASK);
 		GetTarget()->CastSpell(GetTarget(), SPELL_MAGE_CAUTERIZE_DOT, TRIGGERED_FULL_MASK);
@@ -499,7 +500,7 @@ class spell_mage_cauterize_AuraScript : public AuraScript
 
 	void Register() override
 	{
-		OnEffectAbsorb += AuraEffectAbsorbFn(spell_mage_cauterize_AuraScript::HandleAbsorb, EFFECT_0);
+		OnEffectAbsorb += AuraEffectAbsorbOverkillFn(spell_mage_cauterize_AuraScript::HandleAbsorb, EFFECT_0);
 	}
 };
 
