@@ -1,4 +1,4 @@
-#ifndef CUSTOM_CUSTOMAI_H
+﻿#ifndef CUSTOM_CUSTOMAI_H
 #define CUSTOM_CUSTOMAI_H
 
 #include "Custom/FakeParty/FakeParty.h"
@@ -6,6 +6,8 @@
 #include "ScriptedCreature.h"
 #include "TaskScheduler.h"
 #include "SpellInfo.h"
+#include "Random.h"
+#include <cmath>
 
 enum class AI_Type
 {
@@ -78,6 +80,12 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void StopFakeParty();
 
         void TalkInCombat(uint8 textId, Seconds cooldown = 10s);
+
+        // Autorise la creature a faire des coups critiques avec ses sorts et fixe
+        // sa chance de base. Le core les interdit aux PNJ (Unit::SpellCritChanceDone)
+        // sauf s'ils portent le string id "can_spell_crit" : s'il manque en DB, on le
+        // pose dans le slot Script (ecrase donc un eventuel SetScriptStringId).
+        void SetSpellCritChance(float chance);
 
         void MovementInform(uint32 /*type*/, uint32 /*id*/) override;
 
@@ -176,6 +184,9 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         // Schedule la boucle de detection d'encerclement (Distance/Hybrid).
         void ScheduleEncircleCheck();
 
+        // Interrompt les sorts non-melee en cours dont l'ID ne satisfait pas le prédicat.
+        void CastStopIf(const std::function<bool(uint32)>& isException);
+
         uint32 FriendsInRange(float distance, uint8 pct);
         uint32 FriendsInFront(float distance, uint8 pct);
         uint32 EnemiesInRange(float distance);
@@ -222,66 +233,75 @@ struct FriendlyInFront
     }
 };
 
-inline Position const GetRandomPosition(Position center, float dist)
+// ===========================================================================
+// Positions aleatoires
+// ===========================================================================
+// Les trois helpers delegent le calcul au core plutot que de refaire la
+// trigonometrie a la main. On y gagne, gratuitement et partout :
+//   - le Z accroche au terrain (UpdateAllowedPositionZ : gere le vol, le
+//     hover et les liquides, la ou UpdateGroundPositionZ colle au sol) ;
+//   - la normalisation des coordonnees de carte ;
+//   - les collisions statiques (vmaps) et dynamiques (gameobjects), avec
+//     recul de CONTACT_DISTANCE au point d'impact ;
+//   - un repli sur la hauteur de grille quand il n'y a pas de sol dessous.
+//
+// Ce que le core ne fait pas et qu'on garde ici : l'orientation tournee vers
+// le centre, et une garde sur les pointeurs nuls.
+//
+// ATTENTION AUX ANGLES : les angles de CES helpers sont ABSOLUS, alors que
+// MovePosition / MovePositionToFirstCollision ajoutent l'orientation de
+// l'objet au leur. On la retranche donc avant l'appel. Sans ca, un cercle
+// construit par pas reguliers (slice * index) tournerait avec le personnage.
+
+// Point sur un cercle de rayon `radius` autour de `target`, a un angle ABSOLU
+// impose, en s'arretant a la premiere collision rencontree en chemin.
+inline Position GetRandomPositionAroundCircle(WorldObject const* target, float angle, float radius)
 {
-    float alpha = 2 * float(M_PI) * float(rand_norm());
-    float r = dist * sqrtf(float(rand_norm()));
-    float x = r * cosf(alpha) + center.GetPositionX();
-    float y = r * sinf(alpha) + center.GetPositionY();
+    if (!target)
+        return Position();
 
-    Position result = { x, y, center.GetPositionZ(), 0.f };
+    Position result = target->GetPosition();
+    if (radius <= 0.0f)
+        return result;
 
-    float o = result.GetAbsoluteAngle(center);
-    result.SetOrientation(o);
+    target->MovePositionToFirstCollision(result, radius, angle - target->GetOrientation());
+    result.SetOrientation(result.GetAbsoluteAngle(target));
 
     return result;
 }
 
-inline Position const GetRandomPosition(Unit* target, float dist, bool fill = true)
+// Position aleatoire autour de `target`, en s'arretant a la premiere collision.
+//   fill = true  : tirage uniforme dans le disque de rayon `dist` (la racine
+//                  carree sur le rayon evite l'agglutinement au centre)
+//   fill = false : sur le cercle exact de rayon `dist`
+inline Position GetRandomPosition(WorldObject const* target, float dist, bool fill = true)
 {
-    // Get center position
-    Position center = target->GetPosition();
+    if (!target)
+        return Position();
 
-    // Random angle
-    float alpha = 2 * float(M_PI) * float(rand_norm());
+    float const angle = frand(0.0f, 2.0f * float(M_PI));
+    float const radius = fill ? dist * std::sqrt(float(rand_norm())) : dist;
 
-    // Random radius
-    float r = fill
-        ? dist * sqrtf(float(rand_norm()))
-        : dist;
-
-    // Move to first collision
-    target->MovePositionToFirstCollision(center, r, alpha);
-
-    // Get orientation angle
-    float o = center.GetAbsoluteAngle(target);
-
-    // Set final position
-    return { center.m_positionX, center.m_positionY, center.m_positionZ, o };
+    return GetRandomPositionAroundCircle(target, angle, radius);
 }
 
-inline Position const GetRandomPositionAroundCircle(Unit* target, float angle, float radius)
+// Position aleatoire dans le disque de rayon `radius` autour d'un centre libre,
+// avec une distance minimale optionnelle.
+//
+// `reference` n'est pas le centre : c'est l'objet qui sert a resoudre le
+// terrain et la phase (n'importe quel objet deja present sur la bonne carte -
+// le lanceur, le joueur teleporte, me...). Sans lui, impossible d'accrocher le
+// Z au sol : c'est exactement ce qui manquait a l'ancienne version, qui
+// recopiait le Z du centre pour tout le monde.
+inline Position GetRandomPosition(WorldObject const* reference, Position const& center, float radius, float minRadius = 0.0f)
 {
-    // Get center position
-    const Position center = target->GetPosition();
+    if (!reference)
+        return center;
 
-    // Get X and Y position around the center with radius
-    float x = radius * cosf(angle) + center.GetPositionX();
-    float y = radius * sinf(angle) + center.GetPositionY();
+    Position result = reference->GetRandomPoint(center, radius, minRadius);
+    result.SetOrientation(result.GetAbsoluteAngle(center));
 
-    // Get height map Z position
-    float z = center.GetPositionZ();
-
-    Trinity::NormalizeMapCoord(x);
-    Trinity::NormalizeMapCoord(y);
-    target->UpdateGroundPositionZ(x, y, z);
-
-    // Get orientation angle
-    const Position position = { x, y, z };
-    float o = position.GetAbsoluteAngle(center);
-
-    // Set final position
-    return { x, y, z, o };
+    return result;
 }
 
 inline void FeignDeath(Creature* creature)

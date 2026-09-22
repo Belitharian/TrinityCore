@@ -386,19 +386,15 @@ class spell_freezing_blast : public SpellScript
 		if (!caster)
 			return;
 
-		// 3 positions en ligne droite devant, espacées de 6y
+		// 3 positions en ligne droite devant, espacï¿½es de 6y
 		for (int i = 1; i <= 3; ++i)
 		{
 			float dist = 6.0f * i;
 
-			Position dest;
-			dest.m_positionX = caster->GetPositionX() + dist * std::cos(_orientation);
-			dest.m_positionY = caster->GetPositionY() + dist * std::sin(_orientation);
-			dest.m_positionZ = caster->GetPositionZ();
+			// Angle absolu : le helper compense l'orientation ajoutee par le
+			// core, accroche le Z au sol et s'arrete a la premiere collision.
+			Position dest = GetRandomPositionAroundCircle(caster, _orientation, dist);
 			dest.SetOrientation(_orientation);
-
-			// Ajuster le Z au sol
-			caster->UpdateAllowedPositionZ(dest.m_positionX, dest.m_positionY, dest.m_positionZ);
 
 			CastSpellExtraArgs args(TRIGGERED_DONT_REPORT_CAST_ERROR | TRIGGERED_IGNORE_CAST_IN_PROGRESS);
 			args.SetOriginalCaster(caster->GetGUID());

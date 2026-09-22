@@ -1,4 +1,4 @@
-#include "AreaTrigger.h"
+Ôªø#include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
@@ -176,7 +176,7 @@ struct npc_assassin_dalaran : public CustomAI
 
 	void JustAppeared() override
 	{
-		me->SetBaseSpellCritChance(30.f);
+		SetSpellCritChance(30.f);
 		if (roll_chance(20))
 			DoCastSelf(SPELL_STEALTH);
 	}
@@ -257,7 +257,7 @@ struct npc_assassin_dalaran : public CustomAI
 
 					DoCast(target, SPELL_SHADOWSTEP);
 
-					shadowstep.Schedule(1s, [this](TaskContext backstab)
+					shadowstep.Schedule(1s, [this](TaskContext /*backstab*/)
 					{
 						if (Unit* target = ObjectAccessor::GetUnit(*me, backstabGuid))
 							DoCast(target, SPELL_BACKSTAB);
@@ -579,7 +579,7 @@ struct npc_stormwind_cleric : public CustomAI
 	// Modify Crit Chance
 	void JustAppeared() override
 	{
-		me->SetBaseSpellCritChance(30.f);
+		SetSpellCritChance(30.f);
 	}
 
 	void Reset() override
@@ -979,7 +979,7 @@ public:
 
 	enum Events : uint32
 	{
-		// SÈquence mur de glace
+		// S√©quence mur de glace
 		EVENT_WALL_TALK_01          = 1,
 		EVENT_WALL_TALK_02          = 2,
 		EVENT_WALL_FACE             = 3,
@@ -987,7 +987,7 @@ public:
 		EVENT_WALL_KILL             = 5,
 		EVENT_WALL_TALK_03          = 6,
 		EVENT_WALL_MOVE             = 7,
-		// SÈquence citoyens
+		// S√©quence citoyens
 		EVENT_CITIZEN_FACE          = 9,
 		EVENT_CITIZEN_TALK          = 10,
 		EVENT_CITIZEN_SCATTER       = 11,
@@ -1013,8 +1013,8 @@ public:
 
 	void JustAppeared() override
 	{
-		// RÈcupËre la position du mur de glace pour le summon ultÈrieur du trigger de sort,
-		// et dÈsactive son respawn pour toute la durÈe de vie du script (24h).
+		// R√©cup√®re la position du mur de glace pour le summon ult√©rieur du trigger de sort,
+		// et d√©sactive son respawn pour toute la dur√©e de vie du script (24h).
 		if (Creature* icewall = me->FindNearestCreature(NPC_ICEWALL, 15.f))
 		{
 			m_summonPos = icewall->GetPosition();
@@ -1025,14 +1025,14 @@ public:
 
 	void Reset() override
 	{
-		// Landalock est un PNJ de quÍte, il ne doit jamais entrer en combat.
+		// Landalock est un PNJ de qu√™te, il ne doit jamais entrer en combat.
 		me->SetImmuneToAll(true);
 	}
 
 	void SetGUID(ObjectGuid const& guid, int32 id) override
 	{
-		// ReÁoit les GUIDs du joueur et du stalker depuis le script externe
-		// (typiquement l'InstanceScript ou un autre AI qui orchestre la sÈquence).
+		// Re√ßoit les GUIDs du joueur et du stalker depuis le script externe
+		// (typiquement l'InstanceScript ou un autre AI qui orchestre la s√©quence).
 		switch (id)
 		{
 		case GUID_PLAYER:
@@ -1057,7 +1057,7 @@ public:
 		if (!player)
 			return;
 
-		// Guard : Èvite une double exÈcution si DoAction est appelÈ plusieurs fois.
+		// Guard : √©vite une double ex√©cution si DoAction est appel√© plusieurs fois.
 		if (m_citizenPhaseActive)
 			return;
 
@@ -1078,14 +1078,14 @@ public:
 		}
 		else
 		{
-			// Aucun citoyen trouvÈ : on despawn proprement sans dÈclencher la sÈquence.
+			// Aucun citoyen trouv√© : on despawn proprement sans d√©clencher la s√©quence.
 			me->DespawnOrUnsummon(800ms);
 		}
 	}
 
 	void MovementInform(uint32 /*type*/, uint32 id) override
 	{
-		// DÈclenchÈ quand Landalock atteint la position de Sorin ‡ la fin de la sÈquence mur.
+		// D√©clench√© quand Landalock atteint la position de Sorin √† la fin de la s√©quence mur.
 		if (id != MOVEMENT_INFO_POINT_01)
 			return;
 
@@ -1106,7 +1106,7 @@ public:
 
 	bool OnGossipHello(Player* player) override
 	{
-		// Affiche le menu gossip par dÈfaut sans condition supplÈmentaire.
+		// Affiche le menu gossip par d√©faut sans condition suppl√©mentaire.
 		player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
 		player->SendPreparedGossip(me);
 		return true;
@@ -1118,8 +1118,8 @@ public:
 
 		if (gossipListId == 0)
 		{
-			// Le joueur lance la sÈquence : on retire les flags passifs
-			// et on dÈmarre la timeline du mur de glace.
+			// Le joueur lance la s√©quence : on retire les flags passifs
+			// et on d√©marre la timeline du mur de glace.
 			m_playerGUID = player->GetGUID();
 			me->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 			me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
@@ -1141,7 +1141,7 @@ public:
 			switch (eventId)
 			{
 				// -------------------------------------------------------
-				// SÈquence : destruction du mur de glace
+				// S√©quence : destruction du mur de glace
 				// -------------------------------------------------------
 
 				case EVENT_WALL_TALK_01:
@@ -1164,7 +1164,7 @@ public:
 					m_events.ScheduleEvent(EVENT_WALL_BURST, 2s);
 					break;
 				case EVENT_WALL_BURST:
-					// Summon d'un trigger invisible ‡ la position du mur
+					// Summon d'un trigger invisible √† la position du mur
 					// qui sert de point d'impact pour SPELL_ICE_BURST.
 					if (Creature* trigger = me->SummonCreature(WORLD_TRIGGER, m_summonPos, TEMPSUMMON_TIMED_DESPAWN, 10s))
 					{
@@ -1195,16 +1195,16 @@ public:
 					m_events.ScheduleEvent(EVENT_WALL_MOVE, 4s);
 					break;
 				case EVENT_WALL_MOVE:
-					// DÈplacement vers Sorin Magehand ? la suite est gÈrÈe dans MovementInform.
+					// D√©placement vers Sorin Magehand ? la suite est g√©r√©e dans MovementInform.
 					me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, SORIN_POS, true, SORIN_POS.GetOrientation());
 					break;
 
 				// -------------------------------------------------------
-				// SÈquence : dispersion et tÈlÈportation des citoyens
+				// S√©quence : dispersion et t√©l√©portation des citoyens
 				// -------------------------------------------------------
 
 				case EVENT_CITIZEN_FACE:
-					// Landalock se tourne vers la barriËre arcanique avant de parler.
+					// Landalock se tourne vers la barri√®re arcanique avant de parler.
 					if (Creature* barrier = GetClosestCreatureWithEntry(me, NPC_ARCANE_BARRIER, 15.f))
 						me->SetFacingToObject(barrier);
 					m_events.ScheduleEvent(EVENT_CITIZEN_TALK, 1s);
@@ -1215,9 +1215,9 @@ public:
 					break;
 				case EVENT_CITIZEN_SCATTER:
 				{
-					// RÈpartit les citoyens en cercle autour de Landalock.
-					// Chaque citoyen est envoyÈ ‡ un angle rÈgulier sur un rayon de 3.2f.
-					// Le respawn est dÈsactivÈ pour Èviter qu'ils rÈapparaissent pendant la sÈquence.
+					// R√©partit les citoyens en cercle autour de Landalock.
+					// Chaque citoyen est envoy√© √† un angle r√©gulier sur un rayon de 3.2f.
+					// Le respawn est d√©sactiv√© pour √©viter qu'ils r√©apparaissent pendant la s√©quence.
 					uint8 index = 0;
 					float const slice = 2.f * float(M_PI) / float(m_citizens.size());
 					for (ObjectGuid const& citizenGuid : m_citizens)
@@ -1236,16 +1236,16 @@ public:
 						citizen->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, dest, true, dest.GetOrientation());
 					}
 
-					// DÈmarre le chrono ? le wait forcera le TP aprËs 5s quoi qu'il arrive.
+					// D√©marre le chrono ? le wait forcera le TP apr√®s 5s quoi qu'il arrive.
 					m_citizenWaitExpiry = GameTime::Now() + 5s;
 					m_events.ScheduleEvent(EVENT_CITIZEN_WAIT, 500ms);
 					break;
 				}
 				case EVENT_CITIZEN_WAIT:
 				{
-					// Attend que tous les citoyens soient arrivÈs ‡ proximitÈ de Landalock.
-					// Le check combine distance planaire (XY), visibilitÈ et delta Z
-					// pour exclure les citoyens tombÈs sous la gÈomÈtrie.
+					// Attend que tous les citoyens soient arriv√©s √† proximit√© de Landalock.
+					// Le check combine distance planaire (XY), visibilit√© et delta Z
+					// pour exclure les citoyens tomb√©s sous la g√©om√©trie.
 					uint32 ready = 0;
 					uint32 expected = 0;
 
@@ -1262,8 +1262,8 @@ public:
 						float const dist2D = std::sqrt(dx * dx + dy * dy);
 						float const dz = std::abs(citizen->GetPositionZ() - me->GetPositionZ());
 
-						// Un delta Z > 4.f signale une chute dans la gÈomÈtrie :
-						// le citoyen est ignorÈ pour le check d'arrivÈe.
+						// Un delta Z > 4.f signale une chute dans la g√©om√©trie :
+						// le citoyen est ignor√© pour le check d'arriv√©e.
 						bool const isClose = dist2D <= 6.f;
 						bool const isVisible = citizen->IsVisible();
 						bool const notFallen = dz <= 4.f;
@@ -1273,8 +1273,8 @@ public:
 					}
 
 					bool const allReady = expected == 0 || ready >= expected;
-					// Fallback : si 5s sont ÈcoulÈes on force le TP
-					// pour ne pas bloquer sur un citoyen coincÈ.
+					// Fallback : si 5s sont √©coul√©es on force le TP
+					// pour ne pas bloquer sur un citoyen coinc√©.
 					bool const timedOut = GameTime::Now() >= m_citizenWaitExpiry;
 
 					if (allReady || timedOut)
@@ -1292,12 +1292,12 @@ public:
 				}
 				case EVENT_CITIZEN_TELEPORT:
 				{
-					// Landalock commence son cast, puis les citoyens partent en dÈcalÈ
-					// pour donner l'impression que c'est lui qui les tÈlÈporte.
+					// Landalock commence son cast, puis les citoyens partent en d√©cal√©
+					// pour donner l'impression que c'est lui qui les t√©l√©porte.
 					DoCast(SPELL_TELEPORT_CASTER);
 
 					#ifdef CUSTOM_DEBUG
-						// En debug : rÈcompense accÈlÈrÈe sur un seul citizen pour tester rapidement.
+						// En debug : r√©compense acc√©l√©r√©e sur un seul citizen pour tester rapidement.
 						Player* player = ObjectAccessor::GetPlayer(*me, m_playerGUID);
 						if (player && !m_citizens.empty())
 						{
@@ -1306,8 +1306,8 @@ public:
 								KillRewarder::Reward(player, citizen);
 						}
 					#else
-						// En prod : rÈcompense + tÈlÈportation + despawn pour chaque citoyen valide,
-						// avec un dÈlai ÈchelonnÈ pour que les TP ne partent pas tous en mÍme temps.
+						// En prod : r√©compense + t√©l√©portation + despawn pour chaque citoyen valide,
+						// avec un d√©lai √©chelonn√© pour que les TP ne partent pas tous en m√™me temps.
 						uint32 delay = 500;
 						ObjectGuid const rewardGuid = m_playerGUID;
 						for (ObjectGuid const& citizenGuid : m_citizens)
@@ -1640,7 +1640,7 @@ struct npc_sunreaver_pyromancer : public npc_sunreaver_unit
 	// Modify Crit Chance
 	void JustAppeared() override
 	{
-		me->SetBaseSpellCritChance(30.f);
+		SetSpellCritChance(30.f);
 	}
 
 	void Reset() override
@@ -1974,10 +1974,7 @@ struct npc_arcane_elemental : public CustomAI
 
 struct npc_sunreaver_captain : public CustomAI
 {
-	const Position center = { -743.33f, 4289.46f, 729.07f, 2.29f };
-
-	npc_sunreaver_captain(Creature* creature) : CustomAI(creature, AI_Type::Melee),
-		hostsEvent(false)
+	npc_sunreaver_captain(Creature* creature) : CustomAI(creature, AI_Type::Melee)
 	{
 	}
 
@@ -1993,15 +1990,6 @@ struct npc_sunreaver_captain : public CustomAI
 		SPELL_VICIOUS_WOUND         = 334960
 	};
 
-	enum Misc
-	{
-		SAY_WANTON_HOSTESS_FLEE     = 2,
-		GOB_PORTAL_TO_SILVERMOON    = 323854
-	};
-
-	std::vector<Creature*> hosts;
-	bool hostsEvent;
-
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
 	{
 		if (!me->HasAura(SPELL_RECENTLY_BANDAGED) && me->HealthBelowPctDamaged(25, damage))
@@ -2015,8 +2003,6 @@ struct npc_sunreaver_captain : public CustomAI
 
 	void JustEngagedWith(Unit* /*who*/) override
 	{
-		DoFleeWantonHosts();
-
 		scheduler
 			.Schedule(3s, [this](TaskContext mortal_cleave)
 			{
@@ -2050,89 +2036,102 @@ struct npc_sunreaver_captain : public CustomAI
 				DoCast(SPELL_RISING_ANGER);
 			});
 	}
-
-	void DoFleeWantonHosts()
-	{
-		if (hostsEvent)
-			return;
-
-		hostsEvent = true;
-
-		hosts.clear();
-
-		GetCreatureListWithEntryInGrid(hosts, me, NPC_WANTON_HOST, 8.f);
-		GetCreatureListWithEntryInGrid(hosts, me, NPC_WANTON_HOSTESS, 8.f);
-
-		if (!hosts.empty())
-		{
-			for (Creature* host : hosts)
-			{
-				host->SetEmoteState(EMOTE_STATE_NONE);
-				host->SetStandState(UNIT_STAND_STATE_STAND);
-				host->RemoveAllAuras();
-
-				if (host->GetEntry() == NPC_WANTON_HOSTESS)
-					host->AI()->Talk(SAY_WANTON_HOSTESS_FLEE);
-
-				const Position dest = GetRandomPosition(center, 5.f);
-				ObjectGuid const hostGuid = host->GetGUID();
-				scheduler
-					.Schedule(2s, 5s, [hostGuid, dest, this](TaskContext /*context*/)
-					{
-						Creature* host = ObjectAccessor::GetCreature(*me, hostGuid);
-						if (!host)
-							return;
-
-						host->SetEmoteState(EMOTE_STATE_COWER);
-						host->SetHomePosition(dest);
-						host->SetFacingToObject(me);
-						host->DespawnOrUnsummon(30s);
-
-						float angle = me->GetAbsoluteAngle(host);
-						host->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, dest, true, angle);
-					});
-			}
-		}
-	}
 };
 
 struct npc_magister_brasael : public CustomAI
 {
-	static constexpr uint32 BAGS_COUNT = 50;
-	static constexpr uint32 DAMAGE_LIMITATION = 5000;
+	// -------------------------------------------------------------------------
+	// Enums
+	// -------------------------------------------------------------------------
 
-	npc_magister_brasael(Creature* creature) : CustomAI(creature, AI_Type::Distance),
-		cauterized(false), damagedBags(0)
+	enum Constants : uint32
+	{
+		BAGS_COUNT            = 50,     // Sacs port√©s √† l'engagement
+		REDUCTION_PER_BAG     = 1,      // % de d√©g√¢ts absorb√©s par sac port√©
+		MAX_REDUCTION_PCT     = 50,     // Plafond de la r√©duction de d√©g√¢ts
+		BAGS_PER_COMBUSTION   = 5,      // Sacs jet√©s dans les flammes √† chaque Combustion
+		COMBUSTION_MS_PER_BAG = 1000,   // Prolongation de Combustion par sac br√ªl√©
+		CAUTERIZE_HEALTH_PCT  = 25,     // Seuil de vie qui d√©clenche Caut√©risation
+		CAUTERIZE_BURN_PCT    = 8,      // % de vie max perdus au lancement de Caut√©risation
+		CAUTERIZE_HEAL_MIN    = 1,      // % de vie max par seconde sans plus aucun sac
+		CAUTERIZE_HEAL_MAX    = 10,     // % de vie max par seconde avec tous ses sacs
+	};
+
+	enum Spells : uint32
+	{
+		SPELL_DRAGON_BREATH   = 31661,
+		SPELL_COUNTERSPELL    = 2139,
+		SPELL_SURVIVOR_BAG    = 138208,
+		SPELL_CAUTERIZE       = 175620,
+		SPELL_PYROBLAST       = 255998,
+		SPELL_PHOENIX_FLAMES  = 257541,
+		SPELL_FIREBALL        = 283953,
+		SPELL_COMBUSTION      = 413004,
+		SPELL_FIRESTRIKE      = 1254301,
+	};
+
+	enum Misc : uint32
+	{
+		SAY_BRASAEL_01        = 0,
+	};
+
+	// Chance de critique des sorts hors Combustion (Combustion la porte √† 100 %).
+	static constexpr float BASE_SPELL_CRIT = 30.f;
+
+	// -------------------------------------------------------------------------
+	// Membres
+	// -------------------------------------------------------------------------
+
+	Position barrierPoint01;
+	SpellInfo const* fireballInfo = nullptr;
+	SpellInfo const* pyroblastInfo = nullptr;
+
+	// -------------------------------------------------------------------------
+	// Constructeur
+	// -------------------------------------------------------------------------
+
+	npc_magister_brasael(Creature* creature) : CustomAI(creature, AI_Type::Distance)
 	{
 		SetCanRandomMovement(false);
 	}
 
-	enum Misc
+	// -------------------------------------------------------------------------
+	// M√©thodes publiques
+	// -------------------------------------------------------------------------
+
+	// R√©sout les SpellInfo qui servent √† cadencer la rotation.
+	void Initialize() override
 	{
-		// Spells
-		SPELL_SURVIVOR_BAG          = 138208,
-		SPELL_GOLDEN_MOSS           = 148559,
-		// Talks
-		SAY_BRASAEL_01              = 0
-	};
+		CustomAI::Initialize();
 
-	enum Spells
+		fireballInfo = sSpellMgr->AssertSpellInfo(SPELL_FIREBALL, DIFFICULTY_NONE);
+		pyroblastInfo = sSpellMgr->AssertSpellInfo(SPELL_PYROBLAST, DIFFICULTY_NONE);
+	}
+
+	// Recharge Brasael de tous ses sacs et remet sa chance de critique de base.
+	void Reset() override
 	{
-		SPELL_INCANTER_FLOW         = 116267,
-		SPELL_METEOR                = 153561,
-		SPELL_CAUTERIZE             = 175620,
-		SPELL_COMBUSTION            = 190319,
-		SPELL_PYROBLAST             = 255998,
-		SPELL_PHOENIX_FLAMES        = 257541,
-		SPELL_BLAST_WAVE            = 270285,
-		SPELL_FIREBALL              = 283953,
-		SPELL_CINDERBLAST           = 424420,
-	};
+		CustomAI::Reset();
 
-	bool cauterized;
-	uint32 damagedBags;
-	Position barrierPoint01;
+		me->SetAuraStack(SPELL_SURVIVOR_BAG, me, BAGS_COUNT);
+		me->SetBaseSpellCritChance(BASE_SPELL_CRIT);
+	}
 
+	// Autorise les critiques de sorts et associe la barri√®re la plus proche au PNJ.
+	void JustAppeared() override
+	{
+		SetSpellCritChance(BASE_SPELL_CRIT);
+
+		if (Creature* barrier = GetClosestCreatureWithEntry(me, NPC_ARCANE_BARRIER, 60.f))
+		{
+			barrierPoint01 = barrier->GetPosition();
+			barrier->SetOwnerGUID(me->GetGUID());
+			barrier->SetObjectScale(1.2f);
+		}
+	}
+
+	// D√©clench√© par la barri√®re quand le joueur la dissipe : Brasael l√¢che ses
+	// occupations et rejoint sa position de combat.
 	void DoAction(int32 action) override
 	{
 		if (action != ACTION_DISPELL_BARRIER)
@@ -2148,195 +2147,191 @@ struct npc_magister_brasael : public CustomAI
 		});
 	}
 
-	void MovementInform(uint32 /*type*/, uint32 id) override
+	// Arriv√© √† sa position : il pose son sac, interpelle le joueur et redevient
+	// attaquable. Les autres points de mouvement restent g√©r√©s par CustomAI (recul).
+	void MovementInform(uint32 type, uint32 id) override
 	{
-		switch (id)
+		if (id != MOVEMENT_INFO_POINT_01)
 		{
-			case MOVEMENT_INFO_POINT_01:
-				me->AI()->Talk(SAY_BRASAEL_01);
-				me->SetHomePosition(BrasaelPos01);
-				me->RemoveAurasDueToSpell(SPELL_HOLD_BAG);
-				scheduler
-					.Schedule(1s, [this](TaskContext ring_of_fire)
-					{
-						switch (ring_of_fire.GetRepeatCounter())
-						{
-							case 4:
-								me->SetImmuneToAll(false);
-								break;
-							default:
-								DoCast(SPELL_GOLDEN_MOSS);
-								ring_of_fire.Repeat(500ms, 800ms);
-								break;
-						}
-					});
-				break;
+			CustomAI::MovementInform(type, id);
+			return;
 		}
-	}
 
-	void JustAppeared() override
-	{
-		if (Creature* barrier = GetClosestCreatureWithEntry(me, NPC_ARCANE_BARRIER, 60.f))
+		Talk(SAY_BRASAEL_01);
+		me->SetHomePosition(BrasaelPos01);
+		me->RemoveAurasDueToSpell(SPELL_HOLD_BAG);
+
+		scheduler.Schedule(2s, [this](TaskContext /*context*/)
 		{
-			barrierPoint01 = barrier->GetPosition();
-
-			barrier->SetOwnerGUID(me->GetGUID());
-			barrier->SetObjectScale(1.2f);
-		}
+			me->SetImmuneToAll(false);
+		});
 	}
 
-	void Initialize() override
+	// Combustion : au moment o√π l'aura s'applique, Brasael jette BAGS_PER_COMBUSTION
+	// sacs dans les flammes. Chaque sac br√ªl√© prolonge Combustion de
+	// COMBUSTION_MS_PER_BAG, mais rogne d'autant sa protection et sa Caut√©risation.
+	//
+	// Le ¬´ +100 % de critique ¬ª du sort est un spellmod de la famille Mage que le
+	// core n'applique qu'aux joueurs (Unit::SpellCritChanceDone passe par
+	// GetSpellModOwner()), et qui ne couvrirait de toute fa√ßon pas les sorts PNJ
+	// sans famille de classe (Boule de feu, Pyroblast, Frappe de feu). On force
+	// donc la chance de critique de base le temps de l'aura.
+	void OnAuraApplied(AuraApplication const* aurApp) override
 	{
-		CustomAI::Initialize();
+		Aura* combustion = aurApp->GetBase();
+		if (combustion->GetId() != SPELL_COMBUSTION)
+			return;
 
-		cauterized = false;
-		damagedBags = 0;
+		me->SetBaseSpellCritChance(100.f);
+
+		Aura* bags = me->GetAura(SPELL_SURVIVOR_BAG);
+		if (!bags)
+			return;
+
+		int32 const burned = std::min<int32>(bags->GetStackAmount(), BAGS_PER_COMBUSTION);
+		bags->ModStackAmount(-burned);   // retire l'aura si c'√©taient les derniers sacs
+
+		int32 const bonus = burned * COMBUSTION_MS_PER_BAG;
+		combustion->SetMaxDuration(combustion->GetMaxDuration() + bonus);
+		combustion->SetDuration(combustion->GetDuration() + bonus);
 	}
 
-	void Reset() override
+	// Fin de Combustion : retour √† la chance de critique de base.
+	void OnAuraRemoved(AuraApplication const* aurApp) override
 	{
-		CustomAI::Reset();
-
-		for (uint8 i = 0; i < BAGS_COUNT; i++)
-			me->AddAura(SPELL_SURVIVOR_BAG, me);
+		if (aurApp->GetBase()->GetId() == SPELL_COMBUSTION)
+			me->SetBaseSpellCritChance(BASE_SPELL_CRIT);
 	}
 
-	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+	// Les sacs de survivant sont la ressource du combat :
+	//   - chaque sac absorbe REDUCTION_PER_BAG % des d√©g√¢ts re√ßus ;
+	//   - chaque Combustion en br√ªle BAGS_PER_COMBUSTION (voir OnAuraApplied) ;
+	//   - sous CAUTERIZE_HEALTH_PCT % de vie, Brasael br√ªle ce qu'il lui reste
+	//     de sacs pour se caut√©riser (voir Cauterize).
+	// Les d√©g√¢ts ne d√©truisent aucun sac : seul Brasael les consomme.
+	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* spellInfo) override
 	{
-		// L'aura de [Sac de survivant] est obligatoire pour appliquer la technique CautÈrisation
-		if (Aura* bags = me->GetAura(SPELL_SURVIVOR_BAG))
+		// La br√ªlure de Caut√©risation ne peut pas l'achever
+		if (spellInfo && spellInfo->Id == SPELL_CAUTERIZE)
 		{
-			// RÈcupËre le nombre de sacs
-			uint32 stack = bags->GetStackAmount();
-			if (stack <= 0)
-				return;
-
-			// Ajoute les dÈg‚ts
-			damagedBags += damage;
-
-			// Si les dÈg‚ts infligÈs sont supÈrieurs ‡ la limite de dÈg‚ts
-			if (damagedBags >= DAMAGE_LIMITATION)
-			{
-				// On enlËve un sac et on rÈinitilise les dÈg‚ts infligÈs
-				damagedBags = 0;
-				bags->SetStackAmount(stack - 1);
-			}
-
-			// Si Brasael n'a pas encore utilisÈ CautÈrisation ou si la technique n'est pas encore rechargÈe (1 min)
-			if (cauterized)
-				return;
-
-			// Si Brasael est en dessous de 25% de sa vie aprËs que les dÈg‚ts actuels soient appliquÈes
-			if (HealthBelowPct(25))
-			{
-				// On met une sÈcuritÈ
-				cauterized = true;
-
-				// On interrompt tous les sorts
-				CastStop();
-
-				// La technique CautÈrisation dÈpend du nombre de sacs qui n'ont pas ÈtÈ enlevÈs par les dÈg‚ts
-				CastSpellExtraArgs args;
-				args.SetOriginalCaster(me->GetGUID());
-				args.AddSpellMod(SPELLVALUE_BASE_POINT0, 8);        // 8% de la vie maximum
-				args.AddSpellMod(SPELLVALUE_BASE_POINT1, stack);    // Le pourcentage de soin dÈpend du nombre de sac
-
-				// On lance CautÈrisation avec les arguments de lancement
-				DoCast(me, SPELL_CAUTERIZE, args);
-
-				// On attend 1min avant de relancer CautÈrisation
-				scheduler.Schedule(1min, [this](TaskContext /*context*/)
-				{
-					cauterized = false;
-				});
-			}
+			damage = std::min<uint32>(damage, std::max<uint32>(me->GetHealth(), 1) - 1);
+			return;
 		}
+
+		Aura* bags = me->GetAura(SPELL_SURVIVOR_BAG);
+		if (!bags)
+			return;
+
+		uint32 const stack = bags->GetStackAmount();
+		damage -= CalculatePct(damage, std::min<uint32>(stack * REDUCTION_PER_BAG, MAX_REDUCTION_PCT));
+
+		if (me->HealthBelowPctDamaged(CAUTERIZE_HEALTH_PCT, damage))
+			Cauterize(stack, damage);
 	}
 
-	void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
-	{
-		if (spellInfo->Id == SPELL_FIREBALL)
-			DoCast(me, SPELL_INCANTER_FLOW, true);
-		else if (spellInfo->Id == SPELL_CINDERBLAST)
-		{
-			CastStop();
-			if (Unit* victim = target->ToUnit())
-				DoCast(victim, SPELL_METEOR);
-		}
-	}
-
-	void DamageDealt(Unit* /*victim*/, uint32& damage, DamageEffectType damageType) override
-	{
-		if (damageType == DIRECT_DAMAGE || damageType == SPELL_DIRECT_DAMAGE || damageType == DOT)
-		{
-			if (me->HasAura(SPELL_COMBUSTION))
-				damage *= 1.25f;
-
-			uint32 incanterCount = me->GetAuraCount(SPELL_INCANTER_FLOW);
-			if (incanterCount > 0)
-			{
-				float const incanterBonus = 1.0f + incanterCount * 0.5f;
-				damage = uint32(damage * incanterBonus);
-			}
-		}
-	}
-
+	// Rotation de combat. Combustion revient r√©guli√®rement : c'est la fen√™tre o√π
+	// Brasael br√ªle ses sacs et remplace ses Boules de feu par des Pyroblasts,
+	// tous critiques.
 	void JustEngagedWith(Unit* /*who*/) override
 	{
-		DoCast(SPELL_COMBUSTION);
+		DoCastSelf(SPELL_COMBUSTION);
 
 		scheduler
+			.Schedule(30s, [this](TaskContext combustion)
+			{
+				DoCastSelf(SPELL_COMBUSTION);
+				combustion.Repeat();
+			})
 			.Schedule(1s, [this](TaskContext fireball)
 			{
-				DoCastVictim(SPELL_FIREBALL);
-				fireball.Repeat(1800ms);
+				// Sous Combustion, les Boules de feu laissent la place aux Pyroblasts :
+				// plus lents, mais critiques √† coup s√ªr. La cadence suit le temps
+				// d'incantation du sort r√©ellement lanc√©.
+				uint32 spellId = SPELL_FIREBALL;
+				SpellInfo const* spellInfo = fireballInfo;
+				if (me->HasAura(SPELL_COMBUSTION))
+				{
+					spellId = SPELL_PYROBLAST;
+					spellInfo = pyroblastInfo;
+				}
+
+				DoCastVictim(spellId);
+				fireball.Repeat(Milliseconds(spellInfo->CalcCastTime()) + 500ms);
 			})
-			.Schedule(5s, 15s, [this](TaskContext blast_wave)
+			.Schedule(3s, 15s, [this](TaskContext firestrike)
 			{
 				CastStop(SPELL_CAUTERIZE);
-				DoCast(SPELL_BLAST_WAVE);
-				blast_wave.Repeat(15s);
+				DoCastVictim(SPELL_FIRESTRIKE);
+				firestrike.Repeat(12s, 15s);
 			})
-			.Schedule(3s, [this](TaskContext phoenix_flames)
+			.Schedule(5s, [this](TaskContext phoenix_flames)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 				{
-					CastStop({ SPELL_CAUTERIZE, SPELL_BLAST_WAVE });
+					CastStop({ SPELL_CAUTERIZE, SPELL_DRAGON_BREATH });
 					DoCast(target, SPELL_PHOENIX_FLAMES);
 				}
 				phoenix_flames.Repeat(8s, 15s);
 			})
-			.Schedule(15s, [this](TaskContext meteor)
+			.Schedule(8s, [this](TaskContext dragon_breath)
 			{
-				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+				if (EnemiesInFront(2.f))
 				{
-					me->GetSpellHistory()->ResetAllCooldowns();
-
 					CastStop(SPELL_CAUTERIZE);
-					DoCast(target, SPELL_METEOR);
-					meteor.Repeat(28s, 32s);
+					DoCast(SPELL_DRAGON_BREATH);
+					dragon_breath.Repeat(45s);
 				}
 				else
-					meteor.Repeat(15s);
+					dragon_breath.Repeat(1s);
 			})
-			.Schedule(2s, [this](TaskContext counterspell)
+			.Schedule(1s, [this](TaskContext counterspell)
 			{
-				if (Unit* target = DoSelectCastingUnit(SPELL_CINDERBLAST, 35.f))
+				if (Unit* target = DoSelectCastingUnit(SPELL_COUNTERSPELL, 35.f))
 				{
-					me->GetSpellHistory()->ResetAllCooldowns();
-
 					CastStop(SPELL_CAUTERIZE);
-					DoCast(target, SPELL_CINDERBLAST, CastSpellExtraArgs(TRIGGERED_CAST_DIRECTLY));
-					counterspell.Repeat(12s, 24s);
-				}
-				else
-					counterspell.Repeat();
+					DoCast(target, SPELL_COUNTERSPELL);
+                    counterspell.Repeat(20s);
+                }
+                else
+				    counterspell.Repeat(1s);
 			});
 	}
 
-	bool CanAIAttack(Unit const* who) const
+	bool CanAIAttack(Unit const* who) const override
 	{
 		return who->IsAlive() && me->IsValidAttackTarget(who) && ScriptedAI::CanAIAttack(who);
+	}
+
+private:
+	// Soin par seconde de Caut√©risation, interpol√© sur les sacs restants et born√©
+	// √† CAUTERIZE_HEAL_MAX : passer le nombre de sacs brut au sort (5 % par point)
+	// rendrait Brasael intuable tant qu'il en porte encore une trentaine.
+	int32 CauterizeHealPct(uint32 stack) const
+	{
+		uint32 const bags = std::min<uint32>(stack, BAGS_COUNT);
+		return int32(CAUTERIZE_HEAL_MIN + (CAUTERIZE_HEAL_MAX - CAUTERIZE_HEAL_MIN) * bags / BAGS_COUNT);
+	}
+
+	// Caut√©risation : Brasael br√ªle tous ses sacs restants pour se soigner.
+	// Le sort lui co√ªte CAUTERIZE_BURN_PCT % de sa vie max d'un coup, puis lui
+	// rend un pourcentage de vie max par seconde proportionnel aux sacs qui lui
+	// restent : plus le joueur en a d√©truit avant ce seuil, plus le soin est
+	// maigre. Comme pour un mage, le coup qui d√©clenche la Caut√©risation ne peut
+	// pas √™tre fatal.
+	void Cauterize(uint32 stack, uint32& damage)
+	{
+		damage = std::min<uint32>(damage, std::max<uint32>(me->GetHealth(), 1) - 1);
+
+		// Retir√©s avant le cast : la br√ªlure de Caut√©risation repasse par DamageTaken
+		me->RemoveAurasDueToSpell(SPELL_SURVIVOR_BAG);
+
+		CastStop();
+
+		CastSpellExtraArgs args;
+		args.SetOriginalCaster(me->GetGUID());
+		args.AddSpellMod(SPELLVALUE_BASE_POINT0, CAUTERIZE_BURN_PCT);
+		args.AddSpellMod(SPELLVALUE_BASE_POINT1, CauterizeHealPct(stack));
+		DoCast(me, SPELL_CAUTERIZE, args);
 	}
 };
 
@@ -2442,7 +2437,7 @@ struct npc_magister_surdiel : public CustomAI
 	}
 
 	// -------------------------------------------------------------------------
-	// MÈthodes publiques
+	// M√©thodes publiques
 	// -------------------------------------------------------------------------
 
 	// Initialise fireballInfo depuis le SpellMgr.
@@ -2453,7 +2448,7 @@ struct npc_magister_surdiel : public CustomAI
 		fireballInfo = sSpellMgr->AssertSpellInfo(SPELL_FIREBALL, DIFFICULTY_NONE);
 	}
 
-	// RÈinitialise l'AI, les area triggers, le scheduler et les Ètats internes.
+	// R√©initialise l'AI, les area triggers, le scheduler et les √©tats internes.
 	void Reset() override
 	{
 		Initialize();
@@ -2470,7 +2465,7 @@ struct npc_magister_surdiel : public CustomAI
 		ScriptedAI::Reset();
 	}
 
-	// Associe la barriËre la plus proche au PNJ ‡ l'apparition.
+	// Associe la barri√®re la plus proche au PNJ √† l'apparition.
 	void JustAppeared() override
 	{
 		Creature* barrier = GetClosestCreatureWithEntry(me, NPC_ARCANE_BARRIER, 60.f);
@@ -2482,7 +2477,7 @@ struct npc_magister_surdiel : public CustomAI
 		}
 	}
 
-	// Enregistre les ÈlÈmentaires invoquÈs dans la SummonList dÈdiÈe.
+	// Enregistre les √©l√©mentaires invoqu√©s dans la SummonList d√©di√©e.
 	void JustSummoned(Creature* summon) override
 	{
 		if (summon->GetEntry() != NPC_FIRE_ELEMENTAL)
@@ -2494,7 +2489,7 @@ struct npc_magister_surdiel : public CustomAI
 		elementals.Summon(summon);
 	}
 
-	// Despawn immÈdiat des ÈlÈmentaires ‡ leur mort.
+	// Despawn imm√©diat des √©l√©mentaires √† leur mort.
 	void SummonedCreatureDies(Creature* summon, Unit* killer) override
 	{
 		if (summon->GetEntry() == NPC_FIRE_ELEMENTAL)
@@ -2506,7 +2501,7 @@ struct npc_magister_surdiel : public CustomAI
 		CustomAI::SummonedCreatureDies(summon, killer);
 	}
 
-	// Nettoie les area triggers et rÈinvoque les ÈlÈmentaires si besoin.
+	// Nettoie les area triggers et r√©invoque les √©l√©mentaires si besoin.
 	void EnterEvadeMode(EvadeReason why) override
 	{
 		me->RemoveAllAreaTriggers();
@@ -2524,7 +2519,7 @@ struct npc_magister_surdiel : public CustomAI
 		}
 	}
 
-	// GËre la transition de dispell de barriËre initiÈe par l'extÈrieur.
+	// G√®re la transition de dispell de barri√®re initi√©e par l'ext√©rieur.
 	void DoAction(int32 action) override
 	{
 		if (GetPhase() >= DLPPhases::TheEscape)
@@ -2554,7 +2549,7 @@ struct npc_magister_surdiel : public CustomAI
 		zuros->AI()->DoAction(ACTION_DISPELL_BARRIER);
 	}
 
-	// GËre les points de mouvement nommÈs pour l'outro et l'activation des ÈlÈmentaires.
+	// G√®re les points de mouvement nomm√©s pour l'outro et l'activation des √©l√©mentaires.
 	void MovementInform(uint32 /*type*/, uint32 id) override
 	{
 		if (GetPhase() >= DLPPhases::TheEscape)
@@ -2574,7 +2569,7 @@ struct npc_magister_surdiel : public CustomAI
 				{
 					rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, portalPoint01);
 
-					// Capture du GUID uniquement ? le pointeur brut peut Ítre invalidÈ avant l'exÈcution
+					// Capture du GUID uniquement ? le pointeur brut peut √™tre invalid√© avant l'ex√©cution
 					const ObjectGuid capturedGUID = rommathGUID;
 
 					scheduler.Schedule(1s, GROUP_OUTRO, [this, capturedGUID](TaskContext /*context*/)
@@ -2589,7 +2584,7 @@ struct npc_magister_surdiel : public CustomAI
 							}
 						}
 
-						// RÈsolution fraÓche du pointeur dans la lambda
+						// R√©solution fra√Æche du pointeur dans la lambda
 						Creature* rommathResolved = ObjectAccessor::GetCreature(*me, capturedGUID);
 						if (rommathResolved)
 						{
@@ -2620,7 +2615,7 @@ struct npc_magister_surdiel : public CustomAI
 		}
 	}
 
-	// GËre les paliers de vie pour les bombes et la transition vers la phase finale.
+	// G√®re les paliers de vie pour les bombes et la transition vers la phase finale.
 	void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo*/) override
 	{
 		if (GetPhase() >= DLPPhases::TheEscape)
@@ -2639,7 +2634,7 @@ struct npc_magister_surdiel : public CustomAI
             return;
         }
 
-		// Transition phase finale ‡ 15% ? prioritaire sur les paliers de bombes
+		// Transition phase finale √† 15 % ? prioritaire sur les paliers de bombes
 		if (!combatFinal && me->HealthBelowPctDamaged(15, damage))
 		{
 			damage = 0;
@@ -2701,7 +2696,7 @@ struct npc_magister_surdiel : public CustomAI
 			return;
 		}
 
-		// Paliers de bombes ? ignorÈs si phase finale dÈj‡ engagÈe
+		// Paliers de bombes ? ignor√©s si phase finale d√©j√† engag√©e
 		if (combatFinal || !me->IsInCombat())
 		{
 			return;
@@ -2718,7 +2713,7 @@ struct npc_magister_surdiel : public CustomAI
 		}
 	}
 
-	// Lance les sorts de combat en rotation dËs l'engagement.
+	// Lance les sorts de combat en rotation d√®s l'engagement.
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		if (!fireballInfo)
@@ -2762,7 +2757,7 @@ struct npc_magister_surdiel : public CustomAI
 	}
 
 private:
-	// Invoque les ÈlÈmentaires aux positions dÈfinies dans elementalPoints.
+	// Invoque les √©l√©mentaires aux positions d√©finies dans elementalPoints.
 	void SummonElementals()
 	{
 		for (const Position& pos : elementalPoints)
@@ -2777,10 +2772,10 @@ private:
 		}
 	}
 
-	// DÈclenche la mÈcanique des bombes de feu avec tÈlÈportation alÈatoire.
-	// La threat list est itÈrÈe une seule fois : effet d'Ècran + collecte des GUIDs,
-	// puis explosion sur la liste figÈe pour Èviter toute invalidation d'itÈrateur.
-	// countdown est local ‡ la capture pour Ítre insensible aux appels concurrents.
+	// D√©clenche la m√©canique des bombes de feu avec t√©l√©portation al√©atoire.
+	// La threat list est it√©r√©e une seule fois : effet d'√©cran + collecte des GUIDs,
+	// puis explosion sur la liste fig√©e pour √©viter toute invalidation d'it√©rateur.
+	// countdown est local √† la capture pour √™tre insensible aux appels concurrents.
 	void SummonFireBombs()
 	{
 		std::vector<ObjectGuid> targetGUIDs;
@@ -2792,8 +2787,8 @@ private:
 			if (!target)
 				continue;
 
-			// L'effet d'Ècran monte en puissance sur toute la mËche : sa durÈe est
-			// calÈe sur FIRE_BOMB_FUSE_MS pour atteindre son maximum ‡ l'explosion.
+			// L'effet d'√©cran monte en puissance sur toute la m√®che : sa dur√©e est
+			// cal√©e sur FIRE_BOMB_FUSE_MS pour atteindre son maximum √† l'explosion.
 			if (!target->HasAura(SPELL_FIRE_BOMB_SCREEN))
 			{
 				if (Aura* screenEffect = target->AddAura(SPELL_FIRE_BOMB_SCREEN, target))
@@ -2838,7 +2833,7 @@ private:
 			});
 	}
 
-	// Retourne la phase scÈnaristique courante depuis l'InstanceScript.
+	// Retourne la phase sc√©naristique courante depuis l'InstanceScript.
 	[[nodiscard]] DLPPhases GetPhase() const
 	{
 		return instance ? static_cast<DLPPhases>(instance->GetData(DATA_SCENARIO_PHASE)) : DLPPhases::FindJaina01;
@@ -3047,10 +3042,10 @@ struct npc_high_arcanist_savor : public CustomAI
 			}
 			case ACTION_HORDE_PORTAL_SPAWN:
 			{
-				// PremiËre vague de Sunreavers
+				// Premi√®re vague de Sunreavers
 				SummonSunreavers();
 
-				// VÈrifie l'Ètat de l'invocation chaque seconde
+				// V√©rifie l'√©tat de l'invocation chaque seconde
 				scheduler.Schedule(1s, GROUP_PORTAL, [this](TaskContext check_hordes)
 				{
 					if (phase == Phases::Final)
@@ -3060,7 +3055,7 @@ struct npc_high_arcanist_savor : public CustomAI
 					{
 						if (wavesCount >= SAVOR_MAX_WAVES)
 						{
-							// Passage ‡ la phase finale
+							// Passage √† la phase finale
 							phase = Phases::Final;
 
 							scheduler.CancelGroup(GROUP_PORTAL);
@@ -3078,7 +3073,7 @@ struct npc_high_arcanist_savor : public CustomAI
 							// Ferme le portail
 							ClosePortal(sunreaversPortal);
 
-							// Active l'effet de zone via la barriËre
+							// Active l'effet de zone via la barri√®re
 							if (Creature* barrier = ObjectAccessor::GetCreature(*me, arcaneBarrier))
 							{
 								barrier->RemoveAllAuras();
@@ -3125,7 +3120,7 @@ struct npc_high_arcanist_savor : public CustomAI
 
 			timeCount++;
 
-			// Si 3 dÈclenchements ou plus, passage ‡ la phase Portal
+			// Si 3 d√©clenchements ou plus, passage √† la phase Portal
 			if (timeCount >= 3)
 			{
 				rewinding = false;
@@ -3150,7 +3145,7 @@ struct npc_high_arcanist_savor : public CustomAI
 				DoCast(me, SPELL_PORTAL_CHANNELING_03, true);
 				DoCast(me, SPELL_ARCANE_FX, true);
 
-				// Invoque la barriËre arcanique
+				// Invoque la barri√®re arcanique
 				if (Creature* barrier = me->SummonCreature(WORLD_TRIGGER, me->GetPosition()))
 				{
 					barrier->CastSpell(barrier, SPELL_ARCANE_BARRIER);
@@ -3515,7 +3510,7 @@ struct npc_arcane_barrier : public NullCreatureAI
 
 		void JustAppeared() override
 		{
-			// N'initialise la barriËre que si le scÈnario est dans la phase appropriÈe.
+			// N'initialise la barri√®re que si le sc√©nario est dans la phase appropri√©e.
 			if (!m_instance)
 				return;
 
@@ -3527,11 +3522,11 @@ struct npc_arcane_barrier : public NullCreatureAI
 
 			me->AddAura(SPELL_ARCANE_BARRIER, me);
 
-			// RÈcupËre le stalker le plus proche qui servira de point d'invocation pour Landalock.
+			// R√©cup√®re le stalker le plus proche qui servira de point d'invocation pour Landalock.
 			if (Creature* stalker = GetClosestCreatureWithEntry(me, NPC_INVISIBLE_STALKER, 10.f))
 				m_triggerGUID = stalker->GetGUID();
 
-			// Invoque un collider physique alignÈ sur l'orientation de la barriËre.
+			// Invoque un collider physique align√© sur l'orientation de la barri√®re.
 			if (GameObject* collider = me->SummonGameObject(GOB_COLLIDER, me->GetPosition(), QuaternionData::fromEulerAnglesZYX(me->GetOrientation(), 0.f, 0.f), 0s))
 			{
 				m_colliderGUID = collider->GetGUID();
@@ -3541,8 +3536,8 @@ struct npc_arcane_barrier : public NullCreatureAI
 
 		void JustDied(Unit* /*killer*/) override
 		{
-			// Si la barriËre n'a pas d'owner, on nettoie les auras manuellement.
-			// Avec owner, le nettoyage est dÈlÈguÈ ‡ sa mort.
+			// Si la barri√®re n'a pas d'owner, on nettoie les auras manuellement.
+			// Avec owner, le nettoyage est d√©l√©gu√© √† sa mort.
 			if (!me->GetOwner())
 				me->RemoveAllAuras();
 
@@ -3552,7 +3547,7 @@ struct npc_arcane_barrier : public NullCreatureAI
 
 		void Reset() override
 		{
-			// RÈinitialise le guard anti-double dispel.
+			// R√©initialise le guard anti-double dispel.
 			m_dispelled = false;
 		}
 
@@ -3561,7 +3556,7 @@ struct npc_arcane_barrier : public NullCreatureAI
 			if (spellInfo->Id != SPELL_WAND_OF_DISPELLING)
 				return;
 
-			// Guard : une seule exÈcution par vie de la barriËre.
+			// Guard : une seule ex√©cution par vie de la barri√®re.
 			if (m_dispelled)
 				return;
 
@@ -3580,8 +3575,8 @@ struct npc_arcane_barrier : public NullCreatureAI
 		}
 
 	private:
-		// // GËre le dispel d'une barriËre appartenant ‡ un Magistre.
-		// // En debug, la phase est ignorÈe pour faciliter les tests.
+		// G√®re le dispel d'une barri√®re appartenant √† un Magistre.
+		// En debug, la phase est ignor√©e pour faciliter les tests.
 		void HandleMagisterBarrier(Unit* owner, Player* player)
 		{
 			bool const isMagister = owner->GetEntry() == NPC_MAGISTER_BRASAEL
@@ -3608,8 +3603,8 @@ struct npc_arcane_barrier : public NullCreatureAI
 			Dispell(player);
 		}
 
-		// // GËre le dispel de la barriËre autonome : invoque Landalock depuis le stalker
-		// // et lui transmet les GUIDs nÈcessaires pour orchestrer la sÈquence.
+		// G√®re le dispel de la barri√®re autonome : invoque Landalock depuis le stalker
+		// et lui transmet les GUIDs n√©cessaires pour orchestrer la s√©quence.
 		void HandleLandalockBarrier(Player* player)
 		{
 			if (m_triggerGUID.IsEmpty())
@@ -3633,8 +3628,8 @@ struct npc_arcane_barrier : public NullCreatureAI
 			Dispell(nullptr);
 		}
 
-		// // Supprime le collider, applique les effets visuels et tue la barriËre proprement.
-		// // player peut Ítre nullptr si le dispel ne doit pas infliger de dÈg‚ts.
+		// Supprime le collider, applique les effets visuels et tue la barri√®re proprement.
+		// player peut √™tre nullptr si le dispel ne doit pas infliger de d√©g√¢ts.
 		void Dispell(Player* player)
 		{
 			if (GameObject* collider = ObjectAccessor::GetGameObject(*me, m_colliderGUID))
@@ -3950,7 +3945,7 @@ struct at_rain_of_fire : AreaTriggerAI
 			if (unit->GetGUID() == caster->GetGUID())
 				return;
 
-			if (!unit->IsValidAttackTarget(caster))
+			if (!unit->IsFriendlyTo(caster))
 				return;
 
 			caster->CastSpell(unit, SPELL_RAIN_OF_FIRE_DAMAGE, true);
@@ -4492,6 +4487,81 @@ class spell_ember_blast : public SpellScript
 	}
 };
 
+struct areatrigger_purge : public AreaTriggerAI
+{
+    InstanceScript* instance;
+    bool consumed;
+
+    areatrigger_purge(AreaTrigger* at) : AreaTriggerAI(at), consumed(false)
+    {
+        instance = at->GetInstanceScript();
+    }
+
+    virtual DLPPhases CheckPhase()
+    {
+        return DLPPhases::None;
+    }
+
+    virtual DLPPhases NextPhase()
+    {
+        return DLPPhases::None;
+    }
+
+    virtual void Process(Player* /*player*/) {}
+
+    void OnUnitEnter(Unit* unit) override
+    {
+        if (consumed)
+            return;
+
+        Player* player = unit->ToPlayer();
+        if (!player || player->IsGameMaster())
+            return;
+
+        DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
+        if (phase != CheckPhase())
+            return;
+
+        DLPPhases nextPhase = NextPhase();
+        if (nextPhase != DLPPhases::None)
+            instance->SetData(DATA_SCENARIO_PHASE, (uint32)nextPhase);
+
+        Process(player);
+        consumed = true;
+    }
+
+    void OnUnitExit(Unit* unit, AreaTriggerExitReason reason) override
+    {
+        if (reason != AreaTriggerExitReason::NotInside)
+            return;
+
+        Player* player = unit->ToPlayer();
+        if (!player || player->IsGameMaster())
+            return;
+
+        if (!consumed)
+            return;
+
+        at->Remove();
+    }
+};
+
+// 500005
+struct areatrigger_purge_captain : public areatrigger_purge
+{
+    areatrigger_purge_captain(AreaTrigger* at) : areatrigger_purge(at) {}
+
+    virtual DLPPhases CheckPhase()
+    {
+        return DLPPhases::FreeTheArcanist;
+    }
+
+    void Process(Player* /*player*/) override
+    {
+        instance->SetData(EVENT_CAPTAIN_ANTHEAS_TELEPORT, 0U);
+    }
+};
+
 void AddSC_npcs_dalaran_purge()
 {
 	// Neutral
@@ -4533,6 +4603,9 @@ void AddSC_npcs_dalaran_purge()
 	RegisterAreaTriggerAI(at_rain_of_fire);
 	RegisterAreaTriggerAI(at_frigid_blizzard_dalaran);
 	RegisterAreaTriggerAI(at_cleansing_force);
+
+    // Area Triggers Custom
+    RegisterAreaTriggerAI(areatrigger_purge_captain);
 
 	// Spells
 	RegisterSpellScript(spell_purge_teleport);

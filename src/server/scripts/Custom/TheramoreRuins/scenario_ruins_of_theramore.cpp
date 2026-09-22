@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Ruins of Theramore - InstanceScript principal
  *
  * Gere le flow complet du scenario "Les Ruines de Theramore" :
@@ -8,13 +8,16 @@
  *   Phase 2 : FindJaina_Crater         -> retrouvailles au cratere
  *             FindJaina_Crater_Valided -> dialogue de protection de l'iris (events 19..24)
  *   Phase 3 : Standards / Standards_Valided / BackToSender / TheFinalAssault
- *             -> retour a Theramore, combat des hordes (events 25..37)
- *             -> watchdog EVT_HORDE_CHECKER_STANDARDS (44) surveille le nettoyage initial
- *             -> watchdog EVT_HORDE_CHECKER_FINAL (38) surveille la mort des hordes finales
+ *             -> retour a Theramore, combat des hordes (events 25..36)
+ *             -> les deux vagues spawnees par SummonCreatureGroup sont suivies
+ *                par GUID : OnUnitDeath retire le mort de sa vague et declenche
+ *                la suite quand le dernier membre tombe
+ *             -> watchdog EVT_STANDARDS_AGGRO_NUDGE (44) : relance les hordes du
+ *                nettoyage restees passives (il ne compte plus les morts)
  *   Phase 4 : LeaveTheRuins            -> Jaina ouvre le portail vers Stormwind (events 39..43, 45)
  *
  * L'enchainement entre events est sequentiel (Next() incremente eventId membre
- * et planifie l'event suivant). Les watchdogs (38, 44) auto-replanifient.
+ * et planifie l'event suivant). Seul le nudge (44) s'auto-replanifie.
  *
  * Commentaires en francais sans accents (encodage TC).
  */
@@ -32,6 +35,7 @@
 #include "TemporarySummon.h"
 #include "Weather.h"
 #include "ruins_of_theramore.h"
+#include "../CustomScenario.h"
 
 // =========================================================================
 // Tables de correspondance NPC / GO <-> Data ID
@@ -53,12 +57,23 @@ const ObjectData gameobjectData[] =
 };
 
 // =========================================================================
+// Groupes de creatures spawnes par SummonCreatureGroup (creature_summon_groups)
+// =========================================================================
+// Les deux vagues sont suivies par GUID et videes par OnUnitDeath : la mort du
+// dernier membre declenche l'etape suivante du scenario.
+enum RFTCreatureGroups : uint32
+{
+	CREATURE_GROUP_STANDARDS    = 0,    // Hordes du nettoyage initial (phase Standards)
+	CREATURE_GROUP_ASSAULT      = 1     // Hordes de l'assaut final (warlord compris)
+};
+
+// =========================================================================
 // Identifiants des evenements internes de l'EventMap
 // =========================================================================
 // L'ordre numerique est SIGNIFICATIF : Next() incremente eventId de 1 et
 // planifie ainsi automatiquement l'event suivant dans la sequence.
-// Les watchdogs (38, 44) sortent de cette logique (ils s'auto-replanifient).
-enum SceneEvent : uint32
+// Le nudge (44) sort de cette logique (il s'auto-replanifie).
+enum RFTEvents : uint32
 {
 	// Phase 1 - Trouver Jaina sur l'ilot (cinematique d'apres bataille)
 	EVT_ISLE_JAINA_WALK             = 1,    // Jaina marche jusqu'a JainaPoint01
@@ -101,10 +116,10 @@ enum SceneEvent : uint32
 	EVT_BACK_JAINA_TALK_09          = 34,
 	EVT_BACK_WARLORD_TALK_10        = 35,
 	EVT_BACK_RELEASE_HORDES         = 36,   // Hordes attaquent (warlord -> joueur, autres -> elementaires)
-	EVT_BACK_JAINA_IMMUNE           = 37,   // Jaina passe en immune (en attendant la fin)
 
-	// Watchdog : surveille que toutes les hordes (hors warlord) sont mortes
-	EVT_HORDE_CHECKER_FINAL         = 38,
+	// 37 et 38 sont libres : l'ancien EVT_BACK_JAINA_IMMUNE etait vide et ne
+	// servait plus qu'a amorcer EVT_HORDE_CHECKER_FINAL, lui-meme remplace par
+	// le suivi de GUIDs de OnUnitDeath (voir EVENT_JAINA_PROTECTED).
 
 	// Phase 4 - Quitter les ruines
 	EVT_LEAVE_JAINA_WALK            = 39,   // Jaina marche vers le verre brise
@@ -113,8 +128,9 @@ enum SceneEvent : uint32
 	EVT_LEAVE_OPEN_PORTAL           = 42,   // Spawn du portail vers Stormwind
 	EVT_LEAVE_DESPAWN_FINAL         = 43,   // Despawn des elementaires + Jaina disparait
 
-	// Watchdog : surveille la phase de nettoyage initiale (Standards)
-	EVT_HORDE_CHECKER_STANDARDS     = 44,
+	// Watchdog : relance les hordes du nettoyage restees passives. La fin de la
+	// vague, elle, est detectee par OnUnitDeath (voir OnStandardsWaveCleared).
+	EVT_STANDARDS_AGGRO_NUDGE       = 44,
 
 	// Mouvement final de Jaina vers JainaPoint03 (declenche apres watchdog 44)
 	EVT_STANDARDS_JAINA_FINAL_MOVE  = 45
@@ -130,24 +146,43 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 	struct scenario_ruins_of_theramore_InstanceScript : public InstanceScript
 	{
 		scenario_ruins_of_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map),
-			eventId(EVT_ISLE_JAINA_WALK), hordeCounter(0),
+			eventId(EVT_ISLE_JAINA_WALK),
 			phase(RFTPhases::FindJaina_Isle), irisDummy(ObjectGuid::Empty)
 		{
 			SetHeaders(DataHeader);
 			LoadObjectData(creatureData, gameobjectData);
 		}
 
+		// Auras portees par les joueurs pendant une tranche de phases.
+		// Posees et retirees par CustomScenario::SyncPhaseAuras, depuis
+		// SetData(DATA_SCENARIO_PHASE) et OnPlayerEnter.
+		//
+		// La bascule de skybox se fait sur FindJaina_Crater, pas sur
+		// FindJaina_Isle_Valided : cette derniere est posee au DEBUT de la
+		// cinematique de l'ilot, alors que les joueurs n'arrivent dans les
+		// ruines qu'a la fin, au teleport (EVT_ISLE_TELEPORT_TRIGGER).
+		static constexpr CustomScenario::PhaseAura PhaseAuras[] =
+		{
+			// Skybox de l'ilot, jusqu'au teleport vers Theramore.
+			{ SPELL_SKYBOX_EFFECT_ENTRANCE, 0,                                    (uint32)RFTPhases::FindJaina_Crater },
+			// Skybox des ruines pour tout le reste du scenario.
+			{ SPELL_SKYBOX_EFFECT_RUINS,    (uint32)RFTPhases::FindJaina_Crater,  CustomScenario::PhaseAura::ToEnd    }
+		};
+
 		// =================================================================
 		// Etat interne
 		// =================================================================
 		EventMap events;
 		uint32 eventId;                       // Dernier event execute (sert a Next() pour planifier eventId+1)
-		uint32 hordeCounter;                  // Nombre total de hordes spawnees pour la phase Standards
 		RFTPhases phase;                      // Phase courante du scenario
 		ObjectGuid irisDummy;                 // GUID du dummy invisible portant les visuels de l'iris
-		GuidVector hordeChecker;              // GUIDs des hordes surveillees par EVT_HORDE_CHECKER_STANDARDS
 		std::vector<Creature*> elementals;    // Elementaires d'eau invoques par Jaina
-		std::list<TempSummon*> hordes;        // Hordes spawnees pour la phase BackToSender
+
+		// Les deux vagues spawnees par SummonCreatureGroup, suivies par GUID et non
+		// par pointeur : un summon peut disparaitre sous nos pieds. OnUnitDeath en
+		// retire chaque mort, et c'est le passage a vide qui declenche la suite.
+		GuidVector standardsWave;             // Groupe 0 - hordes du nettoyage (phase Standards)
+		GuidVector assaultWave;               // Groupe 1 - assaut final, warlord EXCLU (voir HandleBackSpawnHordes)
 
 		// =================================================================
 		// Lecture / ecriture de donnees externes
@@ -161,19 +196,12 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 		void OnPlayerEnter(Player* player) override
 		{
-			// La skybox change selon la progression :
-			// avant la validation de l'ilot -> entree, sinon -> ruines.
-			RFTPhases current = (RFTPhases)GetData(DATA_SCENARIO_PHASE);
-			if (current >= RFTPhases::FindJaina_Isle_Valided)
-				player->AddAura(SPELL_SKYBOX_EFFECT_RUINS, player);
-			else
-				player->AddAura(SPELL_SKYBOX_EFFECT_ENTRANCE, player);
+			CustomScenario::SyncPhaseAuras(player, (uint32)phase, PhaseAuras);
 		}
 
 		void OnPlayerLeave(Player* player) override
 		{
-			player->RemoveAurasDueToSpell(SPELL_SKYBOX_EFFECT_ENTRANCE);
-			player->RemoveAurasDueToSpell(SPELL_SKYBOX_EFFECT_RUINS);
+			CustomScenario::RemovePhaseAuras(player, PhaseAuras);
 		}
 
 		void SetData(uint32 dataId, uint32 value) override
@@ -182,6 +210,9 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			{
 				case DATA_SCENARIO_PHASE:
 					phase = (RFTPhases)value;
+					// La skybox suit la progression : le basculement se fait
+					// ici, donc aussi pour les joueurs deja sur place.
+					CustomScenario::SyncPhaseAuras(instance, value, PhaseAuras);
 					// Entree dans la phase finale : on planifie immediatement
 					// le premier dialogue de sortie.
 					if (phase == RFTPhases::LeaveTheRuins)
@@ -201,13 +232,38 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 					break;
 
 				case EVENT_WARLORD_ROKNAH_SLAIN:
-					// 
-                    events.ScheduleEvent(EVT_HORDE_CHECKER_FINAL, 800ms);
+					// Le warlord signale qu'il est tombe a genoux (Jaina ne l'acheve
+					// que plus tard). Rien a planifier ici : la fin de l'assaut est
+					// detectee par OnUnitDeath, a la mort du dernier membre de
+					// assaultWave - dont le warlord ne fait volontairement pas partie.
 					break;
 
 				default:
 					break;
 			}
+		}
+
+		// =================================================================
+		// Suivi des vagues de hordes
+		// =================================================================
+		// Les deux groupes spawnes par SummonCreatureGroup melangent plusieurs
+		// entries et peuvent tomber dans n'importe quel ordre : on suit les GUIDs
+		// summonnes plutot que les entries, et l'etape suivante n'est declenchee
+		// qu'une fois le dernier membre du groupe mort.
+		void OnUnitDeath(Unit* unit) override
+		{
+			InstanceScript::OnUnitDeath(unit);
+
+			ObjectGuid const guid = unit->GetGUID();
+
+			// Vague du nettoyage : Jaina termine son combat et reprend sa marche.
+			if (std::erase(standardsWave, guid) && standardsWave.empty())
+				OnStandardsWaveCleared();
+
+			// Vague de l'assaut final : l'iris est protege. Le warlord, encore a
+			// genoux, n'appartient pas a cette liste - c'est Jaina qui l'achevera.
+			if (std::erase(assaultWave, guid) && assaultWave.empty())
+				TriggerGameEvent(EVENT_JAINA_PROTECTED);
 		}
 
 		// =================================================================
@@ -287,25 +343,32 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		void OnCriteriaCleaning()
 		{
 			std::list<TempSummon*> spawned;
-			instance->SummonCreatureGroup(0, &spawned);
-			hordeCounter = (uint32)spawned.size();
+			instance->SummonCreatureGroup(CREATURE_GROUP_STANDARDS, &spawned);
 
+			// Vague suivie par GUID : OnUnitDeath la videra au fil des morts.
+			standardsWave.clear();
 			for (TempSummon* horde : spawned)
 			{
 				horde->SetTempSummonType(TEMPSUMMON_TIMED_OR_DEAD_DESPAWN);
-				hordeChecker.push_back(horde->GetGUID());
+				standardsWave.push_back(horde->GetGUID());
 			}
 
 			if (Creature* jaina = GetJaina())
 			{
 				Talk(jaina, SAY_IRIS_PROTECTION_JAINA_03);
-                jaina->SetVignette(VIGNETTE_JAINA_PROUDMOORE);
-                jaina->RemoveAurasDueToSpell(SPELL_ALUNETH_DRINKS);
+				jaina->SetVignette(VIGNETTE_JAINA_PROUDMOORE);
+				jaina->RemoveAurasDueToSpell(SPELL_ALUNETH_DRINKS);
 				jaina->SetHomePosition(JainaPoint04);
 				jaina->NearTeleportTo(JainaPoint04);
 			}
 			SetData(DATA_SCENARIO_PHASE, (uint32)RFTPhases::Standards_Valided);
-			events.ScheduleEvent(EVT_HORDE_CHECKER_STANDARDS, 2s);
+
+			// Groupe vide (donnees de spawn absentes) : personne ne mourra jamais, on
+			// enchaine tout de suite plutot que de bloquer sur une vague inexistante.
+			if (standardsWave.empty())
+				OnStandardsWaveCleared();
+			else
+				events.ScheduleEvent(EVT_STANDARDS_AGGRO_NUDGE, 2s);
 		}
 
 		// =================================================================
@@ -376,17 +439,17 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				#pragma region FIND_JAINA_ISLE
 				case EVT_ISLE_JAINA_WALK:       HandleIsleJainaWalk();        break;
 				case EVT_ISLE_KALECGOS_GREET:   HandleIsleKalecgosGreet();    break;
-				case EVT_ISLE_JAINA_TALK_02:    TalkAndNext(GetJaina(),    SAY_AFTER_BATTLE_JAINA_02,    6s);  break;
-				case EVT_ISLE_JAINA_TALK_03:    TalkAndNext(GetJaina(),    SAY_AFTER_BATTLE_JAINA_03,    10s); break;
+				case EVT_ISLE_JAINA_TALK_02:    TalkAndNext(GetJaina(),    SAY_AFTER_BATTLE_JAINA_02,    9s);  break;
+				case EVT_ISLE_JAINA_TALK_03:    TalkAndNext(GetJaina(),    SAY_AFTER_BATTLE_JAINA_03,    14s); break;
 				case EVT_ISLE_KALECGOS_MOVE:    HandleIsleKalecgosMove();     break;
-				case EVT_ISLE_JAINA_TALK_05:    TalkAndNext(GetJaina(),    SAY_AFTER_BATTLE_JAINA_05,    5s);  break;
+				case EVT_ISLE_JAINA_TALK_05:    TalkAndNext(GetJaina(),    SAY_AFTER_BATTLE_JAINA_05,    6s);  break;
 				case EVT_ISLE_KALECGOS_TALK_06: TalkAndNext(GetKalecgos(), SAY_AFTER_BATTLE_KALECGOS_06, 4s);  break;
-				case EVT_ISLE_JAINA_TALK_07:    TalkAndNext(GetJaina(),    SAY_AFTER_BATTLE_JAINA_07,    6s);  break;
-				case EVT_ISLE_KALECGOS_TALK_08: TalkAndNext(GetKalecgos(), SAY_AFTER_BATTLE_KALECGOS_08, 4s);  break;
+				case EVT_ISLE_JAINA_TALK_07:    TalkAndNext(GetJaina(),    SAY_AFTER_BATTLE_JAINA_07,    12s);  break;
+				case EVT_ISLE_KALECGOS_TALK_08: TalkAndNext(GetKalecgos(), SAY_AFTER_BATTLE_KALECGOS_08, 7s);  break;
 				case EVT_ISLE_JAINA_TALK_09:    TalkAndNext(GetJaina(),    SAY_AFTER_BATTLE_JAINA_09,    4s);  break;
-				case EVT_ISLE_KALECGOS_TALK_10: TalkAndNext(GetKalecgos(), SAY_AFTER_BATTLE_KALECGOS_10, 6s);  break;
-				case EVT_ISLE_KALECGOS_TALK_11: TalkAndNext(GetKalecgos(), SAY_AFTER_BATTLE_KALECGOS_11, 7s);  break;
-				case EVT_ISLE_JAINA_TALK_12:    TalkAndNext(GetJaina(),    SAY_AFTER_BATTLE_JAINA_12,    2s);  break;
+				case EVT_ISLE_KALECGOS_TALK_10: TalkAndNext(GetKalecgos(), SAY_AFTER_BATTLE_KALECGOS_10, 8s);  break;
+				case EVT_ISLE_KALECGOS_TALK_11: TalkAndNext(GetKalecgos(), SAY_AFTER_BATTLE_KALECGOS_11, 8s);  break;
+				case EVT_ISLE_JAINA_TALK_12:    TalkAndNext(GetJaina(),    SAY_AFTER_BATTLE_JAINA_12,    17s);  break;
 				case EVT_ISLE_ECHO_OF_ALUNETH:  HandleIsleEchoOfAluneth();    break;
 				case EVT_ISLE_ALUNETH_FREED:    HandleIsleAlunethFreed();     break;
 				case EVT_ISLE_JAINA_HIDE:       HandleIsleJainaHide();        break;
@@ -416,8 +479,6 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case EVT_BACK_JAINA_TALK_09:     TalkAndNext(GetJaina(),   SAY_IRIS_PROTECTION_JAINA_09, 9s); break;
 				case EVT_BACK_WARLORD_TALK_10:   TalkAndNext(GetWarlord(), SAY_IRIS_PROTECTION_JAINA_10, 2s); break;
 				case EVT_BACK_RELEASE_HORDES:    HandleBackReleaseHordes();    break;
-				case EVT_BACK_JAINA_IMMUNE:      HandleBackJainaImmune();      break;
-				case EVT_HORDE_CHECKER_FINAL:    HandleHordeCheckerFinal();    break;
 				#pragma endregion
 
 				#pragma region LEAVE_THE_RUINS
@@ -428,8 +489,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case EVT_LEAVE_DESPAWN_FINAL:    HandleLeaveDespawnFinal();    break;
 				#pragma endregion
 
-				#pragma region HORDE_CHECKER_STANDARDS
-				case EVT_HORDE_CHECKER_STANDARDS:    HandleHordeCheckerStandards(); break;
+				#pragma region STANDARDS
+				case EVT_STANDARDS_AGGRO_NUDGE:      HandleStandardsAggroNudge();     break;
 				case EVT_STANDARDS_JAINA_FINAL_MOVE: HandleStandardsJainaFinalMove(); break;
 				#pragma endregion
 
@@ -479,7 +540,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				kalecgos->SetSpeedRate(MOVE_WALK, KALECGOS_WALK_SPEED_RATE);
 				kalecgos->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, KalecgosPoint02, true, KalecgosPoint02.GetOrientation());
 			}
-			Next(8s);
+			Next(17s);
 		}
 
 		// Echo of Aluneth : trigger temporaire qui cast le sort d'apparition de l'iris.
@@ -541,13 +602,13 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			Next(5s);
 		}
 
-		// Teleporte tous les joueurs vers Theramore et change la skybox.
+		// Teleporte tous les joueurs vers Theramore. La skybox suit toute
+		// seule : EVENT_HELP_KALECGOS fait passer la phase a FindJaina_Crater,
+		// ce qui declenche la bascule via PhaseAuras.
 		void HandleIsleTeleportTrigger()
 		{
 			ForceWeather(WEATHER_ARCANE_BUILD, true);
 			TeleportPlayers(PlayerPoint01, TELEPORT_SPREAD_RADIUS);
-			DoRemoveAurasDueToSpellOnPlayers(SPELL_SKYBOX_EFFECT_ENTRANCE);
-			DoCastSpellOnPlayers(SPELL_SKYBOX_EFFECT_RUINS);
 			TriggerGameEvent(EVENT_HELP_KALECGOS);
 		}
 
@@ -693,13 +754,22 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		// Spawn de la vague de hordes attaquant l'iris.
 		void HandleBackSpawnHordes()
 		{
-			hordes.clear();
-			instance->SummonCreatureGroup(1, &hordes);
-			for (TempSummon* horde : hordes)
+			std::list<TempSummon*> spawned;
+			instance->SummonCreatureGroup(CREATURE_GROUP_ASSAULT, &spawned);
+
+			assaultWave.clear();
+			for (TempSummon* horde : spawned)
 			{
 				horde->SetTempSummonType(TEMPSUMMON_TIMED_OR_DEAD_DESPAWN);
 				horde->SetImmuneToAll(true);
 				horde->CastSpell(horde, SPELL_THALYSSRA_SPAWNS);
+
+				// Le warlord est volontairement exclu de la vague suivie : il n'est
+				// jamais tue par les joueurs (il se fige a bas PV et c'est Jaina qui
+				// l'acheve, APRES EVENT_JAINA_PROTECTED). L'y inclure attendrait une
+				// mort qui ne peut pas arriver, et figerait le scenario.
+				if (horde->GetEntry() != NPC_ROKNAH_WARLORD)
+					assaultWave.push_back(horde->GetGUID());
 			}
 			Next(4s);
 		}
@@ -713,53 +783,38 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			// Bug-fix : on s'assure que les elementaires existent avant le split.
 			const bool elementalsReady = (elementals.size() >= ELEMENTALS_SIZE && elementals[0] && elementals[1]);
 
-			for (Creature* horde : hordes)
+			// Le warlord se recupere par son data ID : il n'est pas dans assaultWave.
+			if (Creature* warlord = GetWarlord())
 			{
-				if (!horde)
-					continue;
+				warlord->SetImmuneToAll(false);
+				warlord->SetVignette(VIGNETTE_HORDE_WARLORD);
 
-				horde->SetImmuneToAll(false);
-                horde->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, firstPlayer->GetRandomNearPosition(10.f));
-
-				if (horde->GetEntry() == NPC_ROKNAH_WARLORD)
+				if (firstPlayer)
 				{
-                    horde->SetVignette(VIGNETTE_HORDE_WARLORD);
-                    if (firstPlayer)
-						horde->Attack(firstPlayer, true);
+					warlord->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, firstPlayer->GetRandomNearPosition(10.f));
+					warlord->Attack(firstPlayer, true);
 				}
-				else if (elementalsReady)
-				{
-					// Split Y : les hordes au sud du seuil attaquent l'elementaire 1,
-					// les autres l'elementaire 0.
-					Creature* target = (horde->GetPositionY() <= HORDE_SPLIT_Y_THRESHOLD) ? elementals[1] : elementals[0];
-					horde->Attack(target, true);
-                    horde->SetVignette(VIGNETTE_HORDE_TROOPS);
-                }
 			}
-			Next(3s);
-		}
 
-		// Jaina passe en immune en attendant la fin du combat.
-		void HandleBackJainaImmune()
-		{
-            // DELETED
-			Next(0s);
-		}
+			DoOnCreatures(assaultWave, [this, firstPlayer, elementalsReady](Creature* horde)
+			{
+				horde->SetImmuneToAll(false);
 
-		// Watchdog : surveille la mort des hordes apres EXPLOSIVE_BRAND.
-		// Replanifie tant qu'au moins un membre est encore vivant.
-		void HandleHordeCheckerFinal()
-		{
-			uint32 aliveCount = 0;
-			if (!CountAliveHordes(aliveCount))
-			{
-				TriggerGameEvent(EVENT_JAINA_PROTECTED);
-				events.CancelEvent(EVT_HORDE_CHECKER_FINAL);
-			}
-			else
-			{
-				events.RescheduleEvent(EVT_HORDE_CHECKER_FINAL, 1s);
-			}
+				if (firstPlayer)
+					horde->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, firstPlayer->GetRandomNearPosition(10.f));
+
+				if (!elementalsReady)
+					return;
+
+				// Split Y : les hordes au sud du seuil attaquent l'elementaire 1,
+				// les autres l'elementaire 0.
+				Creature* target = (horde->GetPositionY() <= HORDE_SPLIT_Y_THRESHOLD) ? elementals[1] : elementals[0];
+				horde->Attack(target, true);
+				horde->SetVignette(VIGNETTE_HORDE_TROOPS);
+			});
+
+			// Fin de la chaine BackToSender : la suite (EVENT_JAINA_PROTECTED) est
+			// declenchee par OnUnitDeath, quand assaultWave est vide.
 		}
 
 		// =================================================================
@@ -840,54 +895,48 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		}
 
 		// =================================================================
-		// Watchdog Standards : surveille le nettoyage initial des hordes
+		// Standards : nettoyage initial des hordes
 		// =================================================================
 
-		// Surveille les hordes de la phase Standards. Chaque horde encore vivante
-		// est forcee a engager Jaina. Quand toutes sont mortes : transition vers
-		// la fin de combat de Jaina + mouvement final.
-		void HandleHordeCheckerStandards()
+		// Watchdog d'aggro : chaque horde encore passive est forcee a engager
+		// Jaina. Il ne compte plus les morts - c'est OnUnitDeath qui vide
+		// standardsWave et appelle OnStandardsWaveCleared.
+		void HandleStandardsAggroNudge()
 		{
 			Creature* jaina = GetJaina();
-			if (!jaina)
-			{
-				events.CancelEvent(EVT_HORDE_CHECKER_STANDARDS);
+			if (!jaina || standardsWave.empty())
 				return;
-			}
 
-			uint32 deadCount = 0;
-			for (uint8 i = 0; i < hordeCounter; ++i)
+			DoOnCreatures(standardsWave, [jaina](Creature* horde)
 			{
-				Creature* horde = ObjectAccessor::GetCreature(*jaina, hordeChecker[i]);
-
-				if (!horde || horde->isDead())
-				{
-					++deadCount;
-					continue;
-				}
-
-				if (!horde->IsEngaged())
+				if (horde->IsAlive() && !horde->IsEngaged())
 					horde->Attack(jaina, true);
-			}
+			});
 
-			// Tous les membres de la Horde sont morts -> Jaina termine son combat.
-			if (deadCount >= hordeCounter)
-			{
-				Talk(jaina, SAY_IRIS_PROTECTION_JAINA_04);
-				FaceFirstPlayer(jaina);
+			events.RescheduleEvent(EVT_STANDARDS_AGGRO_NUDGE, 1s);
+		}
 
-				jaina->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
-				jaina->SetReactState(REACT_PASSIVE);
-				jaina->LoadEquipment(2);
-				jaina->AI()->SetData(DATA_CANCEL_GROUP, DATA_PHASE_COMBAT);
+		// Dernier membre de la vague du nettoyage tombe : Jaina termine son combat,
+		// puis enchaine sur sa marche finale. Appele depuis OnUnitDeath.
+		void OnStandardsWaveCleared()
+		{
+			events.CancelEvent(EVT_STANDARDS_AGGRO_NUDGE);
 
-				events.CancelEvent(EVT_HORDE_CHECKER_STANDARDS);
-				Next(5s);
-			}
-			else
-			{
-				events.RescheduleEvent(EVT_HORDE_CHECKER_STANDARDS, 1s);
-			}
+			Creature* jaina = GetJaina();
+			if (!jaina)
+				return;
+
+			Talk(jaina, SAY_IRIS_PROTECTION_JAINA_04);
+			FaceFirstPlayer(jaina);
+
+			jaina->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+			jaina->SetReactState(REACT_PASSIVE);
+			jaina->LoadEquipment(2);
+			jaina->AI()->SetData(DATA_CANCEL_GROUP, DATA_PHASE_COMBAT);
+
+			// Planification explicite : on n'est pas dans l'execution d'un event de
+			// l'EventMap, Next() n'aurait aucun eventId courant sur quoi s'appuyer.
+			events.ScheduleEvent(EVT_STANDARDS_JAINA_FINAL_MOVE, 5s);
 		}
 
 		// Jaina termine la phase Standards en marchant vers JainaPoint03.
@@ -914,23 +963,24 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		// Helpers internes
 		// =================================================================
 
-		// Talk null-safe : utilise par les handlers de dialogue sequentiels.
-		void Talk(Creature* creature, uint8 id)
+		// Talk null-safe : un acteur despawne en cours de scene ne doit pas
+		// faire tomber le serveur, la replique est simplement perdue.
+		void Talk(Creature* creature, uint8 textId)
 		{
 			if (creature)
-				creature->AI()->Talk(id);
+				creature->AI()->Talk(textId);
 		}
 
 		// Helper combinant Talk + planification de l'event suivant.
 		// Permet d'ecrire les sequences de dialogue en une ligne par event.
-		void TalkAndNext(Creature* creature, uint8 textId, Milliseconds time)
+		void TalkAndNext(Creature* creature, uint8 textId, const Milliseconds& time)
 		{
 			Talk(creature, textId);
 			Next(time);
 		}
 
 		// Incremente eventId membre et planifie l'event suivant dans la sequence.
-		// ATTENTION : depend de l'ordre numerique des SceneEvent - ne pas modifier
+		// ATTENTION : depend de l'ordre numerique des RFTEvents - ne pas modifier
 		// les valeurs sans repenser le flow.
 		void Next(const Milliseconds& time)
 		{
@@ -958,42 +1008,29 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				creature->SetFacingToObject(player);
 		}
 
-		// Compte les hordes encore vivantes (hors warlord). Retourne true
-		// s'il en reste, false si toutes sont mortes.
-		bool CountAliveHordes(uint32& aliveCount) const
+		// Applique une action a chaque creature encore presente d'une liste de GUIDs.
+		// Les vagues sont suivies par GUID, jamais par pointeur : un summon peut
+		// disparaitre entre deux passages.
+		template <typename T>
+		void DoOnCreatures(GuidVector const& guids, T&& fn)
 		{
-			aliveCount = 0;
-			for (Creature* horde : hordes)
+			for (ObjectGuid const& guid : guids)
 			{
-				if (!horde || horde->GetEntry() == NPC_ROKNAH_WARLORD)
-					continue;
-				if (horde->IsAlive())
-					++aliveCount;
+				if (Creature* creature = instance->GetCreature(guid))
+					fn(creature);
 			}
-			return aliveCount > 0;
 		}
 
-		// Teleporte tous les joueurs aleatoirement autour d'un centre.
-		// Le calcul de new_dist suit une distribution radiale "triangulaire"
-		// (somme de deux uniformes) pour repartir les joueurs sans accumulation
-		// au centre ni sur le bord exact du cercle.
-		void TeleportPlayers(const Position center, float distance)
+		// Teleporte tous les joueurs autour d'un centre, chacun sur son propre
+		// point tire dans le disque (GetRandomPosition gere l'accrochage au
+		// sol et les collisions).
+		void TeleportPlayers(Position const& center, float spreadRadius)
 		{
-			float angle = (float)rand_norm() * static_cast<float>(2 * M_PI);
-			float new_dist = (float)rand_norm() + (float)rand_norm();
-			new_dist = distance * (new_dist > 1 ? new_dist - 2 : new_dist);
-
-			float rand_x = center.m_positionX + new_dist * std::cos(angle);
-			float rand_y = center.m_positionY + new_dist * std::sin(angle);
-
-			Trinity::NormalizeMapCoord(rand_x);
-			Trinity::NormalizeMapCoord(rand_y);
-
-			instance->DoOnPlayers([center, rand_x, rand_y](Player* player)
+			instance->DoOnPlayers([&center, spreadRadius](Player* player)
 			{
-				float rand_z = center.m_positionZ;
-				player->UpdateGroundPositionZ(rand_x, rand_y, rand_z);
-				player->NearTeleportTo({ rand_x, rand_y, rand_z, center.GetOrientation() });
+				Position dest = GetRandomPosition(player, center, spreadRadius);
+				dest.SetOrientation(center.GetOrientation());
+				player->NearTeleportTo(dest);
 			});
 		}
 

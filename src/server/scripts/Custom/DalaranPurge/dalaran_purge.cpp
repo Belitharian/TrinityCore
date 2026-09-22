@@ -522,14 +522,7 @@ public:
 
 	bool Execute(uint64 time, uint32 /*diff*/) override
 	{
-		float angle = frand(0.0f, 2.0f * float(M_PI));
-		float radius = METEROS_RANGE * std::sqrt(frand(0.0f, 1.0f));
-
-		Position destPosition = {
-            _dest.GetPositionX() + radius * std::cos(angle),
-            _dest.GetPositionY() + radius * std::sin(angle),
-            _dest.GetPositionZ()
-        };
+		Position destPosition = GetRandomPosition(_caster, _dest, METEROS_RANGE);
 
 		_caster->CastSpell(destPosition, SPELL_METEOR_STORM_VISUAL,
 			CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS).SetOriginalCastId(_originalCastId));
@@ -562,6 +555,18 @@ class spell_meteor_storm : public SpellScript
 		return ValidateSpellInfo({ SPELL_METEOR_STORM_VISUAL });
 	}
 
+    void FilterTargets(std::list<WorldObject*>& targets)
+    {
+        Unit* caster = GetCaster();
+        if (caster)
+            return;
+
+        targets.remove_if([caster](WorldObject* target)
+        {
+            return target->IsFriendlyTo(caster) || target->GetGUID() == caster->GetGUID();
+        });
+    }
+
 	void EffectHit(SpellEffIndex /*effIndex*/)
 	{
 		GetCaster()->m_Events.AddEventAtOffset(new MeteorStormEvent(GetCaster(), GetSpell()->m_castId, *GetHitDest()), randtime(100ms, 275ms));
@@ -570,7 +575,8 @@ class spell_meteor_storm : public SpellScript
 	void Register() override
 	{
 		OnEffectHit += SpellEffectFn(spell_meteor_storm::EffectHit, EFFECT_0, SPELL_EFFECT_DUMMY);
-	}
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_meteor_storm::FilterTargets, EFFECT_0, TARGET_UNIT_DEST_AREA_ENEMY);
+    }
 };
 
 void AddSC_dalaran_purge()

@@ -1285,6 +1285,10 @@ struct npc_theramore_marksman : public npc_theramore_troop
 	{
 		SPELL_SHOOT                 = 22907,
 		SPELL_MULTI_SHOOT           = 38310,
+
+        // Tir assur� = 131991
+        // Tir ac�r� = 62318
+        // Vis�e = 294882
 	};
 
 	void Reset() override
@@ -2481,7 +2485,7 @@ struct npc_wave_caller_gruhta : public CustomAI
 
 						for (uint8 i = 0; i < LIGHTNING_STORM_BOLTS; i++)
 						{
-							Position randomPos = GetRandomPosition(tempestPos02, LIGHTNING_STORM_RADIUS);
+							Position randomPos = GetRandomPosition(me, tempestPos02, LIGHTNING_STORM_RADIUS);
 							me->CastSpell(randomPos, SPELL_LIGHTNING_STORM, args);
 						}
 
@@ -3220,9 +3224,13 @@ class spell_wild_imp : public SpellScript
 	static Position SlotToWorld(Unit const* caster, SlotDef const& def)
 	{
 		float worldAngle = caster->GetOrientation() + float(M_PI) + def.angleFromBehind;
-		float x = caster->GetPositionX() + def.radius * std::cos(worldAngle);
-		float y = caster->GetPositionY() + def.radius * std::sin(worldAngle);
-		return Position(x, y, caster->GetPositionZ(), caster->GetOrientation());
+
+		// Angle absolu : GetRandomPositionAroundCircle compense lui-meme
+		// l'orientation ajoutee en interne par le core.
+		Position slot = GetRandomPositionAroundCircle(caster, worldAngle, def.radius);
+		slot.SetOrientation(caster->GetOrientation());
+
+		return slot;
 	}
 
 	void HandleSummon(SpellEffIndex effIndex)

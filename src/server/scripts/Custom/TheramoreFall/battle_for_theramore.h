@@ -33,7 +33,7 @@
 
 // Decommenter pour raccourcir les cinematiques et sauter directement aux
 // phases de combat pendant les tests (voir les #ifdef CUSTOM_DEBUG du .cpp).
-#define CUSTOM_DEBUG
+//#define CUSTOM_DEBUG
 
 constexpr char const* BFTScriptName             = "scenario_battle_for_theramore";
 constexpr char const* DataHeader                = "BFT";
@@ -263,9 +263,6 @@ enum BFTMisc
 	CRITERIA_TREE_RETRIEVE_JAINA        = 1000018,
 	CRITERIA_TREE_SURVIVE_THE_BATTLE    = 1000019,
 	CRITERIA_TREE_MAINTAIN_PROTECTION   = 1000088,
-	// Noeud ProgressBar : il n'est jamais atteint par UpdateCriteria, mais
-	// par la remontee de parents de Scenario::CompletedCriteriaTree. Son
-	// compteur est celui de CRITERIA_SURVIVE_WAVES.
 	CRITERIA_TREE_SURVIVE_WAVES         = 1000020,
 	CRITERIA_TREE_HELP_THE_WOUNDED      = 1000021,
 	CRITERIA_TREE_FOLLOW_JAINA          = 1000022,
@@ -292,9 +289,6 @@ enum BFTMisc
     VIGNETTE_LADY_JAINA_PROUDMOORE      = 50003,
     VIGNETTE_RHONIN                     = 50004,
     VIGNETTE_THADER_WINDERMERE          = 50005,
-
-	// Phase
-	PHASE_THERAMORE_SCENE_EXPLOSION     = 1503,
 
 	// Sounds
 	SOUND_FEARFUL_CROWD                 = 15003,
