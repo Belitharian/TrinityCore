@@ -3014,10 +3014,10 @@ void Unit::_UpdateAutoRepeatSpell()
 
     // check "realtime" interrupts
     // don't cancel spells which are affected by a SPELL_AURA_CAST_WHILE_WALKING effect
-    if ((isMoving() && m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->CheckMovement() != SPELL_CAST_OK) || IsNonMeleeSpellCast(false, false, true, autoRepeatSpellInfo->Id == 75))
+    if ((isMoving() && m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->CheckMovement() != SPELL_CAST_OK) || IsNonMeleeSpellCast(false, false, true, autoRepeatSpellInfo->IsAutoShot()))
     {
         // cancel wand shoot
-        if (autoRepeatSpellInfo->Id != 75)
+        if (!autoRepeatSpellInfo->IsAutoShot())
             InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
         return;
     }
@@ -3029,7 +3029,7 @@ void Unit::_UpdateAutoRepeatSpell()
         SpellCastResult result = m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->CheckCast(true);
         if (result != SPELL_CAST_OK)
         {
-            if (autoRepeatSpellInfo->Id != 75)
+            if (!autoRepeatSpellInfo->IsAutoShot())
                 InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
             else if (GetTypeId() == TYPEID_PLAYER)
                 Spell::SendCastResult(ToPlayer(), autoRepeatSpellInfo, m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->m_SpellVisual, m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->m_castId, result);
@@ -3091,7 +3091,7 @@ void Unit::SetCurrentCastSpell(Spell* pSpell)
             if (m_currentSpells[CURRENT_AUTOREPEAT_SPELL])
             {
                 // break autorepeat if not Auto Shot
-                if (m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->GetSpellInfo()->Id != 75)
+                if (!m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->GetSpellInfo()->IsAutoShot())
                     InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
             }
             if (pSpell->GetCastTime() > 0)
@@ -3113,7 +3113,7 @@ void Unit::SetCurrentCastSpell(Spell* pSpell)
 
                 // it also does break autorepeat if not Auto Shot
                 if (m_currentSpells[CURRENT_AUTOREPEAT_SPELL] &&
-                    m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->GetSpellInfo()->Id != 75)
+                    !m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->GetSpellInfo()->IsAutoShot())
                     InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
 
                 AddUnitState(UNIT_STATE_CASTING);
@@ -3127,7 +3127,7 @@ void Unit::SetCurrentCastSpell(Spell* pSpell)
                 m_currentSpells[CSpellType]->setState(SPELL_STATE_FINISHED);
 
             // only Auto Shoot does not break anything
-            if (pSpell->GetSpellInfo()->Id != 75)
+            if (!pSpell->GetSpellInfo()->IsAutoShot())
             {
                 // generic autorepeats break generic non-delayed and channeled non-delayed spells
                 InterruptSpell(CURRENT_GENERIC_SPELL, false);
@@ -3237,8 +3237,10 @@ bool Unit::IsNonMeleeSpellCast(bool withDelayed, bool skipChanneled /*= false*/,
     if (!skipChanneled && m_currentSpells[CURRENT_CHANNELED_SPELL] &&
         (m_currentSpells[CURRENT_CHANNELED_SPELL]->getState() != SPELL_STATE_FINISHED))
     {
-        if ((!isAutoshoot || !m_currentSpells[CURRENT_CHANNELED_SPELL]->m_spellInfo->HasAttribute(SPELL_ATTR2_DO_NOT_RESET_COMBAT_TIMERS)) &&
-            (!skipChanneledAllowingActions || !m_currentSpells[CURRENT_CHANNELED_SPELL]->m_spellInfo->HasAttribute(SPELL_ATTR5_ALLOW_ACTIONS_DURING_CHANNEL)))
+        SpellInfo const* channeledSpellInfo = m_currentSpells[CURRENT_CHANNELED_SPELL]->m_spellInfo;
+
+        if ((!isAutoshoot || !channeledSpellInfo->HasAttribute(SPELL_ATTR2_DO_NOT_RESET_COMBAT_TIMERS) || channeledSpellInfo->HasChannelInterruptFlag(SpellAuraInterruptFlags::Action | SpellAuraInterruptFlags::ActionDelayed)) &&
+            (!skipChanneledAllowingActions || !channeledSpellInfo->HasAttribute(SPELL_ATTR5_ALLOW_ACTIONS_DURING_CHANNEL)))
             return true;
     }
     // autorepeat spells may be finished or delayed, but they are still considered cast
@@ -4293,7 +4295,7 @@ void Unit::RemoveAurasWithInterruptFlags(InterruptFlags flag, SpellInfo const* s
             && spell->GetSpellInfo()->HasChannelInterruptFlag(flag)
             && (!source || spell->GetSpellInfo()->Id != source->Id)
             && !IsInterruptFlagIgnoredForSpell(flag, this, spell->GetSpellInfo(), true, source))
-            InterruptNonMeleeSpells(false);
+            InterruptSpell(CURRENT_CHANNELED_SPELL, false, false);
 
     UpdateInterruptMask();
 }
