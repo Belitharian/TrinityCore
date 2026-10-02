@@ -43,9 +43,13 @@
 #ifndef CUSTOM_SCENARIO_H
 #define CUSTOM_SCENARIO_H
 
+#include "Creature.h"
+#include "CreatureTextMgr.h"
 #include "Define.h"
+#include "Duration.h"
 #include "Map.h"
 #include "Player.h"
+#include <algorithm>
 #include <limits>
 #include <span>
 
@@ -137,6 +141,49 @@ namespace CustomScenario
             }
         });
     }
+
+    // TEMPS DE PAROLE
+    //
+    // Les cinematiques enchainent leurs repliques avec des delais ecrits a la
+    // main (Next(8s)...). Des qu'un son est regenere, sa duree change et le
+    // delai coupe la replique. DialogueClock fait du delai ecrit un minimum :
+    // l'event suivant attend au moins la fin de la replique qui vient d'etre
+    // dite, d'apres la colonne Duration de creature_text (en ms, renseignee
+    // par _Tools/UpdateCreatureTextDurations.ps1 a partir des mp3).
+    //
+    //   void Talk(Creature* c, uint8 id)    { dialogue.Say(c, id); }
+    //   void Next(Milliseconds const& time) { ...ScheduleEvent(eventId, dialogue.Consume(time)); }
+    //   Update() : dialogue.Reset() avant d'executer l'event
+    struct DialogueClock
+    {
+        // Respiration laissee entre deux repliques.
+        static constexpr Milliseconds Pause = 700ms;
+
+        void Say(Creature* creature, uint8 textGroup)
+        {
+            if (!creature)
+                return;
+
+            // CreatureAI::Talk ne fait que ce SendChat : on garde la duree.
+            if (uint32 duration = sCreatureTextMgr->SendChat(creature, textGroup))
+                _pending = std::max(_pending, Milliseconds(duration) + Pause);
+        }
+
+        // Delai a utiliser pour l'event suivant : le plus long entre le
+        // delai ecrit et le temps de parole en cours.
+        Milliseconds Consume(Milliseconds scripted)
+        {
+            Milliseconds const delay = std::max(scripted, _pending);
+            _pending = 0ms;
+            return delay;
+        }
+
+        // Un event sans Next() ne doit pas allonger l'enchainement suivant.
+        void Reset() { _pending = 0ms; }
+
+    private:
+        Milliseconds _pending = 0ms;
+    };
 
     // Retire toutes les auras de la table, quel que soit le mode.
     // A appeler depuis OnPlayerLeave : rien de tout ceci ne doit suivre le

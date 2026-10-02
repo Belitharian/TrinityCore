@@ -173,7 +173,8 @@ class scenario_dalaran_convo : public InstanceMapScript
                         break;
                     case Phases::Visions_Jaina:
                         SpawnActors(VISION_TYPE_JAINA);
-                        GetJainaVision()->SetObjectScale(2.5f);
+                        if (Creature* jainaVision = GetJainaVision())
+                            jainaVision->SetObjectScale(2.5f);
                         break;
                     case Phases::Visions_KalecgosJaina:
                         DespawnActors(VISION_TYPE_JAINA);
@@ -314,49 +315,16 @@ class scenario_dalaran_convo : public InstanceMapScript
         std::unordered_map<VisionType, std::vector<VisionGuid>> actors;
 
 		// Accesseurs
+		// Ils peuvent renvoyer nullptr : un ASSERT ici ferait tomber tout le
+		// worldserver pour un acteur manquant, les appelants testent le retour.
 		#pragma region ACCESSORS
-		
-		Creature* GetJaina()
-		{
-			Creature* creature = GetCreature(DATA_JAINA_PROUDMOORE);
-			ASSERT(creature);
-			return creature;
-		}
 
-		Creature* GetJainaVision()
-		{
-			Creature* creature = GetCreature(DATA_JAINA_PROUDMOORE_VISION);
-			ASSERT(creature);
-			return creature;
-		}
-
-		Creature* GetKalecgos()
-		{
-			Creature* creature = GetCreature(DATA_KALECGOS);
-			ASSERT(creature);
-			return creature;
-		}
-
-		Creature* GetAnduin()
-		{
-			Creature* creature = GetCreature(DATA_ANDUIN);
-			ASSERT(creature);
-			return creature;
-		}
-
-		Creature* GetKelThuzad()
-		{
-			Creature* creature = GetCreature(DATA_KELTHUZAD);
-			ASSERT(creature);
-			return creature;
-		}
-
-		Creature* GetKaelThas()
-		{
-			Creature* creature = GetCreature(DATA_KAELTHAS);
-			ASSERT(creature);
-			return creature;
-		}
+		Creature* GetJaina()        { return GetCreature(DATA_JAINA_PROUDMOORE); }
+		Creature* GetJainaVision()  { return GetCreature(DATA_JAINA_PROUDMOORE_VISION); }
+		Creature* GetKalecgos()     { return GetCreature(DATA_KALECGOS); }
+		Creature* GetAnduin()       { return GetCreature(DATA_ANDUIN); }
+		Creature* GetKelThuzad()    { return GetCreature(DATA_KELTHUZAD); }
+		Creature* GetKaelThas()     { return GetCreature(DATA_KAELTHAS); }
 
 		#pragma endregion
 
@@ -381,6 +349,8 @@ class scenario_dalaran_convo : public InstanceMapScript
         void SpawnActors(VisionType type, std::function<void(const std::vector<VisionGuid>&)> onSpawn = nullptr)
         {
             Creature* jaina = GetJaina();
+            if (!jaina)
+                return;
 
             for (const VisionData& data : visionData[type])
             {
@@ -400,6 +370,8 @@ class scenario_dalaran_convo : public InstanceMapScript
                 case HighGuid::Uniq:
                 {
                     Creature* summon = GetCreature(data.EntryOrData);
+                    if (!summon)
+                        return ObjectGuid::Empty;
                     TeleportActor(summon, data.Position);
                     ApplyAuras(summon, data.Auras);
                     return ObjectGuid::Empty;
@@ -407,6 +379,8 @@ class scenario_dalaran_convo : public InstanceMapScript
                 case HighGuid::Creature:
                 {
                     Creature* summon = jaina->SummonCreature(data.EntryOrData, data.Position);
+                    if (!summon)
+                        return ObjectGuid::Empty;
                     ApplyHauntingMemoryAura(summon, false);
                     ApplyAuras(summon, data.Auras);
                     return summon->GetGUID();
@@ -415,6 +389,8 @@ class scenario_dalaran_convo : public InstanceMapScript
                 {
                     GameObject* summon = jaina->SummonGameObject(data.EntryOrData, data.Position,
                         QuaternionData::fromEulerAnglesZYX(data.Position.GetOrientation(), 0.f, 0.f), 0s);
+                    if (!summon)
+                        return ObjectGuid::Empty;
                     ApplyHauntingMemoryAura(summon, false);
                     return summon->GetGUID();
                 }
@@ -435,6 +411,11 @@ class scenario_dalaran_convo : public InstanceMapScript
         void DespawnActors(VisionType type)
         {
             Creature* jaina = GetJaina();
+            if (!jaina)
+            {
+                actors.erase(type);
+                return;
+            }
 
             for (const VisionGuid& guid : actors[type])
             {
@@ -522,8 +503,11 @@ class scenario_dalaran_convo : public InstanceMapScript
 
 		void StartConversation(uint32 entry)
 		{
+			// Le joueur a pu quitter l'instance entre la validation du
+			// critere et l'event (EVENT_START est differe d'une seconde).
 			Player* player = GetPlayer();
-			ASSERT(player);
+			if (!player)
+				return;
 
 			Conversation::CreateConversation(entry, player, *player, player->GetGUID());
 		}

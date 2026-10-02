@@ -144,10 +144,15 @@ void FakeParty::SendFakePartyMemberState(Player* player)
 /// Sends a SMSG_PARTY_UPDATE with GROUP_FLAG_DESTROYED to remove the fake party frame.
 void FakeParty::DestroyFakeParty(Player* player)
 {
-    if (!_owner || !player)
+    if (!_fakePartyActive)
         return;
 
-    if (!_fakePartyActive)
+    // Toujours desactiver, meme si le joueur n'est plus joignable (deconnecte,
+    // hors carte) : sinon IsActive() resterait vrai et la partie ne pourrait
+    // plus jamais etre recreee.
+    _fakePartyActive = false;
+
+    if (!_owner || !player)
         return;
 
     ObjectGuid const fakePartyGuid = BuildPartyGuid();
@@ -161,8 +166,6 @@ void FakeParty::DestroyFakeParty(Player* player)
     partyUpdate.SequenceNum = player->NextGroupUpdateSequenceNumber(GROUP_CATEGORY_HOME);
 
     player->SendDirectMessage(partyUpdate.Write());
-
-    _fakePartyActive = false;
 
     TC_LOG_DEBUG("scripts", "FakeParty::DestroyFakeParty - Party frame destroyed for player {} with creature {}",
         player->GetName(), _owner->GetEntry());

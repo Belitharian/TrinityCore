@@ -7,7 +7,7 @@
 CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 	type(type), summons(creature), canCombatMove(true), damageReduction(false),
 	textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance(50)),
-	fakeParty(creature), linkedPlayer(nullptr), encircleReactOnCooldown(false), circleAngle(0.f)
+	fakeParty(creature), encircleReactOnCooldown(false), circleAngle(0.f)
 {
 	if (type == AI_Type::Distance)
 	{
@@ -20,7 +20,7 @@ CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 CustomAI::CustomAI(Creature* creature, bool damageReduction, AI_Type type) : ScriptedAI(creature),
 	type(type), summons(creature), canCombatMove(true), damageReduction(damageReduction),
 	textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance(50)),
-	fakeParty(creature), linkedPlayer(nullptr), encircleReactOnCooldown(false), circleAngle(0.f)
+	fakeParty(creature), encircleReactOnCooldown(false), circleAngle(0.f)
 {
 	if (type == AI_Type::Distance)
 	{
@@ -34,6 +34,8 @@ void CustomAI::Initialize()
 {
 	interruptCounter = 0;
 	circleAngle = 0.f;
+	meleeChaseTarget.Clear();
+	meleeChaseAngle = 0.f;
 	circleClockwise = roll_chance(50);
 	encircleReactOnCooldown = false;
 
@@ -126,11 +128,7 @@ void CustomAI::Reset()
 	scheduler.CancelAll();
 
 	// Si un joueur était lié, on détruit le frame avant de reset
-	if (linkedPlayer)
-	{
-		fakeParty.DestroyFakeParty(linkedPlayer);
-		linkedPlayer = nullptr;
-	}
+	StopFakeParty();
 }
 
 void CustomAI::AttackStart(Unit* who)
@@ -189,10 +187,18 @@ void CustomAI::AttackStart(Unit* who)
             {
                 me->GetMotionMaster()->MoveChase(who);
 
-                ObjectGuid const targetGuid = who->GetGUID();
-                scheduler.Schedule(500ms, [this, targetGuid](TaskContext ctx)
+                // UpdateVictim rappelle AttackStart a chaque changement de cible
+                // sans sortie de combat : sans cette annulation, l'ancienne boucle
+                // survivait et tirait encore l'unite vers l'ancienne cible, avec
+                // son ancien angle, en alternance avec la nouvelle (petits pas).
+                scheduler.CancelGroup(MeleePositioning);
+                meleeChaseTarget.Clear();   // force l'emission au premier tick (placement en arc)
+                meleeChaseAngle = 0.f;
+
+                scheduler.Schedule(500ms, MeleePositioning, [this](TaskContext ctx)
                 {
-                    Unit* target = ObjectAccessor::GetUnit(*me, targetGuid);
+                    // Toujours la cible courante, jamais celle capturee au depart.
+                    Unit* target = me->GetVictim();
                     if (!target || !target->IsAlive() || !me->IsInCombat())
                         return;
 
@@ -236,7 +242,19 @@ void CustomAI::AttackStart(Unit* who)
                     float const t = (total == 1) ? 0.f : (float(myIndex) / float(total - 1) - 0.5f);
                     float const angle = 0.f + t * totalArc;
 
-                    me->GetMotionMaster()->MoveChase(target, meleeRange, ChaseAngle(angle, tolerance));
+                    // Ne relance la poursuite que si quelque chose a change : cible,
+                    // angle attribue (un melee arrive ou part), ou generateur de
+                    // chase remplace entre-temps (saut, knockback, script...).
+                    bool const sameTarget = meleeChaseTarget == target->GetGUID();
+                    bool const sameAngle = std::fabs(meleeChaseAngle - angle) < 0.05f;
+                    bool const isChasing = me->GetMotionMaster()->GetCurrentMovementGeneratorType() == CHASE_MOTION_TYPE;
+
+                    if (!sameTarget || !sameAngle || !isChasing)
+                    {
+                        me->GetMotionMaster()->MoveChase(target, meleeRange, ChaseAngle(angle, tolerance));
+                        meleeChaseTarget = target->GetGUID();
+                        meleeChaseAngle = angle;
+                    }
 
                     ctx.Repeat(500ms);
                 });
@@ -264,15 +282,16 @@ void CustomAI::UpdateAI(uint32 diff)
 	if (fakeParty.IsActive())
 	{
 		// Vérifier que le joueur est toujours valide et en range
-		if (!linkedPlayer
-			|| !linkedPlayer->IsInWorld()
-			|| !linkedPlayer->IsWithinDistInMap(me, 100.0f))
+		Player* player = GetLinkedPlayer();
+		if (!player
+			|| !player->IsInWorld()
+			|| !player->IsWithinDistInMap(me, 100.0f))
 		{
 			StopFakeParty();
 		}
 		else
 		{
-			fakeParty.Update(diff, linkedPlayer);
+			fakeParty.Update(diff, player);
 		}
 	}
 
@@ -377,18 +396,29 @@ void CustomAI::StartFakeParty(Player* player)
 	if (!player || fakeParty.IsActive())
 		return;
 
-	linkedPlayer = player;
+	linkedPlayerGuid = player->GetGUID();
 	fakeParty.SendFakePartyUpdate(player);
 	fakeParty.SendFakePartyMemberState(player);
 }
 
 void CustomAI::StopFakeParty()
 {
-	if (!linkedPlayer || !fakeParty.IsActive())
-		return;
+	if (fakeParty.IsActive())
+	{
+		// Le joueur peut etre introuvable (deconnecte, hors carte) : la partie
+		// est quand meme desactivee pour pouvoir etre recreee ensuite.
+		fakeParty.DestroyFakeParty(GetLinkedPlayer());
+	}
 
-	fakeParty.DestroyFakeParty(linkedPlayer);
-	linkedPlayer = nullptr;
+	linkedPlayerGuid.Clear();
+}
+
+Player* CustomAI::GetLinkedPlayer() const
+{
+	if (linkedPlayerGuid.IsEmpty())
+		return nullptr;
+
+	return ObjectAccessor::GetPlayer(*me, linkedPlayerGuid);
 }
 
 void CustomAI::TalkInCombat(uint8 textId, Seconds cooldown)

@@ -173,6 +173,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		// Etat interne
 		// =================================================================
 		EventMap events;
+		CustomScenario::DialogueClock dialogue;   // Temps de parole : Next() attend la fin de la replique
 		uint32 eventId;                       // Dernier event execute (sert a Next() pour planifier eventId+1)
 		RFTPhases phase;                      // Phase courante du scenario
 		ObjectGuid irisDummy;                 // GUID du dummy invisible portant les visuels de l'iris
@@ -431,6 +432,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		void Update(uint32 diff) override
 		{
 			events.Update(diff);
+			dialogue.Reset();
 
 			// eventId est conserve en membre car Next() le re-incremente
 			// pour planifier l'event suivant dans la sequence.
@@ -623,18 +625,28 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			Next(1800ms);
 		}
 
-		// Jaina regarde le joueur, Kinndy emet ses visuels d'arcane.
+		// Jaina decouvre les restes de Kinndy, qui se dissolvent sous ses yeux.
 		void HandleCraterKinndyDissolve()
 		{
-			if (Creature* jaina = GetJaina())
-				FaceFirstPlayer(jaina);
+			Creature* jaina = GetJaina();
+			Creature* kinndy = GetCreature(DATA_KINNDY_SPARKSHINE);
 
-			if (Creature* kinndy = GetCreature(DATA_KINNDY_SPARKSHINE))
+			if (jaina)
+			{
+				if (kinndy)
+					jaina->SetFacingToObject(kinndy);
+				else
+					FaceFirstPlayer(jaina);
+
+				Talk(jaina, SAY_CRATER_KINNDY_JAINA);
+			}
+
+			if (kinndy)
 			{
 				kinndy->AddAura(SPELL_COSMETIC_ARCANE_DISSOLVE, kinndy);
 				kinndy->CastSpell(kinndy, SPELL_DISSOLVE_ARCANE_VISUAL);
 			}
-			Next(2s);
+			Next(6s);
 		}
 
 		// Jaina marche vers le cratere et Kinndy perd ses auras cosmetiques.
@@ -967,8 +979,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		// faire tomber le serveur, la replique est simplement perdue.
 		void Talk(Creature* creature, uint8 textId)
 		{
-			if (creature)
-				creature->AI()->Talk(textId);
+			dialogue.Say(creature, textId);
 		}
 
 		// Helper combinant Talk + planification de l'event suivant.
@@ -985,7 +996,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		void Next(const Milliseconds& time)
 		{
 			eventId++;
-			events.ScheduleEvent(eventId, time);
+			events.ScheduleEvent(eventId, dialogue.Consume(time));
 		}
 
 		// Retourne le premier joueur encore en jeu dans l'instance, ou nullptr.

@@ -23,12 +23,12 @@
  *     25 -  70  THE_UNKNOWN_TAUREN   Perith annonce l'attaque de la Horde
  *     71 -  90  A_LITTLE_HELP        Arrivee des archimages, mise en place
  *     91 - 100  THE_BATTLE           Trahison de Thalen, debut de la bataille
- *    122 - 141  HELP_THE_WOUNDED     Dialogues d'apres-bataille (2 parties)
+ *    114 - 136  HELP_THE_WOUNDED     Dialogues d'apres-bataille (2 parties)
  *    142 - 160  WAIT_FOR_AMARA       Retour d'Amara Leeson (2 parties)
  *    161 - 172  RETRIEVE_RHONIN      Montee a la tour, scene de l'explosion
  *
- * Les identifiants 101 a 121 ne sont pas utilises (marge laissee libre entre
- * la bataille et l'apres-bataille).
+ * Les identifiants 101 a 113 et 137 a 141 ne sont pas utilises (marges libres entre
+ * la bataille, l'apres-bataille et le retour d'Amara).
  *
  * Les events sont nommes dans l'enum BFTEvents (voir plus bas), mais leurs
  * VALEURS restent porteuses de sens : Next() s'appuie sur eventId + 1, et
@@ -110,8 +110,8 @@ const ObjectData gameobjectData[] =
 // planifie ainsi automatiquement l'event suivant dans la sequence. Ne pas
 // reordonner ni inserer une valeur au milieu d'une chaine sans verifier les
 // Next() concernes.
-// Les valeurs 101 a 121 restent libres (marge entre la bataille et
-// l'apres-bataille) et EVT_BATTLE_UNUSED (92) est un trou historique.
+// Les valeurs 101 a 113 et 137 a 141 restent libres (marges entre les blocs
+// d'events) et EVT_BATTLE_UNUSED (92) est un trou historique.
 enum BFTEvents : uint32
 {
 	// -- The Council (1 - 23) : conseil de guerre dans la tour
@@ -224,33 +224,38 @@ enum BFTEvents : uint32
 	EVT_BATTLE_THADER_WOUNDED           = 99,
 	EVT_BATTLE_FIRST_LANDING            = 100,  // Point d'arret : EVENT_MAINTAIN_THE_PROTECTION
 
-	// 101 - 121 : libres
+	// 101 - 113 : libres
 
-	// -- Help the wounded (122 - 141) : dialogues d'apres-bataille
-	// Partie I (122 - 127) : toujours jouee
-	EVT_WOUNDED_JAINA_HEDRIC_FACE       = 122,
-	EVT_WOUNDED_JAINA_TALK_01           = 123,
-	EVT_WOUNDED_HEDRIC_TALK_02          = 124,
-	EVT_WOUNDED_JAINA_TALK_03           = 125,
-	EVT_WOUNDED_JAINA_WALK              = 126,
-	EVT_WOUNDED_HEDRIC_WALK             = 127,
-	// Partie II (128 - 140) : jouee seulement si les joueurs suivent Jaina,
+	// -- Help the wounded (114 - 136) : dialogues d'apres-bataille
+	// Partie I (114 - 121) : toujours jouee
+	EVT_WOUNDED_JAINA_HEDRIC_FACE       = 114,
+	EVT_WOUNDED_JAINA_TALK_01           = 115,
+	EVT_WOUNDED_HEDRIC_TALK_02          = 116,
+	EVT_WOUNDED_HEDRIC_TALK_02_BIS      = 117,  // Thalen libere, Vereesa a sa poursuite
+	EVT_WOUNDED_JAINA_TALK_02_TER       = 118,
+	EVT_WOUNDED_JAINA_TALK_03           = 119,
+	EVT_WOUNDED_JAINA_WALK              = 120,
+	EVT_WOUNDED_HEDRIC_WALK             = 121,  // Point d'arret : la partie II part de CRITERIA_TREE_FOLLOW_JAINA
+	// Partie II (122 - 135) : jouee seulement si les joueurs suivent Jaina,
 	// annulee en bloc via [EVT_WOUNDED_PART2_FIRST, EVT_WOUNDED_PART2_LAST]
 	// si l'etape se termine avant la fin des dialogues.
-	EVT_WOUNDED_JAINA_KINNDY_FACE       = 128,
-	EVT_WOUNDED_KINNDY_TALK_04          = 129,
-	EVT_WOUNDED_JAINA_TALK_05           = 130,
-	EVT_WOUNDED_KINNDY_TALK_06          = 131,
-	EVT_WOUNDED_JAINA_TALK_07           = 132,
-	EVT_WOUNDED_KINNDY_TALK_08          = 133,
-	EVT_WOUNDED_JAINA_TALK_09           = 134,
-	EVT_WOUNDED_JAINA_TALK_10           = 135,
-	EVT_WOUNDED_KINNDY_TALK_11          = 136,
-	EVT_WOUNDED_JAINA_TALK_12           = 137,
-	EVT_WOUNDED_JAINA_TALK_13           = 138,
-	EVT_WOUNDED_KINNDY_TALK_14          = 139,
-	EVT_WOUNDED_JAINA_TALK_15           = 140,
-	EVT_WOUNDED_SCENE_END               = 141,
+	EVT_WOUNDED_JAINA_KINNDY_FACE       = 122,
+	EVT_WOUNDED_KINNDY_TALK_04          = 123,
+	EVT_WOUNDED_JAINA_TALK_05           = 124,
+	EVT_WOUNDED_KINNDY_TALK_06          = 125,
+	EVT_WOUNDED_JAINA_TALK_07           = 126,
+	EVT_WOUNDED_KINNDY_TALK_08          = 127,
+	EVT_WOUNDED_JAINA_TALK_09           = 128,
+	EVT_WOUNDED_KINNDY_TALK_10          = 129,
+	EVT_WOUNDED_JAINA_TALK_11           = 130,
+	EVT_WOUNDED_KINNDY_TALK_11_BIS      = 131,
+	EVT_WOUNDED_JAINA_TALK_12           = 132,
+	EVT_WOUNDED_JAINA_TALK_13           = 133,
+	EVT_WOUNDED_KINNDY_TALK_14          = 134,
+	EVT_WOUNDED_JAINA_TALK_15           = 135,
+	EVT_WOUNDED_SCENE_END               = 136,
+
+	// 137 - 141 : libres
 
 	// Bornes de la partie II annulable (alias, pas de nouvelles valeurs)
 	EVT_WOUNDED_PART2_FIRST             = EVT_WOUNDED_JAINA_KINNDY_FACE,
@@ -788,6 +793,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				{
 					SpawnWoundedTroops();
 					RelocateTroops();
+					// Canon : la Horde a libere Thalen pendant l'assaut. Sa cellule
+					// est vide quand Hedric vient faire son rapport a Jaina.
+					if (Creature* thalen = GetThalen())
+						thalen->DespawnOrUnsummon();
 					GetBarrier01()->ResetDoorOrButton();
 					GetBarrier02()->ResetDoorOrButton();
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::HelpTheWounded);
@@ -991,6 +1000,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			scheduler.Update(diff);
 
 			events.Update(diff);
+			dialogue.Reset();
 			switch (eventId = events.ExecuteEvent())
 			{
 				// The Council (1 - 23)
@@ -1531,7 +1541,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						jaina->SetTarget(ObjectGuid::Empty);
 						jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					}
-					Next(8s);
+					Next(10s);
 					break;
 				case EVT_HELP_JAINA_TALK_15:
 					if (Creature* jaina = GetJaina())
@@ -1664,10 +1674,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						amara->SetEmoteState(EMOTE_STATE_READY2HL_ALLOW_MOVEMENT);
 						amara->CastSpell(amara, SPELL_PRISMATIC_BARRIER, true);
 					}
-					GetThalen()->HandleEmoteCommand(EMOTE_ONESHOT_LAUGH);
+					// Thalen jubile : il nargue Jaina au lieu de fuir aussitot.
+					if (Creature* thalen = GetThalen())
+					{
+						thalen->HandleEmoteCommand(EMOTE_ONESHOT_LAUGH);
+						Talk(thalen, SAY_BATTLE_THALEN_BETRAYAL);
+					}
 					GetJaina()->SetEmoteState(EMOTE_STATE_READY2HL_ALLOW_MOVEMENT);
 					GetHedric()->SetEmoteState(EMOTE_STATE_READY1H_ALLOW_MOVEMENT);
-					Next(1s);
+					Next(4s);
 					break;
 				case EVT_BATTLE_JAINA_TALK_03:
 					Talk(GetJaina(), SAY_BATTLE_03);
@@ -1692,8 +1707,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						thalen->CastSpell(thalen, SPELL_ICY_GLARE);
 						thalen->CastSpell(thalen, SPELL_CHILLING_BLAST, true);
 						thalen->StopMoving();
+						// Allusion a la bombe de mana qu'il a concue : prepare la fin du scenario.
+						Talk(thalen, SAY_BATTLE_THALEN_BOMB);
 					}
-					Next(2s);
+					Next(7s);
 					break;
 				// Thalen se dissout (fuite) et laisse Thader agonisant, que
 				// Kinndy vient soigner : c'est ce tableau que les joueurs
@@ -1745,7 +1762,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 				// Help the wounded (122 - 141)
 				// Deux blocs de dialogue apres la bataille. La partie I
-				// (122-127) se joue toujours ; la partie II (128-140) n'est
+				// (114-121) se joue toujours ; la partie II (122-135) n'est
 				// lancee que si les joueurs suivent Jaina, et elle est annulee
 				// en bloc s'ils terminent l'etape avant la fin (voir
 				// CRITERIA_TREE_HELP_THE_WOUNDED).
@@ -1773,6 +1790,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case EVT_WOUNDED_HEDRIC_TALK_02:
 					Talk(GetHedric(), SAY_POST_BATTLE_02);
 					Next(4s);
+					break;
+				// Thalen a ete libere pendant l'assaut : Vereesa et les
+				// sentinelles de Shandris sont parties le traquer dans le
+				// marecage, d'ou leur absence au moment de la bombe.
+				case EVT_WOUNDED_HEDRIC_TALK_02_BIS:
+					Talk(GetHedric(), SAY_POST_BATTLE_02_BIS);
+					Next(11s);
+					break;
+				case EVT_WOUNDED_JAINA_TALK_02_TER:
+					Talk(GetJaina(), SAY_POST_BATTLE_02_TER);
+					Next(6s);
 					break;
 				case EVT_WOUNDED_JAINA_TALK_03:
 					Talk(GetJaina(), SAY_POST_BATTLE_03);
@@ -1833,13 +1861,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					Talk(GetJaina(), SAY_POST_BATTLE_09);
 					Next(13s);
 					break;
-				case EVT_WOUNDED_JAINA_TALK_10:
-					Talk(GetJaina(), SAY_POST_BATTLE_10);
+				case EVT_WOUNDED_KINNDY_TALK_10:
+					Talk(GetKinndy(), SAY_POST_BATTLE_10);
+					Next(4s);
+					break;
+				case EVT_WOUNDED_JAINA_TALK_11:
+					Talk(GetJaina(), SAY_POST_BATTLE_11);
 					Next(7s);
 					break;
-				case EVT_WOUNDED_KINNDY_TALK_11:
-					Talk(GetKinndy(), SAY_POST_BATTLE_11);
-					Next(8s);
+				case EVT_WOUNDED_KINNDY_TALK_11_BIS:
+					Talk(GetKinndy(), SAY_POST_BATTLE_11_BIS);
+					Next(5s);
 					break;
 				case EVT_WOUNDED_JAINA_TALK_12:
 					Talk(GetJaina(), SAY_POST_BATTLE_12);
@@ -2067,6 +2099,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		// Etat interne
 		// =================================================================
 		EventMap events;                  // Chaine des events cinematiques
+		CustomScenario::DialogueClock dialogue;   // Temps de parole : Next() attend la fin de la replique
 		TaskScheduler scheduler;          // Taches recurrentes (auras, explosions d'ambiance)
 		uint32 eventId;                   // Dernier event execute (sert a Next() pour planifier eventId + 1)
 		uint32 woundedTroops;             // Blesses deja evacues par les joueurs
@@ -2130,8 +2163,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		// faire tomber le serveur, la replique est simplement perdue.
 		void Talk(Creature* creature, uint8 textId)
 		{
-			if (creature)
-				creature->AI()->Talk(textId);
+			dialogue.Say(creature, textId);
 		}
 
 		// Joueur au nom duquel crediter un criteria de scenario.
@@ -2176,7 +2208,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		void Next(const Milliseconds& time)
 		{
 			eventId++;
-			events.ScheduleEvent(eventId, time);
+			events.ScheduleEvent(eventId, dialogue.Consume(time));
 		}
 
 		// Met en scene un dialogue : tous les acteurs presents se tournent

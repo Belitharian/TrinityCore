@@ -206,6 +206,8 @@ enum DLPMisc
 	ACTION_DISPELL_BARRIER              = 5000000,
 	ACTION_ARCANE_ORB_DESPAWN           = 5000001,
 	ACTION_HORDE_PORTAL_SPAWN           = 5000002,
+	ACTION_ROMMATH_FOLLOW               = 5000003,  // Rommath suit le joueur (SetGUID GUID_PLAYER avant)
+	ACTION_ROMMATH_STOP_FOLLOW          = 5000004,  // Rommath cesse de suivre (deplacement scripte)
 
     // Path
     PATH_RATHAELLA_01                   = 1,
@@ -230,6 +232,8 @@ enum DLPMisc
 	CRITERIA_TREE_A_FACELIFT            = 1000051,
 	CRITERIA_TREE_FIRST_STEP            = 1000053,
 	CRITERIA_TREE_UNFORTUNATE_CAPTURE   = 1000055,
+	CRITERIA_TREE_TALK_TO_LANDALOCK     = 1000056,  // An Unfortunate Capture - Parler a Lan'dalock
+	CRITERIA_TREE_FREE_RATHAELLA        = 1000058,  // An Unfortunate Capture - Liberer Rathaella
 	CRITERIA_TREE_SERVE_AND_PROTECT     = 1000059,
 	CRITERIA_TREE_CASHING_OUT           = 1000061,
 	CRITERIA_TREE_REMAINING_SUNREAVERS  = 1000064,
@@ -240,6 +244,23 @@ enum DLPMisc
 	CRITERIA_TREE_FOLLOW_TRACKS         = 1000070,  // What happened? - Criteria Tree 2
 	CRITERIA_TREE_FREE_AETHAS           = 1000071,  // What happened? - Criteria Tree 3
 	CRITERIA_TREE_HANDS_OF_THE_CHEF     = 1000072,
+
+	// Vignettes (Vignette.db2, hotfixes) - marqueurs minimap / carte.
+	// VIGNETTE_NONE efface la vignette d'une creature ou d'un GameObject.
+	// Une vignette de creature disparait seule a sa mort.
+	VIGNETTE_NONE                       = 0,
+	VIGNETTE_INTERACTION                = 50001,    // Objet / PNJ a utiliser (captive, barriere, portail)
+	VIGNETTE_LADY_JAINA_PROUDMOORE      = 50003,
+	VIGNETTE_HORDE_TROOPS               = 50006,    // Citoyens Saccage-Soleil a chasser (Un coup de menage)
+	VIGNETTE_ARCHMAGE_LANDALOCK         = 50008,
+	VIGNETTE_SUNREAVER_CAPTAIN          = 50009,
+	VIGNETTE_MAGISTER_BRASAEL           = 50010,
+	VIGNETTE_MAGISTER_SURDIEL           = 50011,
+	VIGNETTE_HIGH_ARCANIST_SAVOR        = 50012,
+	VIGNETTE_GRAND_MAGISTER_ROMMATH     = 50013,
+	VIGNETTE_AETHAS_SUNREAVER           = 50014,
+	VIGNETTE_ARCANIST_RATHAELLA         = 50015,
+	VIGNETTE_DALARAN_CITIZEN            = 50016,    // Citoyens refugies derriere les barrieres (Servir et proteger)
 
 	// Point Id
 	MOVEMENT_INFO_POINT_NONE            = 0,

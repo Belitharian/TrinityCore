@@ -198,6 +198,7 @@ enum DalaranFateMisc
 	CONVERSATION_START                      = 60001,    // Nobody dislikes Garrosh more than me [...]
 	CONVERSATION_VISIONS                    = 60002,    // In the aftermath of Theramore, my first in [...]
 	CONVERSATION_KELTHUZAD_COMBAT           = 60003,
+	CONVERSATION_VISIONS_PART02             = 60004,    // Kael'thas Sunstrider also studied here [...]
 
 	// Misc
 	FACTION_KELTHUZAD_HOSTILE               = 14,

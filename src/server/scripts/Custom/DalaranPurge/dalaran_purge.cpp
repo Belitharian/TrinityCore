@@ -6,6 +6,9 @@
 #include "InstanceScript.h"
 #include "TemporarySummon.h"
 #include "ScriptMgr.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
+#include "SpellScript.h"
 #include "dalaran_purge.h"
 
 struct npc_jaina_dalaran_purge : public CustomAI
@@ -194,9 +197,21 @@ struct npc_magister_rommath_purge : public CustomAI
     };
 
 private:
+    // Au-dela de cette distance, Rommath rejoint le joueur par teleportation
+    // (joueur ressuscite au cimetiere, ou Rommath reste en arriere apres un evade).
+    static constexpr float REJOIN_DISTANCE = 40.f;
+    // Frequence de la surveillance d'escorte.
+    static constexpr Milliseconds ESCORT_CHECK_INTERVAL = 1s;
+
     InstanceScript* m_instance;
     bool m_evocating;
     ObjectGuid m_playerGuid;
+
+    // Etat d'escorte, conserve a travers Reset() : la mort du joueur fait
+    // evader Rommath, il ne doit pas pour autant oublier qui il escorte.
+    bool m_following = false;      // Rommath suit le joueur (MoveFollow)
+    bool m_partyWanted = false;    // Fausse partie a maintenir (joueur solo)
+    Milliseconds m_escortCheckTimer = ESCORT_CHECK_INTERVAL;
 
     // Raccourci avec garde null
     Player* GetFollowedPlayer() const
@@ -208,11 +223,83 @@ private:
     }
 
 public:
+    // m_playerGuid et l'etat d'escorte ne sont PAS effaces : Reset() est appele
+    // a chaque evade, notamment quand le joueur escorte meurt.
     void Reset() override
     {
         scheduler.CancelGroup(GROUP_COMBAT);
         m_evocating = false;
-        m_playerGuid.Clear();
+    }
+
+    void SetGUID(ObjectGuid const& guid, int32 id) override
+    {
+        if (id == GUID_PLAYER)
+            m_playerGuid = guid;
+    }
+
+    // Pilotage de l'escorte par le scenario (prison, portail, Narasi).
+    void DoAction(int32 action) override
+    {
+        switch (action)
+        {
+            case ACTION_ROMMATH_FOLLOW:
+                FollowPlayer();
+                break;
+            case ACTION_ROMMATH_STOP_FOLLOW:
+                // Le scenario reprend la main sur le deplacement ; la fausse
+                // partie, elle, reste active jusqu'au portail de fin.
+                m_following = false;
+                me->SetOwnerGUID(ObjectGuid::Empty);
+                break;
+            default:
+                break;
+        }
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        CustomAI::UpdateAI(diff);
+
+        m_escortCheckTimer -= Milliseconds(diff);
+        if (m_escortCheckTimer > 0ms)
+            return;
+
+        m_escortCheckTimer = ESCORT_CHECK_INTERVAL;
+        UpdateEscort();
+    }
+
+    // Surveillance d'escorte. Tant que le joueur est mort, Rommath l'attend ;
+    // une fois ressuscite, il le rejoint par teleportation s'il est trop loin,
+    // reprend son suivi et recree la fausse partie dissoute a la mort.
+    void UpdateEscort()
+    {
+        if (!m_following && !m_partyWanted)
+            return;
+
+        Player* player = GetFollowedPlayer();
+        if (!player || !player->IsInWorld() || !player->IsAlive())
+            return;
+
+        if (m_following && !me->IsEngaged())
+        {
+            if (!me->IsWithinDistInMap(player, REJOIN_DISTANCE))
+            {
+                me->NearTeleportTo(player->GetRandomNearPosition(3.f));
+                DoCastSelf(SPELL_TELEPORT_VISUAL_ONLY, true);
+            }
+
+            if (me->GetMotionMaster()->GetCurrentMovementGeneratorType() != FOLLOW_MOTION_TYPE)
+            {
+                FollowPlayer();
+                return; // FollowPlayer recree aussi la fausse partie
+            }
+        }
+
+        if (m_partyWanted && !fakeParty.IsActive() && !player->GetGroup())
+        {
+            StartFakeParty(player);
+            player->SetMinionGUID(me->GetGUID());
+        }
     }
 
     void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
@@ -237,8 +324,11 @@ public:
         if (!player)
             return;
 
+        m_following = true;
+
         // Fake party seulement si le joueur est solo
-        if (!player->GetGroup())
+        m_partyWanted = !player->GetGroup();
+        if (m_partyWanted)
             StartFakeParty(player);
 
         player->SetMinionGUID(me->GetGUID());
@@ -263,20 +353,26 @@ public:
                         passage->UseDoorOrButton();
 
                     if (GameObject* portal = m_instance->GetGameObject(DATA_PORTAL_TO_PRISON))
+                    {
                         portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
+                        portal->SetVignette(VIGNETTE_INTERACTION);
+                    }
                 }
                 me->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
                 break;
             }
             case MOVEMENT_INFO_POINT_03:
             {
+                // Fin de l'escorte : plus rien a maintenir.
+                m_following = false;
+                m_partyWanted = false;
                 StopFakeParty();
                 DoCast(SPELL_TELEPORT_VISUAL_ONLY);
                 me->SetVisible(false);
 
                 if (m_instance)
                 {
-                    // Capture le GUID de l'instance pour éviter un dangling this
+                    // Capture le GUID de l'instance pour ï¿½viter un dangling this
                     ObjectGuid instanceCreatureGuid = me->GetGUID();
                     scheduler.Schedule(5s, [this](TaskContext /*context*/)
                     {
@@ -339,7 +435,7 @@ public:
         if (!me->HealthBelowPctDamaged(10, damage))
             return;
 
-        // Toujours annuler les dégâts sous 10%, que l'evocation soit en cours ou non
+        // Toujours annuler les dï¿½gï¿½ts sous 10%, que l'evocation soit en cours ou non
         damage = 0;
 
         if (m_evocating)
@@ -558,12 +654,13 @@ class spell_meteor_storm : public SpellScript
     void FilterTargets(std::list<WorldObject*>& targets)
     {
         Unit* caster = GetCaster();
-        if (caster)
+        if (!caster)
             return;
 
         targets.remove_if([caster](WorldObject* target)
         {
-            return target->IsFriendlyTo(caster) || target->GetGUID() == caster->GetGUID();
+            Unit* unit = target->ToUnit();
+            return !unit || !caster->IsValidAttackTarget(unit);
         });
     }
 
@@ -579,6 +676,57 @@ class spell_meteor_storm : public SpellScript
     }
 };
 
+// Sorts de zone des allies de l'infiltration (Rommath, Surdiel) :
+//   401525 - Scorching Detonation, 215555 - Meteor Storm (impacts),
+//   255890 - Dragon's Breath, 329509 - Blazing Surge
+//
+// Ces sorts PNJ ciblent tout ce qui se trouve dans la zone, sans tenir compte
+// de la faction. Sous l'illusion de la Horde, le joueur combattait a cote de
+// Rommath et encaissait ses explosions ; le premier coup le mettait en plus
+// en combat avec lui. On ne garde que ce que le lanceur peut attaquer.
+//
+// Les types de cibles varient d'un sort a l'autre : le filtre s'accroche a
+// chaque cible de zone reellement presente dans les effets du sort, ce qui
+// evite d'avoir a les connaitre (et un echec de validation au demarrage).
+class spell_purge_hostile_area_only : public SpellScript
+{
+    void FilterTargets(std::list<WorldObject*>& targets)
+    {
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        targets.remove_if([caster](WorldObject* target)
+        {
+            Unit* unit = target->ToUnit();
+            return unit && !caster->IsValidAttackTarget(unit);
+        });
+    }
+
+    void Register() override
+    {
+        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(m_scriptSpellId, DIFFICULTY_NONE);
+        if (!spellInfo)
+            return;
+
+        for (SpellEffectInfo const& effect : spellInfo->GetEffects())
+        {
+            for (SpellImplicitTargetInfo const* target : { &effect.TargetA, &effect.TargetB })
+            {
+                if (!target->GetTarget() || !target->IsArea())
+                    continue;
+
+                // TargetA et TargetB identiques : un seul filtre suffit
+                if (target == &effect.TargetB && effect.TargetB.GetTarget() == effect.TargetA.GetTarget())
+                    continue;
+
+                OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_purge_hostile_area_only::FilterTargets,
+                    effect.EffectIndex, target->GetTarget());
+            }
+        }
+    }
+};
+
 void AddSC_dalaran_purge()
 {
 	RegisterDalaranAI(npc_jaina_dalaran_purge);
@@ -588,4 +736,5 @@ void AddSC_dalaran_purge()
     RegisterConversationAI(conversation_dalaran_purge);
 
     RegisterSpellScript(spell_meteor_storm);
+    RegisterSpellScript(spell_purge_hostile_area_only);
 }

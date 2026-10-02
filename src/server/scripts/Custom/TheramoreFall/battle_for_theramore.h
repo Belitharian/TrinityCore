@@ -410,6 +410,8 @@ enum BFTTalks
 	SAY_BATTLE_04         = 35,
 	SAY_BATTLE_05         = 0,
 	SAY_BATTLE_06         = 0,
+	SAY_BATTLE_THALEN_BETRAYAL = 1,     // Thalen nargue Jaina apres la chute de la barriere
+	SAY_BATTLE_THALEN_BOMB     = 2,     // Thalen, gele, fait allusion a la bombe de mana
 	
 	// --- Annonces de vagues : une replique par point d arrivee ---
 	SAY_BATTLE_ALERT      = 36,
@@ -421,6 +423,8 @@ enum BFTTalks
 	// --- Apres la bataille (HelpTheWounded / WaitForAmara) ---
 	SAY_POST_BATTLE_01    = 43,
 	SAY_POST_BATTLE_02    = 2,
+	SAY_POST_BATTLE_02_BIS = 3,     // Hedric : Thalen a ete libere, Vereesa le poursuit
+	SAY_POST_BATTLE_02_TER = 63,    // Jaina : reaction a la fuite de Thalen
 	SAY_POST_BATTLE_03    = 44,
 	SAY_POST_BATTLE_04    = 4,
 	SAY_POST_BATTLE_05    = 45,
@@ -428,8 +432,9 @@ enum BFTTalks
 	SAY_POST_BATTLE_07    = 46,
 	SAY_POST_BATTLE_08    = 6,
 	SAY_POST_BATTLE_09    = 47,
-	SAY_POST_BATTLE_10    = 48,
-	SAY_POST_BATTLE_11    = 7,
+	SAY_POST_BATTLE_10    = 7,      // Kinndy : "Je ne pense pas que je pourrai rire..."
+	SAY_POST_BATTLE_11    = 48,     // Jaina  : "Tu te souviendras comment rire..."
+	SAY_POST_BATTLE_11_BIS = 9,     // Kinndy : "Pourquoi moi, madame ?..."
 	SAY_POST_BATTLE_12    = 49,
 	SAY_POST_BATTLE_13    = 50,
 	SAY_POST_BATTLE_14    = 8,

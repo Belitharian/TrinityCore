@@ -171,7 +171,8 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         SummonList summons;
         uint8 interruptCounter;
         FakeParty fakeParty;
-        Player* linkedPlayer;
+        ObjectGuid linkedPlayerGuid;     // Joueur de la fausse partie (GUID : un pointeur brut pendrait a la deconnexion)
+        Player* GetLinkedPlayer() const;
         bool canCombatMove;
         bool damageReduction;
         bool textOnCooldown;
@@ -206,7 +207,14 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
             RandomMovement  = 9001,
             TeleportSettle  = 9002,
             Encircle        = 9003,
+            MeleePositioning = 9004,    // Boucle de placement en arc des melee (une seule a la fois)
         };
+
+        // Derniere poursuite emise par la boucle MeleePositioning : MoveChase
+        // n'est relance que si la cible ou l'angle change, sinon chaque
+        // re-emission remplace le generateur et hache le deplacement.
+        ObjectGuid meleeChaseTarget;
+        float meleeChaseAngle = 0.f;
 
         static constexpr float JUMP_SPEED = 6.f;
         static constexpr float JUMP_HEIGHT = 1.5f;

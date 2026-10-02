@@ -566,8 +566,8 @@ class conversation_dalaran_part01 : public ConversationAI
 		if (!jaina || !anduin)
 			return;
 
-		conversation->AddActor(CONVERSATION_INTRODUCTION, CONVERSATION_ACTOR_IDX_JAINA_PROUDMOORE, jaina->GetGUID());
-		conversation->AddActor(CONVERSATION_INTRODUCTION, CONVERSATION_ACTOR_IDX_ANDUIN_WRYNN, anduin->GetGUID());
+		conversation->AddActor(CONVERSATION_VISIONS, CONVERSATION_ACTOR_IDX_JAINA_PROUDMOORE, jaina->GetGUID());
+		conversation->AddActor(CONVERSATION_VISIONS, CONVERSATION_ACTOR_IDX_ANDUIN_WRYNN, anduin->GetGUID());
 		conversation->Start();
 	}
 
@@ -617,7 +617,7 @@ class conversation_dalaran_kelthuzad : public ConversationAI
 		if (!kelthuzad)
 			return;
 
-		conversation->AddActor(CONVERSATION_START, CONVERSATION_ACTOR_IDX_KELTHUZAD, kelthuzad->GetGUID());
+		conversation->AddActor(CONVERSATION_KELTHUZAD_COMBAT, CONVERSATION_ACTOR_IDX_KELTHUZAD, kelthuzad->GetGUID());
 		conversation->Start();
 	}
 
@@ -674,8 +674,8 @@ class conversation_dalaran_part02 : public ConversationAI
 		if (!jaina || !anduin)
 			return;
 
-		conversation->AddActor(CONVERSATION_INTRODUCTION, CONVERSATION_ACTOR_IDX_JAINA_PROUDMOORE, jaina->GetGUID());
-		conversation->AddActor(CONVERSATION_INTRODUCTION, CONVERSATION_ACTOR_IDX_ANDUIN_WRYNN, anduin->GetGUID());
+		conversation->AddActor(CONVERSATION_VISIONS_PART02, CONVERSATION_ACTOR_IDX_JAINA_PROUDMOORE, jaina->GetGUID());
+		conversation->AddActor(CONVERSATION_VISIONS_PART02, CONVERSATION_ACTOR_IDX_ANDUIN_WRYNN, anduin->GetGUID());
 		conversation->Start();
 	}
 

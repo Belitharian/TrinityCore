@@ -112,6 +112,9 @@ enum RFTTalks
 	SAY_AFTER_BATTLE_JAINA_12           = 5,
 	SAY_AFTER_BATTLE_KALECGOS_13        = 16,
 
+	// --- Cratere : Jaina trouve les restes de Kinndy (Phase 2) ---
+	SAY_CRATER_KINNDY_JAINA             = 15,
+
 	// --- Protection de l'iris (Phase 2-3, cratere) ---
 	SAY_IRIS_PROTECTION_JAINA_01        = 6,
 	SAY_IRIS_PROTECTION_JAINA_02        = 7,
