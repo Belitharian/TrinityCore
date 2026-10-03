@@ -1051,6 +1051,7 @@ class TC_GAME_API ObjectMgr
         GameObjectOverride const* GetGameObjectOverride(ObjectGuid::LowType spawnId) const;
         CreatureAddon const* GetCreatureTemplateAddon(uint32 entry) const;
         std::vector<float> const* GetCreatureTemplateSparringValues(uint32 entry) const;
+        uint32 GetCreatureItemLevel(uint32 contentTuningId) const;
         CreatureMovementData const* GetCreatureMovementOverride(ObjectGuid::LowType spawnId) const;
         ItemTemplate const* GetItemTemplate(uint32 entry) const;
         ItemTemplateContainer const& GetItemTemplateStore() const { return _itemTemplateStore; }
@@ -1219,6 +1220,7 @@ class TC_GAME_API ObjectMgr
         void LoadCreatureTemplates();
         void LoadCreatureTemplateAddons();
         void LoadCreatureTemplateSparring();
+        void LoadCreatureTemplateItemLevels();
         void LoadCreatureTemplate(Field* fields);
         void LoadCreatureTemplateDifficulty();
         void LoadCreatureTemplateGossip();
@@ -1246,6 +1248,7 @@ class TC_GAME_API ObjectMgr
         void LoadSpawnGroupTemplates();
         void LoadSpawnGroups();
         void LoadInstanceSpawnGroups();
+        void LoadCreatureSpawnRegions();
         void LoadItemTemplates();
         void LoadItemTemplateAddon();
         void LoadItemScriptNames();
@@ -1366,6 +1369,8 @@ class TC_GAME_API ObjectMgr
         Trinity::IteratorPair<SpawnGroupLinkContainer::const_iterator> GetSpawnMetadataForGroup(uint32 groupId) const { return Trinity::Containers::MapEqualRange(_spawnGroupMapStore, groupId); }
         std::vector<uint32> const* GetSpawnGroupsForMap(uint32 mapId) const { auto it = _spawnGroupsByMap.find(mapId); return it != _spawnGroupsByMap.end() ? &it->second : nullptr; }
         std::vector<InstanceSpawnGroupInfo> const* GetInstanceSpawnGroupsForMap(uint32 mapId) const { auto it = _instanceSpawnGroupStore.find(mapId); return it != _instanceSpawnGroupStore.end() ? &it->second : nullptr; }
+        std::vector<ObjectGuid::LowType> const* GetSpawnRegionCreatures(uint32 spawnRegionId) const { auto it = _spawnRegionStore.find(spawnRegionId); return it != _spawnRegionStore.end() ? &it->second : nullptr; }
+        std::vector<uint32> const* GetCreatureSpawnRegions(ObjectGuid::LowType spawnId) const { auto it = _creatureSpawnRegionStore.find(spawnId); return it != _creatureSpawnRegionStore.end() ? &it->second : nullptr; }
 
         SpawnTrackingTemplateData const* GetSpawnTrackingData(uint32 spawnTrackingId) const;
         Trinity::IteratorPair<SpawnTrackingLinkContainer::const_iterator> GetSpawnMetadataForSpawnTracking(uint32 spawnTrackingId) const { return Trinity::Containers::MapEqualRange(_spawnTrackingMapStore, spawnTrackingId); }
@@ -1811,6 +1816,7 @@ class TC_GAME_API ObjectMgr
         CreatureAddonContainer _creatureAddonStore;
         CreatureTemplateAddonContainer _creatureTemplateAddonStore;
         CreatureTemplateSparringContainer _creatureTemplateSparringStore;
+        std::unordered_map<uint32, uint32> _creatureItemLevelStore;
         std::unordered_map<ObjectGuid::LowType, CreatureMovementData> _creatureMovementOverrides;
         GameObjectAddonContainer _gameObjectAddonStore;
         GameObjectQuestItemMap _gameObjectQuestItemStore;
@@ -1830,6 +1836,8 @@ class TC_GAME_API ObjectMgr
         std::unordered_map<uint32, std::vector<uint32>> _spawnGroupsByMap;
         SpawnGroupLinkContainer _spawnGroupMapStore;
         InstanceSpawnGroupContainer _instanceSpawnGroupStore;
+        std::unordered_map<uint32, std::vector<ObjectGuid::LowType>> _spawnRegionStore;
+        std::unordered_map<ObjectGuid::LowType, std::vector<uint32>> _creatureSpawnRegionStore;
         SpawnTrackingTemplateContainer _spawnTrackingDataStore;
         SpawnTrackingLinkContainer _spawnTrackingMapStore;
         SpawnTrackingQuestObjectiveContainer _spawnTrackingQuestObjectiveStore;

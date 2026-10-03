@@ -744,6 +744,9 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
 
         bool IsSpawnGroupActive(uint32 groupId) const;
 
+        // True when every creature of the spawn region that can exist on this map is dead
+        bool IsSpawnRegionCleared(uint32 spawnRegionId) const;
+
         // Enable the spawn group, which causes all creatures in it to respawn (unless they have a respawn timer)
         // The force flag can be used to force spawning additional copies even if old copies are still around from a previous spawn
         bool SpawnGroupSpawn(uint32 groupId, bool ignoreRespawn = false, bool force = false, std::vector<WorldObject*>* spawnedObjects = nullptr);

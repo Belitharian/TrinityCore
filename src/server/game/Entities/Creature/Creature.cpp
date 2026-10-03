@@ -31,6 +31,7 @@
 #include "GameTime.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
+#include "ItemEnchantmentMgr.h"
 #include "ItemTemplate.h"
 #include "Log.h"
 #include "Loot.h"
@@ -1659,8 +1660,10 @@ void Creature::UpdateLevelDependantStats()
     SetBaseWeaponDamage(RANGED_ATTACK, MINDAMAGE, weaponBaseMinDamage);
     SetBaseWeaponDamage(RANGED_ATTACK, MAXDAMAGE, weaponBaseMaxDamage);
 
-    m_baseAttackPower       = stats->AttackPower;
-    m_baseRangedAttackPower = stats->RangedAttackPower;
+    // AP comme un joueur : 1 point de stat principale = 1 AP, pour les sorts de joueur a coefficient d'AP
+    uint32 const playerLikePower = uint32(GetPlayerLikePowerForLevel(level));
+    m_baseAttackPower       = stats->AttackPower + playerLikePower;
+    m_baseRangedAttackPower = stats->RangedAttackPower + playerLikePower;
 
     float armor = GetBaseArmorForLevel(level);
     SetStatFlatModifier(UNIT_MOD_ARMOR, BASE_VALUE, armor);
@@ -3211,6 +3214,63 @@ float Creature::GetBaseArmorForLevel(uint8 level) const
     CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
     float baseArmor = sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureArmor, level, creatureDifficulty->GetHealthScalingExpansion(), m_unitData->ContentTuningID, Classes(cInfo->unit_class), 0);
     return baseArmor * creatureDifficulty->ArmorModifier;
+}
+
+// Stat principale d'un joueur de la classe du PNJ, au niveau donne, equipe en epique a l'ilvl donne.
+// Equipement de reference = allocations reelles des objets de Midnight (ItemSparse StatPercentEditor) :
+// 5259 sur chaque piece d'armure et la cape, 6666 sur les bijoux, 5259 + 18121 sur une arme a deux mains.
+// Le budget par ilvl vient de RandPropPoints, comme pour Item::GetItemStatValue.
+static float GetPlayerPrimaryStatForItemLevel(uint8 level, uint8 unitClass, uint32 itemLevel)
+{
+    struct ReferenceItem
+    {
+        InventoryType Slot;
+        uint32 PrimaryStatAllocation;
+    };
+
+    static constexpr ReferenceItem ReferenceGear[] =
+    {
+        { INVTYPE_HEAD,      5259 },
+        { INVTYPE_SHOULDERS, 5259 },
+        { INVTYPE_CHEST,     5259 },
+        { INVTYPE_WAIST,     5259 },
+        { INVTYPE_LEGS,      5259 },
+        { INVTYPE_FEET,      5259 },
+        { INVTYPE_WRISTS,    5259 },
+        { INVTYPE_HANDS,     5259 },
+        { INVTYPE_CLOAK,     5259 },
+        { INVTYPE_TRINKET,   6666 },
+        { INVTYPE_TRINKET,   6666 },
+        { INVTYPE_2HWEAPON,  5259 + 18121 },
+    };
+
+    float primaryStat = 0.0f;
+
+    // Stat de base de la classe a ce niveau (player_classlevelstats), race humaine : elle couvre
+    // les quatre unit_class des creatures et l'ecart entre races est negligeable.
+    PlayerLevelInfo levelInfo;
+    sObjectMgr->GetPlayerLevelInfo(RACE_HUMAN, unitClass, level, &levelInfo);
+    primaryStat += std::max({ levelInfo.stats[STAT_STRENGTH], levelInfo.stats[STAT_AGILITY], levelInfo.stats[STAT_INTELLECT] });
+
+    for (ReferenceItem const& item : ReferenceGear)
+        primaryStat += GetRandomPropertyPoints(itemLevel, ITEM_QUALITY_EPIC, item.Slot, 0) * item.PrimaryStatAllocation * 0.0001f;
+
+    return primaryStat;
+}
+
+float Creature::GetPlayerLikePowerForLevel(uint8 level) const
+{
+    CreatureTemplate const* cInfo = GetCreatureTemplate();
+    CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
+
+    // ilvl du ContentTuning (creature_template_ilvl) ; sans ligne, stat principale attendue d'ExpectedStat.
+    float primaryStat;
+    if (uint32 itemLevel = sObjectMgr->GetCreatureItemLevel(m_unitData->ContentTuningID))
+        primaryStat = GetPlayerPrimaryStatForItemLevel(level, cInfo->unit_class, itemLevel);
+    else
+        primaryStat = sDB2Manager.EvaluateExpectedStat(ExpectedStatType::PlayerPrimaryStat, level, creatureDifficulty->GetHealthScalingExpansion(), m_unitData->ContentTuningID, Classes(cInfo->unit_class), 0);
+
+    return primaryStat * creatureDifficulty->DamageModifier;
 }
 
 float Creature::GetArmorMultiplierForTarget(WorldObject const* target) const

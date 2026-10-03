@@ -3,11 +3,12 @@
 #include "Containers.h"
 #include "GridNotifiers.h"
 #include "MotionMaster.h"
+#include "SpellAuras.h"
+#include "SpellMgr.h"
 
 CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
-	type(type), summons(creature), canCombatMove(true), damageReduction(false),
-	textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance(50)),
-	fakeParty(creature), encircleReactOnCooldown(false), circleAngle(0.f)
+	type(type), summons(creature), fakeParty(creature), canCombatMove(true), damageReduction(false),
+	textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance(50)), encircleReactOnCooldown(false), circleAngle(0.f)
 {
 	if (type == AI_Type::Distance)
 	{
@@ -18,9 +19,8 @@ CustomAI::CustomAI(Creature* creature, AI_Type type) : ScriptedAI(creature),
 }
 
 CustomAI::CustomAI(Creature* creature, bool damageReduction, AI_Type type) : ScriptedAI(creature),
-	type(type), summons(creature), canCombatMove(true), damageReduction(damageReduction),
-	textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance(50)),
-	fakeParty(creature), encircleReactOnCooldown(false), circleAngle(0.f)
+	type(type), summons(creature), fakeParty(creature), canCombatMove(true), damageReduction(damageReduction),
+	textOnCooldown(false), randomMovements(false), backpedaling(false), circleClockwise(roll_chance(50)), encircleReactOnCooldown(false), circleAngle(0.f)
 {
 	if (type == AI_Type::Distance)
 	{
@@ -266,7 +266,7 @@ void CustomAI::AttackStart(Unit* who)
 	}
 }
 
-void CustomAI::JustDied(Unit* killer)
+void CustomAI::JustDied(Unit* /*killer*/)
 {
 	summons.DespawnAll();
 	scheduler.CancelAll();
@@ -306,6 +306,34 @@ bool CustomAI::CanAIAttack(Unit const* who) const
 		&& !who->HasAuraType(SPELL_AURA_MOD_FEAR_2)
 		&& !who->HasBreakableByDamageCrowdControlAura()
 		&& ScriptedAI::CanAIAttack(who);
+}
+
+SpellCastResult CustomAI::DoCast(Unit* victim, uint32 spellId, CastSpellExtraArgs const& args)
+{
+	if (victim && HasBuffFromOtherCaster(victim, spellId))
+		return SPELL_FAILED_AURA_BOUNCED;
+
+	return ScriptedAI::DoCast(victim, spellId, args);
+}
+
+bool CustomAI::HasBuffFromOtherCaster(Unit const* target, uint32 spellId) const
+{
+	SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, me->GetMap()->GetDifficultyID());
+	if (!spellInfo || !spellInfo->IsPositive())
+		return false;
+
+	bool appliesAura = std::any_of(spellInfo->GetEffects().begin(), spellInfo->GetEffects().end(),
+		[](SpellEffectInfo const& effect) { return effect.IsAura(); });
+	if (!appliesAura)
+		return false;
+
+	// Notre propre exemplaire peut etre rafraichi : seul celui d'un autre lanceur bloque.
+	auto range = target->GetAppliedAuras().equal_range(spellId);
+	for (auto itr = range.first; itr != range.second; ++itr)
+		if (itr->second->GetBase()->GetCasterGUID() != me->GetGUID())
+			return true;
+
+	return false;
 }
 
 void CustomAI::CastStop()

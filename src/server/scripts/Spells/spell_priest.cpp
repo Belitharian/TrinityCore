@@ -90,6 +90,7 @@ enum PriestSpells
     SPELL_PRIEST_DIVINE_FAVOR_SERENITY              = 372791,
     SPELL_PRIEST_DIVINE_HALO                        = 449806,
     SPELL_PRIEST_DIVINE_HYMN_HEAL                   = 64844,
+    SPELL_PRIEST_DIVINE_IMAGE                       = 392988,
     SPELL_PRIEST_DIVINE_IMAGE_SUMMON                = 392990,
     SPELL_PRIEST_DIVINE_IMAGE_EMPOWER               = 409387,
     SPELL_PRIEST_DIVINE_IMAGE_EMPOWER_STACK         = 405963,
@@ -1223,6 +1224,18 @@ Optional<uint32> GetSpellToCast(uint32 spellId)
     return {};
 }
 
+// Mots sacres : seuls sorts qui invoquent ou renforcent l'image (392988). Ce talent fait deja
+// lancer l'image ; 405216 doit donc les ignorer, sinon l'image lance son sort deux fois.
+bool IsHolyWord(SpellInfo const* spellInfo)
+{
+    if (spellInfo->Id == SPELL_PRIEST_HOLY_WORD_SERENITY_NPC)
+        return true;
+
+    // Filtre spell_proc original de 392988 (famille Priest, masques des Mots sacres)
+    return spellInfo->SpellFamilyName == SPELLFAMILY_PRIEST
+        && (spellInfo->SpellFamilyFlags & flag128(270533632, 0, 32, 0));
+}
+
 void Trigger(AuraScript const&, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
 {
     Unit* target = eventInfo.GetActor();
@@ -1260,24 +1273,9 @@ class spell_pri_divine_image : public AuraScript
         if (!spellInfo)
             return false;
 
-        // Sort de PNJ ajoute manuellement
-        switch (spellInfo->Id)
-        {
-            case SPELL_PRIEST_RENEW_NPC:
-            case SPELL_PRIEST_FLASH_HEAL_NPC:
-            case SPELL_PRIEST_POWER_WORD_SHIELD_NPC:
-            case SPELL_PRIEST_HOLY_WORD_SERENITY_NPC:
-                return true;
-        }
-
-        // Reproduction du filtre spell_proc original (famille 6, masques)
-        if (spellInfo->SpellFamilyName == SPELLFAMILY_PRIEST)
-        {
-            if (spellInfo->SpellFamilyFlags & flag128(270533632, 0, 32, 0))
-                return true;
-        }
-
-        return false;
+        // Uniquement les Mots sacres (Holy Word: Serenity PNJ inclus) : les autres sorts
+        // sont relayes par 405216 tant que l'image existe.
+        return DivineImageHelpers::IsHolyWord(spellInfo);
     }
 
     static void HandleProc(AuraScript const& script, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
@@ -1375,6 +1373,10 @@ class spell_pri_divine_image_spell_triggered : public AuraScript
 
         SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
         if (!spellInfo)
+            return false;
+
+        // Mots sacres deja relayes par le talent 392988 (spell_pri_divine_image::HandleProc)
+        if (DivineImageHelpers::IsHolyWord(spellInfo) && eventInfo.GetActor()->HasAura(SPELL_PRIEST_DIVINE_IMAGE))
             return false;
 
         // Sorts de PNJ autorises explicitement

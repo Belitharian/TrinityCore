@@ -4758,6 +4758,24 @@ struct QuestFactionRewardLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 11, &QuestFactionRewardMeta::Instance, HOTFIX_SEL_QUEST_FACTION_REWARD };
 };
 
+struct QuestFeedbackEffectLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[9] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "InteractCursor" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "FileDataID" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "MinimapAtlasMemberID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "AttachPoint" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "PassiveHighlightColorType" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "Priority" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 9, &QuestFeedbackEffectMeta::Instance, HOTFIX_SEL_QUEST_FEEDBACK_EFFECT };
+};
+
 struct QuestInfoLoadInfo
 {
     static constexpr DB2FieldMeta Fields[5] =

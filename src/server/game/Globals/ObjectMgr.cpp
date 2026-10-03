@@ -874,6 +874,48 @@ void ObjectMgr::LoadCreatureTemplateAddons()
     TC_LOG_INFO("server.loading", ">> Loaded {} creature template addons in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
 }
 
+void ObjectMgr::LoadCreatureTemplateItemLevels()
+{
+    uint32 oldMSTime = getMSTime();
+
+    _creatureItemLevelStore.clear();
+
+    //                                               0                1
+    QueryResult result = WorldDatabase.Query("SELECT ContentTuningID, ItemLevel FROM creature_template_ilvl");
+
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 creature item levels. DB table `creature_template_ilvl` is empty.");
+        return;
+    }
+
+    uint32 count = 0;
+    do
+    {
+        Field* fields = result->Fetch();
+
+        uint32 contentTuningId = fields[0].GetUInt32();
+        uint32 itemLevel = fields[1].GetUInt32();
+
+        if (!sContentTuningStore.LookupEntry(contentTuningId))
+        {
+            TC_LOG_ERROR("sql.sql", "ContentTuningID {} does not exist but has a record in `creature_template_ilvl`", contentTuningId);
+            continue;
+        }
+
+        if (!sRandPropPointsStore.LookupEntry(itemLevel))
+        {
+            TC_LOG_ERROR("sql.sql", "ContentTuningID {} has invalid ItemLevel ({}) in `creature_template_ilvl` (no RandPropPoints row). Skipping", contentTuningId, itemLevel);
+            continue;
+        }
+
+        _creatureItemLevelStore[contentTuningId] = itemLevel;
+        ++count;
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} creature item levels in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
+}
+
 void ObjectMgr::LoadCreatureTemplateSparring()
 {
     uint32 oldMSTime = getMSTime();
@@ -1416,6 +1458,12 @@ CreatureAddon const* ObjectMgr::GetCreatureTemplateAddon(uint32 entry) const
 std::vector<float> const* ObjectMgr::GetCreatureTemplateSparringValues(uint32 entry) const
 {
     return Trinity::Containers::MapGetValuePtr(_creatureTemplateSparringStore, entry);
+}
+
+uint32 ObjectMgr::GetCreatureItemLevel(uint32 contentTuningId) const
+{
+    uint32 const* itemLevel = Trinity::Containers::MapGetValuePtr(_creatureItemLevelStore, contentTuningId);
+    return itemLevel ? *itemLevel : 0;
 }
 
 CreatureMovementData const* ObjectMgr::GetCreatureMovementOverride(ObjectGuid::LowType spawnId) const
@@ -2915,6 +2963,60 @@ void ObjectMgr::LoadInstanceSpawnGroups()
     } while (result->NextRow());
 
     TC_LOG_INFO("server.loading", ">> Loaded {} instance spawn groups in {} ms", n, GetMSTimeDiffToNow(oldMSTime));
+}
+
+void ObjectMgr::LoadCreatureSpawnRegions()
+{
+    uint32 oldMSTime = getMSTime();
+
+    _spawnRegionStore.clear();
+    _creatureSpawnRegionStore.clear();
+
+    //                                               0               1
+    QueryResult result = WorldDatabase.Query("SELECT SpawnRegionId, SpawnId FROM creature_spawn_region");
+
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 creature spawn regions. DB table `creature_spawn_region` is empty.");
+        return;
+    }
+
+    std::unordered_map<uint32, uint32> regionMaps;
+    uint32 count = 0;
+    do
+    {
+        Field* fields = result->Fetch();
+        uint32 const spawnRegionId = fields[0].GetUInt32();
+        ObjectGuid::LowType const spawnId = fields[1].GetUInt64();
+
+        if (!spawnRegionId)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `creature_spawn_region` has creature (GUID: {}) with spawn region 0, skipped.", spawnId);
+            continue;
+        }
+
+        CreatureData const* data = GetCreatureData(spawnId);
+        if (!data)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `creature_spawn_region` has non-existing creature (GUID: {}) in spawn region {}, skipped.", spawnId, spawnRegionId);
+            continue;
+        }
+
+        // A region is cleared map by map: all its creatures must be spawned on the same map
+        auto [mapItr, inserted] = regionMaps.try_emplace(spawnRegionId, data->mapId);
+        if (!inserted && mapItr->second != data->mapId)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `creature_spawn_region` has creature (GUID: {}) on map {} in spawn region {} whose creatures are on map {}, skipped.",
+                spawnId, data->mapId, spawnRegionId, mapItr->second);
+            continue;
+        }
+
+        _spawnRegionStore[spawnRegionId].push_back(spawnId);
+        _creatureSpawnRegionStore[spawnId].push_back(spawnRegionId);
+        ++count;
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} creatures in {} spawn regions in {} ms", count, _spawnRegionStore.size(), GetMSTimeDiffToNow(oldMSTime));
 }
 
 SpawnData const* ObjectMgr::GetSpawnData(SpawnObjectType type, ObjectGuid::LowType spawnId) const

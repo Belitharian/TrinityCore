@@ -3505,6 +3505,19 @@ struct QuestFactionRewardEntry
     std::array<int16, 10> Difficulty;
 };
 
+struct QuestFeedbackEffectEntry
+{
+    uint32 ID;
+    char const* InteractCursor;
+    uint32 FileDataID;
+    uint16 MinimapAtlasMemberID;
+    uint8 AttachPoint;
+    uint8 PassiveHighlightColorType;
+    uint8 Priority;
+    int32 Flags;
+    int32 SpellID;
+};
+
 struct QuestInfoEntry
 {
     uint32 ID;

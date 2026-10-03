@@ -610,7 +610,7 @@ enum class CriteriaType : int16
     TotalRespecs                                   = 61,  // Total respecs
     MoneyEarnedFromQuesting                        = 62,  // Money earned from questing
     MoneySpentOnTaxis                              = 63,  // Money spent on taxis
-    KilledAllUnitsInSpawnRegion                    = 64,  /*NYI*/ // Killed all units in spawn region "{SpawnRegion}"
+    KilledAllUnitsInSpawnRegion                    = 64,  // Killed all units in spawn region "{SpawnRegion}"
     MoneySpentAtBarberShop                         = 65,  // Money spent at the barber shop
     MoneySpentOnPostage                            = 66,  // Money spent on postage
     MoneyLootedFromCreatures                       = 67,  // Money looted from creatures

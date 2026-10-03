@@ -75,6 +75,16 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
         void CastStop(uint32 /*exception*/);
         void CastStop(const std::unordered_set<uint32>& /*exceptions*/);
 
+        // Buffs uniques : masquent UnitAI::DoCast / DoCastSelf. Un buff (sort
+        // positif qui applique une aura) est abandonne silencieusement si la
+        // cible le porte deja d'un autre lanceur ; renvoie alors
+        // SPELL_FAILED_AURA_BOUNCED. Les appels directs a me->CastSpell ne
+        // passent pas par ce filtre.
+        using ScriptedAI::DoCast;
+        SpellCastResult DoCast(Unit* victim, uint32 spellId, CastSpellExtraArgs const& args = {});
+        SpellCastResult DoCastSelf(uint32 spellId, CastSpellExtraArgs const& args = {}) { return DoCast(me, spellId, args); }
+        bool HasBuffFromOtherCaster(Unit const* target, uint32 spellId) const;
+
         //
         void StartFakeParty(Player* /*player*/);
         void StopFakeParty();

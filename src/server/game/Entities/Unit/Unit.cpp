@@ -72,6 +72,7 @@
 #include "PlayerAI.h"
 #include "QuestDef.h"
 #include "Spell.h"
+#include "Scenario.h"
 #include "ScheduledChangeAI.h"
 #include "SpellAuraEffects.h"
 #include "SpellAuras.h"
@@ -7147,53 +7148,12 @@ int32 Unit::SpellBaseDamageBonusDone(SpellSchoolMask schoolMask) const
     }
     else if (Creature const* creature = ToCreature())
     {
-        // S?ction du type d'attaque et du modificateur d'unit?elon la classe de la cr?ure.
-        // Les cr?ures de classe MAGE utilisent l'attaque ?istance (heuristique caster).
-        float variance = creature->GetCreatureTemplate()->BaseVariance;
-        UnitMods unitMod = UNIT_MOD_DAMAGE_MAINHAND;
-        WeaponAttackType attackType = BASE_ATTACK;
-
-        if (creature->GetClass() == UNIT_CLASS_MAGE)
-        {
-            variance = creature->GetCreatureTemplate()->RangeVariance;
-            attackType = RANGED_ATTACK;
-            unitMod = UNIT_MOD_DAMAGE_RANGED;
-        }
-
-        // Vitesse d'attaque r?le en secondes (GetAttackTime retourne des millisecondes).
-        // Plancher ?000 ms pour ?ter une division par z? ou une vitesse absurde.
-        constexpr float MIN_ATTACK_TIME_MS = 1000.0f;
-        float const attackTimeSec = std::max(
-            static_cast<float>(getAttackTimer(attackType)),
-            MIN_ATTACK_TIME_MS) / 1000.0f;
-
-        // Moyenne des d?ts arme ? plus repr?ntative que MAXDAMAGE seul.
-        float const weaponMinDamage = GetWeaponDamageRange(attackType, MINDAMAGE);
-        float const weaponMaxDamage = GetWeaponDamageRange(attackType, MAXDAMAGE);
-        float const weaponAvgDamage = (weaponMinDamage + weaponMaxDamage) * 0.5f;
-
-        // Contribution de l'attack power ramen?au DPS r? de la cr?ure,
-        // puis mise ?'?elle par la variance du template.
-        // Formule : (AP / vitesse_arme) * variance ? coh?nt avec le mod? TrinityCore joueur.
-        float const attackPower = GetTotalAttackPowerValue(attackType, false);
-        float const apContribution = (attackPower / attackTimeSec) * variance;
-
-        // Modificateurs du stat system (UNIT_MOD).
-        // BASE_PCT et TOTAL_PCT restent de purs multiplicateurs de stat,
-        // sans m?nge avec attackSpeedMulti.
-        float const baseValue = GetFlatModifierValue(unitMod, BASE_VALUE) + apContribution;
-        float const basePct = GetPctModifierValue(unitMod, BASE_PCT);
-        float const totalValue = GetFlatModifierValue(unitMod, TOTAL_VALUE);
-        float const totalPct = GetPctModifierValue(unitMod, TOTAL_PCT);
-
-        // Modificateur de d?ts li? la difficult?DamageModifier).
-        // Appliqu?ur l'ensemble du calcul pour coh?nce ? totalValue inclus.
-        float const dmgMultiplier = creature->GetCreatureDifficulty()->DamageModifier;
-
-        DoneAdvertisedBenefit +=
-            ((weaponAvgDamage + baseValue) * basePct + totalValue)
-            * totalPct
-            * dmgMultiplier;
+        // SP calculee comme celle d'un joueur, pour toutes les classes : la stat principale
+        // attendue a ce niveau (voir Creature::GetPlayerLikePowerForLevel), DamageModifier inclus.
+        // Les gardiens n'en ont pas : comme les familiers des joueurs, leur bonus vient
+        // uniquement du maitre (Guardian::GetBonusDamage, ajoute dans SpellDamageBonusDone).
+        if (!HasUnitTypeMask(UNIT_MASK_GUARDIAN))
+            DoneAdvertisedBenefit += int32(creature->GetPlayerLikePowerForLevel(creature->GetLevel()));
     }
 
     return DoneAdvertisedBenefit;
@@ -7699,42 +7659,9 @@ int32 Unit::SpellBaseHealingBonusDone(SpellSchoolMask schoolMask) const
     }
     else if (Creature const* creature = ToCreature())
     {
-        // Les cr?ures soigneuses utilisent l'attaque ?istance comme proxy caster
-        // (m? heuristique que SpellBaseDamageBonusDone).
-        float variance = creature->GetCreatureTemplate()->BaseVariance;
-        UnitMods unitMod = UNIT_MOD_DAMAGE_MAINHAND;
-        WeaponAttackType attackType = BASE_ATTACK;
-
-        if (creature->GetClass() == UNIT_CLASS_MAGE)
-        {
-            variance = creature->GetCreatureTemplate()->RangeVariance;
-            attackType = RANGED_ATTACK;
-            unitMod = UNIT_MOD_DAMAGE_RANGED;
-        }
-
-        constexpr float MIN_ATTACK_TIME_MS = 1000.0f;
-        float const attackTimeSec = std::max(
-            static_cast<float>(getAttackTimer(attackType)),
-            MIN_ATTACK_TIME_MS) / 1000.0f;
-
-        float const weaponMinDamage = GetWeaponDamageRange(attackType, MINDAMAGE);
-        float const weaponMaxDamage = GetWeaponDamageRange(attackType, MAXDAMAGE);
-        float const weaponAvgDamage = (weaponMinDamage + weaponMaxDamage) * 0.5f;
-
-        float const attackPower = GetTotalAttackPowerValue(attackType, false);
-        float const apContribution = (attackPower / attackTimeSec) * variance;
-
-        float const baseValue = GetFlatModifierValue(unitMod, BASE_VALUE) + apContribution;
-        float const basePct = GetPctModifierValue(unitMod, BASE_PCT);
-        float const totalValue = GetFlatModifierValue(unitMod, TOTAL_VALUE);
-        float const totalPct = GetPctModifierValue(unitMod, TOTAL_PCT);
-
-        float const dmgMultiplier = creature->GetCreatureDifficulty()->DamageModifier;
-
-        advertisedBenefit +=
-            ((weaponAvgDamage + baseValue) * basePct + totalValue)
-            * totalPct
-            * dmgMultiplier;
+        // Meme modele que SpellBaseDamageBonusDone : SP de joueur, sans part propre pour les gardiens.
+        if (!HasUnitTypeMask(UNIT_MASK_GUARDIAN))
+            advertisedBenefit += int32(creature->GetPlayerLikePowerForLevel(creature->GetLevel()));
     }
 
     return advertisedBenefit;
@@ -11561,6 +11488,35 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
     {
         TC_LOG_DEBUG("entities.unit", "SET JUST_DIED");
         victim->setDeathState(JUST_DIED);
+    }
+
+    // Credit "killed all units in spawn region" once the last creature of the region is dead, whoever killed it
+    if (creature && !creature->IsAlive() && creature->GetSpawnId())
+    {
+        if (std::vector<uint32> const* spawnRegions = sObjectMgr->GetCreatureSpawnRegions(creature->GetSpawnId()))
+        {
+            for (uint32 spawnRegionId : *spawnRegions)
+            {
+                if (!creature->GetMap()->IsSpawnRegionCleared(spawnRegionId))
+                    continue;
+
+                for (Player* tapper : tappers)
+                    tapper->UpdateCriteria(CriteriaType::KilledAllUnitsInSpawnRegion, spawnRegionId, 0, 0, victim);
+
+                // Group criteria type: the scenario is credited once, even if the region was cleared by a creature
+                if (Scenario* scenario = creature->GetScenario())
+                {
+                    Player* referencePlayer = !tappers.empty() ? tappers.front() : nullptr;
+                    if (!referencePlayer)
+                        for (MapReference const& ref : creature->GetMap()->GetPlayers())
+                            if ((referencePlayer = ref.GetSource()))
+                                break;
+
+                    if (referencePlayer)
+                        scenario->UpdateCriteria(CriteriaType::KilledAllUnitsInSpawnRegion, spawnRegionId, 0, 0, victim, referencePlayer);
+                }
+            }
+        }
     }
 
     // Inform pets (if any) when player kills target)

@@ -238,6 +238,7 @@ struct npc_wounded_theramore_troop : public ScriptedAI
 		}
 
 		me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+		me->SetVignette(VIGNETTE_NONE);
 
 		uint32 counter = instance->GetData(DATA_WOUNDED_TROOPS);
 
@@ -357,6 +358,7 @@ struct npc_theramore_troop : public CustomAI
 				case 1:
 					me->HandleEmoteCommand(EMOTE_ONESHOT_CHEER_FORTHEALLIANCE);
 					KillRewarder::Reward(player, me, NPC_THERAMORE_TROOPS_CREDIT);
+					me->SetVignette(VIGNETTE_NONE);
 					context.Repeat(1ms, 2s);
 					break;
 				case 2:
@@ -598,12 +600,12 @@ struct npc_theramore_officier : public npc_theramore_troop
 	static constexpr uint8 BLESSED_HAMMER_COUNT       = 3;
 
 	npc_theramore_officier(Creature* creature) : npc_theramore_troop(creature, AI_Type::Melee)
-    {
-        // Le nombre de stacks requis pour declencher Afterimage est lu
-        // directement dans l'effet 2 du sort passif, pas code en dur.
-        SpellInfo const* afterimageInfo = sSpellMgr->GetSpellInfo(SPELL_AFTERIMAGE, DIFFICULTY_NONE);
-        afterimageAmount = afterimageInfo->GetEffect(EFFECT_2).CalcValue(me);
-    }
+	{
+		// Le nombre de stacks requis pour declencher Afterimage est lu
+		// directement dans l'effet 2 du sort passif, pas code en dur.
+		SpellInfo const* afterimageInfo = sSpellMgr->GetSpellInfo(SPELL_AFTERIMAGE, DIFFICULTY_NONE);
+		afterimageAmount = afterimageInfo->GetEffect(EFFECT_2).CalcValue(me);
+	}
 
 	// Groupes de tasks : permet de retarder en bloc les routines DPS/Heal
 	// quand l'officier passe sous Divine Shield pour caster un Holy Light d'urgence.
@@ -637,13 +639,13 @@ struct npc_theramore_officier : public npc_theramore_troop
 		SPELL_AFTERIMAGE_BUFF       = 400745
 	};
 
-    uint8 afterimageAmount;
+	uint8 afterimageAmount;
 
-    CastSpellExtraArgs WORD_OF_GLORY_FLAGS = CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_IGNORE_POWER_COST);
+	CastSpellExtraArgs WORD_OF_GLORY_FLAGS = CastSpellExtraArgs(TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_IGNORE_POWER_COST);
 
 	void SpellHit(WorldObject* /*caster*/, SpellInfo const* spell) override
 	{
-        // Passive
+		// Passive
 		if (spell->Id == SPELL_SHINING_LIGHT_BUFF)
 		{
 			scheduler.Schedule(2s, 5s, [this](TaskContext /*context*/)
@@ -652,7 +654,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 			});
 		}
 
-        // Passive
+		// Passive
 		if (spell->Id == SPELL_AFTERIMAGE_BUFF)
 		{
 			Aura* aura = me->GetAura(SPELL_AFTERIMAGE_BUFF);
@@ -706,7 +708,7 @@ struct npc_theramore_officier : public npc_theramore_troop
 				args.AddSpellBP0(me->GetMaxHealth());
 
 				CastStop();
-                DoCastSelf(SPELL_HOLY_LIGHT, args);
+				DoCastSelf(SPELL_HOLY_LIGHT, args);
 			});
 		}
 	}
@@ -1025,7 +1027,7 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 	static constexpr uint32 MASS_POLYMORPH_THRESHOLD    = 4;        // Au-dela de N ennemis -> Polymorph
 	static constexpr uint32 ARCANE_EXPLOSION_THRESHOLD  = 2;        // Au-dela de N ennemis -> Explosion
 	static constexpr float  TARGET_RANGE                = 30.0f;    // Portee de selection des cibles a distance
-	static constexpr uint32 ARCANE_MISSILES_CHANCE      = 60;        // Missiles plutot qu'Arcane Orb sur un proc Clearcasting
+	static constexpr uint32 ARCANE_MISSILES_CHANCE      = 60;       // Missiles plutot qu'Arcane Orb sur un proc Clearcasting
 
 	uint32 arcaneCharges;
 
@@ -1078,7 +1080,7 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 					else
 						DoCastSelf(SPELL_ARCANE_ORB);
 				}
-                clearcasting.Repeat(1s);
+				clearcasting.Repeat(1s);
 			})
 			// --- Arcane Orbs ---
 			// Salve de 1-5 orbs centree sur soi (cible utilisee uniquement pour l'arret si elle meurt).
@@ -1155,7 +1157,7 @@ struct npc_theramore_faithful : public npc_theramore_troop
 	enum Spells
 	{
 		SPELL_PRAYER_OF_HEALING     = 596,
-        SPELL_GUARDIAN_SPIRIT       = 47788,
+		SPELL_GUARDIAN_SPIRIT       = 47788,
 		SPELL_SHADOW_WORD_DEATH     = 51818,
 		SPELL_PSYCHIC_SCREAM        = 65543,
 		SPELL_PLEA                  = 200829,
@@ -1163,9 +1165,9 @@ struct npc_theramore_faithful : public npc_theramore_troop
 		SPELL_RENEW                 = 294342,
 		SPELL_FLASH_HEAL            = 314655,
 		SPELL_POWER_WORD_SHIELD     = 318158,
-        SPELL_HOLY_WORD_SERENITY    = 430546,
+		SPELL_HOLY_WORD_SERENITY    = 430546,
 		SPELL_SHADOW_WORD_PAIN      = 435397,
-    };
+	};
 
 	static constexpr float  STANDARD_RANGE              = 40.0f;   // Portee standard des soins et DoT
 	static constexpr float  PSYCHIC_SCREAM_RANGE        = 10.0f;   // Distance de detection AOE
@@ -1209,12 +1211,12 @@ struct npc_theramore_faithful : public npc_theramore_troop
 		npc_theramore_troop::JustEngagedWith(who);
 
 		scheduler
-            // Guardian Spirit
+			// Guardian Spirit
 			.Schedule(1s, GROUP_NORMAL, [this](TaskContext guardian_spirit)
 			{
-                if (Unit* target = DoSelectLowestHpFriendly(STANDARD_RANGE))
-                    DoCast(target, SPELL_GUARDIAN_SPIRIT, TRIGGERED_IGNORE_CAST_IN_PROGRESS);
-                guardian_spirit.Repeat(3min);
+				if (Unit* target = DoSelectLowestHpFriendly(STANDARD_RANGE))
+					DoCast(target, SPELL_GUARDIAN_SPIRIT, TRIGGERED_IGNORE_CAST_IN_PROGRESS);
+				guardian_spirit.Repeat(3min);
 			})
 			// Psychic Scream si 2+ ennemis colles
 			.Schedule(3s, 8s, GROUP_NORMAL, [this](TaskContext psychic_scream)
@@ -1241,30 +1243,30 @@ struct npc_theramore_faithful : public npc_theramore_troop
 			// Holy Word: Serenity prend la priorite des qu'il est disponible.
 			// Le prochain passage est cale sur le cast time reel du sort choisi
 			// pour ne pas se couper soi-meme en plein cast.
-            .Schedule(1s, GROUP_NORMAL, [this](TaskContext flash_heal)
-            {
-                if (Unit* target = FindLowestHealthFriend(me, STANDARD_RANGE, true))
-                {
-                    uint32 entry = RAND(SPELL_FLASH_HEAL, SPELL_RENEW, SPELL_PRAYER_OF_HEALING);
-                    if (!me->GetSpellHistory()->HasCooldown(SPELL_HOLY_WORD_SERENITY))
-                        entry = SPELL_HOLY_WORD_SERENITY;
+			.Schedule(1s, GROUP_NORMAL, [this](TaskContext flash_heal)
+			{
+				if (Unit* target = FindLowestHealthFriend(me, STANDARD_RANGE, true))
+				{
+					uint32 entry = RAND(SPELL_FLASH_HEAL, SPELL_RENEW, SPELL_PRAYER_OF_HEALING);
+					if (!me->GetSpellHistory()->HasCooldown(SPELL_HOLY_WORD_SERENITY))
+						entry = SPELL_HOLY_WORD_SERENITY;
 
-                    DoCast(target, entry);
+					DoCast(target, entry);
 
-                    Milliseconds repeat = 1s;
-                    if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(entry, DIFFICULTY_NORMAL))
-                    {
-                        uint32 castTime = spellInfo->CalcCastTime();
-                        if (castTime > 0)
-                            repeat = Milliseconds(castTime);
-                    }
+					Milliseconds repeat = 1s;
+					if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(entry, DIFFICULTY_NORMAL))
+					{
+						uint32 castTime = spellInfo->CalcCastTime();
+						if (castTime > 0)
+							repeat = Milliseconds(castTime);
+					}
 
-                    flash_heal.Repeat(repeat);
-                    return;
-                }
+					flash_heal.Repeat(repeat);
+					return;
+				}
 
-                flash_heal.Repeat(1s);
-            });
+				flash_heal.Repeat(1s);
+			});
 	}
 };
 
@@ -1286,9 +1288,9 @@ struct npc_theramore_marksman : public npc_theramore_troop
 		SPELL_SHOOT                 = 22907,
 		SPELL_MULTI_SHOOT           = 38310,
 
-        // Tir assur� = 131991
-        // Tir ac�r� = 62318
-        // Vis�e = 294882
+		// Tir assur� = 131991
+		// Tir ac�r� = 62318
+		// Vis�e = 294882
 	};
 
 	void Reset() override
@@ -2362,26 +2364,9 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 // -------------------------------------------------------------------------
 // npc_wave_caller_gruhta - Appelante des vagues Gruhta (mini-boss)
 // -------------------------------------------------------------------------
-// Combat en deux phases :
-//   Phase 1 (EnterCombatPhase) : rotation chaman elementaire classique.
-//   Phase 2 (sous GRUHTA_TEMPEST_HP_PCT) : elle s'enfuit en loup fantome
-//     jusqu'a la mer, s'entoure de MAX_ELEMENTAL_PROTECTION boucliers et
-//     canalise une tempete qui pilonne la zone. Les joueurs recoivent la
-//     marche sur l'eau pour pouvoir la poursuivre, et doivent briser ses
-//     protections pour la ramener en phase 1.
 // Sa mort supprime la barriere d'energie qui bloque la suite du scenario.
 struct npc_wave_caller_gruhta : public CustomAI
 {
-	// Nombre de boucliers a briser pour interrompre la tempete.
-	const uint8 MAX_ELEMENTAL_PROTECTION = 10;
-
-	// Seuil de PV declenchant la fuite en mer et la tempete.
-	static constexpr float GRUHTA_TEMPEST_HP_PCT = 40.f;
-	// Portee de combat de Gruhta (elle reste a distance).
-	static constexpr float GRUHTA_COMBAT_RANGE   = 30.f;
-	// Pilonnage : nombre d'impacts par salve et rayon de dispersion.
-	static constexpr uint8 LIGHTNING_STORM_BOLTS = 8;
-	static constexpr float LIGHTNING_STORM_RADIUS = 100.0f;
 	// Nombre de Lightning Bolt gratuits accordes par Stormkeeper.
 	static constexpr uint32 STORMKEEPER_BOLTS    = 2;
 
@@ -2395,9 +2380,6 @@ struct npc_wave_caller_gruhta : public CustomAI
 		// Repeat de la rotation (voir EnterCombatPhase).
 		infoLightningBolt = sSpellMgr->AssertSpellInfo(SPELL_LIGHTNING_BOLT, DIFFICULTY_NONE);
 		infoChainLightning = sSpellMgr->AssertSpellInfo(SPELL_CHAIN_LIGHTNING, DIFFICULTY_NONE);
-
-		// Point de depart de la fuite : sa position de spawn.
-		tempestPos01 = creature->GetHomePosition();
 	}
 
 	enum Spells
@@ -2409,45 +2391,25 @@ struct npc_wave_caller_gruhta : public CustomAI
 		SPELL_LIGHTNING_BOLT        = 430109,
 		SPELL_CHAIN_LIGHTNING       = 1228260, 
 		SPELL_CALL_LIGHTNING        = 157348,
-		SPELL_GHOST_WOLF            = 361620,
-		SPELL_PRIMORDIAL_STORM      = 1218090,
-		SPELL_UNLIMITED_POWER       = 272737,
 		SPELL_FOCUS_ELEMENT         = 167205,
-		SPELL_TEMPEST_CHANNELING    = 212079,
-		SPELL_ELEMENTAL_PROTECTION  = 371756,
-		SPELL_LIGHTNING_STORM       = 447930,
-		SPELL_WATER_WALKING         = 73757,
 	};
 
 	enum Misc
 	{
 		GROUP_NORMAL                = 1,
-		GROUP_TEMPEST,
-		GROUP_CHECKER,
 		GROUP_STORMKEEPER
 	};
 
 	InstanceScript* instance;
-	Position tempestPos01;                  // Etape 1 de la fuite (position de spawn)
-
-	// Etape 2 de la fuite : au large, sur l'eau. C'est de la qu'elle canalise.
-	const Position tempestPos02 = { -3922.5f, -4848.2866f, 0.001533f, 0.78f };
 
 	const SpellInfo* infoLightningBolt;
 	const SpellInfo* infoChainLightning;
-
-	float GetDistance() override
-	{
-		return GRUHTA_COMBAT_RANGE;
-	}
 
 	void Reset() override
 	{
 		CustomAI::Reset();
 
-
 		me->SetRegenerateHealth(true);
-		me->SetWaterWalking(true);
 	}
 
 	// Sa mort libere le passage : la barriere d'energie disparait.
@@ -2455,48 +2417,10 @@ struct npc_wave_caller_gruhta : public CustomAI
 	{
 		CustomAI::JustDied(killer);
 
+		me->SetVignette(VIGNETTE_NONE);
+
 		if (GameObject* barrier = instance->GetGameObject(DATA_ENERGY_BARRIER))
 			barrier->Delete();
-	}
-
-	// Fuite en deux etapes : spawn -> large, puis debut de la tempete.
-	void MovementInform(uint32 type, uint32 id) override
-	{
-		if (type == EFFECT_MOTION_TYPE || type == POINT_MOTION_TYPE)
-		{
-			switch (id)
-			{
-				case MOVEMENT_INFO_POINT_01:
-					me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_02, tempestPos02, false, tempestPos02.GetOrientation());
-					break;
-				case MOVEMENT_INFO_POINT_02:
-				{
-					// Arrivee au large : fin de la course, debut du channel.
-					me->RemoveAurasDueToSpell(SPELL_GHOST_WOLF);
-					me->SetHomePosition(tempestPos02);
-					DoCastSelf(SPELL_TEMPEST_CHANNELING);
-					// Pilonnage continu : 8 impacts toutes les ~90ms, annule
-					// en bloc via CancelGroup(GROUP_TEMPEST) quand ses
-					// protections tombent.
-					scheduler.Schedule(1s, GROUP_TEMPEST, [this](TaskContext lightning_storm)
-					{
-						CastSpellExtraArgs args;
-						args.SetTriggerFlags(TRIGGERED_IGNORE_CAST_IN_PROGRESS);
-
-						for (uint8 i = 0; i < LIGHTNING_STORM_BOLTS; i++)
-						{
-							Position randomPos = GetRandomPosition(me, tempestPos02, LIGHTNING_STORM_RADIUS);
-							me->CastSpell(randomPos, SPELL_LIGHTNING_STORM, args);
-						}
-
-						lightning_storm.Repeat(80ms, 100ms);
-					});
-					break;
-					}
-				default:
-					break;
-			}
-		}
 	}
 
 	void OnSpellCast(SpellInfo const* spell) override
@@ -2536,86 +2460,9 @@ struct npc_wave_caller_gruhta : public CustomAI
 		}
 	}
 
-	// Pendant la tempete, chaque sort recu consomme une protection elementaire.
-	// Quand il n'en reste plus, le channel s'arrete et Gruhta revient au combat.
-	void SpellHit(WorldObject* caster, SpellInfo const* spell) override
-	{
-		CustomAI::SpellHit(caster, spell);
-
-		if (Aura* elementalProtection = me->GetAura(SPELL_ELEMENTAL_PROTECTION))
-		{
-			// Nombre de protections encore actives
-			uint32 stack = elementalProtection->GetStackAmount();
-
-			// Supprime une protection a chaque sort recu
-			elementalProtection->SetStackAmount(stack - 1);
-
-			// A VERIFIER : `stack` est lu AVANT le decrement et n'est jamais
-			// nul pour une aura vivante, donc cette branche ne s'execute
-			// jamais et la tempete n'est pas interrompue ici. Le test devrait
-			// probablement porter sur `stack <= 1`. Laisse tel quel pour ne
-			// pas modifier le gameplay sans validation.
-			if (stack <= 0)
-			{
-				scheduler.CancelGroup(GROUP_TEMPEST);
-
-				EnterCombatPhase();
-
-				return;
-			}
-		}
-	}
-
 	void JustEngagedWith(Unit* /*who*/) override
 	{
-		scheduler
-			// Surveillance des PV : declenche la bascule en phase tempete.
-			.Schedule(1ms, GROUP_CHECKER, [this](TaskContext context)
-				{
-					if (me->HealthBelowPct(GRUHTA_TEMPEST_HP_PCT))
-					{
-						// La bascule est definitive : on coupe le checker et
-						// toute la rotation de la phase 1.
-						context.CancelGroup(GROUP_CHECKER);
-						context.CancelGroup(GROUP_NORMAL);
-
-						me->SetReactState(REACT_PASSIVE);
-						me->RemoveAllAuras();
-
-						CastStop();
-
-						DoCastSelf(SPELL_GHOST_WOLF, true);
-
-						// Les protections empilees sont la "barre de vie" de
-						// la phase tempete (voir SpellHit).
-						for (uint8 i = 0; i < MAX_ELEMENTAL_PROTECTION; i++)
-						{
-							me->AddAura(SPELL_ELEMENTAL_PROTECTION, me);
-						}
-
-						me->GetMotionMaster()->Clear();
-						me->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, tempestPos01, true, tempestPos01.GetOrientation());
-
-						// Marche sur l'eau pour les cibles : sans ca les
-						// joueurs ne peuvent pas la suivre jusqu'au large.
-						for (auto const& itr : me->GetThreatManager().GetUnsortedThreatList())
-						{
-							if (Unit* victim = itr->GetVictim())
-								victim->AddAura(SPELL_WATER_WALKING, victim);
-						}
-					}
-					else
-						context.Repeat(1s);
-				});
-
-		EnterCombatPhase();
-	}
-
-	// Rotation de la phase 1. Extraite dans sa propre methode car elle est
-	// relancee quand les joueurs brisent les protections de la tempete.
-	void EnterCombatPhase()
-	{
-		scheduler
+        scheduler
 			.Schedule(2s, GROUP_NORMAL, [this](TaskContext flame_shock)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, GetDistance(), false, true, -SPELL_FLAME_SHOCK))
@@ -2884,8 +2731,8 @@ struct npc_arcanist_training : public npc_theramore_arcanist
 					me->SetOrientation(me->GetAbsoluteAngle(LookAtPos));
 					me->SetFacingToPoint(LookAtPos);
 
-                    if (Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, DUMMY_SEARCH_RANGE))
-                        training->KillSelf();
+					if (Creature* training = GetClosestCreatureWithEntry(me, NPC_TRAINING_DUMMY, DUMMY_SEARCH_RANGE))
+						training->KillSelf();
 
 					scheduler.CancelGroup(COSMETIC_GROUP_NORMAL);
 				}

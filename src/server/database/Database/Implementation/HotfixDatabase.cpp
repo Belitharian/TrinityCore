@@ -1436,6 +1436,11 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         "Difficulty7, Difficulty8, Difficulty9, Difficulty10 FROM quest_faction_reward WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_QUEST_FACTION_REWARD, "SELECT MAX(ID) + 1 FROM quest_faction_reward", CONNECTION_SYNCH);
 
+    // QuestFeedbackEffect.db2
+    PrepareStatement(HOTFIX_SEL_QUEST_FEEDBACK_EFFECT, "SELECT ID, InteractCursor, FileDataID, MinimapAtlasMemberID, AttachPoint, "
+        "PassiveHighlightColorType, Priority, Flags, SpellID FROM quest_feedback_effect WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_QUEST_FEEDBACK_EFFECT, "SELECT MAX(ID) + 1 FROM quest_feedback_effect", CONNECTION_SYNCH);
+
     // QuestInfo.db2
     PrepareStatement(HOTFIX_SEL_QUEST_INFO, "SELECT ID, InfoName, Type, Modifiers, Profession FROM quest_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_QUEST_INFO, "SELECT MAX(ID) + 1 FROM quest_info", CONNECTION_SYNCH);

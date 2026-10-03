@@ -275,6 +275,12 @@ struct npc_ghoul_frozen_wastes : public CustomAI
 
 	void JustEngagedWith(Unit* who) override
 	{
+		// Invoquee en gardien de Kel'Thuzad (SummonProperties 6069) : le core
+		// fait Attack() sans AttackStart, la goule reste donc en MoveFollow sur
+		// son maitre. On coupe l'attaque pour que AttackStart relance la poursuite.
+		me->AttackStop();
+		AttackStart(who);
+
 		DoCast(who, SPELL_TOXIC_VAPORS);
 
 		scheduler.Schedule(2s, 5s, [this](TaskContext rending_claw)

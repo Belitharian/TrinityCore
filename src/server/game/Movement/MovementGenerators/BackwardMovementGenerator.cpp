@@ -11,8 +11,8 @@ BackwardMovementGenerator::BackwardMovementGenerator(uint32 id, float x, float y
     Optional<float> speed /*= {}*/,
     MovementWalkRunSpeedSelectionMode speedSelectionMode /*= MovementWalkRunSpeedSelectionMode::Default*/,
     Unit const* faceTarget /*= nullptr*/)
-    : _movementId(id), _speed(speed), _speedSelectionMode(speedSelectionMode),
-    _destination(x, y, z), _faceTarget(faceTarget)
+    : _movementId(id), _destination(x, y, z), _speed(speed), _faceTarget(faceTarget),
+    _speedSelectionMode(speedSelectionMode)
 {
     this->Priority = MOTION_PRIORITY_NORMAL;
     this->Flags = MOVEMENTGENERATOR_FLAG_INITIALIZATION_PENDING;

@@ -342,7 +342,10 @@ class HordeDemolisherThrowBoulder : public BasicEvent
     bool Execute(uint64 /*execTime*/, uint32 /*diff*/) override
     {
         Position randomPos = GetRandomPointOnStrip(_caster, p1, p2, STRIP_WIDTH, _caster->GetMap());
-        _caster->CastSpell(randomPos, SPELL_THROW_BOULDER, TRIGGERED_FULL_MASK);
+        // DEBUG temporaire : sans DONT_REPORT_CAST_ERROR, CheckCast renvoie la vraie raison de l'echec.
+        SpellCastResult result = _caster->CastSpell(randomPos, SPELL_THROW_BOULDER, TriggerCastFlags(TRIGGERED_FULL_MASK & ~TRIGGERED_DONT_REPORT_CAST_ERROR));
+        if (result != SPELL_CAST_OK)
+            TC_LOG_ERROR("scripts", "BFT: Boulder Throw a echoue ({}) depuis {} vers {}", uint32(result), _caster->GetPosition().ToString(), randomPos.ToString());
         _caster->m_Events.AddEvent(this, _caster->m_Events.CalculateTime(Seconds(urand(8, 10))));
         return false;
     }
@@ -507,6 +510,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			InstanceScript::OnUnitDeath(unit);
 
 			Creature* creature = unit->ToCreature();
+			if (creature && creature->GetEntry() == NPC_CAPTAIN_DROK)
+				creature->SetVignette(VIGNETTE_NONE);
+
 			if (!creature || !creature->HasStringId(WaveMemberStringId))
 				return;
 
@@ -596,7 +602,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						if (Creature* citizen = instance->GetCreature(guid))
 						{
 							citizen->SetNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-							citizen->SetVignette(VIGNETTE_INTERACTION);
+							citizen->SetVignette(VIGNETTE_THERAMORE_CITIZEN);
 						}
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Evacuation);
@@ -669,7 +675,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						if (Creature* tank = instance->GetCreature(guid))
 						{
 							tank->SetNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-							tank->SetVignette(VIGNETTE_INTERACTION);
+							tank->SetVignette(VIGNETTE_UNMANNED_TANK);
 							tank->SetRegenerateHealth(false);
 							tank->SetHealth((float)tank->GetHealth() * frand(0.15f, 0.60f));
 						}
@@ -752,6 +758,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						Talk(jaina, SAY_BATTLE_01);
 						SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, jaina);
+						jaina->SetVignette(VIGNETTE_BATTLE_JAINA);
 						jaina->SetBoundingRadius(20.f);
 						jaina->SetRegenerateHealth(false);
 					}
@@ -759,21 +766,25 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, rhonin);
 						rhonin->SetRegenerateHealth(false);
+						rhonin->SetVignette(VIGNETTE_BATTLE_RHONIN);
 					}
 					if (Creature* kalecgos = GetKalecgosDragon())
 					{
-						SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, kalecgos);
 						kalecgos->SetRegenerateHealth(false);
 					}
 					if (Creature* drok = GetDrok())
 					{
 						drok->setActive(true);
 						drok->SetVisible(true);
+						drok->SetVignette(VIGNETTE_CAPTAIN_DROK);
 					}
+					if (GameObject* powder = GetGameObject(DATA_POWDER_BARREL))
+						powder->SetVignette(VIGNETTE_POWDER_BARREL);
 					if (Creature* gruhta = GetGruhta())
 					{
 						gruhta->setActive(true);
 						gruhta->SetVisible(true);
+						gruhta->SetVignette(VIGNETTE_WAVE_CALLER_GRUHTA);
 					}
 					// Tous les tanks sauf le dernier sont detruits au debut de
 					// l'assaut. size() etant non signe, un vecteur vide ferait
@@ -2528,11 +2539,16 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		// archimages a leur place, Thader fige, Kinndy en pleurs).
 		void RelocateTroops()
 		{
-			SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, GetRhonin());
+			if (Creature* rhonin = GetRhonin())
+			{
+				SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, rhonin);
+				rhonin->SetVignette(VIGNETTE_NONE);
+			}
 
 			if (Creature* jaina = GetJaina())
 			{
 				SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, jaina);
+				jaina->SetVignette(VIGNETTE_NONE);
 				jaina->CombatStop();
 				jaina->SetReactState(REACT_PASSIVE);
 				jaina->NearTeleportTo(JainaPoint03);
@@ -2544,10 +2560,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				portal->Delete();
 
 			if (Creature* kalecgos = GetKalecgosDragon())
-			{
-				SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, kalecgos);
 				kalecgos->SetVisible(false);
-			}
 
 			uint8 slot = 0;
 			for (ObjectGuid const& guid : troops)

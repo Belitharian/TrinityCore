@@ -252,7 +252,9 @@ struct npc_jaina_theramore : public CustomAI
 			if (player->IsFriendlyTo(me) && player->IsWithinDist(me, TRIGGER_DISTANCE))
 			{
 				// La vignette a rempli son role (guider le joueur) : on l'efface.
-                me->SetVignette(VIGNETTE_NONE);
+				// Sauf pendant la bataille, ou elle localise Jaina sur la carte.
+				if (phase != BFTPhases::TheBattle_Survive)
+					me->SetVignette(VIGNETTE_NONE);
 
 				switch (phase)
 				{

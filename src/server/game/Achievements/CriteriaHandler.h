@@ -363,6 +363,7 @@ public:
             case CriteriaType::WinAnyRankedArena:
             case CriteriaType::GainAura:            // NYI
             case CriteriaType::WinAnyBattleground:  // NYI
+            case CriteriaType::KilledAllUnitsInSpawnRegion:
                 return true;
             default:
                 break;

@@ -551,6 +551,7 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::PlayerTriggerGameEvent:
         case CriteriaType::Login:
         case CriteriaType::AnyoneTriggerGameEventScenario:
+        case CriteriaType::KilledAllUnitsInSpawnRegion:
         case CriteriaType::DefeatDungeonEncounterWhileElegibleForLoot:
         case CriteriaType::CompleteAnyScenario:
         case CriteriaType::CompleteScenario:
@@ -849,7 +850,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::ExhaustAnyResearchSite:
         case CriteriaType::CompleteInternalCriteria:
         case CriteriaType::CompleteAnyChallengeMode:
-        case CriteriaType::KilledAllUnitsInSpawnRegion:
         case CriteriaType::CompleteChallengeMode:
         case CriteriaType::CreatedItemsByCastingSpellWithLimit:
         case CriteriaType::BattlePetAchievementPointsEarned:
@@ -1259,6 +1259,7 @@ bool CriteriaHandler::IsCompletedCriteria(Criteria const* criteria, uint64 requi
         case CriteriaType::LearnOrKnowSpell:
         case CriteriaType::RevealWorldMapOverlay:
         case CriteriaType::AnyoneTriggerGameEventScenario:
+        case CriteriaType::KilledAllUnitsInSpawnRegion:
         case CriteriaType::GotHaircut:
         case CriteriaType::EquipItemInSlot:
         case CriteriaType::EquipItem:
@@ -1692,6 +1693,10 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
         case CriteriaType::PlayerTriggerGameEvent:
         case CriteriaType::AnyoneTriggerGameEventScenario:
             if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.EventID))
+                return false;
+            break;
+        case CriteriaType::KilledAllUnitsInSpawnRegion:
+            if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.SpawnRegionID))
                 return false;
             break;
         case CriteriaType::CompleteScenario:

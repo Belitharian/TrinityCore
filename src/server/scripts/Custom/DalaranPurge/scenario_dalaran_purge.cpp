@@ -44,11 +44,6 @@ const ObjectData gameobjectData[] =
 	{ 0,                                0                               }   // END
 };
 
-enum PhasesShift
-{
-	PHASESHIFT_HIDE = 52,
-};
-
 // =========================================================================
 // Identifiants des evenements internes de l'EventMap
 // =========================================================================

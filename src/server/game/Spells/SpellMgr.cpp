@@ -5483,6 +5483,7 @@ void SpellMgr::LoadSpellInfoCorrections()
     ApplySpellFix({ 258181 }, [](SpellInfo* spellInfo)
     {
         spellInfo->RangeEntry = sSpellRangeStore.LookupEntry(13);
+        spellInfo->AttributesEx2 |= SPELL_ATTR2_IGNORE_LINE_OF_SIGHT;
     });
 
     for (SpellInfo const& s : mSpellInfoMap)

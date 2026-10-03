@@ -71,7 +71,7 @@ struct npc_jaina_dalaran_purge : public CustomAI
 			if (player->IsGameMaster())
 				return;
 
-			if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 5.f))
+			if (player->IsFriendlyTo(me) && player->IsWithinDist(me, 10.f))
 			{
 				DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
 				switch (phase)

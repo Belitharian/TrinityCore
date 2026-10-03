@@ -2497,6 +2497,43 @@ bool Map::IsSpawnGroupActive(uint32 groupId) const
     return (_toggledSpawnGroupIds.find(groupId) != _toggledSpawnGroupIds.end()) != !(data->flags & SPAWNGROUP_FLAG_MANUAL_SPAWN);
 }
 
+bool Map::IsSpawnRegionCleared(uint32 spawnRegionId) const
+{
+    std::vector<ObjectGuid::LowType> const* spawnIds = sObjectMgr->GetSpawnRegionCreatures(spawnRegionId);
+    if (!spawnIds)
+        return false;
+
+    for (ObjectGuid::LowType spawnId : *spawnIds)
+    {
+        CreatureData const* data = sObjectMgr->GetCreatureData(spawnId);
+        if (!data || data->mapId != GetId())
+            return false;
+
+        auto bounds = GetCreatureBySpawnIdStore().equal_range(spawnId);
+        if (bounds.first != bounds.second)
+        {
+            for (auto itr = bounds.first; itr != bounds.second; ++itr)
+                if (itr->second->IsAlive())
+                    return false;
+            continue;
+        }
+
+        // Not on the map: only counts as killed if its corpse is gone and it awaits respawn.
+        // Spawns that cannot exist here right now (other difficulty, disabled group, pool) are ignored.
+        if (std::find(data->spawnDifficulties.begin(), data->spawnDifficulties.end(), GetDifficultyID()) == data->spawnDifficulties.end())
+            continue;
+        if (data->spawnGroupData && !IsSpawnGroupActive(data->spawnGroupData->groupId))
+            continue;
+        if (data->poolId)
+            continue;
+
+        if (!GetCreatureRespawnTime(spawnId))
+            return false;
+    }
+
+    return true;
+}
+
 void Map::InitSpawnGroupState()
 {
     std::vector<uint32> const* spawnGroups = sObjectMgr->GetSpawnGroupsForMap(GetId());

@@ -221,6 +221,12 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         float GetBaseArmorForLevel(uint8 level) const;
         float GetArmorMultiplierForTarget(WorldObject const* target) const override;
 
+        // Stat principale d'un joueur de meme niveau (ExpectedStat PlayerPrimaryStat
+        // module par le ContentTuning), multipliee par DamageModifier. Sert de SP et
+        // d'AP de base pour que les sorts de joueur lances par un PNJ scalent comme
+        // chez un joueur, quelle que soit sa classe.
+        float GetPlayerLikePowerForLevel(uint8 level) const;
+
         bool IsInEvadeMode() const { return HasUnitState(UNIT_STATE_EVADE); }
         bool IsEvadingAttacks() const { return IsInEvadeMode() || CanNotReachTarget(); }
 

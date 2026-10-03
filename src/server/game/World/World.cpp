@@ -1520,6 +1520,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Creature template sparring...");
     sObjectMgr->LoadCreatureTemplateSparring();
 
+    TC_LOG_INFO("server.loading", "Loading Creature item levels...");
+    sObjectMgr->LoadCreatureTemplateItemLevels();
+
     TC_LOG_INFO("server.loading", "Loading Reputation Reward Rates...");
     sObjectMgr->LoadReputationRewardRate();
 
@@ -1564,6 +1567,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading instance spawn groups...");
     sObjectMgr->LoadInstanceSpawnGroups();
+
+    TC_LOG_INFO("server.loading", "Loading creature spawn regions...");
+    sObjectMgr->LoadCreatureSpawnRegions();                      // must be after LoadCreatures()
 
     TC_LOG_INFO("server.loading", "Loading GameObject Addon Data...");
     sObjectMgr->LoadGameObjectAddons();                          // must be after LoadGameObjects()

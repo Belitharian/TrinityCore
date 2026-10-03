@@ -289,6 +289,14 @@ enum BFTMisc
     VIGNETTE_LADY_JAINA_PROUDMOORE      = 50003,
     VIGNETTE_RHONIN                     = 50004,
     VIGNETTE_THADER_WINDERMERE          = 50005,
+    VIGNETTE_WAVE_CALLER_GRUHTA         = 50017,    // Icone boss
+    VIGNETTE_THERAMORE_CITIZEN          = 50018,    // Citoyens a evacuer
+    VIGNETTE_UNMANNED_TANK              = 50019,    // Chars a reparer
+    VIGNETTE_CAPTAIN_DROK               = 50022,
+    VIGNETTE_POWDER_BARREL              = 50023,    // Baril a faire sauter (Sea Wolf)
+    // Pendant la bataille : position des heros sur la carte, sans surbrillance.
+    VIGNETTE_BATTLE_JAINA               = 50024,
+    VIGNETTE_BATTLE_RHONIN              = 50025,
 
 	// Sounds
 	SOUND_FEARFUL_CROWD                 = 15003,

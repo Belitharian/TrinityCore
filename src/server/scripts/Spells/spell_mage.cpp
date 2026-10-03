@@ -507,9 +507,9 @@ class spell_mage_cauterize_AuraScript : public AuraScript
 // 79684 - Clearcasting
 class spell_mage_clearcasting : public AuraScript
 {
-	bool Validate(SpellInfo const* /*spell*/) override
+	bool Validate(SpellInfo const* spell) override
 	{
-		return ValidateSpellInfo({ SPELL_MAGE_HEAT_SHIMMER });
+		return ValidateSpellInfo({ SPELL_MAGE_CLEARCASTING_BUFF }) && ValidateSpellEffect({ { spell->Id, EFFECT_1 } });
 	}
 
 	bool CheckProc(ProcEventInfo& /*eventInfo*/)
