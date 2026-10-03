@@ -25,6 +25,7 @@
 #include "PassiveAI.h"
 #include "PetAI.h"
 #include "TemporarySummon.h"
+#include "pet_spawn_cast.h"
 
 enum PriestSpells
 {
@@ -42,7 +43,7 @@ struct npc_pet_pri_divine_image : public PassiveAI
 
     void IsSummonedBy(WorldObject* summoner) override
     {
-        me->CastSpell(me, SPELL_PRIEST_INVOKE_THE_NAARU);
+        CastAfterSpawn(me, me->GetGUID(), SPELL_PRIEST_INVOKE_THE_NAARU);
 
         if (me->ToTempSummon()->IsGuardian() && summoner->IsUnit())
             static_cast<Guardian*>(me)->SetBonusDamage(summoner->ToUnit()->SpellBaseHealingBonusDone(SPELL_SCHOOL_MASK_HOLY));

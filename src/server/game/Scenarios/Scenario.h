@@ -76,7 +76,6 @@ class TC_GAME_API Scenario : public CriteriaHandler
 
         void SendScenarioState(Player const* player) const;
         void SendBootPlayer(Player const* player) const;
-        void SendScenarioEvent(Player* player, uint32 eventId);
 
         // Progression brute d'un criteria : permet a un script de lire un
         // compteur sans redupliquer la comptabilite de son cote.
@@ -92,7 +91,7 @@ class TC_GAME_API Scenario : public CriteriaHandler
         bool CanUpdateCriteriaTree(Criteria const* criteria, CriteriaTree const* tree, Player* referencePlayer) const override;
         bool CanCompleteCriteriaTree(CriteriaTree const* tree) override;
         void CompletedCriteriaTree(CriteriaTree const* tree, Player* referencePlayer) override;
-        void OnCompletedCriteriaTree(CriteriaTree const* tree);
+        virtual void OnCompletedCriteriaTree(CriteriaTree const* /*tree*/) { }
         void NotifyCompletedCriteriaTree(CriteriaTree const* tree);
         void AfterCriteriaTreeUpdate(CriteriaTree const* /*tree*/, Player* /*referencePlayer*/) override { }
 

@@ -2497,11 +2497,42 @@ bool Map::IsSpawnGroupActive(uint32 groupId) const
     return (_toggledSpawnGroupIds.find(groupId) != _toggledSpawnGroupIds.end()) != !(data->flags & SPAWNGROUP_FLAG_MANUAL_SPAWN);
 }
 
-bool Map::IsSpawnRegionCleared(uint32 spawnRegionId) const
+void Map::AddSpawnRegionSummon(uint32 spawnRegionId, ObjectGuid const& summonGuid)
+{
+    _spawnRegionSummons[spawnRegionId].insert(summonGuid);
+    _summonSpawnRegions[summonGuid] = spawnRegionId;
+}
+
+std::vector<uint32> Map::GetSpawnRegions(Creature const* creature) const
+{
+    std::vector<uint32> spawnRegions;
+    if (ObjectGuid::LowType spawnId = creature->GetSpawnId())
+    {
+        if (std::vector<uint32> const* regions = sObjectMgr->GetCreatureSpawnRegions(spawnId))
+            spawnRegions = *regions;
+    }
+    else if (uint32 const* spawnRegionId = Trinity::Containers::MapGetValuePtr(_summonSpawnRegions, creature->GetGUID()))
+        spawnRegions.push_back(*spawnRegionId);
+
+    return spawnRegions;
+}
+
+bool Map::IsSpawnRegionCleared(uint32 spawnRegionId)
 {
     std::vector<ObjectGuid::LowType> const* spawnIds = sObjectMgr->GetSpawnRegionCreatures(spawnRegionId);
-    if (!spawnIds)
+    auto summonsItr = _spawnRegionSummons.find(spawnRegionId);
+    if (!spawnIds && summonsItr == _spawnRegionSummons.end())
         return false;
+
+    // Summons that are gone without dying (despawned) can no longer be killed: they do not hold the region back
+    if (summonsItr != _spawnRegionSummons.end())
+        for (ObjectGuid const& summonGuid : summonsItr->second)
+            if (Creature* summon = GetCreature(summonGuid))
+                if (summon->IsAlive())
+                    return false;
+
+    if (!spawnIds)
+        return true;
 
     for (ObjectGuid::LowType spawnId : *spawnIds)
     {

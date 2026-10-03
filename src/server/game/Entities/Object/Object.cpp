@@ -1338,8 +1338,15 @@ static void SummonCreatureGroup(uint32 summonerId, SummonerType summonerType, ui
     summons.reserve(data->size());
 
     for (TempSummonData const& tempSummonData : *data)
+    {
         if (TempSummon* summon = summonCreature(tempSummonData))
+        {
+            if (tempSummonData.spawnRegionId)
+                summon->GetMap()->AddSpawnRegionSummon(tempSummonData.spawnRegionId, summon->GetGUID());
+
             summons.push_back(summon);
+        }
+    }
 
     CreatureGroup* creatureGroup = new CreatureGroup(0);
     for (TempSummon* summon : summons)

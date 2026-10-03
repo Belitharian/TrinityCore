@@ -2152,7 +2152,12 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 		SPELL_INFERNAL_BOLT_BUFF    = 433891,
 		SPELL_RUINATION             = 434635,
 		SPELL_RUINATION_BUFF        = 433885,
-		SPELL_SHARDS                = 1279442,
+
+		// Fragments flottants au-dessus de la tete (auras du Glyph of Floating Shards),
+		// variante verte Fel-Touched rendue inconditionnelle en hotfix.
+		SPELL_SOUL_SHARD_VISUAL_1   = 104756,
+		SPELL_SOUL_SHARD_VISUAL_2   = 104759,
+		SPELL_SOUL_SHARD_VISUAL_3   = 123171,
 	};
 
 	const SpellInfo* corruptionInfo;
@@ -2178,6 +2183,7 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 		npc_theramore_horde::Reset();
 
 		soulShardsCount = 0;
+		UpdateSoulShardVisuals();
 
 		// Traqueur des Tenebres au pull : 60% de chance.
 		if (roll_chance(FELHUNTER_CHANCE))
@@ -2228,6 +2234,8 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 		else if (spell->Id == SPELL_HAND_OF_GULDAN)
 			soulShardsCount = 0;
 
+		UpdateSoulShardVisuals();
+
 		// Main de Gul'dan : obligatoire quand 3 fragments d'ame sont accumules, interrompt tout sauf Drain de vie.
 		DoCastHandOfGuldan();
 	}
@@ -2238,8 +2246,6 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 
 	void JustEngagedWith(Unit* who) override
 	{
-		me->AddAura(SPELL_SHARDS, me);
-
 		npc_theramore_horde::JustEngagedWith(who);
 
 		scheduler
@@ -2350,6 +2356,23 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 	// -------------------------------------------------------------------------
 	// Helpers
 	// -------------------------------------------------------------------------
+
+	// Un fragment flottant par fragment d'ame accumule (0 a 3).
+	void UpdateSoulShardVisuals()
+	{
+		static constexpr uint32 visuals[SOUL_SHARDS_MAX] = { SPELL_SOUL_SHARD_VISUAL_1, SPELL_SOUL_SHARD_VISUAL_2, SPELL_SOUL_SHARD_VISUAL_3 };
+
+		for (uint8 i = 0; i < SOUL_SHARDS_MAX; ++i)
+		{
+			if (i < soulShardsCount)
+			{
+				if (!me->HasAura(visuals[i]))
+					me->AddAura(visuals[i], me);
+			}
+			else
+				me->RemoveAurasDueToSpell(visuals[i]);
+		}
+	}
 
 	void DoCastHandOfGuldan()
 	{

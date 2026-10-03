@@ -9,9 +9,10 @@
  *             FindJaina_Crater_Valided -> dialogue de protection de l'iris (events 19..24)
  *   Phase 3 : Standards / Standards_Valided / BackToSender / TheFinalAssault
  *             -> retour a Theramore, combat des hordes (events 25..36)
- *             -> les deux vagues spawnees par SummonCreatureGroup sont suivies
- *                par GUID : OnUnitDeath retire le mort de sa vague et declenche
- *                la suite quand le dernier membre tombe
+ *             -> vague du nettoyage suivie par GUID : OnUnitDeath retire chaque
+ *                mort et relance Jaina quand le dernier membre tombe
+ *             -> vague de l'assaut final : spawn region SPAWN_REGION_IRIS_ASSAULT,
+ *                le critere 64 valide CRITERIA_TREE_JAINA_PROTECTED a sa mort
  *             -> watchdog EVT_STANDARDS_AGGRO_NUDGE (44) : relance les hordes du
  *                nettoyage restees passives (il ne compte plus les morts)
  *   Phase 4 : LeaveTheRuins            -> Jaina ouvre le portail vers Stormwind (events 39..43, 45)
@@ -119,7 +120,7 @@ enum RFTEvents : uint32
 
 	// 37 et 38 sont libres : l'ancien EVT_BACK_JAINA_IMMUNE etait vide et ne
 	// servait plus qu'a amorcer EVT_HORDE_CHECKER_FINAL, lui-meme remplace par
-	// le suivi de GUIDs de OnUnitDeath (voir EVENT_JAINA_PROTECTED).
+	// le critere de spawn region (voir SPAWN_REGION_IRIS_ASSAULT).
 
 	// Phase 4 - Quitter les ruines
 	EVT_LEAVE_JAINA_WALK            = 39,   // Jaina marche vers le verre brise
@@ -180,10 +181,11 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		std::vector<Creature*> elementals;    // Elementaires d'eau invoques par Jaina
 
 		// Les deux vagues spawnees par SummonCreatureGroup, suivies par GUID et non
-		// par pointeur : un summon peut disparaitre sous nos pieds. OnUnitDeath en
-		// retire chaque mort, et c'est le passage a vide qui declenche la suite.
-		GuidVector standardsWave;             // Groupe 0 - hordes du nettoyage (phase Standards)
-		GuidVector assaultWave;               // Groupe 1 - assaut final, warlord EXCLU (voir HandleBackSpawnHordes)
+		// par pointeur : un summon peut disparaitre sous nos pieds.
+		GuidVector standardsWave;             // Groupe 0 - hordes du nettoyage : OnUnitDeath en retire chaque mort,
+		                                      // le passage a vide relance Jaina
+		GuidVector assaultWave;               // Groupe 1 - assaut final, warlord EXCLU (voir HandleBackSpawnHordes) :
+		                                      // ne sert qu'a les lacher, leur fin est le critere de spawn region
 
 		// =================================================================
 		// Lecture / ecriture de donnees externes
@@ -235,8 +237,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case EVENT_WARLORD_ROKNAH_SLAIN:
 					// Le warlord signale qu'il est tombe a genoux (Jaina ne l'acheve
 					// que plus tard). Rien a planifier ici : la fin de l'assaut est
-					// detectee par OnUnitDeath, a la mort du dernier membre de
-					// assaultWave - dont le warlord ne fait volontairement pas partie.
+					// le critere de SPAWN_REGION_IRIS_ASSAULT, dont le warlord ne fait
+					// volontairement pas partie.
 					break;
 
 				default:
@@ -247,24 +249,17 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		// =================================================================
 		// Suivi des vagues de hordes
 		// =================================================================
-		// Les deux groupes spawnes par SummonCreatureGroup melangent plusieurs
-		// entries et peuvent tomber dans n'importe quel ordre : on suit les GUIDs
-		// summonnes plutot que les entries, et l'etape suivante n'est declenchee
-		// qu'une fois le dernier membre du groupe mort.
+		// Le groupe du nettoyage melange plusieurs entries qui peuvent tomber dans
+		// n'importe quel ordre : on suit les GUIDs summonnes plutot que les entries,
+		// et Jaina n'est relancee qu'une fois le dernier membre mort. Aucun critere
+		// ne porte cette vague, d'ou le suivi a la main (l'assaut final, lui, passe
+		// par sa spawn region).
 		void OnUnitDeath(Unit* unit) override
 		{
 			InstanceScript::OnUnitDeath(unit);
 
-			ObjectGuid const guid = unit->GetGUID();
-
-			// Vague du nettoyage : Jaina termine son combat et reprend sa marche.
-			if (std::erase(standardsWave, guid) && standardsWave.empty())
+			if (std::erase(standardsWave, unit->GetGUID()) && standardsWave.empty())
 				OnStandardsWaveCleared();
-
-			// Vague de l'assaut final : l'iris est protege. Le warlord, encore a
-			// genoux, n'appartient pas a cette liste - c'est Jaina qui l'achevera.
-			if (std::erase(assaultWave, guid) && assaultWave.empty())
-				TriggerGameEvent(EVENT_JAINA_PROTECTED);
 		}
 
 		// =================================================================
@@ -380,8 +375,6 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			InstanceScript::OnCreatureCreate(creature);
 
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
-			creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
-			creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
 			creature->SetBoundingRadius(CREATURE_BOUNDING_RADIUS);
 
 			switch (creature->GetEntry())
@@ -776,10 +769,11 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				horde->SetImmuneToAll(true);
 				horde->CastSpell(horde, SPELL_THALYSSRA_SPAWNS);
 
-				// Le warlord est volontairement exclu de la vague suivie : il n'est
+				// Le warlord est volontairement exclu de la vague, et de sa spawn
+				// region (SpawnRegionId a 0 dans creature_summon_groups) : il n'est
 				// jamais tue par les joueurs (il se fige a bas PV et c'est Jaina qui
-				// l'acheve, APRES EVENT_JAINA_PROTECTED). L'y inclure attendrait une
-				// mort qui ne peut pas arriver, et figerait le scenario.
+				// l'acheve, APRES CRITERIA_TREE_JAINA_PROTECTED). L'y inclure
+				// attendrait une mort qui ne peut pas arriver, et figerait le scenario.
 				if (horde->GetEntry() != NPC_ROKNAH_WARLORD)
 					assaultWave.push_back(horde->GetGUID());
 			}
@@ -825,8 +819,8 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				horde->SetVignette(VIGNETTE_HORDE_TROOPS);
 			});
 
-			// Fin de la chaine BackToSender : la suite (EVENT_JAINA_PROTECTED) est
-			// declenchee par OnUnitDeath, quand assaultWave est vide.
+			// Fin de la chaine BackToSender : la suite (CRITERIA_TREE_JAINA_PROTECTED)
+			// est validee par le critere de SPAWN_REGION_IRIS_ASSAULT.
 		}
 
 		// =================================================================

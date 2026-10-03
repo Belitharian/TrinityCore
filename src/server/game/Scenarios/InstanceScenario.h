@@ -37,6 +37,7 @@ class TC_GAME_API InstanceScenario : public Scenario
     protected:
         std::string GetOwnerInfo() const override;
         void SendPacket(WorldPacket const* data) const override;
+        void OnCompletedCriteriaTree(CriteriaTree const* tree) override;
 
         InstanceMap const* _map;
 };

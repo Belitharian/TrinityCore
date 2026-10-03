@@ -4029,6 +4029,64 @@ int32 GetUnitConditionVariable(Unit const* unit, Unit const* otherUnit, UnitCond
     return 0;
 }
 
+// Emerald : PlayerCondition evaluee pour une creature (choix des visuels de sort, SpellXSpellVisual.CasterPlayerConditionID),
+// pour qu'un PNJ ait les memes variantes qu'un joueur (ex. Demonbolt sous Demonic Core). Seules la race, la classe et
+// les auras ont un sens pour une creature ; toute autre exigence (quete, sort connu, talent, objet...) n'est pas remplie.
+bool ConditionMgr::IsCreatureMeetingPlayerCondition(Unit const* unit, uint32 conditionId)
+{
+    PlayerConditionEntry const* condition = sPlayerConditionStore.LookupEntry(conditionId);
+    if (!condition)
+        return true;
+
+    if (condition->GetFlags().HasFlag(PlayerConditionFlags::Disabled))
+        return true;
+
+    auto anyOf = [](auto const& values) { return std::ranges::any_of(values, [](auto value) { return value != 0; }); };
+
+    bool const unsupported = condition->MinLevel || condition->MaxLevel || condition->ContentTuningID
+        || condition->LanguageID || condition->MaxFactionID || condition->CurrentPvpFaction || condition->PvpMedal
+        || condition->ItemFlags || condition->WorldStateExpressionID || condition->WeatherID || condition->PartyStatus
+        || condition->LifetimeMaxPVPRank || condition->QuestKillID || condition->MinAvgItemLevel || condition->MaxAvgItemLevel
+        || condition->MinAvgEquippedItemLevel || condition->MaxAvgEquippedItemLevel || condition->PhaseUseFlags
+        || condition->PhaseID || condition->PhaseGroupID || condition->ModifierTreeID || condition->MovementFlags
+        || condition->WeaponSubclassMask || condition->CovenantID || condition->Gender >= 0 || condition->NativeGender >= 0
+        || condition->ChrSpecializationIndex >= 0 || condition->ChrSpecializationRole >= 0
+        || (condition->PowerType != -1 && condition->PowerTypeComp) || condition->MinExpansionLevel != -1
+        || condition->MaxExpansionLevel != -1
+        || anyOf(condition->SkillID) || anyOf(condition->MinFactionID) || anyOf(condition->PrevQuestID)
+        || anyOf(condition->CurrQuestID) || anyOf(condition->CurrentCompletedQuestID) || anyOf(condition->SpellID)
+        || anyOf(condition->ItemID) || anyOf(condition->Explored) || anyOf(condition->Time) || anyOf(condition->Achievement)
+        || anyOf(condition->AreaID) || anyOf(condition->LfgStatus) || anyOf(condition->CurrencyID)
+        || anyOf(condition->TraitNodeEntryID);
+
+    bool meets = !unsupported;
+
+    if (meets && !condition->RaceMask.IsEmpty() && !condition->RaceMask.HasRace(unit->GetRace()))
+        meets = false;
+
+    if (meets && condition->ClassMask && !(unit->GetClassMask() & condition->ClassMask))
+        meets = false;
+
+    if (meets && condition->AuraSpellID[0])
+    {
+        std::bitset<4> results;
+        for (std::size_t i = 0; i < condition->AuraSpellID.size(); ++i)
+        {
+            uint32 spellId = condition->AuraSpellID[i];
+            if (!spellId)
+                results[i] = true;
+            else if (condition->AuraStacks[i])
+                results[i] = unit->GetAuraCount(spellId) >= condition->AuraStacks[i];
+            else
+                results[i] = unit->HasAura(spellId);
+        }
+
+        meets = PlayerConditionLogic(condition->AuraSpellLogic, results);
+    }
+
+    return meets != condition->GetFlags().HasFlag(PlayerConditionFlags::Invert);
+}
+
 bool ConditionMgr::IsUnitMeetingCondition(Unit const* unit, Unit const* otherUnit, UnitConditionEntry const* condition)
 {
     for (size_t i = 0; i < MAX_UNIT_CONDITION_VALUES; ++i)

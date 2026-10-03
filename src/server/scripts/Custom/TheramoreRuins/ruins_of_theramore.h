@@ -190,7 +190,10 @@ enum RFTMisc
 	EVENT_FIND_JAINA_02                 = 65813,    // Cratere
 	EVENT_BACK_TO_SENDER                = 65814,
 	EVENT_WARLORD_ROKNAH_SLAIN          = 65815,
-	EVENT_JAINA_PROTECTED               = 65816,
+
+	// Spawn regions (creature_summon_groups.SpawnRegionId) : le critere 64
+	// "Killed all units in spawn region" se valide a la mort du dernier membre.
+	SPAWN_REGION_IRIS_ASSAULT           = 500101,   // Assaut final, warlord exclu (critere 100026)
 
 	// Criteres (criteria tree IDs) declenchant les transitions de phase
 	CRITERIA_TREE_FIND_JAINA_01         = 1000031,  // Ilot

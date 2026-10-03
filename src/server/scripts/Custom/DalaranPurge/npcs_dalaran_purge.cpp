@@ -2841,10 +2841,21 @@ struct npc_high_arcanist_savor : public CustomAI
 	static constexpr uint32 SAVOR_MAX_WAVES = 4;
 	static constexpr int32 PLAYER_MAX_ALT_POWER = 2;
 	static constexpr uint8 SAVOR_SPAWN_COUNT = 2;
+	static constexpr Milliseconds REWIND_DURATION = 4s;
+
+	// Phase Time : chaque rewind accelere l alternance des vitesses et la pluie arcanique
+	static constexpr Milliseconds SPEED_INTERVAL = 15s;
+	static constexpr Milliseconds SPEED_INTERVAL_STEP = 3s;
+	static constexpr Milliseconds ARCANE_RAIN_INTERVAL = 3s;
+	static constexpr Milliseconds ARCANE_RAIN_INTERVAL_STEP = 750ms;
+	static constexpr Milliseconds DEFLECTION_DELAY = 2s;
+
+	// Phase Portal : les vagues arrivent a intervalle fixe, ou des que la precedente est tombee
+	static constexpr Milliseconds PORTAL_WAVE_INTERVAL = 20s;
 
 	npc_high_arcanist_savor(Creature* creature) : CustomAI(creature, AI_Type::Stay), phase(Phases::None),
 		clones(creature), sunreaversPortal(nullptr), arcaneBarrier(ObjectGuid::Empty), lastSpeed(SPELL_SPEED_SLOW),
-		timeCount(0), sunreaversCount(0), wavesCount(0), rewinding(false)
+		speedCycle(0), timeCount(0), sunreaversCount(0), sunreaversSpawned(0), wavesCount(0), rewinding(false)
 	{
 		instance = me->GetInstanceScript();
 		SetCanRandomMovement(false);
@@ -2865,6 +2876,9 @@ struct npc_high_arcanist_savor : public CustomAI
 		SPELL_SPEED_NORMAL          = 207012,
 		SPELL_SPEED_FAST            = 207013,
 		SPELL_ALT_POWER_BAR         = 102668,
+		SPELL_ARCANE_RAIN           = 303880,   // Vitesse elevee : missiles a esquiver
+		SPELL_DEFLECTION_FRONT_BACK = 1290802,  // Vitesse reduite : absorbe les degats de face et de dos
+		SPELL_DEFLECTION_SIDES      = 1290806,  // Vitesse reduite : absorbe les degats de cote
 
 		// Portal
 		SPELL_ARCANE_FX             = 200065,
@@ -2909,7 +2923,6 @@ struct npc_high_arcanist_savor : public CustomAI
 	enum class Phases
 	{
 		None,
-		Intro,
 		LivingLedger,
 		Time,
 		Portal,
@@ -2921,6 +2934,7 @@ struct npc_high_arcanist_savor : public CustomAI
 		GROUP_ALWAYS,
 		GROUP_LIVING_LEDGERS,
 		GROUP_TIME,
+		GROUP_SPEED,
 		GROUP_PORTAL
 	};
 
@@ -2931,8 +2945,10 @@ struct npc_high_arcanist_savor : public CustomAI
 	GameObject* sunreaversPortal;
 	ObjectGuid arcaneBarrier;
 	uint32 lastSpeed;
+	uint32 speedCycle;          // Change a chaque bascule de vitesse : arrete les mecaniques de la vitesse precedente
 	uint32 timeCount;
-	uint32 sunreaversCount;
+	uint32 sunreaversCount;     // Saccage-Soleil tues (toutes vagues)
+	uint32 sunreaversSpawned;   // Saccage-Soleil invoques (toutes vagues)
 	uint32 wavesCount;
 	bool rewinding;
 
@@ -3017,29 +3033,50 @@ struct npc_high_arcanist_savor : public CustomAI
 
 				scheduler.CancelGroup(GROUP_LIVING_LEDGERS);
 
-				// Alterne entre vitesse rapide/lente toutes les 15s
-				scheduler.Schedule(2s, GROUP_TIME, [this](TaskContext spell_speed)
+				// Alterne entre vitesse rapide/lente (mis en pause pendant les rewinds), chaque vitesse ayant sa mecanique :
+				// rapide = pluie arcanique a esquiver, lente = Deviation arcanique (se placer du bon cote de Savor)
+				scheduler.Schedule(2s, GROUP_SPEED, [this](TaskContext spell_speed)
 				{
+					speedCycle++;
+
 					if (lastSpeed == SPELL_SPEED_FAST)
 					{
 						DoCastOnPlayers(SPELL_SPEED_SLOW);
 						lastSpeed = SPELL_SPEED_SLOW;
+						ScheduleDeflection();
 					}
 					else
 					{
 						DoCastOnPlayers(SPELL_SPEED_FAST);
 						lastSpeed = SPELL_SPEED_FAST;
+						ScheduleArcaneRain();
 					}
 
-					spell_speed.Repeat(15s);
+					spell_speed.Repeat(GetSpeedInterval());
 				});
 
 				break;
 			}
 			case ACTION_HORDE_PORTAL_SPAWN:
 			{
-				// Première vague de Sunreavers
+				// Première vague de Sunreavers, puis une vague toutes les PORTAL_WAVE_INTERVAL (les vagues peuvent se chevaucher)
 				SummonSunreavers();
+
+				scheduler.Schedule(PORTAL_WAVE_INTERVAL, GROUP_PORTAL, [this](TaskContext wave)
+				{
+					if (wavesCount >= SAVOR_MAX_WAVES)
+						return;
+
+					SummonSunreavers();
+					wave.Repeat(PORTAL_WAVE_INTERVAL);
+				});
+
+				// Savor continue de frapper depuis sa barriere (declenche : ne coupe pas la canalisation du portail)
+				scheduler.Schedule(8s, GROUP_PORTAL, [this](TaskContext delphuric_beam)
+				{
+					DoCastAOE(SPELL_DELPHURIC_BEAM, true);
+					delphuric_beam.Repeat(12s, 18s);
+				});
 
 				// Vérifie l'état de l'invocation chaque seconde
 				scheduler.Schedule(1s, GROUP_PORTAL, [this](TaskContext check_hordes)
@@ -3047,7 +3084,8 @@ struct npc_high_arcanist_savor : public CustomAI
 					if (phase == Phases::Final)
 						return;
 
-					if (sunreaversCount >= SAVOR_SPAWN_COUNT)
+					// Tous les Saccage-Soleil invoques sont tombes
+					if (sunreaversCount >= sunreaversSpawned)
 					{
 						if (wavesCount >= SAVOR_MAX_WAVES)
 						{
@@ -3132,7 +3170,9 @@ struct npc_high_arcanist_savor : public CustomAI
 				});
 
 				scheduler.CancelGroup(GROUP_TIME);
+				scheduler.CancelGroup(GROUP_SPEED);
 				scheduler.CancelGroup(GROUP_ALWAYS);
+				me->InterruptNonMeleeSpells(false);
 
 				summons.DespawnAll();
 				me->SetReactState(REACT_PASSIVE);
@@ -3161,7 +3201,14 @@ struct npc_high_arcanist_savor : public CustomAI
 			}
 			else
 			{
-				// Rewind du temps (2 fois)
+				// Rewind du temps (2 fois). Savor coupe son incantation (le scheduler est gele tant qu il incante, ce qui
+				// retarderait le rewind) et ne frappe pas les joueurs pendant leur retour ; l alternance des vitesses et ses
+				// sorts reprennent la ou ils en etaient une fois le rewind termine.
+				// La mecanique de la vitesse en cours (pluie, Deviation) est arretee puis relancee a la fin du rewind.
+				me->InterruptNonMeleeSpells(false);
+				speedCycle++;
+				scheduler.DelayGroup(GROUP_SPEED, REWIND_DURATION);
+				scheduler.DelayGroup(GROUP_ALWAYS, REWIND_DURATION);
 				scheduler.Schedule(5ms, GROUP_TIME, [this](TaskContext rewind_time)
 				{
 					switch (rewind_time.GetRepeatCounter())
@@ -3170,69 +3217,24 @@ struct npc_high_arcanist_savor : public CustomAI
 							me->SetFullHealth();
 							rewinding = false;
 							RewindTime(true);
-							rewind_time.Repeat(4s);
+							rewind_time.Repeat(REWIND_DURATION);
 							break;
 						case 1:
 							RewindTime(false);
+							if (lastSpeed == SPELL_SPEED_FAST)
+								ScheduleArcaneRain();
+							else
+								ScheduleDeflection();
 							break;
-						}
+                    }
 				});
 			}
 		}
 	}
 
-	void MoveInLineOfSight(Unit* who) override
-	{
-		ScriptedAI::MoveInLineOfSight(who);
-
-		if (who->GetTypeId() != TYPEID_PLAYER)
-			return;
-
-		Player* player = who->ToPlayer();
-		if (player && player->IsGameMaster())
-			return;
-
-		if (phase != Phases::None
-			|| me->IsEngaged()
-			|| who->IsFriendlyTo(me)
-			|| !who->IsWithinDist(me, 45.0f))
-		{
-			return;
-		}
-
-		phase = Phases::Intro;
-
-		std::list<Creature*> creatures;
-		GetCreatureListWithEntryInGrid(creatures, me, NPC_SUNREAVER_PYROMANCER, 25.0f);
-		GetCreatureListWithEntryInGrid(creatures, me, NPC_SUNREAVER_AEGIS, 25.0f);
-		GetCreatureListWithEntryInGrid(creatures, me, NPC_SUNREAVER_SUMMONER, 25.0f);
-		GetCreatureListWithEntryInGrid(creatures, me, NPC_HORDE_PEON, 25.0f);
-
-		if (!creatures.empty())
-		{
-			for (Creature* creature : creatures)
-			{
-				creature->SetImmuneToAll(true);
-				creature->CastSpell(creature, SPELL_TELEPORT_VISUAL_ONLY);
-				creature->DespawnOrUnsummon(1300ms);
-			}
-		}
-
-		me->RemoveAllAuras();
-		me->AddAura(SPELL_LEVITATE, me);
-		me->SetImmuneToAll(false);
-
-		DoCast(me, SPELL_IMMUNE, true);
-	}
-
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		me->AI()->Talk(SAY_SAVOR_AGGRO);
-
-		DoOnPlayers([this](Player* player)
-		{
-			player->AddAura(SPELL_ALT_POWER_BAR, player);
-		});
 
 		scheduler
 			.Schedule(1ms, [this](TaskContext /*summon_time*/)
@@ -3322,6 +3324,9 @@ struct npc_high_arcanist_savor : public CustomAI
 					clone->SetOwnerGUID(player->GetGUID());
 
 					player->CastSpell(clone, SPELL_CLONE_ME, true);
+
+					// Seuls les joueurs qui ont un clone peuvent etre ramenes en arriere : eux seuls ont le sablier
+					player->AddAura(SPELL_ALT_POWER_BAR, player);
 					player->SetPower(POWER_ALTERNATE_POWER, PLAYER_MAX_ALT_POWER);
 
 					clones.Summon(clone);
@@ -3335,8 +3340,6 @@ struct npc_high_arcanist_savor : public CustomAI
 		me->AI()->Talk(SAY_SAVOR_PORTAL_SPAWN);
 		me->SetFacingTo(4.11f);
 
-		sunreaversCount = 0;
-
 		wavesCount++;
 
 		uint8 index = 0;
@@ -3349,6 +3352,7 @@ struct npc_high_arcanist_savor : public CustomAI
 			const Position dest = GetRandomPositionAroundCircle(me, angle, 3.2f);
 			if (Creature* spawn = DoSummon(entry, portalPoint01))
 			{
+				sunreaversSpawned++;
 				spawn->SetImmuneToAll(true);
 				spawn->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
 				spawn->CastSpell(spawn, SPELL_TELEPORT_VISUAL_ONLY);
@@ -3360,65 +3364,79 @@ struct npc_high_arcanist_savor : public CustomAI
 		}
 	}
 
+	// Ne concerne que les proprietaires d un clone, ou qu ils soient sur la carte (morts au cimetiere compris)
 	void RewindTime(bool apply)
 	{
-		DoOnPlayers([this, apply](Player* player)
+		if (apply)
+			me->AI()->Talk(SAY_SAVOR_REWIND);
+
+		for (ObjectGuid guid : clones)
 		{
-			if (!apply)
+			Creature* clone = ObjectAccessor::GetCreature(*me, guid);
+			if (!clone || clone->isDead())
+				continue;
+
+			Player* player = ObjectAccessor::GetPlayer(*me, clone->GetOwnerGUID());
+			if (!player)
+				continue;
+
+			if (apply)
+			{
+				// Retour au clone et remise a neuf : spell_rewind_time
+				player->CastSpell(player, SPELL_REWIND_TIME, CastSpellExtraArgs(TRIGGERED_FULL_MASK).SetCustomArg(clone->GetGUID()));
+
+				// Le sablier affiche les rewinds restants, decomptes par Savor (barre remise si la mort l a retiree)
+				if (!player->HasAura(SPELL_ALT_POWER_BAR))
+					player->AddAura(SPELL_ALT_POWER_BAR, player);
+
+				player->SetPower(POWER_ALTERNATE_POWER, std::max(PLAYER_MAX_ALT_POWER - int32(timeCount), 0));
+			}
+			else
 			{
 				player->RemoveAurasDueToSpell(SPELL_ETERNAL_SILENCE);
-				player->RemoveUnitFlag(UNIT_FLAG_PACIFIED);
 				player->SetClientControl(player, true);
 				player->SetFacingToObject(me);
 				player->CastSpell(player, lastSpeed, true);
 			}
-			else
-			{
-				me->AI()->Talk(SAY_SAVOR_REWIND);
+		}
+	}
 
-				for (ObjectGuid guid : clones)
-				{
-					if (Creature* clone = ObjectAccessor::GetCreature(*me, guid))
-					{
-						if (!clone || clone->isDead())
-							continue;
+	// L alternance des vitesses et la pluie s accelerent a chaque rewind
+	Milliseconds GetSpeedInterval() const
+	{
+		return SPEED_INTERVAL - SPEED_INTERVAL_STEP * timeCount;
+	}
 
-						if (clone->GetOwnerGUID() != player->GetGUID())
-							continue;
-						else
-						{
-							if (player->isDead())
-							{
-								player->RemoveAllAuras();
-								player->ResurrectPlayer(100.0f);
-							}
+	Milliseconds GetArcaneRainInterval() const
+	{
+		return ARCANE_RAIN_INTERVAL - ARCANE_RAIN_INTERVAL_STEP * timeCount;
+	}
 
-							float cloneDist = player->GetDistance2d(clone);
+	// Vitesse elevee : un missile tombe a la position de chaque joueur, a esquiver tant que la vitesse dure
+	void ScheduleArcaneRain()
+	{
+		scheduler.Schedule(1s, GROUP_SPEED, [this, cycle = speedCycle](TaskContext arcane_rain)
+		{
+			if (cycle != speedCycle)
+				return;
 
-							player->CastSpell(player, SPELL_SPEED_NORMAL, true);
-							player->CastSpell(player, SPELL_REWIND_TIME, true);
-							player->CastSpell(player, SPELL_ETERNAL_SILENCE, true);
-							player->SetUnitFlag(UNIT_FLAG_PACIFIED);
-							player->SetClientControl(player, false);
-							player->GetMotionMaster()->MoveCharge(clone->GetPositionX(), clone->GetPositionY(), clone->GetPositionZ(), cloneDist / 3.0f);
-							player->ToPlayer()->SetFullHealth();
-							player->ToPlayer()->SetFullPower(player->GetPowerType());
-							player->GetSpellHistory()->ResetAllCooldowns();
-							player->GetSpellHistory()->ResetAllCharges();
+			for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
+				if (Player* player = ref->GetVictim()->ToPlayer())
+					me->CastSpell(player->GetPosition(), SPELL_ARCANE_RAIN, true);
 
-							int32 charges = player->GetPower(POWER_ALTERNATE_POWER);
-							charges -= 1;
+			arcane_rain.Repeat(GetArcaneRainInterval());
+		});
+	}
 
-							player->SetPower(POWER_ALTERNATE_POWER, charges);
+	// Vitesse reduite : Deviation arcanique, face/dos ou cotes au hasard (non interruptible, il faut se placer)
+	void ScheduleDeflection()
+	{
+		scheduler.Schedule(DEFLECTION_DELAY, GROUP_SPEED, [this, cycle = speedCycle](TaskContext /*deflection*/)
+		{
+			if (cycle != speedCycle)
+				return;
 
-							player->RemoveAura(57723);      // Heroism
-							player->RemoveAura(57724);      // Bloodlust
-							player->RemoveAura(80354);      // Time Warp
-							player->RemoveAura(102381);     // Temporal Blast
-						}
-					}
-				}
-			}
+			DoCastSelf(RAND(SPELL_DEFLECTION_FRONT_BACK, SPELL_DEFLECTION_SIDES));
 		});
 	}
 
@@ -3451,10 +3469,13 @@ struct npc_high_arcanist_savor : public CustomAI
 		});
 
 		phase = Phases::None;
+		clones.clear();
 		arcaneBarrier = ObjectGuid::Empty;
 		lastSpeed = SPELL_SPEED_SLOW;
+		speedCycle = 0;
 		timeCount = 0;
 		sunreaversCount = 0;
+		sunreaversSpawned = 0;
 		wavesCount = 0;
 		rewinding = false;
 	}
@@ -4123,58 +4144,201 @@ class spell_purge_glacial_spike_summon : public SpellScript
 // Speed: Slow - 207011
 // Speed: Normal - 207012
 // Speed: Fast - 207013
+// L effet 0 (Dummy) donne l ecoulement du temps en % : -30 (reduite), 0 (normale), +30 (elevee).
+// Tout suit le meme facteur rate = 1 + valeur / 100 : deplacement x rate, durees (incantations, attaques,
+// GCD, regeneration, temps de recharge, ticks periodiques sensibles a la hate) / rate.
+// Chaque modificateur est reversible (multiplie a l application, divise au retrait), sans ecraser la hate ou les
+// vitesses venant d autres auras ou de l equipement.
 class spell_speed : public AuraScript
 {
-	void OnRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+	static float GetTimeRate(AuraEffect const* aurEff)
 	{
-		if (Unit* target = GetTarget())
-		{
-			// Restauration inconditionnelle : l aura est deja en cours de suppression,
-			// la retirer une seconde fois ici ne servait a rien.
-			float rate = 1.0f;
-			target->SetSpeedRate(MOVE_RUN, rate);
-			target->SetSpeedRate(MOVE_RUN_BACK, rate);
-			target->SetSpeedRate(MOVE_WALK, rate);
-			target->SetModCastingSpeed(rate);
-			target->SetModSpellHaste(rate);
-			target->SetModHaste(rate);
-			target->SetModRangedHaste(rate);
-			target->SetModHasteRegen(rate);
-			target->SetModTimeRate(rate);
-		}
+		return std::max(1.0f + float(aurEff->GetAmount()) / 100.0f, 0.01f);
+	}
+
+	// Pourcentage a passer aux fonctions de hate du core pour que les durees soient multipliees par 1 / rate
+	// (au-dessous de 0, le core multiplie les durees par 1 + |pct| / 100 au lieu de les diviser)
+	static float GetHastePct(float rate)
+	{
+		return rate >= 1.0f
+			? (rate - 1.0f) * 100.0f
+			: -(1.0f / rate - 1.0f) * 100.0f;
+	}
+
+	void HandleTimeRate(AuraEffect const* aurEff, bool apply)
+	{
+		Unit* target = GetTarget();
+		float rate = GetTimeRate(aurEff);
+		if (rate == 1.0f)
+			return;
+
+		float hastePct = GetHastePct(rate);
+
+		// Deplacement
+		target->ApplySpeedRateMultiplier(rate, apply);
+
+		// Incantations, hate des sorts (ticks periodiques), regeneration et GCD
+		target->ApplyCastTimePercentMod(hastePct, apply);
+
+		// Attaques automatiques
+		target->ApplyAttackTimePercentMod(BASE_ATTACK, hastePct, apply);
+		target->ApplyAttackTimePercentMod(OFF_ATTACK, hastePct, apply);
+		target->ApplyAttackTimePercentMod(RANGED_ATTACK, hastePct, apply);
+
+		// Temps de recharge et charges
+		target->SetModTimeRate(apply
+			? *target->m_unitData->ModTimeRate / rate
+			: *target->m_unitData->ModTimeRate * rate);
 	}
 
 	void OnApply(AuraEffect const* aurEff, AuraEffectHandleModes /*mode*/)
 	{
-		if (Unit* target = GetTarget())
-		{
-			int32 basePoints = aurEff->GetSpellEffectInfo().BasePoints;
+		HandleTimeRate(aurEff, true);
+	}
 
-			float speedRate = basePoints != 1.0f
-				? 1.0f * (basePoints / 100.0f) + 1.0f
-				: 1.0f;
-
-			target->SetSpeedRate(MOVE_RUN, speedRate);
-			target->SetSpeedRate(MOVE_RUN_BACK, speedRate);
-			target->SetSpeedRate(MOVE_WALK, speedRate);
-
-			float castRate = basePoints != 1.0f
-				? 1.0f * (-basePoints / 100.0f) + 1.0f
-				: 1.0f;
-
-			target->SetModCastingSpeed(castRate);
-			target->SetModSpellHaste(castRate);
-			target->SetModHaste(castRate);
-			target->SetModRangedHaste(castRate);
-			target->SetModHasteRegen(castRate);
-			target->SetModTimeRate(castRate);
-		}
+	void OnRemove(AuraEffect const* aurEff, AuraEffectHandleModes /*mode*/)
+	{
+		HandleTimeRate(aurEff, false);
 	}
 
 	void Register() override
 	{
 		AfterEffectApply += AuraEffectApplyFn(spell_speed::OnApply, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
 		AfterEffectRemove += AuraEffectRemoveFn(spell_speed::OnRemove, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+	}
+};
+
+// Arcane Deflection - 1290802 (absorbe les degats venant de face et de dos)
+// Arcane Deflection - 1290806 (absorbe les degats venant des cotes)
+// Absorption illimitee mais directionnelle, selon la position de l attaquant par rapport a l orientation du lanceur
+// (quarts de 90 degres). Le lanceur ne pivote plus pendant la canalisation : il faut se placer du bon cote.
+class spell_savor_arcane_deflection : public AuraScript
+{
+	static constexpr uint32 SPELL_DEFLECTION_FRONT_BACK = 1290802;
+
+	static void CalculateAmount(AuraScript const&, AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
+	{
+		amount = -1;
+	}
+
+	void Absorb(AuraEffect* /*aurEff*/, DamageInfo const& dmgInfo, uint32& absorbAmount)
+	{
+		absorbAmount = 0;
+
+		Unit* attacker = dmgInfo.GetAttacker();
+		Unit* target = GetTarget();
+		if (!attacker || attacker == target)
+			return;
+
+		bool front = target->HasInArc(float(M_PI) / 2.0f, attacker);
+		bool back = !target->HasInArc(float(M_PI) * 3.0f / 2.0f, attacker);
+		bool frontOrBack = front || back;
+
+		if (frontOrBack == (GetId() == SPELL_DEFLECTION_FRONT_BACK))
+			absorbAmount = dmgInfo.GetDamage();
+	}
+
+	void AfterApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+	{
+		GetTarget()->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+	}
+
+	void AfterRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+	{
+		GetTarget()->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+	}
+
+	void Register() override
+	{
+		DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_savor_arcane_deflection::CalculateAmount, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB);
+		OnEffectAbsorb += AuraEffectAbsorbFn(spell_savor_arcane_deflection::Absorb, EFFECT_0);
+		AfterEffectApply += AuraEffectApplyFn(spell_savor_arcane_deflection::AfterApply, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB, AURA_EFFECT_HANDLE_REAL);
+		AfterEffectRemove += AuraEffectRemoveFn(spell_savor_arcane_deflection::AfterRemove, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB, AURA_EFFECT_HANDLE_REAL);
+	}
+};
+
+// Rewind Time - 101590
+// Le joueur qui lance le sort revient a son clone fige (NPC 500018 dont il est le proprietaire) : il est ressuscite
+// et remis a neuf, et reste immobilise le temps du retour. Le decompte du sablier et la fin du rewind
+// (restitution du controle, retour de la vitesse en cours) restent geres par High Arcanist Savor.
+class spell_rewind_time : public SpellScript
+{
+	static constexpr uint32 SPELL_SPEED_NORMAL    = 207012;
+	static constexpr uint32 SPELL_ETERNAL_SILENCE = 158061;
+	static constexpr uint32 NPC_PLAYER_CLONE      = 500018;
+	static constexpr float  CLONE_SEARCH_RANGE    = 200.0f;
+	static constexpr float  REWIND_TRAVEL_SECONDS = 3.0f;
+	static constexpr float  MIN_REWIND_SPEED      = 1.0f;
+	static constexpr float  MAX_REWIND_CHARGE_DISTANCE = 100.0f;
+
+	bool Validate(SpellInfo const* /*spellInfo*/) override
+	{
+		return ValidateSpellInfo({ SPELL_SPEED_NORMAL, SPELL_ETERNAL_SILENCE });
+	}
+
+	// Le clone est transmis par Savor (CustomArg) ; a defaut, recherche autour du joueur
+	Creature* FindClone(Player* player) const
+	{
+		if (ObjectGuid const* cloneGuid = std::any_cast<ObjectGuid>(&GetSpell()->m_customArg))
+		{
+			Creature* clone = ObjectAccessor::GetCreature(*player, *cloneGuid);
+			return clone && clone->IsAlive() ? clone : nullptr;
+		}
+
+		std::list<Creature*> clones;
+		player->GetCreatureListWithEntryInGrid(clones, NPC_PLAYER_CLONE, CLONE_SEARCH_RANGE);
+		for (Creature* clone : clones)
+			if (clone->IsAlive() && clone->GetOwnerGUID() == player->GetGUID())
+				return clone;
+
+		return nullptr;
+	}
+
+	void HandleDummy(SpellEffIndex /*effIndex*/)
+	{
+		Player* player = GetCaster()->ToPlayer();
+		if (!player)
+			return;
+
+		Creature* clone = FindClone(player);
+		if (!clone)
+			return;
+
+		if (player->isDead())
+		{
+			player->ResurrectPlayer(1.0f);
+			player->SpawnCorpseBones();
+		}
+
+		player->CastSpell(player, SPELL_SPEED_NORMAL, true);
+		// Silence + pacification (auras 27 et 60) le temps du retour, retires par Savor a la fin du rewind
+		player->CastSpell(player, SPELL_ETERNAL_SILENCE, true);
+		player->SetClientControl(player, false);
+
+		// Retour au clone en ~3 s (vitesse minimale si le joueur n a pas bouge) ; teleportation directe s il est trop loin
+		// pour un deplacement (fantome au cimetiere)
+		float distance = player->GetDistance(clone);
+		if (distance > MAX_REWIND_CHARGE_DISTANCE)
+			player->NearTeleportTo(clone->GetPosition());
+		else
+			player->GetMotionMaster()->MoveCharge(clone->GetPositionX(), clone->GetPositionY(), clone->GetPositionZ(),
+				std::max(distance / REWIND_TRAVEL_SECONDS, MIN_REWIND_SPEED));
+
+		player->SetFullHealth();
+		player->SetFullPower(player->GetPowerType());
+		player->GetSpellHistory()->ResetAllCooldowns();
+		player->GetSpellHistory()->ResetAllCharges();
+
+		// Le retour en arriere leve les verrous des hates temporelles (Heroisme, Furie sanguinaire, Distorsion temporelle)
+		player->RemoveAurasDueToSpell(57723);   // Exhaustion
+		player->RemoveAurasDueToSpell(57724);   // Sated
+		player->RemoveAurasDueToSpell(80354);   // Temporal Displacement
+		player->RemoveAurasDueToSpell(102381);  // Temporal Blast
+	}
+
+	void Register() override
+	{
+		OnEffectHit += SpellEffectFn(spell_rewind_time::HandleDummy, EFFECT_1, SPELL_EFFECT_DUMMY);
 	}
 };
 
@@ -4564,6 +4728,90 @@ struct areatrigger_purge_captain : public areatrigger_purge
 	}
 };
 
+// 500006 - Entree de l arene de High Arcanist Savor (egouts)
+// Intro de Savor : les Saccage-Soleil et peons autour de lui se teleportent, il se met en levitation, devient
+// attaquable et se protege (Immune, qui le protege pendant la phase des Grimoires).
+// Reste en place, contrairement aux autres areatrigger_purge : apres un wipe, Savor a perdu ses auras et l intro doit
+// se rejouer au retour des joueurs ; la levitation sert de marqueur d intro deja jouee.
+struct areatrigger_purge_savor : public areatrigger_purge
+{
+	static constexpr uint32 SPELL_IMMUNE        = 299144;
+	static constexpr uint32 SPELL_LEVITATE      = 252620;
+	static constexpr float  CLEAR_RADIUS        = 25.0f;
+
+	static constexpr std::array<uint32, 4> CLEARED_ENTRIES =
+	{
+		68757,      // Sunreaver Pyromancer
+		68051,      // Sunreaver Aegis
+		68760,      // Sunreaver Summoner
+		126471      // Horde Peon
+	};
+
+	areatrigger_purge_savor(AreaTrigger* at) : areatrigger_purge(at) {}
+
+	DLPPhases CheckPhase() override
+	{
+		return DLPPhases::RemainingSunreavers;
+	}
+
+	void OnUnitExit(Unit* /*unit*/, AreaTriggerExitReason /*reason*/) override
+	{
+		consumed = false;
+	}
+
+	void Process(Player* player) override
+	{
+		Creature* savor = instance->GetCreature(DATA_HIGH_ARCANIST_SAVOR);
+		if (!savor || !savor->IsAlive() || savor->IsEngaged() || savor->HasAura(SPELL_LEVITATE) || player->IsFriendlyTo(savor))
+			return;
+
+		for (uint32 entry : CLEARED_ENTRIES)
+		{
+			std::list<Creature*> creatures;
+			savor->GetCreatureListWithEntryInGrid(creatures, entry, CLEAR_RADIUS);
+			for (Creature* creature : creatures)
+			{
+				creature->SetImmuneToAll(true);
+				creature->CastSpell(creature, SPELL_TELEPORT_VISUAL_ONLY);
+				creature->DespawnOrUnsummon(1300ms);
+			}
+		}
+
+		savor->RemoveAllAuras();
+		savor->AddAura(SPELL_LEVITATE, savor);
+		savor->SetImmuneToAll(false);
+		savor->CastSpell(savor, SPELL_IMMUNE, true);
+	}
+};
+
+// 500007 - Galerie d'Aegwynn, devant Narasi (prison)
+// Rommath cesse de suivre le joueur, devient intouchable et prend position ; le scenario enchaine
+// ensuite la replique de Rommath puis l'affrontement Surdiel / Narasi (EVENT_PRISON_NARASI_REACHED).
+struct areatrigger_purge_narasi : public areatrigger_purge
+{
+	areatrigger_purge_narasi(AreaTrigger* at) : areatrigger_purge(at) {}
+
+	DLPPhases CheckPhase() override
+	{
+		return DLPPhases::TheEscape_Escort;
+	}
+
+	void Process(Player* /*player*/) override
+	{
+		Creature* rommath = instance->GetCreature(DATA_GRAND_MAGISTER_ROMMATH);
+		if (!rommath)
+			return;
+
+		rommath->SetImmuneToAll(true);
+		rommath->AI()->DoAction(ACTION_ROMMATH_STOP_FOLLOW);
+		rommath->SetHomePosition(RommathPos02);
+		rommath->GetMotionMaster()->Clear();
+		rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos02, true, RommathPos02.GetOrientation());
+
+		instance->SetData(EVENT_PRISON_NARASI_REACHED, 0U);
+	}
+};
+
 void AddSC_npcs_dalaran_purge()
 {
 	// Neutral
@@ -4608,13 +4856,16 @@ void AddSC_npcs_dalaran_purge()
 
 	// Area Triggers Custom
 	RegisterAreaTriggerAI(areatrigger_purge_captain);
+	RegisterAreaTriggerAI(areatrigger_purge_savor);
+	RegisterAreaTriggerAI(areatrigger_purge_narasi);
 
 	// Spells
 	RegisterSpellScript(spell_purge_teleport);
 	RegisterSpellScript(spell_purge_glacial_spike);
 	RegisterSpellScript(spell_purge_glacial_spike_summon);
 	RegisterSpellScript(spell_speed);
-	RegisterSpellScript(spell_living_ledgers);
+	RegisterSpellScript(spell_rewind_time);
+	RegisterSpellScript(spell_savor_arcane_deflection);	RegisterSpellScript(spell_living_ledgers);
 	RegisterSpellScript(spell_big_bang);
 	RegisterSpellScript(spell_atonement_stormwind_cleric);
 	RegisterSpellScript(spell_atonement_effect_stormwind_cleric);

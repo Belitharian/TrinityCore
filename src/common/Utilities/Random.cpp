@@ -19,6 +19,7 @@
 #include "Errors.h"
 #include "SFMTRand.h"
 #include <boost/math/tools/roots.hpp>
+#include <limits>
 #include <memory>
 #include <random>
 
@@ -117,6 +118,11 @@ struct PseudoRandomDistributionChanceTable : std::array<float, 10000>
                 float chanceToFail = 1 - p * i;
                 chain.second = chain.second * chanceToFail - chain.first * i;
                 chain.first = chain.first * chanceToFail;
+
+                // Emerald: stop once remaining terms can no longer change the float sums (same table, ~11s -> ~2ms at startup)
+                constexpr float negligible = std::numeric_limits<float>::epsilon() / 4;
+                if (std::abs(chain.first) < std::abs(result.first) * negligible && std::abs(chain.second) < std::abs(result.second) * negligible)
+                    break;
 
                 result.first += chain.first;
                 result.second += chain.second;

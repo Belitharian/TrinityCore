@@ -1425,6 +1425,12 @@ class spell_mage_shatter : public AuraScript
 	static void ShatterFreezing(Unit* caster, Unit* target, AuraEffect const* aurEff)
 	{
 		Aura* freezing = target->GetAura(SPELL_MAGE_FREEZING, caster->GetGUID());
+
+		// PNJ qui partagent leurs auras : le Freezing peut avoir ete pose par un autre PNJ.
+		if (!freezing)
+			if (Creature* creature = caster->ToCreature(); creature && creature->SharesAurasWithCreatures())
+				freezing = target->GetAura(SPELL_MAGE_FREEZING);
+
 		if (!freezing)
 			return;
 

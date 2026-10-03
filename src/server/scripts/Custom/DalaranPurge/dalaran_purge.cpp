@@ -355,7 +355,7 @@ public:
                     if (GameObject* portal = m_instance->GetGameObject(DATA_PORTAL_TO_PRISON))
                     {
                         portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
-                        portal->SetVignette(VIGNETTE_INTERACTION);
+                        portal->SetVignette(VIGNETTE_PORTAL);
                     }
                 }
                 me->HandleEmoteCommand(EMOTE_ONESHOT_POINT);
@@ -408,10 +408,7 @@ public:
 
         DLPPhases const phase = static_cast<DLPPhases>(m_instance->GetData(DATA_SCENARIO_PHASE));
         if (phase == DLPPhases::TheEscape_Events)
-        {
-            me->RemoveAurasDueToSpell(SPELL_COSMETIC_YELLOW_ARROW);
             m_instance->TriggerGameEvent(EVENT_FIND_ROMMATH_01);
-        }
     }
 
     void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
@@ -727,6 +724,32 @@ class spell_purge_hostile_area_only : public SpellScript
     }
 };
 
+// 195838 - Horde (illusion : faction Horde + reactions forcees envers la Horde et l'Alliance)
+//
+// Un PNJ dont la faction a une reputation (Rommath : Silvermoon City, Surdiel)
+// juge un joueur sur sa reputation, avant la faction : pour un personnage de
+// l'Alliance, Deteste. Le joueur voyait ses allies en amis, mais eux le
+// voyaient en ennemi et leurs sorts de zone le touchaient. Pendant l'illusion,
+// seule la faction compte (UNIT_FLAG2_IGNORE_REPUTATION).
+class spell_purge_horde_illusion_reactions : public AuraScript
+{
+    void AfterApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        GetTarget()->SetUnitFlag2(UNIT_FLAG2_IGNORE_REPUTATION);
+    }
+
+    void AfterRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        GetTarget()->RemoveUnitFlag2(UNIT_FLAG2_IGNORE_REPUTATION);
+    }
+
+    void Register() override
+    {
+        AfterEffectApply += AuraEffectApplyFn(spell_purge_horde_illusion_reactions::AfterApply, EFFECT_0, SPELL_AURA_MOD_FACTION, AURA_EFFECT_HANDLE_REAL);
+        AfterEffectRemove += AuraEffectRemoveFn(spell_purge_horde_illusion_reactions::AfterRemove, EFFECT_0, SPELL_AURA_MOD_FACTION, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
 void AddSC_dalaran_purge()
 {
 	RegisterDalaranAI(npc_jaina_dalaran_purge);
@@ -737,4 +760,5 @@ void AddSC_dalaran_purge()
 
     RegisterSpellScript(spell_meteor_storm);
     RegisterSpellScript(spell_purge_hostile_area_only);
+    RegisterSpellScript(spell_purge_horde_illusion_reactions);
 }

@@ -92,6 +92,7 @@ struct TempSummonData
     Position pos;        ///< Position, where should be creature spawned
     TempSummonType type; ///< Summon type, see TempSummonType for available types
     Milliseconds time;   ///< Despawn time, usable only with certain temp summon types
+    uint32 spawnRegionId = 0; ///< Spawn region the summon belongs to, see CriteriaType::KilledAllUnitsInSpawnRegion
 };
 
 // DB scripting commands

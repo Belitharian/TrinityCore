@@ -1224,12 +1224,21 @@ Optional<uint32> GetSpellToCast(uint32 spellId)
     return {};
 }
 
-// Mots sacres : seuls sorts qui invoquent ou renforcent l'image (392988). Ce talent fait deja
-// lancer l'image ; 405216 doit donc les ignorer, sinon l'image lance son sort deux fois.
-bool IsHolyWord(SpellInfo const* spellInfo)
+// Sorts qui invoquent ou renforcent l'image (talent 392988). Ce talent fait deja lancer
+// l'image ; 405216 doit donc les ignorer, sinon l'image lance son sort deux fois.
+bool IsSummonTrigger(SpellInfo const* spellInfo)
 {
-    if (spellInfo->Id == SPELL_PRIEST_HOLY_WORD_SERENITY_NPC)
-        return true;
+    // Sorts de PNJ ajoutes manuellement
+    switch (spellInfo->Id)
+    {
+        case SPELL_PRIEST_RENEW_NPC:
+        case SPELL_PRIEST_FLASH_HEAL_NPC:
+        case SPELL_PRIEST_POWER_WORD_SHIELD_NPC:
+        case SPELL_PRIEST_HOLY_WORD_SERENITY_NPC:
+            return true;
+        default:
+            break;
+    }
 
     // Filtre spell_proc original de 392988 (famille Priest, masques des Mots sacres)
     return spellInfo->SpellFamilyName == SPELLFAMILY_PRIEST
@@ -1273,9 +1282,7 @@ class spell_pri_divine_image : public AuraScript
         if (!spellInfo)
             return false;
 
-        // Uniquement les Mots sacres (Holy Word: Serenity PNJ inclus) : les autres sorts
-        // sont relayes par 405216 tant que l'image existe.
-        return DivineImageHelpers::IsHolyWord(spellInfo);
+        return DivineImageHelpers::IsSummonTrigger(spellInfo);
     }
 
     static void HandleProc(AuraScript const& script, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
@@ -1375,8 +1382,8 @@ class spell_pri_divine_image_spell_triggered : public AuraScript
         if (!spellInfo)
             return false;
 
-        // Mots sacres deja relayes par le talent 392988 (spell_pri_divine_image::HandleProc)
-        if (DivineImageHelpers::IsHolyWord(spellInfo) && eventInfo.GetActor()->HasAura(SPELL_PRIEST_DIVINE_IMAGE))
+        // Deja relayes par le talent 392988 (spell_pri_divine_image::HandleProc)
+        if (DivineImageHelpers::IsSummonTrigger(spellInfo) && eventInfo.GetActor()->HasAura(SPELL_PRIEST_DIVINE_IMAGE))
             return false;
 
         // Sorts de PNJ autorises explicitement

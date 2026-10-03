@@ -130,7 +130,6 @@ enum DLPSpells
 	SPELL_TELEPORT_VISUAL               = 7077,
 	SPELL_TELEPORT_VISUAL_ONLY		    = 51347,
     SPELL_FLASHBACK_EFFECT              = 70649,
-	SPELL_COSMETIC_YELLOW_ARROW         = 92230,
 	SPELL_WATERFALL                     = 125563,
     SPELL_FROZEN_SLAM                   = 126817,
 	SPELL_FROSTBOLT                     = 427863,
@@ -188,6 +187,7 @@ enum DLPMisc
 	EVENT_FIND_ROMMATH_01               = 65821,
 	EVENT_FREE_AETHAS_SUNREAVER         = 65822,
 	EVENT_CAPTAIN_ANTHEAS_TELEPORT      = 65823,
+	EVENT_PRISON_NARASI_REACHED         = 65824,    // areatrigger_purge_narasi : Rommath et le joueur arrivent devant Narasi
 
     // Creature Groups
     CREATURE_GROUP_PRISON               = 0,
@@ -243,15 +243,14 @@ enum DLPMisc
 	CRITERIA_TREE_FIND_ROMMATH          = 1000069,  // What happened? - Criteria Tree 1
 	CRITERIA_TREE_FOLLOW_TRACKS         = 1000070,  // What happened? - Criteria Tree 2
 	CRITERIA_TREE_FREE_AETHAS           = 1000071,  // What happened? - Criteria Tree 3
+	CRITERIA_TREE_PRISON_CLEARED        = 1000097,  // What happened? - cache : groupe de la prison elimine (region 500201)
 	CRITERIA_TREE_HANDS_OF_THE_CHEF     = 1000072,
 
 	// Vignettes (Vignette.db2, hotfixes) - marqueurs minimap / carte.
 	// VIGNETTE_NONE efface la vignette d'une creature ou d'un GameObject.
 	// Une vignette de creature disparait seule a sa mort.
 	VIGNETTE_NONE                       = 0,
-	VIGNETTE_INTERACTION                = 50001,    // Objet / PNJ a utiliser (captive, barriere, portail)
-	VIGNETTE_LADY_JAINA_PROUDMOORE      = 50003,
-	VIGNETTE_HORDE_TROOPS               = 50006,    // Citoyens Saccage-Soleil a chasser (Un coup de menage)
+	VIGNETTE_HORDE_TROOPS               = 50006,    // Citoyens Saccage-Soleil a chasser (Un coup de menage), surbrillance seule
 	VIGNETTE_ARCHMAGE_LANDALOCK         = 50008,
 	VIGNETTE_SUNREAVER_CAPTAIN          = 50009,
 	VIGNETTE_MAGISTER_BRASAEL           = 50010,
@@ -260,7 +259,12 @@ enum DLPMisc
 	VIGNETTE_GRAND_MAGISTER_ROMMATH     = 50013,
 	VIGNETTE_AETHAS_SUNREAVER           = 50014,
 	VIGNETTE_ARCANIST_RATHAELLA         = 50015,
-	VIGNETTE_DALARAN_CITIZEN            = 50016,    // Citoyens refugies derriere les barrieres (Servir et proteger)
+	VIGNETTE_DALARAN_CITIZEN            = 50016,    // Citoyens refugies derriere les barrieres (Servir et proteger), surbrillance seule
+	VIGNETTE_LADY_JAINA_PROUDMOORE      = 50027,
+	VIGNETTE_ARCANE_BARRIER             = 50028,    // Barrieres a dissiper (Servir et proteger)
+	VIGNETTE_PORTAL                     = 50029,    // Portails a emprunter (egouts, prison)
+	VIGNETTE_PORTAL_TO_STORMWIND        = 50030,    // Portail de fin (Entre les mains du chef)
+	VIGNETTE_JAINA_BOSS                 = 50031,    // Jaina vue par les Saccage-Soleil (flashback) : boss, surbrillance rouge
 
 	// Point Id
 	MOVEMENT_INFO_POINT_NONE            = 0,

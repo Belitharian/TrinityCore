@@ -50,8 +50,8 @@ const ObjectData gameobjectData[] =
 // L'ordre numerique est SIGNIFICATIF : Next() incremente eventId de 1 et
 // planifie ainsi automatiquement l'event suivant dans la sequence. Ne pas
 // reordonner sans verifier les chaines de Next().
-// Les watchdogs (EVT_ESCORT_PORTAL_CHECKER, EVT_PRISON_NARASI_CHECKER)
-// sortent de cette logique : ils s'auto-replanifient jusqu'a validation.
+// Le watchdog EVT_ESCORT_PORTAL_CHECKER sort de cette logique : il
+// s'auto-replanifie jusqu'a validation.
 enum DLPEvents : uint32
 {
 	// Dalaran : la purge vue en flashback
@@ -89,13 +89,12 @@ enum DLPEvents : uint32
 	EVT_ESCORT_PORTAL_CHECKER,              // Watchdog : Rommath a portee du portail ?
 
 	// What happened! : la prison
-	EVT_PRISON_AETHAS_REVEAL,               // Declenche par OnUnitDeath une fois le groupe mort
+	EVT_PRISON_AETHAS_REVEAL,               // Declenche par CRITERIA_TREE_PRISON_CLEARED une fois le groupe mort
 	EVT_PRISON_AETHAS_AURAS,
 	EVT_PRISON_ROMMATH_TELEPORT,
 	EVT_PRISON_TELEPORT_GROUP,              // Teleport des joueurs vers le gardien
 	EVT_PRISON_ROMMATH_FOLLOW,              // Rommath suit le joueur le plus proche
-	EVT_PRISON_NARASI_CHECKER,              // Watchdog : Rommath a portee de Narasi ?
-	EVT_PRISON_NARASI_TALK_01,
+	EVT_PRISON_NARASI_TALK_01,              // Lance par EVENT_PRISON_NARASI_REACHED (areatrigger_purge_narasi)
 	EVT_PRISON_SURDIEL_TALK_02,             // Surdiel engage Narasi
 	EVT_PRISON_ROMMATH_TALK_08,
 
@@ -186,6 +185,12 @@ class scenario_dalaran_purge : public InstanceMapScript
 				case EVENT_CAPTAIN_ANTHEAS_TELEPORT:
 					events.ScheduleEvent(EVT_THE_ARCANIST_TELEPORT_01, 1ms);
 					break;
+				// areatrigger_purge_narasi a arrete Rommath devant Narasi : sa replique passe par
+				// le dialogue du scenario pour que la suite attende la fin de la ligne.
+				case EVENT_PRISON_NARASI_REACHED:
+					Talk(GetRommath(), SAY_INFILTRATE_ROMMATH_06);
+					events.ScheduleEvent(EVT_PRISON_NARASI_TALK_01, dialogue.Consume(3s));
+					break;
 				default:
 					break;
 			}
@@ -228,6 +233,8 @@ class scenario_dalaran_purge : public InstanceMapScript
 						creature->SetFaction(FACTION_DALARAN_PATROL);
 						creature->setActive(true);
 						creature->SetVisible(true);
+						if (creature->GetEntry() == NPC_JAINA_PROUDMOORE_PATROL)
+							creature->SetVignette(VIGNETTE_LADY_JAINA_PROUDMOORE);
 					});
 					// Un coup de menage : les Saccage-Soleil a chasser de la ville.
 					DoOnCreatures(sunreavers, [](Creature* creature)
@@ -256,6 +263,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 						creature->SetFaction(FACTION_FRIENDLY);
 						creature->setActive(false);
 						creature->SetVisible(false);
+						creature->SetVignette(VIGNETTE_NONE);
 					});
 
 					for (ObjectGuid guid : sunreavers)
@@ -314,7 +322,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					// npc_arcane_barrier retire son marqueur une fois dissipee.
 					DoOnCreatures(barriers, [](Creature* creature)
 					{
-						creature->SetVignette(VIGNETTE_INTERACTION);
+						creature->SetVignette(VIGNETTE_ARCANE_BARRIER);
 					});
 					// Les citoyens a liberer, visibles sur la carte : Lan'dalock
 					// retire le marqueur de chacun des qu'il le prend en charge.
@@ -357,7 +365,10 @@ class scenario_dalaran_purge : public InstanceMapScript
 						jaina->AI()->EnterEvadeMode(EvadeReason::Other);
 
 						if (GameObject* portal = GetGameObject(DATA_PORTAL_TO_SEWERS))
+						{
 							portal->RemoveFlag(GO_FLAG_IN_USE | GO_FLAG_NOT_SELECTABLE | GO_FLAG_LOCKED);
+							portal->SetVignette(VIGNETTE_PORTAL);
+						}
 					}
 					// Les Saccage-Soleil restants : le Grand Arcaniste dans le sanctuaire.
 					if (Creature* savor = GetCreature(DATA_HIGH_ARCANIST_SAVOR))
@@ -423,6 +434,8 @@ class scenario_dalaran_purge : public InstanceMapScript
 						creature->SetFaction(FACTION_DALARAN_PATROL);
 						creature->setActive(true);
 						creature->SetVisible(true);
+						if (creature->GetEntry() == NPC_JAINA_PROUDMOORE_PATROL)
+							creature->SetVignette(VIGNETTE_LADY_JAINA_PROUDMOORE);
 					});
 					DoOnCreatures(citizens, [this](Creature* creature)
 					{
@@ -440,6 +453,10 @@ class scenario_dalaran_purge : public InstanceMapScript
 						player->CastSpell(player, SPELL_FLASHBACK_EFFECT, true);
 						player->CastSpell(player, SPELL_FADING_TO_BLACK, true);
 					});
+
+					// Souvenir : Surdiel n'est plus une cible (vignette posee a C'est pour un retrait)
+					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
+						surdiel->SetVignette(VIGNETTE_NONE);
 
 					if (Creature* zuros = GetCreature(DATA_MAGE_COMMANDER_ZUROS))
 					{
@@ -473,7 +490,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 
 					if (Creature* rommath = GetRommath())
 					{
-						rommath->CastSpell(rommath, SPELL_COSMETIC_YELLOW_ARROW);
 						rommath->SetVignette(VIGNETTE_GRAND_MAGISTER_ROMMATH);
 						rommath->SetFullHealth();
 						rommath->SetFullPower(POWER_MANA);
@@ -487,7 +503,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 						surdiel->SetHomePosition(SurdielPos01);
 					}
 
-					events.ScheduleEvent(EVT_SEWERS_TELEPORT_PLAYERS, 500ms);
+					events.ScheduleEvent(EVT_SEWERS_TELEPORT_PLAYERS, 300ms);
 					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape_Events);
 					break;
 				}
@@ -503,7 +519,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 						// Entre les mains du chef : prendre le portail vers Hurlevent.
 						if (GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_STORMWIND, EndPortalPos01,
 												QuaternionData::fromEulerAnglesZYX(EndPortalPos01.GetOrientation(), 0.0f, 0.0f), 0s))
-							portal->SetVignette(VIGNETTE_INTERACTION);
+							portal->SetVignette(VIGNETTE_PORTAL_TO_STORMWIND);
 
 						Trinity::RespawnDo doRespawn;
 						Trinity::WorldObjectWorker<Trinity::RespawnDo> worker(jaina, doRespawn);
@@ -527,6 +543,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 						creature->SetFaction(FACTION_FRIENDLY);
 						creature->setActive(false);
 						creature->SetVisible(false);
+						creature->SetVignette(VIGNETTE_NONE);
 					});
 					DoOnCreatures(extraction, [this](Creature* creature)
 					{
@@ -544,10 +561,9 @@ class scenario_dalaran_purge : public InstanceMapScript
 				// What happened! - Find the Grand Magister Rommath
 				case CRITERIA_TREE_FIND_ROMMATH:
 				{
-					// Rommath est escorte : plus besoin de le signaler. Le portail
-					// de la prison est marque quand il s'ouvre (npc_magister_rommath_purge).
-					if (Creature* rommath = GetRommath())
-						rommath->SetVignette(VIGNETTE_NONE);
+					// Rommath reste signale pendant l'escorte et la prison, jusqu'a
+					// l'ouverture du portail vers Lune-d'Argent (EVT_ESCAPE_ROMMATH_PORTAL).
+					// Le portail de la prison est marque quand il s'ouvre (npc_magister_rommath_purge).
 					events.ScheduleEvent(EVT_ESCORT_ROMMATH_TALK_01, 2s);
 					SetData(DATA_SCENARIO_PHASE, (uint32)DLPPhases::TheEscape_Escort);
 					break;
@@ -558,12 +574,9 @@ class scenario_dalaran_purge : public InstanceMapScript
 					if (GameObject* portal = GetGameObject(DATA_PORTAL_TO_PRISON))
 						portal->SetVignette(VIGNETTE_NONE);
 
-					std::list<TempSummon*> summons;
-					instance->SummonCreatureGroup(CREATURE_GROUP_PRISON, &summons);
-
-					prison.clear();
-					for (TempSummon* summon : summons)
-						prison.push_back(summon->GetGUID());
+					// Groupe de la prison : region 500201 (creature_summon_groups), suivie par le
+					// critere cache CRITERIA_TREE_PRISON_CLEARED
+					instance->SummonCreatureGroup(CREATURE_GROUP_PRISON);
 
 					if (Creature* rommath = GetRommath())
 					{
@@ -572,6 +585,10 @@ class scenario_dalaran_purge : public InstanceMapScript
 					}
 					break;
 				}
+				// What happened! - critere cache : le groupe de la prison est elimine
+				case CRITERIA_TREE_PRISON_CLEARED:
+					events.ScheduleEvent(EVT_PRISON_AETHAS_REVEAL, 2s);
+					break;
 				default:
 					break;
 			}
@@ -585,8 +602,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 			InstanceScript::OnCreatureCreate(creature);
 
 			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
-			creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
-			creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
 			creature->SetBoundingRadius(20.f);
 
 			switch (creature->GetEntry())
@@ -674,17 +689,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 				default:
 					break;
 			}
-		}
-
-		void OnUnitDeath(Unit* unit) override
-		{
-			InstanceScript::OnUnitDeath(unit);
-
-			// Le groupe de la prison est compose de plusieurs entries differentes :
-			// on suit les GUIDs summonnes plutot que les entries, et l'etape ne
-			// se declenche qu'une fois le dernier membre tombe.
-			if (std::erase(prison, unit->GetGUID()) && prison.empty())
-				events.ScheduleEvent(EVT_PRISON_AETHAS_REVEAL, 2s);
 		}
 
 		void OnGameObjectCreate(GameObject* go) override
@@ -899,7 +903,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					});
 					if (Creature* surdiel = GetCreature(DATA_MAGISTER_SURDIEL))
 						surdiel->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, SurdielPos02, true, SurdielPos02.GetOrientation());
-					Next(1s);
+					Next(850ms);
 					break;
 				case EVT_SEWERS_HORDE_ILLUSION:
 					DoOnCreatures(extraction, [this](Creature* creature)
@@ -1021,33 +1025,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 						hathorel->SetHomePosition(HathorelPos02);
 						hathorel->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HathorelPos02);
 					}
-					Next(2s);
-					break;
-				case EVT_PRISON_NARASI_CHECKER:
-					if (Creature* rommath = GetRommath())
-					{
-						if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
-						{
-							if (rommath->IsWithinDist(narasi, 45.0f))
-							{
-								events.CancelEvent(EVT_PRISON_NARASI_CHECKER);
-
-								Talk(rommath, SAY_INFILTRATE_ROMMATH_06);
-
-								rommath->SetImmuneToAll(true);
-								rommath->AI()->DoAction(ACTION_ROMMATH_STOP_FOLLOW);
-								rommath->SetHomePosition(RommathPos02);
-								rommath->GetMotionMaster()->Clear();
-								rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos02, true, RommathPos02.GetOrientation());
-
-								Next(3s);
-							}
-							else
-							{
-								events.RescheduleEvent(EVT_PRISON_NARASI_CHECKER, 2s);
-							}
-						}
-					}
+					// Fin de chaine : la suite est relancee par areatrigger_purge_narasi (EVENT_PRISON_NARASI_REACHED)
 					break;
 				case EVT_PRISON_NARASI_TALK_01:
 					if (Creature* narasi = GetCreature(DATA_NARASI_SNOWDAWN))
@@ -1131,6 +1109,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					{
 						jaina->SetImmuneToAll(true);
 						jaina->SetWalk(true);
+						jaina->SetVignette(VIGNETTE_JAINA_BOSS);
 						jaina->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos03);
 						jaina->DespawnOrUnsummon(11s);
 					}
@@ -1140,6 +1119,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 					if (Creature* rommath = GetRommath())
 					{
 						Talk(rommath, SAY_INFILTRATE_ROMMATH_07);
+						rommath->SetVignette(VIGNETTE_NONE);
 
 						if (GameObject* portal = rommath->SummonGameObject(GOB_PORTAL_TO_SILVERMOON, EndPortalPos01,
 							QuaternionData::fromEulerAnglesZYX(EndPortalPos01.GetOrientation(), 0.0f, 0.0f), 0s))
@@ -1186,7 +1166,6 @@ class scenario_dalaran_purge : public InstanceMapScript
 		GuidVector sunreavers;            // Sunreavers a liberer
 		GuidVector extraction;            // Prisonniers en cours d'extraction
 		GuidVector barriers;              // Barrieres magiques
-		GuidVector prison;                // Groupe de la prison (voir OnUnitDeath)
 
 		ObjectGuid endPortal;             // Portail de fin vers Lune-d'argent
 

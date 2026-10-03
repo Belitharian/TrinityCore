@@ -39,6 +39,9 @@ void CustomAI::Initialize()
 	circleClockwise = roll_chance(50);
 	encircleReactOnCooldown = false;
 
+	// Une seule aura par sort et par cible entre PNJ custom (voir Unit::_TryStackingOrRefreshingExistingAura).
+	me->SetSharesAurasWithCreatures(true);
+
 	scheduler.SetValidator([this]
 	{
 		return !me->HasBreakableByDamageCrowdControlAura()
@@ -310,22 +313,37 @@ bool CustomAI::CanAIAttack(Unit const* who) const
 
 SpellCastResult CustomAI::DoCast(Unit* victim, uint32 spellId, CastSpellExtraArgs const& args)
 {
-	if (victim && HasBuffFromOtherCaster(victim, spellId))
+	if (victim && HasAuraFromOtherCaster(victim, spellId))
 		return SPELL_FAILED_AURA_BOUNCED;
 
 	return ScriptedAI::DoCast(victim, spellId, args);
 }
 
-bool CustomAI::HasBuffFromOtherCaster(Unit const* target, uint32 spellId) const
+bool CustomAI::HasAuraFromOtherCaster(Unit const* target, uint32 spellId) const
 {
 	SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, me->GetMap()->GetDifficultyID());
-	if (!spellInfo || !spellInfo->IsPositive())
+	if (!spellInfo)
 		return false;
 
-	bool appliesAura = std::any_of(spellInfo->GetEffects().begin(), spellInfo->GetEffects().end(),
+	// Les auras a stacks ne sont pas bloquees : le core empile sur l'exemplaire existant.
+	if (spellInfo->StackAmount > 1)
+		return false;
+
+	auto const& effects = spellInfo->GetEffects();
+	bool appliesAura = std::any_of(effects.begin(), effects.end(),
 		[](SpellEffectInfo const& effect) { return effect.IsAura(); });
 	if (!appliesAura)
 		return false;
+
+	// Un sort offensif qui fait aussi autre chose (degats directs de Frostbolt
+	// + ralentissement...) doit partir quand meme : seuls les debuffs purs sont filtres.
+	if (!spellInfo->IsPositive())
+	{
+		bool onlyAuras = std::all_of(effects.begin(), effects.end(),
+			[](SpellEffectInfo const& effect) { return !effect.IsEffect() || effect.IsAura(); });
+		if (!onlyAuras)
+			return false;
+	}
 
 	// Notre propre exemplaire peut etre rafraichi : seul celui d'un autre lanceur bloque.
 	auto range = target->GetAppliedAuras().equal_range(spellId);

@@ -4529,8 +4529,19 @@ uint32 SpellInfo::GetSpellXSpellVisualId(WorldObject const* caster /*= nullptr*/
     auto canUseSpellVisual = [=](SpellXSpellVisualEntry const* visual)
     {
         if (visual->CasterPlayerConditionID)
-            if (!caster || !caster->IsPlayer() || !ConditionMgr::IsPlayerMeetingCondition(caster->ToPlayer(), visual->CasterPlayerConditionID))
+        {
+            if (!caster || !caster->IsUnit())
                 return false;
+
+            // Emerald : les creatures ont les memes variantes de visuel que les joueurs (auras de proc, classe, race)
+            if (Player const* player = caster->ToPlayer())
+            {
+                if (!ConditionMgr::IsPlayerMeetingCondition(player, visual->CasterPlayerConditionID))
+                    return false;
+            }
+            else if (!ConditionMgr::IsCreatureMeetingPlayerCondition(caster->ToUnit(), visual->CasterPlayerConditionID))
+                return false;
+        }
 
         if (UnitConditionEntry const* unitCondition = sUnitConditionStore.LookupEntry(visual->CasterUnitConditionID))
             if (!caster || !caster->IsUnit() || !ConditionMgr::IsUnitMeetingCondition(caster->ToUnit(), Object::ToUnit(viewer), unitCondition))

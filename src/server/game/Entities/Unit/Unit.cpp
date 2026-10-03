@@ -373,6 +373,7 @@ Unit::Unit(bool isWorldObject) :
     m_baseSpellCritChance = 5.0f;
 
     m_speed_rate.fill(1.0f);
+    m_speedRateMultiplier = 1.0f;
     SetFlightCapabilityID(0, false);
 
     // remove aurastates allowing special moves
@@ -3418,7 +3419,38 @@ Aura* Unit::_TryStackingOrRefreshingExistingAura(AuraCreateInfo& createInfo)
         ObjectGuid castItemGUID = createInfo.CastItemGUID;
 
         // find current aura from spell and change it's stackamount, or refresh it's duration
-        if (Aura* foundAura = GetOwnedAura(createInfo.GetSpellInfo()->Id, createInfo.GetSpellInfo()->IsStackableOnOneSlotWithDifferentCasters() ? ObjectGuid::Empty : createInfo.CasterGUID, createInfo.GetSpellInfo()->HasAttribute(SPELL_ATTR0_CU_ENCHANT_PROC) ? castItemGUID : ObjectGuid::Empty, 0))
+        Aura* foundAura = GetOwnedAura(createInfo.GetSpellInfo()->Id, createInfo.GetSpellInfo()->IsStackableOnOneSlotWithDifferentCasters() ? ObjectGuid::Empty : createInfo.CasterGUID, createInfo.GetSpellInfo()->HasAttribute(SPELL_ATTR0_CU_ENCHANT_PROC) ? castItemGUID : ObjectGuid::Empty, 0);
+
+        // Emerald : une creature qui partage ses auras reprend l'exemplaire deja
+        // pose par une autre creature (empile / rafraichit) au lieu d'en creer un second.
+        // Ses invocations (Ancetre de Call of the Ancestors...) en heritent.
+        auto sharesAuras = [](Unit const* unit)
+        {
+            Creature const* creature = unit ? unit->ToCreature() : nullptr;
+            return creature && creature->SharesAurasWithCreatures();
+        };
+
+        // Les auras posees par un sort n'ont que le GUID du lanceur (Spell::DoSpellEffectHit), pas son pointeur
+        Unit const* caster = createInfo.Caster;
+        if (!caster && createInfo.CasterGUID.IsCreatureOrVehicle())
+            caster = ObjectAccessor::GetUnit(*this, createInfo.CasterGUID);
+
+        if (!foundAura && caster && caster->IsCreature()
+            && (sharesAuras(caster) || sharesAuras(caster->GetCharmerOrOwner())))
+        {
+            AuraMapBounds range = m_ownedAuras.equal_range(createInfo.GetSpellInfo()->Id);
+            for (AuraMap::const_iterator itr = range.first; itr != range.second; ++itr)
+            {
+                ObjectGuid const& casterGuid = itr->second->GetCasterGUID();
+                if (casterGuid != caster->GetGUID() && casterGuid.IsCreatureOrVehicle() && !itr->second->IsRemoved())
+                {
+                    foundAura = itr->second;
+                    break;
+                }
+            }
+        }
+
+        if (foundAura)
         {
             // effect masks do not match
             // extremely rare case
@@ -8964,6 +8996,8 @@ void Unit::UpdateSpeed(UnitMoveType mtype)
     if (slow)
         AddPct(speed, slow);
 
+    speed *= m_speedRateMultiplier;
+
     if (float minSpeedMod = GetMaxPositiveAuraModifier(SPELL_AURA_MOD_MINIMUM_SPEED))
     {
         float baseMinSpeed = 1.0f;
@@ -8976,6 +9010,23 @@ void Unit::UpdateSpeed(UnitMoveType mtype)
     }
 
     SetSpeedRate(mtype, speed);
+}
+
+void Unit::ApplySpeedRateMultiplier(float multiplier, bool apply)
+{
+    if (multiplier <= 0.0f)
+        return;
+
+    if (apply)
+        m_speedRateMultiplier *= multiplier;
+    else
+        m_speedRateMultiplier /= multiplier;
+
+    for (UnitMoveType mtype : { MOVE_RUN, MOVE_RUN_BACK, MOVE_SWIM, MOVE_SWIM_BACK, MOVE_FLIGHT, MOVE_FLIGHT_BACK })
+        UpdateSpeed(mtype);
+
+    // UpdateSpeed ne recalcule jamais la marche
+    SetSpeedRate(MOVE_WALK, apply ? GetSpeedRate(MOVE_WALK) * multiplier : GetSpeedRate(MOVE_WALK) / multiplier);
 }
 
 float Unit::GetSpeed(UnitMoveType mtype) const
@@ -11491,30 +11542,27 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
     }
 
     // Credit "killed all units in spawn region" once the last creature of the region is dead, whoever killed it
-    if (creature && !creature->IsAlive() && creature->GetSpawnId())
+    if (creature && !creature->IsAlive())
     {
-        if (std::vector<uint32> const* spawnRegions = sObjectMgr->GetCreatureSpawnRegions(creature->GetSpawnId()))
+        for (uint32 spawnRegionId : creature->GetMap()->GetSpawnRegions(creature))
         {
-            for (uint32 spawnRegionId : *spawnRegions)
+            if (!creature->GetMap()->IsSpawnRegionCleared(spawnRegionId))
+                continue;
+
+            for (Player* tapper : tappers)
+                tapper->UpdateCriteria(CriteriaType::KilledAllUnitsInSpawnRegion, spawnRegionId, 0, 0, victim);
+
+            // Group criteria type: the scenario is credited once, even if the region was cleared by a creature
+            if (Scenario* scenario = creature->GetScenario())
             {
-                if (!creature->GetMap()->IsSpawnRegionCleared(spawnRegionId))
-                    continue;
+                Player* referencePlayer = !tappers.empty() ? tappers.front() : nullptr;
+                if (!referencePlayer)
+                    for (MapReference const& ref : creature->GetMap()->GetPlayers())
+                        if ((referencePlayer = ref.GetSource()))
+                            break;
 
-                for (Player* tapper : tappers)
-                    tapper->UpdateCriteria(CriteriaType::KilledAllUnitsInSpawnRegion, spawnRegionId, 0, 0, victim);
-
-                // Group criteria type: the scenario is credited once, even if the region was cleared by a creature
-                if (Scenario* scenario = creature->GetScenario())
-                {
-                    Player* referencePlayer = !tappers.empty() ? tappers.front() : nullptr;
-                    if (!referencePlayer)
-                        for (MapReference const& ref : creature->GetMap()->GetPlayers())
-                            if ((referencePlayer = ref.GetSource()))
-                                break;
-
-                    if (referencePlayer)
-                        scenario->UpdateCriteria(CriteriaType::KilledAllUnitsInSpawnRegion, spawnRegionId, 0, 0, victim, referencePlayer);
-                }
+                if (referencePlayer)
+                    scenario->UpdateCriteria(CriteriaType::KilledAllUnitsInSpawnRegion, spawnRegionId, 0, 0, victim, referencePlayer);
             }
         }
     }

@@ -16,8 +16,6 @@
  */
 
 #include "Scenario.h"
-#include "InstanceScenario.h"
-#include "InstanceScript.h"
 #include "Log.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
@@ -62,7 +60,7 @@ void Scenario::CompleteStep(ScenarioStepEntry const* step)
 {
     CriteriaTree const* tree = sCriteriaMgr->GetCriteriaTree(step->Criteriatreeid);
     if (tree)
-        OnCompletedCriteriaTree(tree);
+        NotifyCompletedCriteriaTree(tree);
 
     if (Quest const* quest = sObjectMgr->GetQuestTemplate(step->RewardQuestID))
         for (ObjectGuid guid : _players)
@@ -286,18 +284,6 @@ void Scenario::DoForAllPlayers(std::function<void(Player*)> const& worker) const
             worker(player);
 }
 
-void Scenario::OnCompletedCriteriaTree(CriteriaTree const* tree)
-{
-    if (InstanceScenario* instanceScenario = reinterpret_cast<InstanceScenario*>(this))
-    {
-        if (InstanceMap* instanceMap = instanceScenario->GetInstance())
-        {
-            if (InstanceScript* instanceScript = instanceMap->GetInstanceScript())
-                instanceScript->OnCompletedCriteriaTree(tree);
-        }
-    }
-}
-
 void Scenario::SendPacket(WorldPacket const* data) const
 {
     DoForAllPlayers([data](Player const* player)
@@ -422,9 +408,4 @@ void Scenario::SendBootPlayer(Player const* player) const
     scenarioBoot.ScenarioGUID = _guid;
     scenarioBoot.ScenarioID = _data->Entry->ID;
     player->SendDirectMessage(scenarioBoot.Write());
-}
-
-void Scenario::SendScenarioEvent(Player* player, uint32 eventId)
-{
-    UpdateCriteria(CriteriaType::AnyoneTriggerGameEventScenario, eventId, 0, 0, nullptr, player);
 }

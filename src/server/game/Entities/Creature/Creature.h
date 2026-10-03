@@ -436,6 +436,12 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         void SetRespawnCompatibilityMode(bool mode = true) { m_respawnCompatibilityMode = mode; }
         bool GetRespawnCompatibilityMode() const { return m_respawnCompatibilityMode; }
 
+        // Emerald : une aura que cette creature applique reutilise (empile /
+        // rafraichit) l'exemplaire deja pose par une autre creature au lieu d'en
+        // creer un second. Active par CustomAI.
+        void SetSharesAurasWithCreatures(bool share) { _sharesAurasWithCreatures = share; }
+        bool SharesAurasWithCreatures() const { return _sharesAurasWithCreatures; }
+
         static float GetDamageMod(CreatureClassifications classification);
 
         float m_SightDistance, m_CombatDistance;
@@ -625,6 +631,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         uint32 _gossipMenuId;
         Optional<uint32> _trainerId;
         float _sparringHealthPct;
+        bool _sharesAurasWithCreatures = false;
 };
 
 class TC_GAME_API AssistDelayEvent : public BasicEvent

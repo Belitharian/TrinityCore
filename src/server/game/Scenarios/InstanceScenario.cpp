@@ -30,6 +30,12 @@ InstanceScenario::InstanceScenario(InstanceMap* map, ScenarioData const* scenari
 {
 }
 
+void InstanceScenario::OnCompletedCriteriaTree(CriteriaTree const* tree)
+{
+    if (InstanceScript* instanceScript = GetInstance()->GetInstanceScript())
+        instanceScript->OnCompletedCriteriaTree(tree);
+}
+
 void InstanceScenario::LoadInstanceData()
 {
     InstanceScript const* instanceScript = _map->ToInstanceMap()->GetInstanceScript();

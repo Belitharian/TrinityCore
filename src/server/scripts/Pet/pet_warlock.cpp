@@ -3,6 +3,7 @@
 #include "PassiveAI.h"
 #include "ScriptMgr.h"
 #include "TemporarySummon.h"
+#include "pet_spawn_cast.h"
 #include "spell_warlock.h"
 
 // Base commune des invocations demoniaques qui peuvent proc Demonic Core a leur despawn
@@ -132,11 +133,45 @@ struct pet_wild_imp : public pet_warlock_demonic_summon
 
 struct pet_dreadstalker : public pet_warlock_demonic_summon
 {
+    static constexpr float LEAP_SPEED  = 20.f;
+    static constexpr float LEAP_HEIGHT = 4.f;
+
     pet_dreadstalker(Creature* creature) : pet_warlock_demonic_summon(creature, AI_Type::Melee) {}
 
     SpellEffIndex GetEffIndex() const override
     {
         return EFFECT_1;
+    }
+
+    // A l'apparition, le traqueffroi bondit sur la cible du maitre (comme sur retail).
+    void OnOwnerSummon(Unit* owner) override
+    {
+        Unit* target = owner->GetVictim();
+        if (!target)
+            if (Player* player = owner->ToPlayer())
+                target = player->GetSelectedUnit();
+
+        if (!target || !me->IsValidAttackTarget(target))
+            return;
+
+        ObjectGuid const targetGuid = target->GetGUID();
+
+        // Laisse le temps au client de recevoir la creation avant le saut
+        me->m_Events.AddEventAtOffset([this, targetGuid]
+        {
+            Unit* victim = ObjectAccessor::GetUnit(*me, targetGuid);
+            if (!victim || !victim->IsAlive())
+                return;
+
+            AttackStart(victim);
+
+            Position leapPos = victim->GetFirstCollisionPosition(victim->GetCombatReach(), victim->GetRelativeAngle(me));
+            MovementFacingTarget facing;
+            facing = victim;
+
+            // MovementInform(Jump) reprend le chase a l'atterrissage
+            me->GetMotionMaster()->MoveJump(Jump, leapPos, LEAP_SPEED, LEAP_HEIGHT, LEAP_HEIGHT, facing);
+        }, 100ms);
     }
 };
 
@@ -163,7 +198,7 @@ struct pet_mother_of_chaos : public PassiveAI
             return;
 
         if (Unit* victim = caster->GetVictim())
-            DoCast(victim, SPELL_CHAOS_SALVO);
+            CastAfterSpawn(me, victim->GetGUID(), SPELL_CHAOS_SALVO);
     }
 
     void OnSpellCast(SpellInfo const* spell) override
@@ -197,7 +232,7 @@ struct pet_overlord : public PassiveAI
             return;
 
         if (Unit* victim = caster->GetVictim())
-            DoCast(victim, SPELL_CHARGE);
+            CastAfterSpawn(me, victim->GetGUID(), SPELL_CHARGE);
     }
 
     void SpellHitTarget(WorldObject* /*object*/, SpellInfo const* spell) override
@@ -230,10 +265,10 @@ struct pet_pit_lord : public PassiveAI
         if (!caster->IsInCombat())
             return;
 
-        DoCastSelf(SPELL_PIT_LORD_PORTAL, true);
+        CastAfterSpawn(me, me->GetGUID(), SPELL_PIT_LORD_PORTAL, true);
 
         if (Unit* victim = caster->GetVictim())
-            DoCast(victim, SPELL_FELSEEKER);
+            CastAfterSpawn(me, victim->GetGUID(), SPELL_FELSEEKER);
     }
 
     void OnSpellCast(SpellInfo const* spell) override

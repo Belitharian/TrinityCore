@@ -924,8 +924,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			// Portee de visibilite maximale : la bataille se joue a l'echelle
 			// de toute la ville, on ne veut aucun pop-in.
             creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
-            creature->SetPvpFlag(UNIT_BYTE2_FLAG_PVP);
-            creature->SetUnitFlag(UNIT_FLAG_PVP_ENABLING);
 
 			if (creature->IsCivilian())
 			{
@@ -1602,6 +1600,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							creature->GetMotionMaster()->MoveIdle();
 							creature->NearTeleportTo(actorsRelocation[i].destination);
 							creature->SetHomePosition(actorsRelocation[i].destination);
+							// Sans ca, la fin du cast de SPELL_MASS_TELEPORT (Jaina)
+							// restaure ~1s plus tard l'orientation d'avant le teleport.
+							creature->DoNotReacquireSpellFocusTarget();
 
 							switch (creature->GetEntry())
 							{

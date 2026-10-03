@@ -2054,8 +2054,8 @@ void ObjectMgr::LoadTempSummons()
 
     _tempSummonDataStore.clear();   // needed for reload case
 
-    //                                               0           1             2        3      4           5           6           7            8           9
-    QueryResult result = WorldDatabase.Query("SELECT summonerId, summonerType, groupId, entry, position_x, position_y, position_z, orientation, summonType, summonTime FROM creature_summon_groups");
+    //                                               0           1             2        3      4           5           6           7            8           9           10
+    QueryResult result = WorldDatabase.Query("SELECT summonerId, summonerType, groupId, entry, position_x, position_y, position_z, orientation, summonType, summonTime, SpawnRegionId FROM creature_summon_groups");
 
     if (!result)
     {
@@ -2125,6 +2125,7 @@ void ObjectMgr::LoadTempSummons()
         }
 
         data.time                       = Milliseconds(fields[9].GetUInt32());
+        data.spawnRegionId              = fields[10].GetUInt32();
 
         TempSummonGroupKey key{ .SummonerEntry = summonerId, .Type = summonerType, .SummonGroup = group };
         _tempSummonDataStore[key].push_back(data);

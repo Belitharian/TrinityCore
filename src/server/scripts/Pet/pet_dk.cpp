@@ -25,6 +25,7 @@
 #include "CombatAI.h"
 #include "GridNotifiersImpl.h"
 #include "MotionMaster.h"
+#include "pet_spawn_cast.h"
 
 enum DeathKnightSpells
 {
@@ -130,7 +131,7 @@ struct npc_pet_dk_risen_ghoul : public AggressorAI
 
     void JustAppeared() override
     {
-        me->CastSpell(me, SPELL_DK_BIRTH, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
+        CastAfterSpawn(me, me->GetGUID(), SPELL_DK_BIRTH, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
     }
 };
 

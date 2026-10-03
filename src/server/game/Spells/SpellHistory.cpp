@@ -429,13 +429,17 @@ void SpellHistory::StartCooldown(SpellInfo const* spellInfo, uint32 itemId, Spel
             }
 
             {
+                bool timeRateApplied = false;
                 auto calcRecoveryRate = [&](AuraEffect const* modRecoveryRate)
                 {
                     double rate = 100.0 / (std::max(modRecoveryRate->GetAmount(), -99.0) + 100.0);
                     if (baseCooldown <= 1h
                         && !spellInfo->HasAttribute(SPELL_ATTR6_IGNORE_FOR_MOD_TIME_RATE)
                         && !modRecoveryRate->GetSpellEffectInfo().EffectAttributes.HasFlag(SpellEffectAttributes::IgnoreDuringCooldownTimeRateCalculation))
+                    {
                         rate *= *_owner->m_unitData->ModTimeRate;
+                        timeRateApplied = true;
+                    }
 
                     return rate;
                 };
@@ -448,6 +452,15 @@ void SpellHistory::StartCooldown(SpellInfo const* spellInfo, uint32 itemId, Spel
                 for (AuraEffect const* modRecoveryRate : _owner->GetAuraEffectsByType(SPELL_AURA_MOD_RECOVERY_RATE_BY_SPELL_LABEL))
                     if (spellInfo->HasLabel(modRecoveryRate->GetMiscValue()) || (modRecoveryRate->GetMiscValueB() && spellInfo->HasLabel(modRecoveryRate->GetMiscValueB())))
                         recoveryRate *= calcRecoveryRate(modRecoveryRate);
+
+                // ModTimeRate (alteration du temps scriptee) s'applique aussi aux temps de recharge sans aura MOD_RECOVERY_RATE,
+                // comme aux charges ; le client recoit alors la duree reelle
+                float timeRate = *_owner->m_unitData->ModTimeRate;
+                if (!timeRateApplied && timeRate != 1.0f && baseCooldown <= 1h && !spellInfo->HasAttribute(SPELL_ATTR6_IGNORE_FOR_MOD_TIME_RATE))
+                {
+                    recoveryRate *= timeRate;
+                    needsCooldownPacket = true;
+                }
 
                 if (recoveryRate > 0.0)
                 {

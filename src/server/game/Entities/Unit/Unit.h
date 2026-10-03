@@ -1736,6 +1736,10 @@ class TC_GAME_API Unit : public WorldObject
         void SetSpeed(UnitMoveType mtype, float newValue);
         void SetSpeedRate(UnitMoveType mtype, float rate);
 
+        // Multiplicateur applique a toutes les vitesses de deplacement par UpdateSpeed (alteration du temps scriptee)
+        float GetSpeedRateMultiplier() const { return m_speedRateMultiplier; }
+        void ApplySpeedRateMultiplier(float multiplier, bool apply);
+
         int32 GetFlightCapabilityID() const { return m_unitData->FlightCapabilityID; }
         void SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate);
         float GetAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType) const { return m_advFlyingSpeed[speedType]; }
@@ -1961,6 +1965,7 @@ class TC_GAME_API Unit : public WorldObject
         Trinity::Containers::FlatSet<AuraApplication*, VisibleAuraSlotCompare> m_visibleAurasToUpdate;
 
         std::array<float, MAX_MOVE_TYPE> m_speed_rate;
+        float m_speedRateMultiplier;
         std::array<float, ADV_FLYING_MAX_SPEED_TYPE> m_advFlyingSpeed;
 
         Unit* m_unitMovedByMe;    // only ever set for players, and only for direct client control

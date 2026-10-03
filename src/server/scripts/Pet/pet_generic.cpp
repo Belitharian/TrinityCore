@@ -30,6 +30,7 @@
 #include "SpellAuraEffects.h"
 #include "SpellScript.h"
 #include "TemporarySummon.h"
+#include "pet_spawn_cast.h"
 
 enum PandarenMonkMisc
 {
@@ -134,7 +135,7 @@ struct npc_pet_gen_soul_trader : public ScriptedAI
     {
         Talk(SAY_SOUL_TRADER_INTRO);
         if (Unit* owner = me->GetOwner())
-            DoCast(owner, SPELL_ETHEREAL_ONSUMMON);
+            CastAfterSpawn(me, owner->GetGUID(), SPELL_ETHEREAL_ONSUMMON);
 
         CreatureAI::JustAppeared();
     }

@@ -744,8 +744,11 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
 
         bool IsSpawnGroupActive(uint32 groupId) const;
 
+        // Spawn regions group creature spawns (creature_spawn_region) and summons (creature_summon_groups.SpawnRegionId)
+        void AddSpawnRegionSummon(uint32 spawnRegionId, ObjectGuid const& summonGuid);
+        std::vector<uint32> GetSpawnRegions(Creature const* creature) const;
         // True when every creature of the spawn region that can exist on this map is dead
-        bool IsSpawnRegionCleared(uint32 spawnRegionId) const;
+        bool IsSpawnRegionCleared(uint32 spawnRegionId);
 
         // Enable the spawn group, which causes all creatures in it to respawn (unless they have a respawn timer)
         // The force flag can be used to force spawning additional copies even if old copies are still around from a previous spawn
@@ -811,6 +814,9 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
 
         void SetSpawnGroupActive(uint32 groupId, bool state);
         std::unordered_set<uint32> _toggledSpawnGroupIds;
+
+        std::unordered_map<uint32, GuidUnorderedSet> _spawnRegionSummons;
+        std::unordered_map<ObjectGuid, uint32> _summonSpawnRegions;
 
         uint32 _respawnCheckTimer;
         std::unordered_map<uint32, uint32> _zonePlayerCountMap;
