@@ -34,6 +34,7 @@
 #include "SpellScript.h"
 #include "TaskScheduler.h"
 #include "TemporarySummon.h"
+#include "advstd.h"
 
 enum MageSpells
 {
@@ -1115,6 +1116,9 @@ class spell_mage_heat_shimmer_remove : public SpellScript
 // 44448 - Pyroblast Clearcasting Driver
 class spell_mage_hot_streak : public AuraScript
 {
+	// Sorts de feu des PNJ (sans famille Mage) : Fire Blast, Phoenix Flames (degats), Scorch, Fireball.
+	static constexpr std::array<uint32, 4> NpcFireSpells = { 108853, 257542, 296457, 338914 };
+
 	bool Validate(SpellInfo const* /*spellInfo*/) override
 	{
 		return ValidateSpellInfo
@@ -1130,7 +1134,20 @@ class spell_mage_hot_streak : public AuraScript
 	bool CheckProc(ProcEventInfo const& procEvent) const
 	{
 		Unit const* caster = GetTarget();
-		switch (procEvent.GetSpellInfo()->Id)
+		SpellInfo const* spellInfo = procEvent.GetSpellInfo();
+		if (!spellInfo)
+			return false;
+
+		// spell_proc ne filtre plus la famille : les sorts de feu des PNJ (famille 0) doivent passer.
+		if (caster->IsCreature())
+		{
+			if (!advstd::ranges::contains(NpcFireSpells, spellInfo->Id))
+				return false;
+		}
+		else if (!spellInfo->IsAffected(SPELLFAMILY_MAGE, flag128(0x00C00013, 0x00100000, 0x0, 0x0)))
+			return false;
+
+		switch (spellInfo->Id)
 		{
 			case SPELL_MAGE_DRAGONS_BREATH:
 				// talent requirement
@@ -1152,6 +1169,10 @@ class spell_mage_hot_streak : public AuraScript
 	void HandleProc(ProcEventInfo const& eventInfo) const
 	{
 		Unit* caster = GetTarget();
+
+		// Creature : Hot Streak! n'est pas consomme par SpellMod, on attend que l'IA le depense.
+		if (caster->IsCreature() && caster->HasAura(SPELL_MAGE_HOT_STREAK))
+			return;
 
 		if (eventInfo.GetHitMask() & PROC_HIT_CRITICAL)
 		{
@@ -1187,12 +1208,23 @@ class spell_mage_hot_streak_ignite_marker : public SpellScript
 
 	int32 CalcCastTime(int32 castTime) override
 	{
-		_affectedByHotStreak = GetSpell()->m_appliedMods.contains(GetCaster()->GetAura(SPELL_MAGE_HOT_STREAK));
+		// Creature : pas de SpellMod, la presence du buff suffit (consomme dans ConsumeForCreature).
+		if (GetCaster()->IsCreature())
+			_affectedByHotStreak = GetCaster()->HasAura(SPELL_MAGE_HOT_STREAK);
+		else
+			_affectedByHotStreak = GetSpell()->m_appliedMods.contains(GetCaster()->GetAura(SPELL_MAGE_HOT_STREAK));
 		return castTime;
+	}
+
+	void ConsumeForCreature() const
+	{
+		if (_affectedByHotStreak && GetCaster()->IsCreature())
+			GetCaster()->RemoveAurasDueToSpell(SPELL_MAGE_HOT_STREAK);
 	}
 
 	void Register() override
 	{
+		AfterCast += SpellCastFn(spell_mage_hot_streak_ignite_marker::ConsumeForCreature);
 	}
 
 	bool _affectedByHotStreak = false;

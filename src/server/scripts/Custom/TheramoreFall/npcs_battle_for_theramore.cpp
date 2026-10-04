@@ -865,7 +865,7 @@ struct npc_theramore_footman : public npc_theramore_troop
 		SPELL_HAMSTRING         = 198374,   // Victim
 		SPELL_BLADESTORM        = 235661,   // Enemies in range > 3
 		SPELL_PUMMEL            = 265431,   // UnitCasting
-		SPELL_SUDDEN_DEATH_BUFF = 280721,   // Buff casted by talent (dont use)
+		SPELL_SUDDEN_DEATH_BUFF = 52437,    // Buff casted by talent 29725 (dont use)
 		SPELL_MORTAL_STRIKE     = 283410,   // MostMissingEnemy
 		SPELL_WHIRLWIND         = 283412,   // Enemies in range >= 2
 		SPELL_REND              = 283419,   // Victim
@@ -988,8 +988,11 @@ struct npc_theramore_footman : public npc_theramore_troop
 			// Consomme le buff Sudden Death sur la victime. Re-check toutes les 1-2s.
 			.Schedule(1s, [this](TaskContext execute)
 			{
-				if (me->HasAura(SPELL_SUDDEN_DEATH_BUFF))
-					DoCastVictim(SPELL_EXECUTE);
+				// Le buff ne se consomme pas seul sur une creature (charges de SpellMod
+				// reservees aux joueurs) : on retire un stack apres chaque Execute.
+				if (Aura* suddenDeath = me->GetAura(SPELL_SUDDEN_DEATH_BUFF))
+					if (DoCastVictim(SPELL_EXECUTE) == SPELL_CAST_OK)
+						suddenDeath->ModStackAmount(-1);
 				execute.Repeat(1s, 2s);
 			});
 	}
@@ -1730,7 +1733,7 @@ struct npc_roknah_grunt : public npc_theramore_horde
 		SPELL_HAMSTRING         = 198374,   // Victim
 		SPELL_BLADESTORM        = 235661,   // Enemies in range > 3
 		SPELL_PUMMEL            = 265431,   // UnitCasting
-		SPELL_SUDDEN_DEATH_BUFF = 280721,   // Buff casted by talent (dont use)
+		SPELL_SUDDEN_DEATH_BUFF = 52437,    // Buff casted by talent 29725 (dont use)
 		SPELL_MORTAL_STRIKE     = 283410,   // MostMissingEnemy
 		SPELL_WHIRLWIND         = 283412,   // Enemies in range >= 2
 		SPELL_REND              = 283419,   // Victim
@@ -1855,8 +1858,11 @@ struct npc_roknah_grunt : public npc_theramore_horde
 			// Consomme le buff Sudden Death sur la victime. Re-check toutes les 1-2s.
 			.Schedule(1s, [this](TaskContext execute)
 			{
-				if (me->HasAura(SPELL_SUDDEN_DEATH_BUFF))
-					DoCastVictim(SPELL_EXECUTE);
+				// Le buff ne se consomme pas seul sur une creature (charges de SpellMod
+				// reservees aux joueurs) : on retire un stack apres chaque Execute.
+				if (Aura* suddenDeath = me->GetAura(SPELL_SUDDEN_DEATH_BUFF))
+					if (DoCastVictim(SPELL_EXECUTE) == SPELL_CAST_OK)
+						suddenDeath->ModStackAmount(-1);
 				execute.Repeat(1s, 2s);
 			});
 	}

@@ -1,9 +1,13 @@
+#include "ConditionMgr.h"
 #include "Conversation.h"
 #include "ConversationAI.h"
 #include "Custom/CustomAI/CustomAI.h"
 #include "Custom/FakeParty/FakeParty.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
+#include <mutex>
+#include "Player.h"
+#include "SceneMgr.h"
 #include "TemporarySummon.h"
 #include "ScriptMgr.h"
 #include "SpellInfo.h"
@@ -32,7 +36,15 @@ struct npc_jaina_dalaran_purge : public CustomAI
 	{
 		DLPPhases phase = (DLPPhases)instance->GetData(DATA_SCENARIO_PHASE);
 		if (phase != DLPPhases::TheEscape)
-			return false;
+		{
+			// Fin du scenario : seulement la quete, le menu 65004 relancerait le flashback.
+			if (!me->IsQuestGiver())
+				return false;
+
+			player->PrepareQuestMenu(me->GetGUID());
+			player->SendPreparedQuest(me);
+			return true;
+		}
 
 		player->PrepareGossipMenu(me, GOSSIP_MENU_DEFAULT, true);
 		player->SendPreparedGossip(me);
@@ -750,6 +762,100 @@ class spell_purge_horde_illusion_reactions : public AuraScript
     }
 };
 
+// 500000 - Ce qui devait etre fait (copie de 32423, rendue a Varian au donjon de Hurlevent)
+//
+// Varian (68690) n'est visible qu'avec la quete, puis apres la scene tant que le joueur
+// reste pres de lui (conditions, source 32). Pendant la scene, il disparait pour le joueur
+// et l'acteur de la scene (SmoothPhaseSpawnActor) prend sa place : Jaina arrive par un
+// portail de Dalaran. L'acteur finit a la place du vrai Varian, qui reapparait a la fin.
+namespace WhatHadToBeDone
+{
+    // Au-dela, Varian disparait pour de bon apres la scene.
+    static constexpr float VARIAN_VISIBLE_DISTANCE = 30.0f;
+
+    // Joueurs qui voient encore Varian apres la scene. Les visibilites sont
+    // calculees par les maps, en parallele : acces sous verrou.
+    std::mutex Lock;
+    GuidUnorderedSet Lingering;
+
+    void SetLingering(ObjectGuid const& guid, bool lingering)
+    {
+        std::lock_guard<std::mutex> lock(Lock);
+        if (lingering)
+            Lingering.insert(guid);
+        else
+            Lingering.erase(guid);
+    }
+
+    bool IsLingering(ObjectGuid const& guid)
+    {
+        std::lock_guard<std::mutex> lock(Lock);
+        return Lingering.contains(guid);
+    }
+}
+
+class quest_what_had_to_be_done_stormwind : public QuestScript
+{
+public:
+    quest_what_had_to_be_done_stormwind() : QuestScript("quest_what_had_to_be_done_stormwind") { }
+
+    void OnQuestStatusChange(Player* player, Quest const* /*quest*/, QuestStatus /*oldStatus*/, QuestStatus newStatus) override
+    {
+        if (newStatus != QUEST_STATUS_REWARDED)
+            return;
+
+        // La scene d'abord : condition_what_had_to_be_done_scene_over cache Varian pendant qu'elle se joue.
+        // Les conditions de visibilite par entry ne sont pas reevaluees seules.
+        WhatHadToBeDone::SetLingering(player->GetGUID(), true);
+        player->GetSceneMgr().PlayScene(SCENE_WHAT_HAD_TO_BE_DONE);
+        player->UpdateObjectVisibility();
+    }
+};
+
+// 150 - Scene « What Had To Be Done » (package 313) : le vrai Varian revient a la fin
+class scene_what_had_to_be_done : public SceneScript
+{
+public:
+    scene_what_had_to_be_done() : SceneScript("scene_what_had_to_be_done") { }
+
+    void OnSceneCancel(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/) override
+    {
+        player->UpdateObjectVisibility();
+    }
+
+    void OnSceneComplete(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/) override
+    {
+        player->UpdateObjectVisibility();
+    }
+};
+
+// Varian (68690), quete 500000 rendue : visible une fois la scene 313 terminee, tant que
+// le joueur reste a portee. Une fois qu'il s'est eloigne, Varian ne revient plus.
+class condition_what_had_to_be_done_scene_over : public ConditionScript
+{
+public:
+    condition_what_had_to_be_done_scene_over() : ConditionScript("condition_what_had_to_be_done_scene_over") { }
+
+    bool OnConditionCheck(Condition const* /*condition*/, ConditionSourceInfo& sourceInfo) override
+    {
+        Player const* player = sourceInfo.mConditionTargets[0] ? sourceInfo.mConditionTargets[0]->ToPlayer() : nullptr;
+        WorldObject const* varian = sourceInfo.mConditionTargets[1];
+        if (!player || !varian)
+            return false;
+
+        if (!WhatHadToBeDone::IsLingering(player->GetGUID()))
+            return false;
+
+        if (!player->IsWithinDist(varian, WhatHadToBeDone::VARIAN_VISIBLE_DISTANCE))
+        {
+            WhatHadToBeDone::SetLingering(player->GetGUID(), false);
+            return false;
+        }
+
+        return player->GetSceneMgr().GetActiveSceneCount(SCENE_PACKAGE_WHAT_HAD_TO_BE_DONE) == 0;
+    }
+};
+
 void AddSC_dalaran_purge()
 {
 	RegisterDalaranAI(npc_jaina_dalaran_purge);
@@ -761,4 +867,8 @@ void AddSC_dalaran_purge()
     RegisterSpellScript(spell_meteor_storm);
     RegisterSpellScript(spell_purge_hostile_area_only);
     RegisterSpellScript(spell_purge_horde_illusion_reactions);
+
+    new quest_what_had_to_be_done_stormwind();
+    new scene_what_had_to_be_done();
+    new condition_what_had_to_be_done_scene_over();
 }

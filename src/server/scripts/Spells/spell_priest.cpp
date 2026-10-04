@@ -3692,7 +3692,18 @@ class spell_pri_divine_aegis : public AuraScript
 
     static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
     {
-        return eventInfo.GetHealInfo() != nullptr;
+        if (!eventInfo.GetHealInfo())
+            return false;
+
+        // spell_proc ne filtre plus la famille : les soins de PNJ (famille 0) doivent pouvoir proc.
+        // Les joueurs gardent le filtre d'origine (sorts de pretre uniquement).
+        if (eventInfo.GetActor() && eventInfo.GetActor()->IsPlayer())
+        {
+            SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+            return spellInfo && spellInfo->SpellFamilyName == SPELLFAMILY_PRIEST;
+        }
+
+        return true;
     }
 
     static void HandleProc(AuraScript const&, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
@@ -3713,6 +3724,37 @@ class spell_pri_divine_aegis : public AuraScript
     {
         DoCheckProc += AuraCheckProcFn(spell_pri_divine_aegis::CheckProc);
         OnEffectProc += AuraEffectProcFn(spell_pri_divine_aegis::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
+// 284593 - Penance (soin, PNJ)
+// Le tick de soin (284594) est lance par l'aura avec les procs desactives : Divine Aegis
+// ne pourrait pas reagir. On relance le tick nous-memes en autorisant les procs.
+class spell_pri_penance_npc_heal : public AuraScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_0 } })
+            && ValidateSpellInfo({ spellInfo->GetEffect(EFFECT_0).TriggerSpell });
+    }
+
+    void HandlePeriodic(AuraEffect const* aurEff)
+    {
+        PreventDefaultAction();
+
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        caster->CastSpell(GetTarget(), aurEff->GetSpellEffectInfo().TriggerSpell, CastSpellExtraArgsInit{
+            .TriggerFlags = TriggerCastFlags(TRIGGERED_FULL_MASK & ~(TRIGGERED_IGNORE_POWER_COST | TRIGGERED_IGNORE_REAGENT_COST | TRIGGERED_DISALLOW_PROC_EVENTS)),
+            .TriggeringAura = aurEff
+        });
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_pri_penance_npc_heal::HandlePeriodic, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL);
     }
 };
 
@@ -5652,6 +5694,7 @@ void AddSC_priest_spell_scripts()
     RegisterSpellScript(spell_pri_dispersing_light);
     RegisterSpellScript(spell_pri_dispersing_light_heal);
     RegisterSpellScript(spell_pri_divine_aegis);
+    RegisterSpellScript(spell_pri_penance_npc_heal);
     RegisterSpellScript(spell_pri_divine_image);
     RegisterSpellScript(spell_pri_divine_image_spell_triggered);
     RegisterSpellScript(spell_pri_divine_image_stack_timer);

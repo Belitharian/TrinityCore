@@ -1839,6 +1839,34 @@ Rate.Creature.SpellDamage.Trivial   = 1
 Rate.Creature.SpellDamage.MinusMob  = 1
 
 #
+#    Rate.Creature.RankDamage.Normal
+#    Rate.Creature.RankDamage.Elite
+#    Rate.Creature.RankDamage.RareElite
+#    Rate.Creature.RankDamage.Obsolete
+#    Rate.Creature.RankDamage.Rare
+#    Rate.Creature.RankDamage.Trivial
+#    Rate.Creature.RankDamage.MinusMob
+#        Description: Single damage multiplier for creatures, depending on their Classification.
+#                     Applies to melee and weapon-based spells, spell base damage and the
+#                     player-like spell power / attack power (creature_template_ilvl).
+#                     Creatures owned by a player (pets, guardians, totems) are not affected.
+#        Default:     0.6 - (Rate.Creature.RankDamage.Normal)
+#                     1   - (Rate.Creature.RankDamage.Elite)
+#                     1.2 - (Rate.Creature.RankDamage.RareElite)
+#                     1.5 - (Rate.Creature.RankDamage.Obsolete)
+#                     0.8 - (Rate.Creature.RankDamage.Rare)
+#                     0.3 - (Rate.Creature.RankDamage.Trivial)
+#                     0.4 - (Rate.Creature.RankDamage.MinusMob)
+
+Rate.Creature.RankDamage.Normal    = 0.6
+Rate.Creature.RankDamage.Elite     = 1
+Rate.Creature.RankDamage.RareElite = 1.2
+Rate.Creature.RankDamage.Obsolete  = 1.5
+Rate.Creature.RankDamage.Rare      = 0.8
+Rate.Creature.RankDamage.Trivial   = 0.3
+Rate.Creature.RankDamage.MinusMob  = 0.4
+
+#
 #    Rate.Creature.HP.Normal
 #    Rate.Creature.HP.Elite
 #    Rate.Creature.HP.RareElite

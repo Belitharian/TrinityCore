@@ -1735,6 +1735,31 @@ float Creature::GetDamageMod(CreatureClassifications classification)
     }
 }
 
+// Multiplicateur de degats unique selon le rang (Rate.Creature.RankDamage.*) : SP/AP "joueur",
+// attaques auto et sorts d'arme, base des sorts (Creature::GetRankDamageMod, Unit::SpellDamageBonusDone).
+float Creature::GetRankDamageMod(CreatureClassifications classification)
+{
+    switch (classification)
+    {
+        case CreatureClassifications::Normal:
+            return sWorld->getRate(RATE_CREATURE_RANKDAMAGE_NORMAL);
+        case CreatureClassifications::Elite:
+            return sWorld->getRate(RATE_CREATURE_RANKDAMAGE_ELITE);
+        case CreatureClassifications::RareElite:
+            return sWorld->getRate(RATE_CREATURE_RANKDAMAGE_RAREELITE);
+        case CreatureClassifications::Obsolete:
+            return sWorld->getRate(RATE_CREATURE_RANKDAMAGE_OBSOLETE);
+        case CreatureClassifications::Rare:
+            return sWorld->getRate(RATE_CREATURE_RANKDAMAGE_RARE);
+        case CreatureClassifications::Trivial:
+            return sWorld->getRate(RATE_CREATURE_RANKDAMAGE_TRIVIAL);
+        case CreatureClassifications::MinusMob:
+            return sWorld->getRate(RATE_CREATURE_RANKDAMAGE_MINUSMOB);
+        default:
+            return sWorld->getRate(RATE_CREATURE_RANKDAMAGE_ELITE);
+    }
+}
+
 float Creature::GetSpellDamageMod(CreatureClassifications classification) const
 {
     switch (classification)
@@ -3195,7 +3220,9 @@ float Creature::GetBaseDamageForLevel(uint8 level) const
 {
     CreatureTemplate const* cInfo = GetCreatureTemplate();
     CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
-    return sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureAutoAttackDps, level, creatureDifficulty->GetHealthScalingExpansion(), m_unitData->ContentTuningID, Classes(cInfo->unit_class), 0);
+    // Sans ContentTuning : ses ExpectedStatMod (ex. CT 3025 : x1.94) ne gonflent pas les degats des PNJ,
+    // le rang (GetRankDamageMod) s'en charge. Les PV gardent leurs mods (GetMaxHealthByLevel).
+    return sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureAutoAttackDps, level, creatureDifficulty->GetHealthScalingExpansion(), 0, Classes(cInfo->unit_class), 0);
 }
 
 float Creature::GetDamageMultiplierForTarget(WorldObject const* target) const
@@ -3270,7 +3297,22 @@ float Creature::GetPlayerLikePowerForLevel(uint8 level) const
     else
         primaryStat = sDB2Manager.EvaluateExpectedStat(ExpectedStatType::PlayerPrimaryStat, level, creatureDifficulty->GetHealthScalingExpansion(), m_unitData->ContentTuningID, Classes(cInfo->unit_class), 0);
 
-    return primaryStat * creatureDifficulty->DamageModifier;
+    // Le rang s'applique une seule fois, via Rate.Creature.RankDamage.* : on retire de DamageModifier
+    // le Rate.Creature.Damage.* que ObjectMgr y a deja multiplie (sinon double prise en compte).
+    float damageModifier = creatureDifficulty->DamageModifier;
+    if (float const rankDamageMod = GetDamageMod(cInfo->Classification); rankDamageMod > 0.0f)
+        damageModifier /= rankDamageMod;
+
+    return primaryStat * damageModifier * GetRankDamageMod();
+}
+
+float Creature::GetRankDamageMod() const
+{
+    // Les creatures d'un joueur (familiers, gardiens, totems) gardent leurs degats d'origine.
+    if (GetCharmerOrOwnerPlayerOrPlayerItself())
+        return 1.0f;
+
+    return GetRankDamageMod(GetCreatureTemplate()->Classification);
 }
 
 float Creature::GetArmorMultiplierForTarget(WorldObject const* target) const

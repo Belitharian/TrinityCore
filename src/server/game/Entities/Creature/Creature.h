@@ -443,6 +443,8 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         bool SharesAurasWithCreatures() const { return _sharesAurasWithCreatures; }
 
         static float GetDamageMod(CreatureClassifications classification);
+        static float GetRankDamageMod(CreatureClassifications classification);
+        float GetRankDamageMod() const;
 
         float m_SightDistance, m_CombatDistance;
 

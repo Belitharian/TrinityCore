@@ -17,6 +17,7 @@
 enum DLPCreatures
 {
 	NPC_WANTON_HOSTESS				    = 16459,
+	NPC_KALECGOS                        = 64565,    // Forme humanoide de la Bataille de Theramore (conclusion)
 	NPC_INVISIBLE_STALKER_SHIELD        = 27306,
 	NPC_INVISIBLE_STALKER               = 32780,
 	NPC_NARASI_SNOWDAWN                 = 67997,
@@ -123,6 +124,19 @@ enum DLPTalks
     SAY_INFILTRATE_SURDIEL_04           = 4,
     SAY_INFILTRATE_NARASI_05            = 1,
     SAY_INFILTRATE_HATHOREL_06          = 0,
+    SAY_INFILTRATE_ROMMATH_09           = 8,    // Remplace le second « Restez pres de moi »
+
+    // L'evasion : Jaina arrive trop tard (flashback)
+    SAY_ESCAPE_JAINA_01                 = 9,
+    SAY_ESCAPE_AETHAS_02                = 2,
+
+    // Conclusion : retour au present
+    SAY_END_JAINA_01                    = 10,
+    SAY_END_JAINA_02                    = 11,
+    SAY_END_KALECGOS_03                 = 17,
+    SAY_END_JAINA_04                    = 12,
+    SAY_END_KALECGOS_05                 = 18,
+    SAY_END_JAINA_06                    = 13,
 };
 
 enum DLPSpells
@@ -191,6 +205,11 @@ enum DLPMisc
 
     // Creature Groups
     CREATURE_GROUP_PRISON               = 0,
+
+    // Quests & scenes
+    QUEST_WHAT_HAD_TO_BE_DONE           = 500000,   // Copie de 32423 : Jaina (fin du scenario) -> Varian (donjon de Hurlevent)
+    SCENE_PACKAGE_WHAT_HAD_TO_BE_DONE   = 313,      // Scene officielle Jaina / Varian, deplacee a Hurlevent (hotfix SceneScriptText)
+    SCENE_WHAT_HAD_TO_BE_DONE           = 150,      // scene_template du package 313 (SceneID officiel du sort 135894)
 
 	// Factions
 	FACTION_DALARAN_PATROL              = 2618,
@@ -343,8 +362,10 @@ const Position GuardianPos01    = { -779.74f, 4415.03f, 602.62f, 2.44f };
 const Position RommathPos01     = { -679.22f, 4444.06f, 694.24f, 5.62f };
 const Position RommathPos02     = { -854.29f, 4475.16f, 588.85f, 5.60f };
 const Position RommathPos03     = { -875.18f, 4492.31f, 580.07f, 2.47f };
+const Position RommathPos04     = { -885.11f, 4497.48f, 580.31f, 5.77f };
 const Position HathorelPos01    = { -805.92f, 4430.16f, 598.65f, 1.76f };
 const Position HathorelPos02    = { -876.22f, 4489.65f, 580.05f, 2.37f };
+const Position HathorelPos03    = { -891.40f, 4500.38f, 580.08f, 1.85f };   // Face a l'emplacement du portail de fin
 const Position SorinPoint01     = { -856.22f, 4477.19f, 653.60f, 4.78f };
 const Position EndPortalPos01   = { -893.05f, 4506.48f, 580.45f, 5.59f };
 const Position ElementalPos01   = { -854.50f, 4598.81f, 748.78f, 4.60f };

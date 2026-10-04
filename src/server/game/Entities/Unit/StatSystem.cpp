@@ -1137,14 +1137,17 @@ void Creature::CalculateMinMaxDamage(WeaponAttackType attType, bool normalized, 
 
     float attackPower      = GetTotalAttackPowerValue(attType, false);
     float attackSpeedMulti = GetAPMultiplier(attType, normalized);
-    float baseValue        = GetFlatModifierValue(unitMod, BASE_VALUE) + (attackPower / 3.5f) * variance;
+    float baseValue        = GetFlatModifierValue(unitMod, BASE_VALUE);
+    float attackPowerValue = (attackPower / 3.5f) * variance;
     float basePct          = GetPctModifierValue(unitMod, BASE_PCT) * attackSpeedMulti;
     float totalValue       = GetFlatModifierValue(unitMod, TOTAL_VALUE);
     float totalPct         = addTotalPct ? GetPctModifierValue(unitMod, TOTAL_PCT) : 1.0f;
-    float dmgMultiplier    = GetCreatureDifficulty()->DamageModifier; // = DamageModifier * GetDamageMod(rank);
+    float dmgMultiplier    = GetCreatureDifficulty()->DamageModifier * GetRankDamageMod(); // DamageModifier inclut deja GetDamageMod(rank)
 
-    minDamage = ((weaponMinDamage + baseValue) * dmgMultiplier * basePct + totalValue) * totalPct;
-    maxDamage = ((weaponMaxDamage + baseValue) * dmgMultiplier * basePct + totalValue) * totalPct;
+    // L'AP inclut deja la puissance "joueur" ponderee par DamageModifier et le rang
+    // (Creature::GetPlayerLikePowerForLevel) : seule la part arme recoit dmgMultiplier.
+    minDamage = (((weaponMinDamage + baseValue) * dmgMultiplier + attackPowerValue) * basePct + totalValue) * totalPct;
+    maxDamage = (((weaponMaxDamage + baseValue) * dmgMultiplier + attackPowerValue) * basePct + totalValue) * totalPct;
 }
 
 /*#######################################

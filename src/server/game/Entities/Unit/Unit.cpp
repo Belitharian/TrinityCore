@@ -6952,6 +6952,11 @@ int32 Unit::SpellDamageBonusDone(Unit* victim, SpellInfo const* spellProto, int3
         DoneTotal += int32(DoneAdvertisedBenefit * coeff * stack);
     }
 
+    // Base du sort (ExpectedStat x BasePoints) ponderee par le rang ; la part SP l'est deja
+    // (Creature::GetPlayerLikePowerForLevel).
+    if (Creature const* creature = ToCreature())
+        pdamage = int32(pdamage * creature->GetRankDamageMod());
+
     callDamageScript(pdamage, DoneTotal, DoneTotalMod);
 
     float tmpDamage = float(pdamage + DoneTotal) * DoneTotalMod;

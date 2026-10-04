@@ -1632,13 +1632,8 @@ struct npc_sunreaver_pyromancer : public npc_sunreaver_unit
 		SPELL_FLAMESTRIKE           = 330347,   // Hot Streak
 		SPELL_FIREBALL              = 338914,   // Hot Streak + Firestarter
 		SPELL_FIRESPELL_SPHERE      = 448604,
+		SPELL_HOT_STREAK            = 48108,    // Pose par le talent 195283 (spell_mage_hot_streak_npc)
 	};
-
-	// Modify Crit Chance
-	void JustAppeared() override
-	{
-		SetSpellCritChance(30.f);
-	}
 
 	void Reset() override
 	{
@@ -1683,6 +1678,17 @@ struct npc_sunreaver_pyromancer : public npc_sunreaver_unit
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
 					DoCast(target, SPELL_FLAMESTRIKE);
 				flamestrike.Repeat(14s, 22s);
+			})
+			.Schedule(1s, [this](TaskContext hot_streak)
+			{
+				// Bonne serie : Pyroblast instantane. Le buff est retire par
+				// spell_mage_hot_streak_ignite_marker apres le cast.
+				if (me->HasAura(SPELL_HOT_STREAK))
+				{
+					CastStop();
+					DoCastVictim(SPELL_PYROBLAST, CastSpellExtraArgs(TriggerCastFlags(TRIGGERED_IGNORE_CAST_TIME | TRIGGERED_IGNORE_GCD)));
+				}
+				hot_streak.Repeat(500ms);
 			});
 	}
 

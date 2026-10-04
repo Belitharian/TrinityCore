@@ -6,7 +6,9 @@
 #include "Group.h"
 #include "GroupMgr.h"
 #include "MotionMaster.h"
+#include "ObjectMgr.h"
 #include "Player.h"
+#include "QuestDef.h"
 #include "TemporarySummon.h"
 #include "CustomAI.h"
 #include "dalaran_purge.h"
@@ -102,8 +104,20 @@ enum DLPEvents : uint32
 	EVT_ESCAPE_SURDIEL_TALK_03,
 	EVT_ESCAPE_SURDIEL_TALK_04,
 	EVT_ESCAPE_NARASI_IMPRISON,             // Emprisonnement arcanique de Surdiel
-	EVT_ESCAPE_HATHOREL_TALK_06,
-	EVT_ESCAPE_ROMMATH_PORTAL               // Portail vers Lune-d'argent
+	EVT_ESCAPE_HATHOREL_TALK_06,            // Jaina arrive (trop tard)
+	EVT_ESCAPE_JAINA_TALK_01,
+	EVT_ESCAPE_ROMMATH_SHATTER,             // Rommath brise la prison de glace d'Aethas
+	EVT_ESCAPE_AETHAS_TALK_02,
+	EVT_ESCAPE_ROMMATH_PORTAL,              // Portail vers Lune-d'argent
+
+	// Entre les mains du chef : retour au present, conclusion
+	EVT_END_JAINA_TALK_01,                  // Lance par CRITERIA_TREE_WHAT_HAPPENED
+	EVT_END_JAINA_TALK_02,
+	EVT_END_KALECGOS_ARRIVE,                // Kalecgos (invoque a EVT_END_JAINA_TALK_01) est arrive
+	EVT_END_KALECGOS_TALK_03,
+	EVT_END_JAINA_TALK_04,
+	EVT_END_KALECGOS_TALK_05,
+	EVT_END_JAINA_TALK_06                   // Portail vers Hurlevent
 };
 
 class scenario_dalaran_purge : public InstanceMapScript
@@ -513,13 +527,14 @@ class scenario_dalaran_purge : public InstanceMapScript
 					if (GameObject* portal = instance->GetGameObject(endPortal))
 						ClosePortal(portal);
 
+					// La Jaina du souvenir s'efface avec lui.
+					if (Creature* memory = instance->GetCreature(flashbackJaina))
+						memory->DespawnOrUnsummon();
+
 					if (Creature* jaina = GetJaina())
 					{
 						jaina->SetVisible(true);
-						// Entre les mains du chef : prendre le portail vers Hurlevent.
-						if (GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_STORMWIND, EndPortalPos01,
-												QuaternionData::fromEulerAnglesZYX(EndPortalPos01.GetOrientation(), 0.0f, 0.0f), 0s))
-							portal->SetVignette(VIGNETTE_PORTAL_TO_STORMWIND);
+						// Le portail vers Hurlevent ne s'ouvre qu'apres la conclusion (EVT_END_JAINA_TALK_06).
 
 						Trinity::RespawnDo doRespawn;
 						Trinity::WorldObjectWorker<Trinity::RespawnDo> worker(jaina, doRespawn);
@@ -556,6 +571,8 @@ class scenario_dalaran_purge : public InstanceMapScript
 						ApplyHordeIllusion(player, false);
 					});
 
+					// Conclusion : Jaina tire le bilan, Kalecgos s'inquiete pour elle.
+					events.ScheduleEvent(EVT_END_JAINA_TALK_01, 3s);
 					break;
 				}
 				// What happened! - Find the Grand Magister Rommath
@@ -1061,7 +1078,7 @@ class scenario_dalaran_purge : public InstanceMapScript
 				case EVT_PRISON_ROMMATH_TALK_08:
 					if (Creature* rommath = GetRommath())
 					{
-						Talk(rommath, SAY_INFILTRATE_ROMMATH_08);
+						Talk(rommath, SAY_INFILTRATE_ROMMATH_09);
 						rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos03);
 					}
 					break;
@@ -1107,13 +1124,60 @@ class scenario_dalaran_purge : public InstanceMapScript
 						Talk(hathorel, SAY_INFILTRATE_HATHOREL_06);
 					if (Creature* jaina = instance->SummonCreature(NPC_JAINA_PROUDMOORE, RommathPos02))
 					{
+						flashbackJaina = jaina->GetGUID();
 						jaina->SetImmuneToAll(true);
 						jaina->SetWalk(true);
 						jaina->SetVignette(VIGNETTE_JAINA_BOSS);
 						jaina->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos03);
-						jaina->DespawnOrUnsummon(11s);
 					}
-					Next(2800ms);
+					Next(1s);
+					break;
+				case EVT_ESCAPE_JAINA_TALK_01:
+					if (Creature* jaina = instance->GetCreature(flashbackJaina))
+					{
+						if (Creature* rommath = GetRommath())
+							jaina->SetFacingToObject(rommath);
+						Talk(jaina, SAY_ESCAPE_JAINA_01);
+					}
+					// Rommath rejoint Aethas en marchant et fait face a Jaina (qui s'arrete en RommathPos03).
+					if (Creature* rommath = GetRommath())
+					{
+						rommath->SetWalk(true);
+						rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos04, true,
+															  RommathPos04.GetAbsoluteAngle(RommathPos03));
+					}
+					// Hathorel court a l'emplacement du portail pour l'ouvrir.
+					if (Creature* hathorel = GetCreature(DATA_MAGISTER_HATHOREL))
+					{
+						hathorel->SetWalk(false);
+						hathorel->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, HathorelPos03, true,
+															   HathorelPos03.GetOrientation());
+					}
+					// Temps de marche jusqu'a Aethas (~11 m).
+					Next(5s);
+					break;
+				case EVT_ESCAPE_ROMMATH_SHATTER:
+					// Hathorel, arrive devant l'emplacement du portail, commence a l'ouvrir.
+					if (Creature* hathorel = GetCreature(DATA_MAGISTER_HATHOREL))
+						hathorel->CastSpell(hathorel, SPELL_PORTAL_CHANNELING_03, true);
+					if (Creature* aethas = GetAethas())
+					{
+						if (Creature* rommath = GetRommath())
+							rommath->HandleEmoteCommand(EMOTE_ONESHOT_SPELL_CAST_OMNI);
+						// La glace vole en eclats : Aethas est libre avant de repondre a Jaina.
+						aethas->RemoveAllAuras();
+						aethas->CastSpell(aethas, SPELL_FROST_NOVA_COSMETIC, true);
+					}
+					Next(1500ms);
+					break;
+				case EVT_ESCAPE_AETHAS_TALK_02:
+					if (Creature* aethas = GetAethas())
+					{
+						if (Creature* jaina = instance->GetCreature(flashbackJaina))
+							aethas->SetFacingToObject(jaina);
+						Talk(aethas, SAY_ESCAPE_AETHAS_02);
+					}
+					Next(1s);
 					break;
 				case EVT_ESCAPE_ROMMATH_PORTAL:
 					if (Creature* rommath = GetRommath())
@@ -1121,25 +1185,101 @@ class scenario_dalaran_purge : public InstanceMapScript
 						Talk(rommath, SAY_INFILTRATE_ROMMATH_07);
 						rommath->SetVignette(VIGNETTE_NONE);
 
-						if (GameObject* portal = rommath->SummonGameObject(GOB_PORTAL_TO_SILVERMOON, EndPortalPos01,
+						// Le portail est celui qu'Hathorel vient d'ouvrir.
+						Creature* hathorel = GetCreature(DATA_MAGISTER_HATHOREL);
+						if (hathorel)
+							hathorel->RemoveAurasDueToSpell(SPELL_PORTAL_CHANNELING_03);
+
+						WorldObject* opener = hathorel ? static_cast<WorldObject*>(hathorel) : rommath;
+						if (GameObject* portal = opener->SummonGameObject(GOB_PORTAL_TO_SILVERMOON, EndPortalPos01,
 							QuaternionData::fromEulerAnglesZYX(EndPortalPos01.GetOrientation(), 0.0f, 0.0f), 0s))
 						{
 							endPortal = portal->GetGUID();
 
 							portal->SetFlag(GO_FLAG_NOT_SELECTABLE | GO_FLAG_IN_USE);
 
+							rommath->SetWalk(false);
 							rommath->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_03, portal->GetPosition());
 
-							if (Creature* hathorel = GetCreature(DATA_MAGISTER_HATHOREL))
+							if (hathorel)
 								hathorel->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_03, portal->GetPosition());
 
 							if (Creature* aethas = GetAethas())
 							{
 								aethas->SetWalk(false);
-								aethas->RemoveAllAuras();
 								aethas->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_03, portal->GetPosition());
 							}
 						}
+					}
+					break;
+
+				#pragma endregion
+
+				// Entre les mains du chef : conclusion
+				#pragma region IN_THE_HANDS_OF_THE_CHIEF
+
+				case EVT_END_JAINA_TALK_01:
+					if (Creature* jaina = GetJaina())
+					{
+						if (Player* player = GetFirstPlayer())
+							jaina->SetFacingToObject(player);
+						Talk(jaina, SAY_END_JAINA_01);
+					}
+					// Kalecgos arrive a pied par le chemin de la Jaina du souvenir,
+					// pendant que Jaina tire le bilan.
+					if (Creature* kalecgos = instance->SummonCreature(NPC_KALECGOS, RommathPos02))
+					{
+						kalecgosGuid = kalecgos->GetGUID();
+						kalecgos->SetReactState(REACT_PASSIVE);
+						kalecgos->SetWalk(true);
+                        kalecgos->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RommathPos03, true,
+                                                               RommathPos03.GetAbsoluteAngle(JainaPos02));
+					}
+					Next(1s);
+					break;
+				case EVT_END_JAINA_TALK_02:
+					Talk(GetJaina(), SAY_END_JAINA_02);
+					Next(1s);
+					break;
+				case EVT_END_KALECGOS_ARRIVE:
+					if (Creature* jaina = GetJaina())
+						if (Creature* kalecgos = instance->GetCreature(kalecgosGuid))
+							jaina->SetFacingToObject(kalecgos);
+					Next(1s);
+					break;
+				case EVT_END_KALECGOS_TALK_03:
+					Talk(instance->GetCreature(kalecgosGuid), SAY_END_KALECGOS_03);
+					Next(1s);
+					break;
+				case EVT_END_JAINA_TALK_04:
+					Talk(GetJaina(), SAY_END_JAINA_04);
+					Next(1s);
+					break;
+				case EVT_END_KALECGOS_TALK_05:
+					Talk(instance->GetCreature(kalecgosGuid), SAY_END_KALECGOS_05);
+					Next(1s);
+					break;
+				case EVT_END_JAINA_TALK_06:
+					if (Creature* jaina = GetJaina())
+					{
+						if (Player* player = GetFirstPlayer())
+							jaina->SetFacingToObject(player);
+						Talk(jaina, SAY_END_JAINA_06);
+						// Ce qui devait etre fait : rapport au roi Varian. Jaina la donne a tout le
+						// groupe ; elle reste donneuse de quete pour qui l'aurait abandonnee.
+						jaina->SetNpcFlag(UNIT_NPC_FLAG_QUESTGIVER);
+						if (Quest const* quest = sObjectMgr->GetQuestTemplate(QUEST_WHAT_HAD_TO_BE_DONE))
+						{
+							instance->DoOnPlayers([quest, jaina](Player* player)
+							{
+								if (player->GetQuestStatus(quest->GetQuestId()) == QUEST_STATUS_NONE && player->CanTakeQuest(quest, false))
+									player->AddQuestAndCheckCompletion(quest, jaina);
+							});
+						}
+						// Entre les mains du chef : prendre le portail vers Hurlevent.
+						if (GameObject* portal = jaina->SummonGameObject(GOB_PORTAL_TO_STORMWIND, EndPortalPos01,
+												QuaternionData::fromEulerAnglesZYX(EndPortalPos01.GetOrientation(), 0.0f, 0.0f), 0s))
+							portal->SetVignette(VIGNETTE_PORTAL_TO_STORMWIND);
 					}
 					break;
 
@@ -1168,6 +1308,8 @@ class scenario_dalaran_purge : public InstanceMapScript
 		GuidVector barriers;              // Barrieres magiques
 
 		ObjectGuid endPortal;             // Portail de fin vers Lune-d'argent
+		ObjectGuid flashbackJaina;        // Jaina du souvenir, arrivee trop tard
+		ObjectGuid kalecgosGuid;          // Kalecgos de la conclusion
 
 		// Accesseurs
 		#pragma region ACCESSORS
