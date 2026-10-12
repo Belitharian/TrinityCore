@@ -4,17 +4,21 @@
  * Regroupe tout ce qui n'est ni Jaina (ruins_of_theramore.cpp) ni
  * l'InstanceScript (scenario_ruins_of_theramore.cpp) :
  *
- *   - npc_water_elementals_theramore : elementaires invoques par Jaina,
- *     ils servent de tank aux hordes pendant la phase BackToSender
- *   - npc_roknah_warlord             : boss de fin, ne meurt pas de lui-meme
+ *   - npc_water_elementals_theramore : elementaires d'eau invoques par Jaina (Bataille de
+ *     Theramore, entrees 10955 / 65680 / 68956)
+ *   - npc_roknah_warlord             : chef des pillards, ne meurt pas de lui-meme
  *     (il passe a genoux a 20% PV et attend le finisher scripte de Jaina)
- *   - go_theramore_banner            : banniere ramassable pendant la phase Standards
- *   - spell_ruins_*                  : sorts dummy relayes vers leur TriggerSpell
- *   - spell_arcane_chaos             : AoE periodique de Jaina sur tous les hostiles
+ *   - go_theramore_banner            : etendard pille, ramassable pendant la phase Looters
+ *   - spell_ruins_frigid_shards      : Frigid Shards (354933), lance par la Jaina de la Purge
+ *   - spell_ruins_flaming_twisters   : Flaming Twisters (1283566) de Jaina
+ *   - at_ruins_flaming_twister       : la tornade de feu (areatrigger 41584)
  *
  * Commentaires en francais sans accents (encodage TC).
  */
 
+#include "AreaTrigger.h"
+#include "AreaTriggerAI.h"
+#include "Containers.h"
 #include "GameObject.h"
 #include "GameObjectAI.h"
 #include "InstanceScript.h"
@@ -31,7 +35,7 @@
 // =========================================================================
 // Invoques par SPELL_SUMMON_WATER_ELEMENTALS (voir npc_jaina_ruins).
 // Ils restent au corps a corps rapproche et encaissent les hordes pendant la
-// phase BackToSender. Un bouclier one-shot se declenche a 30% PV.
+// combat. Un bouclier one-shot se declenche a 30% PV.
 struct npc_water_elementals_theramore : public CustomAI
 {
 	npc_water_elementals_theramore(Creature* creature) : CustomAI(creature), shielded(false)
@@ -104,11 +108,11 @@ struct npc_water_elementals_theramore : public CustomAI
 };
 
 // =========================================================================
-// npc_roknah_warlord - Boss de la phase BackToSender
+// npc_roknah_warlord - Chef des pillards (phase Looters)
 // =========================================================================
-// Le warlord ne peut pas mourir des degats des joueurs : arrive au seuil bas
+// Le chef des pillards ne peut pas mourir des degats des joueurs : arrive au seuil bas
 // il devient invulnerable, s'agenouille et attend que Jaina vienne l'achever
-// (voir npc_jaina_ruins::MovementInform / MOVEMENT_INFO_POINT_02).
+// (voir scenario_ruins_of_theramore::TryStartFinisher).
 struct npc_roknah_warlord : public CustomAI
 {
 	npc_roknah_warlord(Creature* creature) : CustomAI(creature, AI_Type::Melee), isAlmostDead(false)
@@ -160,14 +164,9 @@ struct npc_roknah_warlord : public CustomAI
 				me->SetStandState(UNIT_STAND_STATE_KNEEL);
 			});
 
-			// Jaina sort de sa rotation : on la nettoie de ses auras de combat.
-			if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
-			{
-				jaina->RemoveAllAuras();
-			}
-
-			// Signale a l'InstanceScript que la sequence du finisher peut demarrer.
-			instance->SetData(EVENT_WARLORD_ROKNAH_SLAIN, 0U);
+			// Signale a l'InstanceScript que le chef est a genoux : Jaina viendra
+			// l'achever une fois l'etape des pillards validee.
+			instance->SetData(DATA_WARLORD_KNEELING, 0U);
 		}
 	}
 
@@ -212,9 +211,9 @@ struct npc_roknah_warlord : public CustomAI
 };
 
 // =========================================================================
-// go_theramore_banner - Banniere de Theramore (phase Standards)
+// go_theramore_banner - Banniere de Theramore (phase Looters)
 // =========================================================================
-// Interactible uniquement pendant la phase Standards : elle applique le buff
+// Interactible uniquement pendant la phase Looters : elle applique le buff
 // de banniere au joueur puis disparait. En dehors de cette phase le clic est
 // ignore (return false -> comportement par defaut du GameObject).
 struct go_theramore_banner : public GameObjectAI
@@ -234,7 +233,7 @@ struct go_theramore_banner : public GameObjectAI
 	bool OnGossipHello(Player* player) override
 	{
 		RFTPhases phase = (RFTPhases)instance->GetData(DATA_SCENARIO_PHASE);
-		if (phase != RFTPhases::Standards)
+		if (phase != RFTPhases::Looters)
 			return false;
 
 		player->CastSpell(player, SPELL_STANDARD_OF_THERAMORE, true);
@@ -269,64 +268,113 @@ class spell_ruins_frigid_shards : public AuraScript
 	}
 };
 
-// Comet Barrage - 354938
-// Meme principe que Frigid Shards, mais sur un effet dummy de sort direct.
-class spell_ruins_comet_barrage : public SpellScript
+// Flaming Twisters - 1283566 (Embertalon, Midnight)
+// Dummy "server-side script" sur les ennemis a 60 m (TARGET_UNIT_SRC_AREA_ENEMY) :
+// on n'en garde que BasePoints (3) au hasard, et sur chacun on lance le missile
+// du TriggerSpell (1283561), qui pose a l'arrivee l'areatrigger 41584 (1283558).
+class spell_ruins_flaming_twisters : public SpellScript
 {
-	void HandleDamages(SpellEffIndex effIndex)
+	bool Validate(SpellInfo const* spellInfo) override
+	{
+		return ValidateSpellEffect({ { spellInfo->Id, EFFECT_0 } })
+			&& ValidateSpellInfo({ spellInfo->GetEffect(EFFECT_0).TriggerSpell });
+	}
+
+	void FilterTargets(std::list<WorldObject*>& targets)
+	{
+		int32 const count = GetEffectInfo(EFFECT_0).CalcValue(GetCaster());
+		Trinity::Containers::RandomResize(targets, std::max(count, 1));
+	}
+
+	void HandleDummy(SpellEffIndex effIndex)
 	{
 		Unit* caster = GetCaster();
-		Unit* victim = GetHitUnit();
-		if (caster && victim)
-		{
-			uint32 triggerSpell = GetSpellInfo()->GetEffect(effIndex).TriggerSpell;
-			caster->CastSpell(victim, triggerSpell, true);
-		}
+		Unit* target = GetHitUnit();
+		if (!caster || !target)
+			return;
+
+		// Le missile vise une destination (TARGET_DEST_DEST) : la position de la cible.
+		caster->CastSpell(target->GetPosition(), GetEffectInfo(effIndex).TriggerSpell, true);
 	}
 
 	void Register() override
 	{
-		OnEffectHitTarget += SpellEffectFn(spell_ruins_comet_barrage::HandleDamages, EFFECT_0, SPELL_EFFECT_DUMMY);
+		OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_ruins_flaming_twisters::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENEMY);
+		OnEffectHitTarget += SpellEffectFn(spell_ruins_flaming_twisters::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
 	}
 };
 
-// Arcane Chaos - 406854
-// Aura periodique de Jaina : a chaque tick, envoie un missile sur TOUS les
-// hostiles vivants a portee. Les morts et les feign death sont filtres pour
-// ne pas gaspiller de missiles sur des cibles invalides.
-class spell_arcane_chaos : public AuraScript
+// Flaming Twister - AreaTrigger 41584 (sort 1283558, 20 s)
+// La tornade se balade au hasard pendant ses 20 s (spline relancee a chaque
+// arrivee) et brule les ennemis de son lanceur tant qu'ils sont dedans :
+// DoT 1283559 (4 % toutes les 1,5 s). Elle reste dans la zone du combat : au-dela
+// de WANDER_LEASH de son point d'apparition, elle repart vers lui.
+struct at_ruins_flaming_twister : AreaTriggerAI
 {
-	static constexpr float MAX_RANGE = 20.0f;
+	using AreaTriggerAI::AreaTriggerAI;
 
 	enum Spells
 	{
-		SPELL_ARCANE_CHAOS_MISSILE = 406859,
+		SPELL_FLAMING_TWISTERS_DAMAGE = 1283559
 	};
 
-	void OnPeriodic(AuraEffect const* /*aurEff*/)
+	static constexpr float WANDER_MIN   = 10.0f;
+	static constexpr float WANDER_MAX   = 20.0f;
+	static constexpr float WANDER_SPEED = 6.0f;
+	static constexpr float WANDER_LEASH = 40.0f;
+	static constexpr uint8 WANDER_TRIES = 6;
+
+	Position origin;
+
+	void OnInitialize() override
 	{
-		Unit* caster = GetCaster();
-		if (!caster)
-			return;
-
-		// Recherche de tous les hostiles a portee autour du caster.
-		std::list<Unit*> targets;
-		Trinity::AnyUnfriendlyUnitInObjectRangeCheck uCheck(caster, caster, MAX_RANGE);
-		Trinity::UnitListSearcher<Trinity::AnyUnfriendlyUnitInObjectRangeCheck> searcher(caster, targets, uCheck);
-		Cell::VisitAllObjects(caster, searcher, MAX_RANGE);
-
-		targets.remove_if([](Unit* unit)
-		{
-			return unit->isDead() || unit->HasUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
-		});
-
-		for (Unit* victim : targets)
-			caster->CastSpell(victim, SPELL_ARCANE_CHAOS_MISSILE, true);
+		origin = at->GetPosition();
+		Wander();
 	}
 
-	void Register() override
+	void OnDestinationReached() override
 	{
-		OnEffectPeriodic += AuraEffectPeriodicFn(spell_arcane_chaos::OnPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
+		Wander();
+	}
+
+	// Un grand pas dans une direction au hasard, arrete par le premier obstacle.
+	// Plusieurs essais : contre un mur, une autre direction finit par passer.
+	void Wander()
+	{
+		for (uint8 i = 0; i < WANDER_TRIES; ++i)
+		{
+			// Trop loin de son point d'apparition : elle y revient (a peu pres).
+			float angle = frand(0.0f, float(2 * M_PI));
+			if (at->GetExactDist2d(origin) > WANDER_LEASH)
+				angle = at->GetAbsoluteAngle(origin) + frand(-float(M_PI) / 4, float(M_PI) / 4);
+
+			// MovePositionToFirstCollision ajoute l'orientation a l'angle : on la retranche.
+			Position dest = at->GetPosition();
+			at->MovePositionToFirstCollision(dest, frand(WANDER_MIN, WANDER_MAX), angle - at->GetOrientation());
+
+			std::vector<G3D::Vector3> points;
+			points.emplace_back(at->GetPositionX(), at->GetPositionY(), at->GetPositionZ());
+			points.emplace_back(dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
+
+			// Spline trop courte (bloquee contre un mur) : on essaie une autre direction.
+			if ((points[1] - points[0]).squaredMagnitude() < 4.0f)
+				continue;
+
+			at->InitSplines(points, WANDER_SPEED);
+			return;
+		}
+	}
+
+	void OnUnitEnter(Unit* unit) override
+	{
+		Unit* caster = at->GetCaster();
+		if (caster && caster->IsValidAttackTarget(unit))
+			caster->CastSpell(unit, SPELL_FLAMING_TWISTERS_DAMAGE, true);
+	}
+
+	void OnUnitExit(Unit* unit, AreaTriggerExitReason /*reason*/) override
+	{
+		unit->RemoveAurasDueToSpell(SPELL_FLAMING_TWISTERS_DAMAGE, at->GetCasterGuid());
 	}
 };
 
@@ -342,7 +390,8 @@ void AddSC_npcs_ruins_of_theramore()
 
 	RegisterGameObjectAI(go_theramore_banner);
 
-	RegisterSpellScript(spell_ruins_comet_barrage);
 	RegisterSpellScript(spell_ruins_frigid_shards);
-	RegisterSpellScript(spell_arcane_chaos);
+	RegisterSpellScript(spell_ruins_flaming_twisters);
+
+	RegisterAreaTriggerAI(at_ruins_flaming_twister);
 }
