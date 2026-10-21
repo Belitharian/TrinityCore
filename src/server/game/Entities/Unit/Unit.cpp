@@ -3489,6 +3489,9 @@ Aura* Unit::_TryStackingOrRefreshingExistingAura(AuraCreateInfo& createInfo)
                 *oldItemLevel = createInfo.CastItemLevel;
             }
 
+            if (createInfo.Dst)
+                foundAura->m_dst.WorldRelocate(createInfo.Dst);
+
             // try to increase stack amount
             foundAura->ModStackAmount(createInfo.StackAmount, AURA_REMOVE_BY_DEFAULT, createInfo.ResetPeriodicTimer);
             return foundAura;
@@ -5351,7 +5354,7 @@ void Unit::UpdateStatBuffModForClient(Stats stat)
 void Unit::SetCreateStat(Stats stat, float val)
 {
     UnitMods const unitMod = static_cast<UnitMods>(UNIT_MOD_STAT_START + AsUnderlyingType(stat));
-    HandleStatFlatModifier(unitMod, BASE_VALUE, val, true);
+    SetStatFlatModifier(unitMod, BASE_VALUE, val);
 }
 
 float Unit::GetCreateStat(Stats stat) const
@@ -5543,6 +5546,13 @@ std::vector<AreaTrigger*> Unit::GetAreaTriggers(uint32 spellId) const
         if ((*i)->GetSpellId() == spellId)
             areaTriggers.push_back(*i);
 
+    return areaTriggers;
+}
+
+std::vector<AreaTrigger*> Unit::GetAreaTriggers(std::function<bool(AreaTrigger const*)> const& predicate) const
+{
+    std::vector<AreaTrigger*> areaTriggers;
+    std::ranges::copy_if(m_areaTrigger, std::back_inserter(areaTriggers), std::ref(predicate));
     return areaTriggers;
 }
 
@@ -8711,16 +8721,6 @@ int64 Unit::ModifyHealth(int64 dVal)
         gain = maxHealth - curHealth;
     }
 
-    if (dVal < 0)
-    {
-        WorldPackets::Combat::HealthUpdate packet;
-        packet.Guid = GetGUID();
-        packet.Health = GetHealth();
-
-        if (Player* player = GetCharmerOrOwnerPlayerOrPlayerItself())
-            player->GetSession()->SendPacket(packet.Write());
-    }
-
     return gain;
 }
 
@@ -11148,15 +11148,35 @@ void Unit::ApplyCastTimePercentMod(float val, bool apply)
     if (val > 0.f)
     {
         ApplyPercentModUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModCastingSpeed), val, !apply);
-        ApplyPercentModUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModSpellHaste), val, !apply);
-        ApplyPercentModUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModHasteRegen), val, !apply);
     }
     else
     {
         ApplyPercentModUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModCastingSpeed), -val, apply);
-        ApplyPercentModUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModSpellHaste), -val, apply);
-        ApplyPercentModUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModHasteRegen), -val, apply);
+        ApplyPercentModUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModCastingSpeedNeg), -val, apply);
     }
+}
+
+void Unit::ApplySpellHastePercentMod(float val, bool apply)
+{
+    if (val > 0.f)
+        ApplyPercentModUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModSpellHaste), val, !apply);
+    else
+        ApplyPercentModUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModSpellHaste), -val, apply);
+}
+
+void Unit::ApplyHasteRegenPercentMod(float val, bool apply)
+{
+    if (val > 0.f)
+        ApplyPercentModUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModHasteRegen), val, !apply);
+    else if (val < 0.0f)
+        ApplyPercentModUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModHasteRegen), -val, apply);
+    else
+        return;
+
+    if (Player* player = ToPlayer())
+        for (Powers power : GetPowerTypes())
+            if (sDB2Manager.GetPowerTypeEntry(power)->GetFlags().HasFlag(PowerTypeFlags::RegenAffectedByHaste))
+                player->UpdatePowerRegen(power);
 }
 
 void Unit::UpdateAuraForGroup()

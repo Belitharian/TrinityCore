@@ -1319,6 +1319,7 @@ std::array<SpellEffectInfo::StaticData, TOTAL_SPELL_EFFECTS> SpellEffectInfo::_d
     {EFFECT_IMPLICIT_TARGET_EXPLICIT, TARGET_OBJECT_TYPE_ITEM}, // 357 SPELL_EFFECT_357
     {EFFECT_IMPLICIT_TARGET_EXPLICIT, TARGET_OBJECT_TYPE_ITEM}, // 358 SPELL_EFFECT_358
     {EFFECT_IMPLICIT_TARGET_EXPLICIT, TARGET_OBJECT_TYPE_ITEM}, // 359 SPELL_EFFECT_359
+    {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_NONE}, // 360 SPELL_EFFECT_360
 } };
 
 SpellInfo::SpellInfo(SpellNameEntry const* spellName, ::Difficulty difficulty, SpellInfoLoadHelper const& data)
@@ -4365,6 +4366,9 @@ float SpellInfo::CalcProcPPM(Unit* caster, int32 itemLevel) const
 
     for (SpellProcsPerMinuteModEntry const* mod : ProcPPMMods)
     {
+        if (mod->PlayerConditionID && (!caster->IsPlayer() || !ConditionMgr::IsPlayerMeetingCondition(caster->ToPlayer(), mod->PlayerConditionID)))
+            continue;
+
         switch (mod->Type)
         {
             case SPELL_PPM_MOD_HASTE:
@@ -4856,9 +4860,14 @@ bool _isPositiveEffectImpl(SpellInfo const* spellInfo, SpellEffectInfo const& ef
             case SPELL_AURA_MOD_SPELL_HIT_CHANCE:
             case SPELL_AURA_MOD_SPELL_CRIT_CHANCE:
             case SPELL_AURA_MOD_RANGED_HASTE:
+            case SPELL_AURA_MOD_RANGED_HASTE_NO_REGEN:
             case SPELL_AURA_MOD_MELEE_RANGED_HASTE:
-            case SPELL_AURA_MOD_CASTING_SPEED_NOT_STACK:
-            case SPELL_AURA_HASTE_SPELLS:
+            case SPELL_AURA_MOD_MELEE_RANGED_HASTE_NO_REGEN:
+            case SPELL_AURA_MOD_CASTING_SPEED:
+            case SPELL_AURA_MOD_CASTING_SLOW_NO_STACK:
+            case SPELL_AURA_MOD_MELEE_SLOW_NO_STACK:
+            case SPELL_AURA_MOD_RANGED_SLOW_NO_STACK:
+            case SPELL_AURA_MOD_SPELL_SLOW_NO_STACK:
             case SPELL_AURA_MOD_RECOVERY_RATE_BY_SPELL_LABEL:
             case SPELL_AURA_MOD_DETECT_RANGE:
             case SPELL_AURA_MOD_INCREASE_HEALTH_PERCENT:
@@ -4872,6 +4881,7 @@ bool _isPositiveEffectImpl(SpellInfo const* spellInfo, SpellEffectInfo const& ef
                 break;
             case SPELL_AURA_MOD_ATTACKSPEED:            // some buffs have negative bp, check both target and bp
             case SPELL_AURA_MOD_MELEE_HASTE:
+            case SPELL_AURA_MOD_MELEE_HASTE_NO_REGEN:
             case SPELL_AURA_MOD_DAMAGE_DONE:
             case SPELL_AURA_MOD_RESISTANCE:
             case SPELL_AURA_MOD_RESISTANCE_PCT:
@@ -4879,8 +4889,8 @@ bool _isPositiveEffectImpl(SpellInfo const* spellInfo, SpellEffectInfo const& ef
             case SPELL_AURA_MOD_ATTACK_POWER:
             case SPELL_AURA_MOD_RANGED_ATTACK_POWER:
             case SPELL_AURA_MOD_DAMAGE_PERCENT_DONE:
-            case SPELL_AURA_MOD_SPEED_SLOW_ALL:
-            case SPELL_AURA_MELEE_SLOW:
+            case SPELL_AURA_MOD_MELEE_RANGED_CASTING_SLOW_NO_STACK:
+            case SPELL_AURA_MOD_MELEE_RANGED_CASTING_HASTE:
             case SPELL_AURA_MOD_ATTACK_POWER_PCT:
             case SPELL_AURA_MOD_HEALING_DONE_PERCENT:
             case SPELL_AURA_MOD_HEALING_PCT:
