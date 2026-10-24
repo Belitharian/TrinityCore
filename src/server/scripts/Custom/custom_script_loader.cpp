@@ -34,6 +34,8 @@ void AddSC_npcs_dalaran_convo();
 void AddSC_npcs_clan();
 void AddSC_npc_clan_farm_animal();
 
+void AddSC_spell_custom();
+
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
 void AddCustomScripts()
@@ -55,4 +57,6 @@ void AddCustomScripts()
 
     AddSC_npcs_clan();
     AddSC_npc_clan_farm_animal();
+
+    AddSC_spell_custom();
 }

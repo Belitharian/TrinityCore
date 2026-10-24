@@ -3519,8 +3519,8 @@ struct at_arcane_orb : AreaTriggerAI
 
 // Blessed Hammer - 420092
 // AreaTriggerID - 29807
-// Marteau tournoyant : la zone suit une spirale d'Archimede calculee a la
-// creation autour du lanceur, et frappe les ennemis qu elle traverse.
+// Marteau tournoyant : la zone suit une spirale d'Archimede (spline en base,
+// areatrigger_create_properties_spline_point) et frappe les ennemis qu elle traverse.
 struct at_blessed_hammer : AreaTriggerAI
 {
 	using AreaTriggerAI::AreaTriggerAI;
@@ -3529,34 +3529,6 @@ struct at_blessed_hammer : AreaTriggerAI
 	{
 		SPELL_BLESSED_HAMMER_DAMAGE = 420091
 	};
-
-	void OnCreate(Spell const* /*creatingSpell*/) override
-	{
-		Unit* caster = at->GetCaster();
-		if (!caster)
-			return;
-
-		Position center  = caster->GetPosition();
-		float startAngle = caster->GetOrientation();
-		float fixedZ     = center.GetPositionZ() + Z_OFFSET;
-
-		std::vector<G3D::Vector3> path;
-		path.reserve(POINTS + 1);
-
-		for (std::size_t i = 0; i <= POINTS; ++i)
-		{
-			float t     = float(i) / float(POINTS);
-			float theta = t * TURNS * 2.0f * float(M_PI);
-			float r     = R0 + GROWTH * theta;
-
-			float x = center.GetPositionX() + r * std::cos(startAngle + theta);
-			float y = center.GetPositionY() + r * std::sin(startAngle + theta);
-
-			path.emplace_back(x, y, fixedZ);
-		}
-
-		at->InitSplines(std::move(path));
-	}
 
 	void OnUnitEnter(Unit* unit) override
 	{
@@ -3567,14 +3539,6 @@ struct at_blessed_hammer : AreaTriggerAI
 		if (caster->IsValidAttackTarget(unit))
 			caster->CastSpell(unit, SPELL_BLESSED_HAMMER_DAMAGE, TRIGGERED_IGNORE_GCD | TRIGGERED_IGNORE_CAST_IN_PROGRESS);
 	}
-
-private:
-	// AreaTrigger 29807 dure 5 s : on etale la spirale sur toute la duree.
-	static constexpr std::size_t POINTS = 200;    // Densite totale (40 pts/seconde)
-	static constexpr float TURNS        = 10.0f;  // 10 tours sur 5 s = 2 tours/s
-	static constexpr float R0           = 2.0f;   // Rayon de depart
-	static constexpr float GROWTH       = 0.35f;  // Expansion par radian (spirale d'Archimede)
-	static constexpr float Z_OFFSET     = 1.5f;   // Hauteur du marteau au-dessus du sol
 };
 
 // =========================================================================

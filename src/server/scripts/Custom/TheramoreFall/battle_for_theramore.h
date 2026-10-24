@@ -33,7 +33,7 @@
 
 // Decommenter pour raccourcir les cinematiques et sauter directement aux
 // phases de combat pendant les tests (voir les #ifdef CUSTOM_DEBUG du .cpp).
-//#define CUSTOM_DEBUG
+#define CUSTOM_DEBUG
 
 constexpr char const* BFTScriptName             = "scenario_battle_for_theramore";
 constexpr char const* DataHeader                = "BFT";
