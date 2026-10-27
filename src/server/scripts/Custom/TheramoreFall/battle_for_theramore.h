@@ -56,7 +56,7 @@ static constexpr uint8 ARCHMAGES_LOCATION       = 6;    // Archimages de Dalaran
 static constexpr uint8 ARCHMAGES_RELOCATION     = 6;    // Positions des archimages apres la bataille
 static constexpr uint8 GENERALS_LOCATION        = 6;    // Generaux de la 7e Legion (arrivee au briefing)
 static constexpr uint8 GENERALS_AFTERMATH       = 5;    // Generaux reunis apres la bataille (Shandris est partie)
-static constexpr uint8 ACTORS_RELOCATION        = 16;   // Acteurs et generaux teleportes au debut de la bataille
+static constexpr uint8 ACTORS_RELOCATION        = 17;   // Acteurs et generaux teleportes au debut de la bataille
 static constexpr uint8 BARRIERS_LOCATION        = 2;    // Barrieres mystiques (DATA_MYSTIC_BARRIER_01/02) - non utilisee actuellement
 static constexpr uint8 FIRE_LOCATION            = 32;   // Foyers d'incendie repartis dans la ville
 static constexpr uint8 TOWER_BARRIERS_LOCATION  = 8;    // Barrieres d'energie autour de la tour
@@ -275,19 +275,22 @@ enum BFTMisc
 	GOB_PORTAL_TO_ORGRIMMAR             = 353822,
 	GOB_ENERGY_BARRIER_TOWER            = 396264,
 	GOB_LAVISH_REFRESHMENT_TABLE        = 1550006,
+	GOB_ALLIANCE_BATTLESHIP             = 1550016,  // Flotte de la 7e Legion
+	GOB_MORNING_STAR                    = 1550017,  // L'Etoile du matin
+	GOB_SEA_WOLF                        = 1550018,  // Loup de mer
+	GOB_GANGPLANK                       = 1550019,  // Passerelle des navires
 
 	// Navires du port : gameobjects retires des ADT, ouverts et fermes par
 	// groupe de spawn (2026_10_27_00_world_theramore_ships.sql)
-	SPAWN_GROUP_SEVENTH_FLEET           = 50000,    // Flotte de la 7e Legion, apres le depart de L'Etoile du matin
-	SPAWN_GROUP_MORNING_STAR            = 50001,    // L'Etoile du matin, au port jusqu'a la fin de l'evacuation
-	SPAWN_GROUP_SEA_WOLF                = 50002,    // Loup de mer et son baril de poudre, avec le capitaine Drok
+	SPAWN_GROUP_SEVENTH_FLEET           = 50000,    // Flotte de la 7e Legion, a la validation de l'etape Une petite aide
+	SPAWN_GROUP_MORNING_STAR            = 50001,    // L'Etoile du matin, au port jusqu'a la validation de l'etape Une petite aide
+	SPAWN_GROUP_SEA_WOLF                = 50002,    // Loup de mer et son baril de poudre
 
 	// Actions (DoAction) de l'evacuation
-	ACTION_EVACUATION_PREPARE           = 1,        // Civils : rassemblent leurs enfants
-	ACTION_EVACUATION_START             = 2,        // Crieur : debut des proclamations
-	ACTION_EVACUATION_END               = 3,        // Crieur : fin des proclamations
-	ACTION_ANSWER_CRIER                 = 4,        // Civil : repond (agace) au crieur
-	ACTION_MORNING_STAR_DEPARTS         = 5,        // Civils encore en route : embarquent d'office
+	ACTION_EVACUATION_START             = 1,        // Crieur : debut des proclamations
+	ACTION_EVACUATION_END               = 2,        // Crieur : fin des proclamations ; civils : montent a bord
+	ACTION_ANSWER_CRIER                 = 3,        // Civil : repond (agace) au crieur
+	ACTION_FIGHT_FIRE                   = 4,        // Janene : eteint l'incendie devant l'auberge pendant la bataille
 
 	// Scenes (scene_template)
 	SCENE_THERAMORE_INTRO               = 500000,   // Survol de la ville a l'entree (package 50000)
@@ -591,7 +594,8 @@ enum class EvacuationScene : uint32
 // Reseau des rues de Theramore, releve en jeu (marqueurs .npc add 1, guid en
 // commentaire) : l'anneau autour de la tour, ses branches vers l'auberge et
 // les groupes de civils, et la route du port. Les quatre derniers noeuds
-// (passerelle et pont de L'Etoile du matin) ont ete releves au .gps.
+// (bout du ponton, passerelle et pont de L'Etoile du matin, dernier navire
+// du ponton) ont ete releves au .gps.
 //
 // Un civil evacue part du noeud le plus proche et suit le plus court chemin
 // jusqu'au pont (THERAMORE_STREET_BOARDING). Entre deux noeuds, le
@@ -609,7 +613,7 @@ struct StreetLink
 
 static constexpr uint8 THERAMORE_STREET_NODES    = 82;
 static constexpr uint8 THERAMORE_STREET_LINKS    = 82;
-static constexpr uint8 THERAMORE_STREET_GANGPLANK = 78; // Pied de la passerelle : plus de decalage lateral a partir d'ici
+static constexpr uint8 THERAMORE_STREET_GANGPLANK = 78; // Bout du ponton : fin des rues, embarquement en ligne droite ensuite
 static constexpr uint8 THERAMORE_STREET_BOARDING = 81;  // Centre du pont de L'Etoile du matin
 
 StreetNode const TheramoreStreets[THERAMORE_STREET_NODES] =
@@ -692,10 +696,10 @@ StreetNode const TheramoreStreets[THERAMORE_STREET_NODES] =
 	{  -3697.42f,  -4372.17f,  10.61f },   // 75 50000672
 	{  -3689.73f,  -4378.56f,  10.61f },   // 76 50000673
 	{  -3679.90f,  -4382.99f,  10.49f },   // 77 50000674
-	{  -3933.12f,  -4659.34f,   8.51f },   // 78 pied de la passerelle
-	{  -3924.09f,  -4668.30f,  13.50f },   // 79 haut de la passerelle
-	{  -3918.15f,  -4670.53f,  13.08f },   // 80 pont de L'Etoile du matin
-	{  -3907.22f,  -4666.13f,  13.25f },   // 81 centre du navire
+	{  -3995.39f,  -4718.32f,   4.12f },   // 78 bout du ponton
+	{  -3989.63f,  -4734.62f,   4.57f },   // 79 pied de la passerelle
+	{  -4003.34f,  -4745.31f,  12.99f },   // 80 haut de la passerelle
+	{  -4018.24f,  -4742.52f,  13.26f },   // 81 pont de L'Etoile du matin
 };
 
 StreetLink const TheramoreStreetLinks[THERAMORE_STREET_LINKS] =
@@ -867,6 +871,7 @@ Location const actorsRelocation[ACTORS_RELOCATION] =
 	{ DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3649.58f, -4369.21f,  9.57f, 0.69f } },
 	{ DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3779.07f, -4276.96f,  7.93f, 1.52f } },
 	{ DATA_KALECGOS,             { 0.f, 0.f, 0.f, 0.f }, { -3730.39f, -4550.39f, 27.11f, 0.54f } },
+	{ DATA_VEREESA_WINDRUNNER,   { 0.f, 0.f, 0.f, 0.f }, { -3728.51f, -4555.08f,  4.74f, 2.78f } },    // elle est pas visible
 	// Generaux de la 7e Legion, aux cotes des defenseurs de chaque vague
 	{ DATA_MARCUS_JONATHAN,      { 0.f, 0.f, 0.f, 0.f }, { -3664.50f, -4373.00f,  9.35f, 0.69f } },    // portes principales
 	{ DATA_THADDUS_STOUTBLOW,    { 0.f, 0.f, 0.f, 0.f }, { -3656.00f, -4378.50f,  9.40f, 0.69f } },    // portes principales
@@ -1251,8 +1256,8 @@ WaypointPath const JainaPath02 =
 };
 
 // Survol de Theramore par Kalecgos sous forme de dragon.
-// NOTE : actuellement inutilise, npc_kalecgos_dragon pilote son vol via
-// MoveCirclePath autour de TheramorePoint01.
+// NOTE : actuellement inutilise, npc_kalecgos_dragon pilote son vol par une
+// spline cyclique autour de TheramorePoint01.
 WaypointPath const KalecgosPath01 =
 {
 	1,
@@ -1437,8 +1442,6 @@ Position const RhoninPoint02    = { -3744.36f, -4453.88f, 64.98f, 5.41f }; // Rh
 Position const PainedPoint01    = { -3747.93f, -4442.05f, 30.54f, 1.54f }; // Pained a la table du conseil
 Position const PainedPoint02    = { -3660.60f, -4372.12f,  9.36f, 0.68f }; // Pained aux cotes de Jaina, porte principale (bataille)
 Position const PainedPoint03    = { -3659.07f, -4365.56f, 10.06f, 0.14f }; // Peine recule depuis Thalen
-Position const OfficerPoint01   = { -3748.43f, -4432.99f, 30.54f, 4.66f }; // Officier de Theramore dans la tour (inutilise)
-Position const QuillPoint01     = { -3751.32f, -4438.13f, 31.26f, 3.33f }; // Plume magique au-dessus de la table (inutilise)
 Position const TervoshPoint01   = { -3720.83f, -4551.10f, 25.82f, 1.35f }; // Tervosh sur la place, phase Evacuation
 Position const KalecgosPoint01  = { -3730.39f, -4550.39f, 27.11f, 0.54f }; // Kalecgos sur la place, phase Evacuation
 Position const PortalPoint01    = { -3712.42f, -4539.62f, 25.82f, 3.59f }; // Portail de Dalaran (arrivee des archimages)
@@ -1447,6 +1450,7 @@ Position const PortalPoint03    = { -3750.82f, -4449.65f, 64.90f, 0.63f }; // Po
 Position const HedricPoint01    = { -3717.79f, -4522.24f, 25.82f, 5.16f }; // Hedric sur la place, phase Evacuation
 Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f }; // Hedric recule devant le portail de Dalaran
 Position const HedricPoint03    = { -3625.58f, -4447.94f, 14.24f, 4.99f }; // Hedric a la table de banquet
+Position const JaneneFirePoint  = { -3626.34f, -4434.43f, 13.10f, 5.58f }; // Janene devant l'auberge, contre l'incendie (bataille)
 Position const ExplodingPoint01 = { -3648.24f, -4364.96f,  9.68f, 3.78f }; // Point d'impact des explosions cosmetiques
 Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f }; // Cellule de Thalen, a la citadelle (des sa capture)
 Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f }; // Table de banquet invoquee pour le repas

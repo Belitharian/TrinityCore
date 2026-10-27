@@ -530,7 +530,7 @@ void npc_clan_member::SpawnGravestone()
     //   - isSummonedAndExpired vaut (GetOwner() || GetSpellId()) && ... , donc faux ici.
     // C'est aussi ce qui evite le recours a une duree de vie artificiellement enorme.
     Map* map = me->GetMap();
-    GameObject* gravestone = GameObject::CreateGameObject(randomEntry, map, dest, rot, 255, GO_STATE_READY);
+    GameObject* gravestone = GameObject::CreateGameObject(randomEntry, map, dest, rot, InitialPhaseShift(), 255, GO_STATE_READY);
     if (gravestone)
     {
         // Meme phase que le defunt, sinon la tombe pourrait lui etre invisible.

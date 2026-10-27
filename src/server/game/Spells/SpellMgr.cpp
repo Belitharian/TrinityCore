@@ -5495,6 +5495,15 @@ void SpellMgr::LoadSpellInfoCorrections()
         spellInfo->AttributesEx2 |= SPELL_ATTR2_IGNORE_LINE_OF_SIGHT;
     });
 
+    // Water Bucket (Bataille de Theramore : seau des incendies d'apres-bataille)
+    // Le joueur ne peut pas l'annuler : seul le scenario le retire
+    // (RemoveAurasDueToSpell, CustomScenario::SyncPhaseAuras).
+    ApplySpellFix({ 42336 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->Attributes |= SPELL_ATTR0_NO_AURA_CANCEL;
+        spellInfo->DurationEntry = sSpellDurationStore.LookupEntry(21);
+    });
+
     for (SpellInfo const& s : mSpellInfoMap)
     {
         SpellInfo* spellInfo = &const_cast<SpellInfo&>(s);

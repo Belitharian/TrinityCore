@@ -26,6 +26,7 @@
 #include "Map.h"
 #include "MapManager.h"
 #include "ObjectAccessor.h"
+#include "PhasingHandler.h"
 #include "Random.h"
 #include "ScriptedCreature.h"
 #include "StringFormat.h"
@@ -1467,7 +1468,7 @@ GameObject* ClanMgr::FillTrough(GameObject* emptyTrough, bool water)
     uint32 entry = water ? FARM_GO_TROUGH_WATER : FARM_GO_TROUGH_STRAW;
     // Duree "infinie" (24h) : elle ne s'evapore pas, seul un animal la vide. Passer par
     // SummonGameObject via le map necessite un summoner ; on cree l'objet a la main.
-    GameObject* filled = GameObject::CreateGameObject(entry, map, pos, rot, 255, GO_STATE_READY);
+    GameObject* filled = GameObject::CreateGameObject(entry, map, pos, rot, InitialPhaseShift(), 255, GO_STATE_READY);
     if (!filled)
         return nullptr;
     filled->SetRespawnTime(86400);
@@ -1490,7 +1491,7 @@ void ClanMgr::EmptyTrough(GameObject* filled)
     QuaternionData rot(filled->GetLocalRotation());
     filled->DespawnOrUnsummon();
 
-    GameObject* empty = GameObject::CreateGameObject(FARM_GO_TROUGH_EMPTY, map, pos, rot, 255, GO_STATE_READY);
+    GameObject* empty = GameObject::CreateGameObject(FARM_GO_TROUGH_EMPTY, map, pos, rot, InitialPhaseShift(), 255, GO_STATE_READY);
     if (!empty)
         return;
     empty->SetRespawnTime(86400);

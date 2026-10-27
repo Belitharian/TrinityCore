@@ -676,7 +676,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						{
 							citizen->SetNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
 							citizen->SetVignette(VIGNETTE_THERAMORE_CITIZEN);
-							citizen->AI()->DoAction(ACTION_EVACUATION_PREPARE);
 						}
 					}
 					SetEvacuationWitnesses(true);
@@ -693,19 +692,23 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				// Step 5 : Evacuation
 				case CRITERIA_TREE_EVACUATION:
 				{
-                    for (ObjectGuid guid : citizens)
-                    {
-                        if (Creature* citizen = instance->GetCreature(guid))
-                        {
-                            citizen->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-                            citizen->SetVignette(VIGNETTE_NONE);
-                        }
-                    }
+					// Tous les citoyens sont a bord : ceux qu'on a prevenus comme
+					// ceux qui attendaient encore, foule du crieur comprise.
+					for (ObjectGuid guid : civilians)
+					{
+						Creature* citizen = instance->GetCreature(guid);
+						if (!citizen || (citizen->GetEntry() != NPC_THERAMORE_CITIZEN_MALE && citizen->GetEntry() != NPC_THERAMORE_CITIZEN_FEMALE))
+							continue;
+
+						citizen->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+						citizen->SetVignette(VIGNETTE_NONE);
+						citizen->AI()->DoAction(ACTION_EVACUATION_END);
+					}
 					if (Creature* crier = GetCreature(DATA_THERAMORE_CRIER))
 						crier->AI()->DoAction(ACTION_EVACUATION_END);
 					SetEvacuationWitnesses(false);
-					// Les derniers civils ont le temps de monter a bord avant
-					// que L'Etoile du matin ne largue les amarres.
+					// Un temps de recul avant que L'Etoile du matin ne largue
+					// les amarres.
 					scheduler.Schedule(MORNING_STAR_DEPARTURE_DELAY, [this](TaskContext /*context*/)
 					{
 						MorningStarDeparture();
@@ -757,6 +760,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				// Step 6 : A Little Help
 				case CRITERIA_TREE_A_LITTLE_HELP:
 				{
+					// L'Etoile du matin est partie, la flotte de la 7e Legion
+					// mouille au large.
+					instance->SpawnGroupDespawn(SPAWN_GROUP_MORNING_STAR, true);
+					instance->SpawnGroupSpawn(SPAWN_GROUP_SEVENTH_FLEET, true);
 					for (uint8 i = 0; i < FIRE_LOCATION; i++)
 					{
 						const Position pos = FireLocation[i];
@@ -862,27 +869,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						rhonin->SetVignette(VIGNETTE_BATTLE_RHONIN);
 					}
 					if (Creature* kalecgos = GetKalecgosDragon())
-					{
 						kalecgos->SetRegenerateHealth(false);
-					}
-					if (Creature* drok = GetDrok())
-					{
-						drok->setActive(true);
-						drok->SetVisible(true);
-						drok->SetVignette(VIGNETTE_CAPTAIN_DROK);
-					}
-					// Le Loup de mer arrive avec son capitaine. Si la grille du
-					// port n'est pas chargee, le grid loader le fera apparaitre
-					// plus tard et OnGameObjectCreate posera la vignette du baril.
 					instance->SpawnGroupSpawn(SPAWN_GROUP_SEA_WOLF, true);
+					// Janene sort de l'auberge pour lutter contre l'incendie.
+					if (Creature* janene = GetCreature(DATA_INNKEEPER_JANENE))
+						janene->AI()->DoAction(ACTION_FIGHT_FIRE);
 					if (GameObject* powder = GetGameObject(DATA_POWDER_BARREL))
-						powder->SetVignette(VIGNETTE_POWDER_BARREL);
-					if (Creature* gruhta = GetGruhta())
-					{
-						gruhta->setActive(true);
-						gruhta->SetVisible(true);
-						gruhta->SetVignette(VIGNETTE_WAVE_CALLER_GRUHTA);
-					}
+						powder->SetVignette(VIGNETTE_POWDER_BARREL);			
 					// Tous les tanks sauf le dernier sont detruits au debut de
 					// l'assaut. size() etant non signe, un vecteur vide ferait
 					// deborder la borne : la garde ci-dessous l'evite.
@@ -1024,7 +1017,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 			// Portee de visibilite maximale : la bataille se joue a l'echelle
 			// de toute la ville, on ne veut aucun pop-in.
-            creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Gigantic);
+            creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
 
 			if (creature->IsCivilian())
 			{
@@ -1064,15 +1057,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				// N'apparait qu'avec l'ordre d'evacuation (CRITERIA_TREE_UNKNOW_TAUREN).
 				case NPC_THERAMORE_CRIER:
-					creature->SetVisible(false);
-					break;
-				case NPC_CAPTAIN_DROK:
-				case NPC_WAVE_CALLER_GRUHTA:
-				case NPC_KALECGOS_DRAGON:
-					// Acteurs de la bataille : masques et inactifs jusqu'a ce
-					// que le scenario les revele.
-					creature->setActive(false);
-					creature->SetVisible(false);
+                case NPC_KALECGOS_DRAGON:
+                    creature->SetVisible(false);
 					break;
 				case NPC_JAINA_PROUDMOORE:
 					creature->SetVignette(VIGNETTE_LADY_JAINA_PROUDMOORE);
@@ -1084,7 +1070,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		{
 			InstanceScript::OnGameObjectCreate(go);
 
-			go->SetVisibilityDistanceOverride(VisibilityDistanceType::Large);
+            go->SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
 
 			switch (go->GetEntry())
 			{
@@ -1732,19 +1718,11 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						if (Player* player = GetFirstPlayer())
 							SetTarget(player);
 					}
-					if (Creature* vereesa = GetVereesa())
-					{
-                        vereesa->SetWalk(true);
-                        vereesa->CastSpell(vereesa, SPELL_VANISH);
-                        vereesa->GetMotionMaster()->MovePoint(0, VereesaPoint01);
-						vereesa->SetFaction(FACTION_FRIENDLY);
-					}
 					Next(5s);
 					break;
 				case EVT_HELP_MASS_TELEPORT:
 					ClearTarget();
 					GetJaina()->CastSpell(GetJaina(), SPELL_MASS_TELEPORT);
-                    GetVereesa()->SetVisible(false);
 					Next(4600ms);
 					break;
 				// Mise en place du champ de bataille : Kalecgos dragon prend
@@ -1765,8 +1743,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						if (Creature* creature = GetCreature(actorsRelocation[i].dataId))
 						{
-							// Z recale sur le sol : les points sont releves a la
-							// main et la ville a des marches partout.
+							// Z recale sur le sol : les points sont releves manuellement
 							Position destination = actorsRelocation[i].destination;
 							creature->UpdateAllowedPositionZ(destination.GetPositionX(), destination.GetPositionY(), destination.m_positionZ);
 
@@ -1803,6 +1780,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 									TeleportPlayers(GetJaina(), actorsRelocation[i].destination, 15.0f);
 									break;
 								case NPC_KALECGOS:
+								case NPC_VEREESA_WINDRUNNER:
 									creature->SetVisible(false);
 									break;
 							}
@@ -2535,10 +2513,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		static constexpr float TELEPORT_Z_OFFSET      = 3.0f;
 		// Proportion des troupes survivantes qui laissent un blesse a evacuer.
 		static constexpr uint32 WOUNDED_SPAWN_CHANCE  = 80;
-		// Fin de l'evacuation -> depart de L'Etoile du matin : le temps aux
-		// derniers civils de monter a bord (jusqu'a 500 m de rues en courant),
-		// puis au second de crier l'ordre.
-		static constexpr Milliseconds MORNING_STAR_DEPARTURE_DELAY = 70s;
+		// Fin de l'evacuation -> le second crie l'ordre du depart (les civils
+		// disparaissent des la fin de l'etape ; le delai laisse finir la scene
+		// du quai si le second est le dernier temoin), puis monte a bord.
+		static constexpr Milliseconds MORNING_STAR_DEPARTURE_DELAY = 25s;
 		static constexpr Milliseconds MORNING_STAR_CAST_OFF_DELAY  = 6s;
 
 		// Talk null-safe : un acteur despawne en cours de scene ne doit pas
@@ -2651,18 +2629,15 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 		}
 
-		// L'Etoile du matin appareille pour Gadgetzan. Les civils encore en
-		// route embarquent d'office, le second et le chaman montent a bord,
-		// puis la flotte de la 7e Legion prend sa place au port.
+		// L'Etoile du matin appareille pour Gadgetzan : le second crie
+		// l'ordre, puis monte a bord avec le chaman. Le navire et sa
+		// passerelle ne partent qu'a la validation de l'etape Une petite aide,
+		// quand la flotte de la 7e Legion prend leur place et que les joueurs
+		// sont a la citadelle. Les civils, eux, ont embarque a la fin de
+		// l'etape.
 		void MorningStarDeparture()
 		{
 			Talk(GetCreature(DATA_MORNING_STAR_FIRST_MATE), SAY_EVAC_MATE_DEPARTURE);
-
-			for (ObjectGuid guid : citizens)
-			{
-				if (Creature* citizen = instance->GetCreature(guid))
-					citizen->AI()->DoAction(ACTION_MORNING_STAR_DEPARTS);
-			}
 
 			scheduler.Schedule(MORNING_STAR_CAST_OFF_DELAY, [this](TaskContext /*context*/)
 			{
@@ -2670,9 +2645,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					firstMate->DespawnOrUnsummon();
 				if (Creature* shaman = GetCreature(DATA_DRAENEI_SHAMAN))
 					shaman->DespawnOrUnsummon();
-
-				instance->SpawnGroupDespawn(SPAWN_GROUP_MORNING_STAR, true);
-				instance->SpawnGroupSpawn(SPAWN_GROUP_SEVENTH_FLEET, true);
 			});
 		}
 
@@ -2780,10 +2752,20 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			instance->SummonCreatureGroup(waveId, &members);
 			for (TempSummon* horde : members)
 			{
+                switch (horde->GetEntry())
+                {
+                    case NPC_WAVE_CALLER_GRUHTA:
+                        horde->SetVignette(VIGNETTE_WAVE_CALLER_GRUHTA);
+                        break;
+                    case NPC_CAPTAIN_DROK:
+                        horde->SetVignette(VIGNETTE_CAPTAIN_DROK);
+                        break;
+                }
+
+                horde->SetRegenerateHealth(false);
+
                 if (Unit* target = SelectNearestHostileInRange(horde))
                     horde->AI()->AttackStart(target);
-
-				horde->SetRegenerateHealth(false);
 
 				if (scored)
 				{
@@ -2791,7 +2773,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					waveMembers.push_back(horde->GetGUID());
 				}
 
-				if (dummies)
+                if (dummies)
 				{
 					horde->SetImmuneToAll(true);
 

@@ -54,14 +54,14 @@
 // -------------------------------------------------------------------------
 // npc_theramore_citizen - Civil a evacuer (phase Evacuation)
 // -------------------------------------------------------------------------
-// Tides of War, chapitre 7 : un seul navire, L'Etoile du matin, emmene a
-// Gadgetzan les enfants et les familles qui veulent partir.
+// Tides of War, chapitre 7 : un seul navire, L'Etoile du matin, emmene
+// les familles qui veulent partir.
 //
-// A l'ordre d'evacuation, certains civils rassemblent un ou deux enfants
-// (ACTION_EVACUATION_PREPARE). Le joueur clique le civil (spellclick) pour
-// valider un credit d'evacuation ; le civil suit alors les rues de Theramore
-// (TheramoreStreets) jusqu'au pont du navire, ses enfants en formation
-// derriere lui, et disparait une fois a bord.
+// A l'ordre d'evacuation, le clic sur le civil (spellclick) fait lancer
+// SPELL_EVACUATING au joueur ; a la fin de l'incantation, le civil valide un
+// credit d'evacuation, suit les rues de Theramore (TheramoreStreets) jusqu'au
+// pont du navire et disparait une fois a bord. A la fin de l'etape, tous les
+// civils encore presents disparaissent (ACTION_EVACUATION_END).
 //
 // Si aucun itineraire n'est trouve, il garde l'ancienne reaction : emote de
 // panique sur place.
@@ -70,30 +70,23 @@ struct npc_theramore_citizen : public CustomAI
 	enum Misc
 	{
 		// Credits
-		NPC_THERAMORE_CITIZEN_CREDIT    = 500005
+		NPC_THERAMORE_CITIZEN_CREDIT    = 500005,
+
+		// Lance par le joueur au clic (npc_spellclick_spells) : 1,5 s
+		// d'incantation, effet Dummy sur le civil
+		SPELL_EVACUATING                = 1239742
 	};
 
 	enum Talks
 	{
 		SAY_THERAMORE_CITIZEN_FLEE      = 0,
 		SAY_THERAMORE_CITIZEN_CRY       = 1,
-		SAY_THERAMORE_CITIZEN_FEARED    = 2,    // Aussi la reponse agacee au crieur
-		SAY_THERAMORE_CHILD_LEAVE       = 0     // Enfant : au moment de partir
+		SAY_THERAMORE_CITIZEN_FEARED    = 2     // Aussi la reponse agacee au crieur
 	};
 
 	// Chance de jouer l'emote "pleurs" plutot que "salut apeure" quand le
 	// civil reste sur place.
 	static constexpr uint32 CRY_EMOTE_CHANCE = 60;
-	// Part des civils accompagnes d'enfants, et chance d'en avoir un second.
-	static constexpr uint32 CHILDREN_CHANCE = 40;
-	static constexpr uint32 SECOND_CHILD_CHANCE = 35;
-	// Les enfants attendent a cote du parent, puis le suivent en formation :
-	// derriere lui, un de chaque cote.
-	static constexpr float CHILD_SPAWN_DISTANCE = 1.8f;
-	static constexpr float CHILD_FOLLOW_DISTANCE = 1.5f;
-	static constexpr float CHILD_FOLLOW_ANGLES[2] = { float(M_PI) * 0.8f, float(M_PI) * 1.2f };
-	// Chance qu'un enfant parle au depart, et qu'un civil reponde au crieur.
-	static constexpr uint32 CHILD_TALK_CHANCE = 50;
 	static constexpr uint32 ANSWER_CRIER_CHANCE = 30;
 	// Arrive sur le pont : le temps de faire un pas a bord avant de disparaitre.
 	static constexpr Milliseconds BOARDING_DESPAWN_DELAY = 1s;
@@ -106,24 +99,20 @@ struct npc_theramore_citizen : public CustomAI
 	// ligne au milieu de la rue. Pas de decalage sur la passerelle.
 	static constexpr float PATH_OFFSET_MAX = 1.5f;
 
-	npc_theramore_citizen(Creature* creature) : CustomAI(creature, AI_Type::Stay), evacuating(false) { }
+	npc_theramore_citizen(Creature* creature) : CustomAI(creature, AI_Type::Stay), warned(false), evacuating(false) { }
 
 	void DoAction(int32 action) override
 	{
 		switch (action)
 		{
-			case ACTION_EVACUATION_PREPARE:
-				GatherChildren();
-				break;
 			case ACTION_ANSWER_CRIER:
 				if (!evacuating && roll_chance(ANSWER_CRIER_CHANCE))
 					Talk(SAY_THERAMORE_CITIZEN_FEARED);
 				break;
-			// L'Etoile du matin largue les amarres : ceux qui marchaient
-			// encore vers le quai sont reputes a bord.
-			case ACTION_MORNING_STAR_DEPARTS:
-				if (evacuating)
-					Board();
+			// Etape validee : tout le monde est repute a bord, ceux qui
+			// marchaient encore vers le quai comme ceux qui attendaient.
+			case ACTION_EVACUATION_END:
+				Board();
 				break;
 			default:
 				break;
@@ -141,14 +130,21 @@ struct npc_theramore_citizen : public CustomAI
 			Board();
 	}
 
-	void OnSpellClick(Unit* clicker, bool spellClickHandled) override
+	// Le clic fait lancer SPELL_EVACUATING au joueur : la sequence ne part
+	// qu'a la fin de l'incantation, quand le sort touche le civil. Deux
+	// joueurs qui l'incantent en meme temps ne le creditent qu'une fois.
+	void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
 	{
-		if (!spellClickHandled)
+		CustomAI::SpellHit(caster, spellInfo);
+
+		if (spellInfo->Id != SPELL_EVACUATING || warned)
 			return;
 
-		Player* player = clicker->ToPlayer();
+		Player* player = caster->ToPlayer();
 		if (!player)
 			return;
+
+		warned = true;
 
 		// En debug, un seul civil suffit a valider toute l'etape.
 		#ifdef CUSTOM_DEBUG
@@ -164,13 +160,15 @@ struct npc_theramore_citizen : public CustomAI
 		me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
 
 		// Sequence en deux temps : il se tourne vers le joueur, puis reagit.
-		scheduler.Schedule(780ms, 1500ms, [this, player](TaskContext context)
+		// Le joueur est retrouve par son GUID : il peut s'etre deconnecte.
+		scheduler.Schedule(780ms, 1500ms, [this, playerGuid = player->GetGUID()](TaskContext context)
 		{
 			switch (context.GetRepeatCounter())
 			{
 				case 0:
 				{
-					me->SetFacingToObject(player);
+					if (Player* player = ObjectAccessor::GetPlayer(*me, playerGuid))
+						me->SetFacingToObject(player);
 					// Retire les auras d'ambiance posees par le creature_addon
 					// (peur, sanglots...) avant de jouer la reaction.
 					if (CreatureAddon const* creatureAddon = me->GetCreatureAddon())
@@ -205,26 +203,8 @@ struct npc_theramore_citizen : public CustomAI
 	}
 
 	private:
-	bool evacuating;
-
-	// Un ou deux enfants serres contre le parent jusqu'au depart. Invoques
-	// par le civil : CustomAI les range dans `summons`.
-	void GatherChildren()
-	{
-		if (!summons.empty() || !roll_chance(CHILDREN_CHANCE))
-			return;
-
-		uint8 const count = roll_chance(SECOND_CHILD_CHANCE) ? 2 : 1;
-		for (uint8 i = 0; i < count; ++i)
-		{
-			Position const pos = GetRandomPosition(me, CHILD_SPAWN_DISTANCE, false);
-			if (Creature* child = me->SummonCreature(RAND(NPC_THERAMORE_BOY, NPC_THERAMORE_GIRL), pos, TEMPSUMMON_MANUAL_DESPAWN))
-			{
-				child->SetFacingToObject(me);
-				child->SetEmoteState(EMOTE_STATE_COWER);
-			}
-		}
-	}
+	bool warned;            // Deja credite par un joueur
+	bool evacuating;        // En route vers L'Etoile du matin
 
 	static float StreetDistance(uint8 a, uint8 b)
 	{
@@ -303,7 +283,7 @@ struct npc_theramore_citizen : public CustomAI
 		return route;
 	}
 
-	// Le civil part vers L'Etoile du matin, ses enfants en formation. Ce
+	// Le civil part vers L'Etoile du matin,. Ce
 	// premier chemin s'arrete au pied de la passerelle : StartBoarding prend
 	// le relais.
 	bool StartEvacuation()
@@ -348,59 +328,34 @@ struct npc_theramore_citizen : public CustomAI
 		me->GetMotionMaster()->Clear();
 		if (nodes.empty())
 			StartBoarding();
-		else
-			me->GetMotionMaster()->MovePath(WaypointPath(EVACUATION_PATH_ID, std::move(nodes), WaypointMoveType::Run), false);
+        else
+        {
+            WaypointPath const path(EVACUATION_PATH_ID, std::move(nodes), WaypointMoveType::Run, WaypointPathFlags::ExactSplinePath);
+            me->GetMotionMaster()->MovePath(path, false);
+        }
 
-		uint8 index = 0;
-		bool childTalked = false;
-		for (ObjectGuid const& guid : summons)
-		{
-			Creature* child = ObjectAccessor::GetCreature(*me, guid);
-			if (!child)
-				continue;
-
-			child->SetEmoteState(EMOTE_STATE_NONE);
-			child->GetMotionMaster()->MoveFollow(me, CHILD_FOLLOW_DISTANCE, ChaseAngle(CHILD_FOLLOW_ANGLES[index % 2]));
-			if (!childTalked && roll_chance(CHILD_TALK_CHANCE))
-			{
-				child->AI()->Talk(SAY_THERAMORE_CHILD_LEAVE);
-				childTalked = true;
-			}
-			++index;
-		}
 		return true;
 	}
 
-	// Passerelle, pont et centre du navire (noeuds qui suivent
+	// Du bout du ponton au pont du navire (noeuds qui suivent
 	// THERAMORE_STREET_GANGPLANK) : en ligne droite, sans les mmaps. Le
 	// maillage du port ne connait que le pont de l'ancien navire de l'ADT et
 	// une couche sous la coque, ou le calcul de chemin faisait passer les
-	// civils sous L'Etoile du matin. Les enfants prennent le meme chemin.
+	// civils sous L'Etoile du matin.
 	void StartBoarding()
 	{
 		std::vector<WaypointNode> nodes;
 		for (uint8 node = THERAMORE_STREET_GANGPLANK + 1; node <= THERAMORE_STREET_BOARDING; ++node)
 			nodes.emplace_back(uint32(nodes.size()), TheramoreStreets[node].x, TheramoreStreets[node].y, TheramoreStreets[node].z);
-		WaypointPath const path(BOARDING_PATH_ID, std::move(nodes), WaypointMoveType::Run);
-
+		WaypointPath const path(BOARDING_PATH_ID, std::move(nodes), WaypointMoveType::Run, WaypointPathFlags::ExactSplinePath);
 		me->GetMotionMaster()->MovePath(path, false, {}, {}, MovementWalkRunSpeedSelectionMode::Default, {}, {}, {}, true, false);
-		for (ObjectGuid const& guid : summons)
-		{
-			if (Creature* child = ObjectAccessor::GetCreature(*me, guid))
-				child->GetMotionMaster()->MovePath(path, false, {}, {}, MovementWalkRunSpeedSelectionMode::Default, {}, {}, {}, true, false);
-		}
 	}
 
-	// Arrive sur le pont (ou rattrape par le depart du navire) : la famille
-	// est a bord.
+	// Arrive sur le pont (ou rattrape par la fin de l'etape) : le civil est
+	// a bord.
 	void Board()
 	{
 		evacuating = false;
-		for (ObjectGuid const& guid : summons)
-		{
-			if (Creature* child = ObjectAccessor::GetCreature(*me, guid))
-				child->DespawnOrUnsummon(BOARDING_DESPAWN_DELAY);
-		}
 		me->DespawnOrUnsummon(BOARDING_DESPAWN_DELAY);
 	}
 };
@@ -500,7 +455,9 @@ struct npc_theramore_evacuation_witness : public ScriptedAI
 	{
 		GOSSIP_MENU_JANENE          = 65010,
 		GOSSIP_MENU_DOCTOR          = 65011,
-		GOSSIP_MENU_FIRST_MATE      = 65012
+		GOSSIP_MENU_FIRST_MATE      = 65012,
+
+		SPELL_THROW_BUCKET_OF_WATER = 130754
 	};
 
 	npc_theramore_evacuation_witness(Creature* creature) : ScriptedAI(creature)
@@ -509,6 +466,35 @@ struct npc_theramore_evacuation_witness : public ScriptedAI
 	}
 
 	InstanceScript* instance;
+
+	// Janene, pendant la bataille : sortie devant l'auberge, elle jette des
+	// seaux d'eau sur le feu le plus proche tant qu'il en reste. Ses seaux
+	// (130754) n'eteignent rien : seul celui des joueurs (42339) credite.
+	void DoAction(int32 action) override
+	{
+		if (action != ACTION_FIGHT_FIRE || me->GetEntry() != NPC_INNKEEPER_JANENE)
+			return;
+
+		me->NearTeleportTo(JaneneFirePoint);
+		me->SetHomePosition(JaneneFirePoint);
+
+		_scheduler.CancelAll();
+		_scheduler.Schedule(2s, [this](TaskContext task)
+		{
+			if (Creature* fire = me->FindNearestCreature(NPC_THERAMORE_FIRE_CREDIT, FIRE_SEARCH_RADIUS))
+			{
+				me->SetFacingToObject(fire);
+				me->CastSpell(fire->GetPosition(), SPELL_THROW_BUCKET_OF_WATER, true);
+			}
+
+			task.Repeat(4s, 6s);
+		});
+	}
+
+	void UpdateAI(uint32 diff) override
+	{
+		_scheduler.Update(diff);
+	}
 
 	bool OnGossipHello(Player* player) override
 	{
@@ -526,9 +512,12 @@ struct npc_theramore_evacuation_witness : public ScriptedAI
 			me->SetVignette(VIGNETTE_NONE);
 			me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
 			me->SetFacingToObject(player);
+			// La scene d'abord : si c'etait le dernier objectif, le credit
+			// valide l'etape sur-le-champ, la phase change, et l'InstanceScript
+			// refuserait ensuite la scene.
+			instance->SetData(DATA_EVACUATION_SCENE, uint32(GetScene()));
 			// Credite l'objectif "parler a ..." pour le joueur.
 			KillRewarder::Reward(player, me);
-			instance->SetData(DATA_EVACUATION_SCENE, uint32(GetScene()));
 		}
 
 		CloseGossipMenuFor(player);
@@ -555,6 +544,10 @@ struct npc_theramore_evacuation_witness : public ScriptedAI
 			default:                        return EvacuationScene::Docks;
 		}
 	}
+
+	static constexpr float FIRE_SEARCH_RADIUS = 15.f;
+
+	TaskScheduler _scheduler;
 };
 
 // -------------------------------------------------------------------------

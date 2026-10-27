@@ -29,6 +29,7 @@
 #include "InstanceScript.h"
 #include "KillRewarder.h"
 #include "MotionMaster.h"
+#include "MoveSplineInit.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
@@ -1040,37 +1041,32 @@ struct npc_ziradormi_theramore : public CustomAI
 // pendant la bataille. Elle est pilotee entierement par l'InstanceScript
 // via SetData(DATA_KALECGOS_*_EVENT).
 //
-// Le cercle de vol est reprogramme a chaque tour complet : m_loopTime est
-// la duree d'un tour, calculee a partir du perimetre et de la vitesse de
-// course, pour que le prochain MoveCirclePath tombe pile a la fin du
-// precedent (sinon le mouvement se fige apres un tour).
+// Le cercle de vol est une seule spline cyclique, lancee une fois : elle
+// boucle d'elle-meme sans jamais etre relancee, donc sans a-coup. Elle est
+// lissee en Catmull-Rom (MoveCirclePath ne le fait pas : le serveur suivait
+// un polygone) et part de la position courante du dragon, deja sur le
+// cercle a son spawn. Une verification periodique ne la relance que si un
+// autre mouvement l'a remplacee.
 struct npc_kalecgos_dragon : public CustomAI
 {
 	// Rayon du cercle de vol autour de TheramorePoint01.
-	const float m_circleRadius = 95.0f;
-	// Nombre de points d'interpolation du cercle (fluidite du survol).
-	static constexpr uint8 CIRCLE_STEPS      = 16;
+	static constexpr float CIRCLE_RADIUS     = 95.0f;
+	// Points de la spline : avec le lissage Catmull-Rom, 48 points donnent
+	// un cercle sans angle visible.
+	static constexpr uint8 CIRCLE_STEPS      = 48;
+	// Intervalle de la verification qui relance le vol s'il a ete
+	// interrompu.
+	static constexpr Milliseconds CIRCLE_WATCH_INTERVAL = 5s;
 	// Chance de lacher une replique de combat a chaque fenetre.
 	static constexpr uint32 COMBAT_TALK_CHANCE = 30;
 
-	npc_kalecgos_dragon(Creature* creature) : CustomAI(creature), m_loopTime(0)
+	npc_kalecgos_dragon(Creature* creature) : CustomAI(creature)
 	{
 		instance = me->GetInstanceScript();
         SetCanRandomMovement(false);
     }
 
 	InstanceScript* instance;
-	uint64 m_loopTime;                      // Duree d'un tour complet, en ms
-
-	void Reset() override
-	{
-		CustomAI::Reset();
-
-		// Recalculer m_loopTime au moment de DATA_KALECGOS_CIRCLE_EVENT
-		// reglerait le probleme : a valider en jeu.
-		float perimeter = 2.f * float(M_PI) * m_circleRadius;
-		m_loopTime = (perimeter / me->GetSpeed(MOVE_RUN)) * 1000.f;
-	}
 
 	// Toutes les taches commencent par verifier isActiveObject : quand
 	// DATA_KALECGOS_CANCEL_EVENT desactive la creature, les taches deja
@@ -1079,24 +1075,18 @@ struct npc_kalecgos_dragon : public CustomAI
 	{
 		switch (id)
 		{
-			// Vol en cercle, relance a chaque tour complet.
+			// Vol en cercle, lance une fois puis surveille.
 			case DATA_KALECGOS_CIRCLE_EVENT:
 			{
-				scheduler.Schedule(1s, [this](TaskContext circle_path)
+				StartCircleFlight();
+				scheduler.Schedule(CIRCLE_WATCH_INTERVAL, [this](TaskContext watch)
 				{
                     if (!me->isActiveObject())
                         return;
 
-					me->GetMotionMaster()->MoveCirclePath
-					(
-						TheramorePoint01.GetPositionX(),
-						TheramorePoint01.GetPositionY(),
-						TheramorePoint01.GetPositionZ(),
-						m_circleRadius,
-						true,
-						CIRCLE_STEPS
-					);
-					circle_path.Repeat(Milliseconds(m_loopTime));
+					if (me->GetMotionMaster()->GetCurrentMovementGeneratorType() != EFFECT_MOTION_TYPE)
+						StartCircleFlight();
+					watch.Repeat();
 				});
 				break;
 			}
@@ -1104,14 +1094,43 @@ struct npc_kalecgos_dragon : public CustomAI
 			// de la liste des objets actifs.
 			case DATA_KALECGOS_CANCEL_EVENT:
 			{
-				me->CastStop();
 				me->GetMotionMaster()->Clear();
 				me->GetMotionMaster()->MoveIdle();
-                me->setActive(false);
                 scheduler.CancelAll();
                 break;
 			}
 		}
+	}
+
+	private:
+	// Spline cyclique, sens horaire, autour de TheramorePoint01. Le premier
+	// point est la position courante (retire par le moteur a l'entree du
+	// cycle), puis CIRCLE_STEPS points dont le dernier revient a l'angle de
+	// depart : la boucle se referme sans couture.
+	void StartCircleFlight()
+	{
+		std::function<void(Movement::MoveSplineInit&)> initializer = [this](Movement::MoveSplineInit& init)
+		{
+			float const step = -2.0f * float(M_PI) / CIRCLE_STEPS;
+			float const startAngle = TheramorePoint01.GetAbsoluteAngle(me->GetPositionX(), me->GetPositionY());
+
+			init.Path().reserve(CIRCLE_STEPS + 1);
+			init.Path().emplace_back(me->GetPositionX(), me->GetPositionY(), me->GetPositionZ());
+			for (uint8 i = 1; i <= CIRCLE_STEPS; ++i)
+			{
+				float const angle = startAngle + step * i;
+				init.Path().emplace_back(
+					TheramorePoint01.GetPositionX() + CIRCLE_RADIUS * std::cos(angle),
+					TheramorePoint01.GetPositionY() + CIRCLE_RADIUS * std::sin(angle),
+					TheramorePoint01.GetPositionZ());
+			}
+
+			init.SetFly();
+			init.SetSmooth();
+			init.SetCyclic();
+		};
+
+		me->GetMotionMaster()->LaunchMoveSpline(std::move(initializer), 0, MOTION_PRIORITY_NORMAL, EFFECT_MOTION_TYPE);
 	}
 };
 
