@@ -414,11 +414,14 @@ uint32 CustomAI::FriendsInFront(float range, uint8 pct)
 	return list.size();
 }
 
-uint32 CustomAI::EnemiesInRange(float distance)
+uint32 CustomAI::EnemiesInRange(float distance, Unit const* center)
 {
+	if (!center)
+		center = me;
+
 	uint32 count = 0;
 	for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
-		if (me->IsWithinDist(ref->GetVictim(), distance))
+		if (center->IsWithinDist(ref->GetVictim(), distance))
 			++count;
 	return count;
 }

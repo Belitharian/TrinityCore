@@ -6,7 +6,8 @@
  *
  *   1. ALLIANCE  : civils, tanks, blesses, et la hierarchie des troupes de
  *                  Theramore (npc_theramore_troop -> officier / footman /
- *                  arcanist / faithful / marksman)
+ *                  arcanist / faithful / marksman), et les generaux de la
+ *                  7e Legion qui reprennent ces rotations (npc_theramore_general)
  *   2. HORDE     : npc_theramore_horde -> hag / grunt / loasinger / felcaster,
  *                  plus le mini-boss npc_wave_caller_gruhta
  *   3. COSMETIC  : PNJ d'entrainement joues en boucle avant la bataille
@@ -36,9 +37,15 @@
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
+#include "WaypointDefines.h"
 #include "CustomAI.h"
 #include "spell_warlock.h"
 #include "battle_for_theramore.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <limits>
+#include <vector>
 
 // =========================================================================
 //     ALLIANCE NPC
@@ -47,20 +54,21 @@
 // -------------------------------------------------------------------------
 // npc_theramore_citizen - Civil a evacuer (phase Evacuation)
 // -------------------------------------------------------------------------
-// Le joueur clique le civil (spellclick) pour valider un credit d'evacuation.
-// Deux comportements ensuite, selon que le civil a un chemin de fuite ou non :
-//   - avec chemin  : il se met a courir, parle et despawn au bout de 10s
-//   - sans chemin  : il joue une emote de panique sur place
+// Tides of War, chapitre 7 : un seul navire, L'Etoile du matin, emmene a
+// Gadgetzan les enfants et les familles qui veulent partir.
+//
+// A l'ordre d'evacuation, certains civils rassemblent un ou deux enfants
+// (ACTION_EVACUATION_PREPARE). Le joueur clique le civil (spellclick) pour
+// valider un credit d'evacuation ; le civil suit alors les rues de Theramore
+// (TheramoreStreets) jusqu'au pont du navire, ses enfants en formation
+// derriere lui, et disparait une fois a bord.
+//
+// Si aucun itineraire n'est trouve, il garde l'ancienne reaction : emote de
+// panique sur place.
 struct npc_theramore_citizen : public CustomAI
 {
 	enum Misc
 	{
-		// Spells
-		SPELL_AFRAID                    = 123263,
-
-		// Gossip
-		GOSSIP_MENU_DEFAULT             = 65000,
-
 		// Credits
 		NPC_THERAMORE_CITIZEN_CREDIT    = 500005
 	};
@@ -69,22 +77,69 @@ struct npc_theramore_citizen : public CustomAI
 	{
 		SAY_THERAMORE_CITIZEN_FLEE      = 0,
 		SAY_THERAMORE_CITIZEN_CRY       = 1,
-		SAY_THERAMORE_CITIZEN_FEARED    = 2,
-	};
-
-	enum Path : uint32
-	{
-		WAYPOINT_PATH_01                = 4000031921,
-		WAYPOINT_PATH_02                = 4000031922,
-		WAYPOINT_PATH_03                = 4000031924,
-		WAYPOINT_PATH_04                = 4000031923
+		SAY_THERAMORE_CITIZEN_FEARED    = 2,    // Aussi la reponse agacee au crieur
+		SAY_THERAMORE_CHILD_LEAVE       = 0     // Enfant : au moment de partir
 	};
 
 	// Chance de jouer l'emote "pleurs" plutot que "salut apeure" quand le
 	// civil reste sur place.
 	static constexpr uint32 CRY_EMOTE_CHANCE = 60;
+	// Part des civils accompagnes d'enfants, et chance d'en avoir un second.
+	static constexpr uint32 CHILDREN_CHANCE = 40;
+	static constexpr uint32 SECOND_CHILD_CHANCE = 35;
+	// Les enfants attendent a cote du parent, puis le suivent en formation :
+	// derriere lui, un de chaque cote.
+	static constexpr float CHILD_SPAWN_DISTANCE = 1.8f;
+	static constexpr float CHILD_FOLLOW_DISTANCE = 1.5f;
+	static constexpr float CHILD_FOLLOW_ANGLES[2] = { float(M_PI) * 0.8f, float(M_PI) * 1.2f };
+	// Chance qu'un enfant parle au depart, et qu'un civil reponde au crieur.
+	static constexpr uint32 CHILD_TALK_CHANCE = 50;
+	static constexpr uint32 ANSWER_CRIER_CHANCE = 30;
+	// Arrive sur le pont : le temps de faire un pas a bord avant de disparaitre.
+	static constexpr Milliseconds BOARDING_DESPAWN_DELAY = 1s;
+	// Identifiants des chemins construits a la volee, recus par
+	// WaypointPathEnded : les rues jusqu'au pied de la passerelle, puis
+	// l'embarquement.
+	static constexpr uint32 EVACUATION_PATH_ID = 1;
+	static constexpr uint32 BOARDING_PATH_ID = 2;
+	// Decalage lateral tire par civil : ils ne marchent pas tous sur la meme
+	// ligne au milieu de la rue. Pas de decalage sur la passerelle.
+	static constexpr float PATH_OFFSET_MAX = 1.5f;
 
-	npc_theramore_citizen(Creature* creature) : CustomAI(creature, AI_Type::Stay) { }
+	npc_theramore_citizen(Creature* creature) : CustomAI(creature, AI_Type::Stay), evacuating(false) { }
+
+	void DoAction(int32 action) override
+	{
+		switch (action)
+		{
+			case ACTION_EVACUATION_PREPARE:
+				GatherChildren();
+				break;
+			case ACTION_ANSWER_CRIER:
+				if (!evacuating && roll_chance(ANSWER_CRIER_CHANCE))
+					Talk(SAY_THERAMORE_CITIZEN_FEARED);
+				break;
+			// L'Etoile du matin largue les amarres : ceux qui marchaient
+			// encore vers le quai sont reputes a bord.
+			case ACTION_MORNING_STAR_DEPARTS:
+				if (evacuating)
+					Board();
+				break;
+			default:
+				break;
+		}
+	}
+
+	void WaypointPathEnded(uint32 /*nodeId*/, uint32 pathId) override
+	{
+		if (!evacuating)
+			return;
+
+		if (pathId == EVACUATION_PATH_ID)
+			StartBoarding();
+		else if (pathId == BOARDING_PATH_ID)
+			Board();
+	}
 
 	void OnSpellClick(Unit* clicker, bool spellClickHandled) override
 	{
@@ -131,28 +186,374 @@ struct npc_theramore_citizen : public CustomAI
 				}
 				case 1:
 				{
-					if (me->GetWaypointPathId())
-					{
-						// Ce civil a un chemin de fuite : il s'enfuit.
-						me->SetWalk(false);
-						me->ResumeMovement();
-						me->DespawnOrUnsummon(10s);
-						me->AI()->Talk(SAY_THERAMORE_CITIZEN_FLEE);
-					}
+					if (StartEvacuation())
+						Talk(SAY_THERAMORE_CITIZEN_FLEE);
 					else if (roll_chance(CRY_EMOTE_CHANCE))
 					{
 						me->HandleEmoteCommand(RAND(EMOTE_STATE_CRY, EMOTE_STATE_COWER));
-						me->AI()->Talk(SAY_THERAMORE_CITIZEN_CRY);
+						Talk(SAY_THERAMORE_CITIZEN_CRY);
 					}
 					else
 					{
 						me->HandleEmoteCommand(RAND(EMOTE_ONESHOT_WAVE, EMOTE_ONESHOT_NO));
-						me->AI()->Talk(SAY_THERAMORE_CITIZEN_FEARED);
+						Talk(SAY_THERAMORE_CITIZEN_FEARED);
 					}
 					break;
 				}
 			}
 		});
+	}
+
+	private:
+	bool evacuating;
+
+	// Un ou deux enfants serres contre le parent jusqu'au depart. Invoques
+	// par le civil : CustomAI les range dans `summons`.
+	void GatherChildren()
+	{
+		if (!summons.empty() || !roll_chance(CHILDREN_CHANCE))
+			return;
+
+		uint8 const count = roll_chance(SECOND_CHILD_CHANCE) ? 2 : 1;
+		for (uint8 i = 0; i < count; ++i)
+		{
+			Position const pos = GetRandomPosition(me, CHILD_SPAWN_DISTANCE, false);
+			if (Creature* child = me->SummonCreature(RAND(NPC_THERAMORE_BOY, NPC_THERAMORE_GIRL), pos, TEMPSUMMON_MANUAL_DESPAWN))
+			{
+				child->SetFacingToObject(me);
+				child->SetEmoteState(EMOTE_STATE_COWER);
+			}
+		}
+	}
+
+	static float StreetDistance(uint8 a, uint8 b)
+	{
+		return std::hypot(TheramoreStreets[a].x - TheramoreStreets[b].x, TheramoreStreets[a].y - TheramoreStreets[b].y);
+	}
+
+	// Itineraire dans les rues : plus court chemin (Dijkstra) du noeud le
+	// plus proche du civil jusqu'au pont de L'Etoile du matin. Vide si le
+	// reseau ne relie pas les deux.
+	std::vector<uint8> FindEvacuationRoute() const
+	{
+		std::array<std::vector<uint8>, THERAMORE_STREET_NODES> neighbours;
+		for (StreetLink const& link : TheramoreStreetLinks)
+		{
+			neighbours[link.from].push_back(link.to);
+			neighbours[link.to].push_back(link.from);
+		}
+
+		uint8 start = 0;
+		float startDistance = std::numeric_limits<float>::max();
+		for (uint8 i = 0; i < THERAMORE_STREET_NODES; ++i)
+		{
+			float const distance = me->GetExactDist(TheramoreStreets[i].x, TheramoreStreets[i].y, TheramoreStreets[i].z);
+			if (distance < startDistance)
+			{
+				startDistance = distance;
+				start = i;
+			}
+		}
+
+		std::array<float, THERAMORE_STREET_NODES> cost;
+		std::array<int16, THERAMORE_STREET_NODES> previous;
+		std::array<bool, THERAMORE_STREET_NODES> visited{};
+		cost.fill(std::numeric_limits<float>::max());
+		previous.fill(-1);
+		cost[start] = 0.0f;
+
+		for (;;)
+		{
+			int16 current = -1;
+			for (uint8 i = 0; i < THERAMORE_STREET_NODES; ++i)
+				if (!visited[i] && cost[i] < std::numeric_limits<float>::max() && (current < 0 || cost[i] < cost[current]))
+					current = i;
+
+			if (current < 0 || current == THERAMORE_STREET_BOARDING)
+				break;
+
+			visited[current] = true;
+			for (uint8 next : neighbours[current])
+			{
+				float const total = cost[current] + StreetDistance(uint8(current), next);
+				if (total < cost[next])
+				{
+					cost[next] = total;
+					previous[next] = current;
+				}
+			}
+		}
+
+		std::vector<uint8> route;
+		if (cost[THERAMORE_STREET_BOARDING] == std::numeric_limits<float>::max())
+			return route;
+
+		for (int16 node = THERAMORE_STREET_BOARDING; node >= 0; node = previous[node])
+			route.push_back(uint8(node));
+		std::reverse(route.begin(), route.end());
+
+		// Deja engage vers le second noeud : revenir au premier ferait un
+		// aller-retour inutile.
+		if (route.size() > 1)
+		{
+			StreetNode const& second = TheramoreStreets[route[1]];
+			if (me->GetExactDist2d(second.x, second.y) < StreetDistance(route[0], route[1]))
+				route.erase(route.begin());
+		}
+		return route;
+	}
+
+	// Le civil part vers L'Etoile du matin, ses enfants en formation. Ce
+	// premier chemin s'arrete au pied de la passerelle : StartBoarding prend
+	// le relais.
+	bool StartEvacuation()
+	{
+		std::vector<uint8> const route = FindEvacuationRoute();
+		if (route.empty())
+			return false;
+
+		// Chaque noeud est decale perpendiculairement au sens de marche
+		// (direction moyenne entre le noeud precedent et le suivant), du meme
+		// cote tout le long du trajet.
+		float const offset = frand(-PATH_OFFSET_MAX, PATH_OFFSET_MAX);
+		std::vector<WaypointNode> nodes;
+		nodes.reserve(route.size());
+		for (size_t i = 0; i < route.size(); ++i)
+		{
+			if (route[i] > THERAMORE_STREET_GANGPLANK)
+				break;
+
+			StreetNode const& node = TheramoreStreets[route[i]];
+			float x = node.x;
+			float y = node.y;
+			if (route[i] < THERAMORE_STREET_GANGPLANK)
+			{
+				StreetNode const& previous = TheramoreStreets[route[i > 0 ? i - 1 : i]];
+				StreetNode const& next = TheramoreStreets[route[i + 1 < route.size() ? i + 1 : i]];
+				float const dx = next.x - previous.x;
+				float const dy = next.y - previous.y;
+				float const length = std::hypot(dx, dy);
+				if (length > 0.1f)
+				{
+					x -= dy / length * offset;
+					y += dx / length * offset;
+				}
+			}
+			nodes.emplace_back(uint32(i), x, y, node.z);
+		}
+
+		evacuating = true;
+		me->SetEmoteState(EMOTE_STATE_NONE);
+		me->SetWalk(false);
+		me->GetMotionMaster()->Clear();
+		if (nodes.empty())
+			StartBoarding();
+		else
+			me->GetMotionMaster()->MovePath(WaypointPath(EVACUATION_PATH_ID, std::move(nodes), WaypointMoveType::Run), false);
+
+		uint8 index = 0;
+		bool childTalked = false;
+		for (ObjectGuid const& guid : summons)
+		{
+			Creature* child = ObjectAccessor::GetCreature(*me, guid);
+			if (!child)
+				continue;
+
+			child->SetEmoteState(EMOTE_STATE_NONE);
+			child->GetMotionMaster()->MoveFollow(me, CHILD_FOLLOW_DISTANCE, ChaseAngle(CHILD_FOLLOW_ANGLES[index % 2]));
+			if (!childTalked && roll_chance(CHILD_TALK_CHANCE))
+			{
+				child->AI()->Talk(SAY_THERAMORE_CHILD_LEAVE);
+				childTalked = true;
+			}
+			++index;
+		}
+		return true;
+	}
+
+	// Passerelle, pont et centre du navire (noeuds qui suivent
+	// THERAMORE_STREET_GANGPLANK) : en ligne droite, sans les mmaps. Le
+	// maillage du port ne connait que le pont de l'ancien navire de l'ADT et
+	// une couche sous la coque, ou le calcul de chemin faisait passer les
+	// civils sous L'Etoile du matin. Les enfants prennent le meme chemin.
+	void StartBoarding()
+	{
+		std::vector<WaypointNode> nodes;
+		for (uint8 node = THERAMORE_STREET_GANGPLANK + 1; node <= THERAMORE_STREET_BOARDING; ++node)
+			nodes.emplace_back(uint32(nodes.size()), TheramoreStreets[node].x, TheramoreStreets[node].y, TheramoreStreets[node].z);
+		WaypointPath const path(BOARDING_PATH_ID, std::move(nodes), WaypointMoveType::Run);
+
+		me->GetMotionMaster()->MovePath(path, false, {}, {}, MovementWalkRunSpeedSelectionMode::Default, {}, {}, {}, true, false);
+		for (ObjectGuid const& guid : summons)
+		{
+			if (Creature* child = ObjectAccessor::GetCreature(*me, guid))
+				child->GetMotionMaster()->MovePath(path, false, {}, {}, MovementWalkRunSpeedSelectionMode::Default, {}, {}, {}, true, false);
+		}
+	}
+
+	// Arrive sur le pont (ou rattrape par le depart du navire) : la famille
+	// est a bord.
+	void Board()
+	{
+		evacuating = false;
+		for (ObjectGuid const& guid : summons)
+		{
+			if (Creature* child = ObjectAccessor::GetCreature(*me, guid))
+				child->DespawnOrUnsummon(BOARDING_DESPAWN_DELAY);
+		}
+		me->DespawnOrUnsummon(BOARDING_DESPAWN_DELAY);
+	}
+};
+
+// -------------------------------------------------------------------------
+// npc_theramore_crier - Crieur de Theramore (phase Evacuation)
+// -------------------------------------------------------------------------
+// Lit, cloche a la main, l'ordre que Jaina vient de rediger (Tides of War,
+// chapitre 7) : plus aucun navire ne quitte le port sauf L'Etoile du matin,
+// portes fermees au coucher du soleil, couvre-feu deux cloches plus tard,
+// volontaires pour le docteur. Les civils voisins lui repondent parfois,
+// agaces de l'entendre repeter la meme chose.
+struct npc_theramore_crier : public CustomAI
+{
+	enum Spells
+	{
+		SPELL_TOWN_CRIER_BELL_AND_SCROLL    = 246022    // 8.0 Town Crier - Bell and Scroll
+	};
+
+	enum Talks
+	{
+		SAY_PROCLAMATION                    = 0
+	};
+
+	// Intervalle entre deux proclamations.
+	static constexpr Milliseconds FIRST_PROCLAMATION_DELAY = 3s;
+	static constexpr Milliseconds PROCLAMATION_MIN = 25s;
+	static constexpr Milliseconds PROCLAMATION_MAX = 1min;
+	// Les civils a portee de voix lui repondent apres la proclamation.
+	static constexpr Milliseconds ANSWER_DELAY = 6s;
+	static constexpr float ANSWER_RANGE = 20.0f;
+    // Civils a portee de voix, memorises au debut des proclamations : ils se
+    // tournent vers le crieur et lui repondent parfois. Des GUID et non des
+    // pointeurs, car un civil evacue disparait a bord de L'Etoile du matin.
+    GuidVector listeners;
+
+    npc_theramore_crier(Creature* creature) : CustomAI(creature, AI_Type::Stay) { }
+
+    void DoAction(int32 action) override
+    {
+	    switch (action)
+	    {
+		    case ACTION_EVACUATION_START:
+		    {
+			    std::list<Creature*> nearby;
+			    me->GetCreatureListWithEntryInGrid(nearby, NPC_THERAMORE_CITIZEN_MALE, ANSWER_RANGE);
+			    me->GetCreatureListWithEntryInGrid(nearby, NPC_THERAMORE_CITIZEN_FEMALE, ANSWER_RANGE);
+			    listeners.clear();
+			    for (Creature* listener : nearby)
+			    {
+				    listener->SetFacingToObject(me);
+				    listeners.push_back(listener->GetGUID());
+			    }
+
+			    me->AddAura(SPELL_TOWN_CRIER_BELL_AND_SCROLL, me);
+			    me->SetEmoteState(EMOTE_STATE_WACRIERSTAND01);
+			    scheduler.Schedule(FIRST_PROCLAMATION_DELAY, [this](TaskContext proclamation)
+			    {
+				    me->HandleEmoteCommand(EMOTE_ONESHOT_WACRIERTALK);
+				    Talk(SAY_PROCLAMATION);
+
+				    proclamation.Schedule(ANSWER_DELAY, [this](TaskContext /*answer*/)
+				    {
+					    if (listeners.empty())
+						    return;
+
+					    ObjectGuid const guid = Trinity::Containers::SelectRandomContainerElement(listeners);
+					    if (Creature* listener = ObjectAccessor::GetCreature(*me, guid))
+						    listener->AI()->DoAction(ACTION_ANSWER_CRIER);
+				    });
+
+				    proclamation.Repeat(PROCLAMATION_MIN, PROCLAMATION_MAX);
+			    });
+			    break;
+		    }
+		    case ACTION_EVACUATION_END:
+			    scheduler.CancelAll();
+			    me->RemoveAurasDueToSpell(SPELL_TOWN_CRIER_BELL_AND_SCROLL);
+			    me->SetEmoteState(EMOTE_STATE_NONE);
+			    break;
+		    default:
+			    break;
+	    }
+    }
+};
+
+// -------------------------------------------------------------------------
+// npc_theramore_evacuation_witness - Janene, le docteur, le second
+// -------------------------------------------------------------------------
+// Temoins du livre a qui parler pendant l'evacuation (objectifs de l'etape).
+// L'InstanceScript leur donne gossip et vignette le temps de l'etape. Le
+// gossip, a usage unique comme celui de Rhonin, credite l'objectif
+// (critere KillCreature sur leur entry) et lance leur scene.
+struct npc_theramore_evacuation_witness : public ScriptedAI
+{
+	enum Misc
+	{
+		GOSSIP_MENU_JANENE          = 65010,
+		GOSSIP_MENU_DOCTOR          = 65011,
+		GOSSIP_MENU_FIRST_MATE      = 65012
+	};
+
+	npc_theramore_evacuation_witness(Creature* creature) : ScriptedAI(creature)
+	{
+		instance = creature->GetInstanceScript();
+	}
+
+	InstanceScript* instance;
+
+	bool OnGossipHello(Player* player) override
+	{
+		player->PrepareGossipMenu(me, GetMenuId(), true);
+		player->SendPreparedGossip(me);
+		return true;
+	}
+
+	bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
+	{
+		ClearGossipMenuFor(player);
+
+		if (gossipListId == 0)
+		{
+			me->SetVignette(VIGNETTE_NONE);
+			me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+			me->SetFacingToObject(player);
+			// Credite l'objectif "parler a ..." pour le joueur.
+			KillRewarder::Reward(player, me);
+			instance->SetData(DATA_EVACUATION_SCENE, uint32(GetScene()));
+		}
+
+		CloseGossipMenuFor(player);
+		return true;
+	}
+
+	private:
+	uint32 GetMenuId() const
+	{
+		switch (me->GetEntry())
+		{
+			case NPC_INNKEEPER_JANENE:      return GOSSIP_MENU_JANENE;
+			case NPC_DOCTOR_VANHOWZEN:      return GOSSIP_MENU_DOCTOR;
+			default:                        return GOSSIP_MENU_FIRST_MATE;
+		}
+	}
+
+	EvacuationScene GetScene() const
+	{
+		switch (me->GetEntry())
+		{
+			case NPC_INNKEEPER_JANENE:      return EvacuationScene::Janene;
+			case NPC_DOCTOR_VANHOWZEN:      return EvacuationScene::Doctor;
+			default:                        return EvacuationScene::Docks;
+		}
 	}
 };
 
@@ -1274,13 +1675,34 @@ struct npc_theramore_faithful : public npc_theramore_troop
 };
 
 // -------------------------------------------------------------------------
-// npc_theramore_marksman - Tireur d'elite de Theramore
+// npc_theramore_marksman - Tireur d'elite de Theramore (chasseur)
 // -------------------------------------------------------------------------
-// La plus simple des troupes : deux sorts, un tir continu et un tir multiple.
-// AI_Type::Hybrid : elle tire a distance mais se replie au corps a corps si
-// on la colle.
+// Rotation de chasseur Maitrise des betes :
+//   - Tir du cobra en filler, Tir acere en entretien de saignement
+//   - Fleches multiples quand la cible est entouree
+//   - Trait de choc sur un ennemi qui incante, ou a defaut sur un ennemi
+//     qui court sur lui (ralentissement)
+//   - Enthousiasme (soin) sous le seuil de PV, Desengagement si on le colle
+// Le Tireur de Theramore (et lui seul : pas les generaux qui reprennent cette
+// rotation) appelle son familier a l'engagement. Le familier est une
+// invocation : CustomAI le despawn au Reset (sortie de combat) et a la mort.
+// AI_Type::Hybrid : il tire a distance mais se replie au corps a corps si
+// on le colle.
 struct npc_theramore_marksman : public npc_theramore_troop
 {
+	// Seuil de PV sous lequel Enthousiasme est lance.
+	static constexpr float EXHILARATION_HEALTH_PCT   = 40.f;
+	// Distance sous laquelle la cible est jugee trop proche (Desengagement).
+	static constexpr float DISENGAGE_RANGE           = 5.f;
+	// Portee de detection d'un ennemi en train d'incanter (Trait de choc).
+	static constexpr float CONCUSSIVE_SHOT_RANGE     = 40.f;
+	// Distance jusqu'a laquelle un ennemi qui court sur le chasseur est ralenti.
+	static constexpr float CHARGE_DETECTION_RANGE    = 25.f;
+	// Fleches multiples : rayon de l'explosion autour de la cible, et nombre
+	// d'ennemis requis dans ce rayon (cible comprise).
+	static constexpr float MULTI_SHOT_RADIUS         = 10.f;
+	static constexpr uint32 MULTI_SHOT_MIN_ENEMIES   = 3;
+
 	npc_theramore_marksman(Creature* creature) : npc_theramore_troop(creature, AI_Type::Hybrid)
 	{
 		Initialize();
@@ -1288,39 +1710,188 @@ struct npc_theramore_marksman : public npc_theramore_troop
 
 	enum Spells
 	{
-		SPELL_SHOOT                 = 22907,
-		SPELL_MULTI_SHOOT           = 38310,
-
-		// Tir assur� = 131991
-		// Tir ac�r� = 62318
-		// Vis�e = 294882
+        SPELL_SHOT                  = 445949,   // Normal
+		SPELL_BARBED_SHOT           = 217200,   // Saignement 12s, cible sans l'aura
+		SPELL_CONCUSSIVE_SHOT       = 284217,   // UnitCasting
+		SPELL_EXHILARATION          = 284341,   // Soin sur soi (CD 45s)
+		SPELL_DISENGAGE             = 284347,   // Cible au contact (CD 20s)
+		SPELL_MULTI_SHOT            = 459848,   // Victim, ennemis groupes
+		SPELL_REVIVE_PET            = 419166    // Invoque le familier (Tireur de Theramore uniquement)
 	};
 
 	void Reset() override
 	{
 		npc_theramore_troop::Reset();
+		me->SetEmoteState(EMOTE_STATE_READY_BOW);
+	}
 
-		me->SetEmoteState(EMOTE_STATE_READYCROSSBOW);
+	// Le familier prend la faction de son maitre et rejoint le combat.
+	void JustSummoned(Creature* summon) override
+	{
+		npc_theramore_troop::JustSummoned(summon);
+
+		summon->SetFaction(me->GetFaction());
+		if (Unit* victim = me->GetVictim())
+			summon->AI()->AttackStart(victim);
+	}
+
+	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
+	{
+		if (me->GetSpellHistory()->HasCooldown(SPELL_EXHILARATION))
+			return;
+
+		if (me->HealthBelowPctDamaged(EXHILARATION_HEALTH_PCT, damage))
+			DoCastSelf(SPELL_EXHILARATION);
 	}
 
 	void JustEngagedWith(Unit* who) override
 	{
 		npc_theramore_troop::JustEngagedWith(who);
 
-		DoCast(who, SPELL_SHOOT);
+		if (me->GetEntry() == NPC_THERAMORE_MARKSMAN && summons.empty())
+			DoCastSelf(SPELL_REVIVE_PET);
+		else
+			DoCast(who, SPELL_BARBED_SHOT);
 
 		scheduler
-			.Schedule(2s, [this](TaskContext shoot)
+			.Schedule(2s, [this](TaskContext shot)
 			{
-				DoCastVictim(SPELL_SHOOT);
-				shoot.Repeat(2s);
+				DoCastVictim(SPELL_SHOT);
+                shot.Repeat(2s);
 			})
-			.Schedule(15s, [this](TaskContext multi_shoot)
+			// Tir acere : on entretient le saignement sur la cible, ou sur un
+			// autre ennemi s'il court deja sur elle. CustomAI::DoCast abandonne
+			// de lui-meme une cible qui saigne deja sous un autre tireur.
+			.Schedule(4s, [this](TaskContext barbed_shot)
 			{
-				DoCastVictim(SPELL_MULTI_SHOOT);
-				multi_shoot.Repeat(14s, 18s);
+				Unit* target = me->GetVictim();
+				if (target && target->HasAura(SPELL_BARBED_SHOT, me->GetGUID()))
+					target = SelectTarget(SelectTargetMethod::Random, 1);
+
+				if (target)
+					DoCast(target, SPELL_BARBED_SHOT);
+				barbed_shot.Repeat(6s, 9s);
+			})
+			.Schedule(8s, [this](TaskContext multi_shot)
+			{
+				Unit* victim = me->GetVictim();
+				if (victim && EnemiesInRange(MULTI_SHOT_RADIUS, victim) >= MULTI_SHOT_MIN_ENEMIES)
+				{
+					DoCast(victim, SPELL_MULTI_SHOT);
+					multi_shot.Repeat(10s, 14s);
+				}
+				else
+					multi_shot.Repeat(2s);
+			})
+			// Trait de choc, en priorite sur un ennemi qui incante, sinon sur
+			// un ennemi qui fonce sur le chasseur. Le sort a 5s de recharge :
+			// on ne retente qu'une fois celle-ci ecoulee.
+			.Schedule(3s, [this](TaskContext concussive_shot)
+			{
+				Unit* target = DoSelectCastingUnit(SPELL_CONCUSSIVE_SHOT, CONCUSSIVE_SHOT_RANGE);
+				if (!target)
+					target = SelectChargingEnemy();
+
+				if (target)
+				{
+					DoCast(target, SPELL_CONCUSSIVE_SHOT);
+					concussive_shot.Repeat(6s, 8s);
+				}
+				else
+					concussive_shot.Repeat(1s);
+			})
+			// Desengagement quand la cible est au contact : il reprend sa
+			// distance de tir.
+			.Schedule(5s, [this](TaskContext disengage)
+			{
+				Unit* victim = me->GetVictim();
+				if (victim && me->IsWithinDist(victim, DISENGAGE_RANGE)
+					&& !me->GetSpellHistory()->HasCooldown(SPELL_DISENGAGE))
+				{
+					me->SetFacingToObject(victim);
+					DoCastSelf(SPELL_DISENGAGE);
+					NotifyTeleported();
+					disengage.Repeat(20s);
+				}
+				else
+					disengage.Repeat(1s);
 			});
 	}
+
+	// Ennemi qui court sur le chasseur : il l'a pris pour cible, se deplace,
+	// n'est pas encore au contact et n'est pas deja ralenti par le Trait de choc.
+	Unit* SelectChargingEnemy() const
+	{
+		for (Unit* attacker : me->getAttackers())
+		{
+			if (attacker->GetVictim() != me || !attacker->isMoving())
+				continue;
+
+			if (me->IsWithinDist(attacker, DISENGAGE_RANGE) || !me->IsWithinDist(attacker, CHARGE_DETECTION_RANGE))
+				continue;
+
+			if (attacker->HasAura(SPELL_CONCUSSIVE_SHOT))
+				continue;
+
+			return attacker;
+		}
+
+		return nullptr;
+	}
+};
+
+// -------------------------------------------------------------------------
+// npc_theramore_general_* - Generaux de la 7e Legion (Tides of War)
+// -------------------------------------------------------------------------
+// Ils combattent avec la rotation de la troupe dont ils derivent, mais :
+//   - ils ne peuvent pas mourir (voir creature_sparring) ;
+//   - ils ne participent pas a la motivation des troupes (pas de credit) ;
+//   - au bout de leur chemin d'arrivee (path 1, voir generalsLocation), ils
+//     prennent l'orientation de leur place et ne tournent plus pendant le
+//     briefing.
+template <class Troop>
+struct npc_theramore_general : public Troop
+{
+	explicit npc_theramore_general(Creature* creature) : Troop(creature)
+    {
+        instance = creature->GetInstanceScript();
+    }
+
+	void ReceiveEmote(Player* /*player*/, uint32 /*emoteId*/) override { }
+
+	// SpawnGeneral fixe le repos sur le dernier point du chemin, orientation
+	// comprise : c'est elle que le general reprend en arrivant.
+	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
+	{
+		if (pathId != 1)
+			return;
+
+        if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
+		    this->me->SetFacingToObject(jaina);
+
+        this->me->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+	}
+
+    private:
+    InstanceScript* instance;
+};
+
+// Marcus Jonathan, Thaddus Coup-Robuste, Horran Crin-Rouge, Amiral Aubrey
+struct npc_theramore_general_warrior : public npc_theramore_general<npc_theramore_footman>
+{
+	using npc_theramore_general::npc_theramore_general;
+};
+
+// General Tiras'alan
+struct npc_theramore_general_paladin : public npc_theramore_general<npc_theramore_officier>
+{
+	using npc_theramore_general::npc_theramore_general;
+};
+
+// Shandris Pennelune
+struct npc_theramore_general_ranger : public npc_theramore_general<npc_theramore_marksman>
+{
+	using npc_theramore_general::npc_theramore_general;
 };
 
 // =========================================================================
@@ -2441,15 +3012,11 @@ struct npc_wave_caller_gruhta : public CustomAI
 		me->SetRegenerateHealth(true);
 	}
 
-	// Sa mort libere le passage : la barriere d'energie disparait.
 	void JustDied(Unit* killer) override
 	{
 		CustomAI::JustDied(killer);
 
 		me->SetVignette(VIGNETTE_NONE);
-
-		if (GameObject* barrier = instance->GetGameObject(DATA_ENERGY_BARRIER))
-			barrier->Delete();
 	}
 
 	void OnSpellCast(SpellInfo const* spell) override
@@ -2989,8 +3556,9 @@ class PowderKegEvent : public BasicEvent
 
 // Powder Keg - 205238
 // Destruction du Sea Wolf : le joueur fait sauter le baril de poudre, ce qui
-// valide l'objectif, supprime le baril, tue le capitaine Drok s'il est encore
-// a bord, puis lance la cascade d'explosions (PowderKegEvent).
+// valide l'objectif, projette les joueurs proches, supprime le baril, tue le
+// capitaine Drok s'il est encore a bord, puis lance la cascade d'explosions
+// (PowderKegEvent).
 class spell_powder_keg : public SpellScript
 {
 	enum Spells
@@ -3002,6 +3570,11 @@ class spell_powder_keg : public SpellScript
 	static constexpr float DROK_KILL_RANGE      = 25.0f;
 	// Rayon de recherche des stalkers porteurs des explosions en cascade.
 	static constexpr float STALKER_SEARCH_RANGE = 50.0f;
+	// Souffle de l'explosion : les joueurs proches du navire sont projetes
+	// loin du point d'impact.
+	static constexpr float KNOCKBACK_RANGE      = 30.0f;
+	static constexpr float KNOCKBACK_SPEED_XY   = 22.0f;
+	static constexpr float KNOCKBACK_SPEED_Z    = 12.0f;
 
 	void HandleDummy(SpellEffIndex /*effIndex*/)
 	{
@@ -3023,6 +3596,12 @@ class spell_powder_keg : public SpellScript
 
 					// The Sea Wolf destroyed event
 					instance->TriggerGameEvent(EVENT_DESTROY_SEA_WOLF);
+
+					// Le souffle projette les joueurs a portee, lanceur compris.
+					std::list<Player*> players;
+					trigger->GetPlayerListInGrid(players, KNOCKBACK_RANGE);
+					for (Player* player : players)
+						player->KnockbackFrom(trigger->GetPosition(), KNOCKBACK_SPEED_XY, KNOCKBACK_SPEED_Z);
 
 					// Delete Powder Barrel targeted
 					if (GameObject* powder = instance->GetGameObject(DATA_POWDER_BARREL))
@@ -3547,6 +4126,8 @@ struct at_blessed_hammer : AreaTriggerAI
 void AddSC_npcs_battle_for_theramore()
 {
 	RegisterTheramoreAI(npc_theramore_citizen);
+	RegisterTheramoreAI(npc_theramore_crier);
+	RegisterTheramoreAI(npc_theramore_evacuation_witness);
 	RegisterTheramoreAI(npc_thader_windermere);
 	RegisterTheramoreAI(npc_hedric_evencane);
 	RegisterTheramoreAI(npc_unmanned_tank);
@@ -3555,6 +4136,9 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterTheramoreAI(npc_theramore_faithful);
 	RegisterTheramoreAI(npc_theramore_arcanist);
 	RegisterTheramoreAI(npc_theramore_marksman);
+	RegisterTheramoreAI(npc_theramore_general_warrior);
+	RegisterTheramoreAI(npc_theramore_general_paladin);
+	RegisterTheramoreAI(npc_theramore_general_ranger);
 	RegisterTheramoreAI(npc_wounded_theramore_troop);
 	RegisterTheramoreAI(npc_faithful_training);
 	RegisterTheramoreAI(npc_arcanist_training);

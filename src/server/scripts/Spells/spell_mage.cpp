@@ -2894,6 +2894,7 @@ struct at_mage_froze_orb : AreaTriggerAI
 			return;
 		}
 
+		_destination = destPos;
 		at->InitSplines(points);
 
 		_scheduler
@@ -2919,8 +2920,13 @@ struct at_mage_froze_orb : AreaTriggerAI
 			});
 	}
 
+	// Au premier ennemi touche, l'orbe ralentit fortement et finit sa course
+	// vers la destination initiale (comportement retail).
 	void OnUnitEnter(Unit* unit) override
 	{
+		if (_slowed)
+			return;
+
 		Unit* caster = at->GetCaster();
 		if (!caster)
 			return;
@@ -2931,9 +2937,17 @@ struct at_mage_froze_orb : AreaTriggerAI
 		if (!caster->IsValidAttackTarget(unit))
 			return;
 
-		PathGenerator path(at);
-		path.CalculatePath(at->GetPositionX(), at->GetPositionY(), at->GetPositionZ(), false);
-		at->InitSplines(path.GetPath());
+		_slowed = true;
+
+		std::vector<G3D::Vector3> points;
+		points.emplace_back(at->GetPositionX(), at->GetPositionY(), at->GetPositionZ());
+		points.emplace_back(_destination.GetPositionX(), _destination.GetPositionY(), _destination.GetPositionZ());
+
+		// Deja (presque) arrivee : rien a ralentir
+		if ((points[1] - points[0]).squaredMagnitude() < 0.01f)
+			return;
+
+		at->InitSplines(points, FROZEN_ORB_SLOWED_SPEED, false);
 	}
 
 	void OnUpdate(uint32 /*diff*/) override
@@ -2942,7 +2956,11 @@ struct at_mage_froze_orb : AreaTriggerAI
 	}
 
 private:
+	static constexpr float FROZEN_ORB_SLOWED_SPEED = 1.0f; // yards/s
+
 	TaskScheduler _scheduler;
+	Position _destination;
+	bool _slowed = false;
 };
 
 void AddSC_mage_spell_scripts()

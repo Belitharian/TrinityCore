@@ -427,7 +427,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case NPC_ARCHMAGE_TERVOSH:
 				case NPC_PAINED:
 				case NPC_THADDUS_STOUTBLOW:
-				case NPC_DWARVEN_ENGINEER:
+				case NPC_HORRAN_REDMANE:
 				case NPC_LIEUTENANT_ADEN:
 				case NPC_MARCUS_JONATHAN:
 					SetupCorpse(creature);
@@ -515,16 +515,16 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case EVT_ISLE_JAINA_WALK:       HandleIsleJainaWalk();        break;
 				case EVT_ISLE_KALECGOS_GREET:   HandleIsleKalecgosGreet();    break;
 				case EVT_ISLE_JAINA_TALK_01:    TalkAndNext(GetJaina(),    SAY_ISLE_JAINA_01,    9s);  break;
-				case EVT_ISLE_JAINA_TALK_02:    TalkAndNext(GetJaina(),    SAY_ISLE_JAINA_02,    14s); break;
+				case EVT_ISLE_JAINA_TALK_02:    TalkAndNext(GetJaina(),    SAY_ISLE_JAINA_02,    16s); break;
 				case EVT_ISLE_KALECGOS_MOVE:    HandleIsleKalecgosMove();     break;
 				case EVT_ISLE_JAINA_TALK_03:    TalkAndNext(GetJaina(),    SAY_ISLE_JAINA_03,    6s);  break;
-				case EVT_ISLE_KALECGOS_TALK_03: TalkAndNext(GetKalecgos(), SAY_ISLE_KALECGOS_03, 4s);  break;
-				case EVT_ISLE_JAINA_TALK_04:    TalkAndNext(GetJaina(),    SAY_ISLE_JAINA_04,    12s); break;
-				case EVT_ISLE_KALECGOS_TALK_04: TalkAndNext(GetKalecgos(), SAY_ISLE_KALECGOS_04, 7s);  break;
-				case EVT_ISLE_JAINA_TALK_05:    TalkAndNext(GetJaina(),    SAY_ISLE_JAINA_05,    4s);  break;
-				case EVT_ISLE_KALECGOS_TALK_05: TalkAndNext(GetKalecgos(), SAY_ISLE_KALECGOS_05, 8s);  break;
+				case EVT_ISLE_KALECGOS_TALK_03: TalkAndNext(GetKalecgos(), SAY_ISLE_KALECGOS_03, 5s);  break;
+				case EVT_ISLE_JAINA_TALK_04:    TalkAndNext(GetJaina(),    SAY_ISLE_JAINA_04,    8500ms); break;
+				case EVT_ISLE_KALECGOS_TALK_04: TalkAndNext(GetKalecgos(), SAY_ISLE_KALECGOS_04, 9s);  break;
+				case EVT_ISLE_JAINA_TALK_05:    TalkAndNext(GetJaina(),    SAY_ISLE_JAINA_05,    3s);  break;
+				case EVT_ISLE_KALECGOS_TALK_05: TalkAndNext(GetKalecgos(), SAY_ISLE_KALECGOS_05, 9500ms);  break;
 				case EVT_ISLE_KALECGOS_TALK_06: TalkAndNext(GetKalecgos(), SAY_ISLE_KALECGOS_06, 8s);  break;
-				case EVT_ISLE_JAINA_TALK_06:    TalkAndNext(GetJaina(),    SAY_ISLE_JAINA_06,    17s); break;
+				case EVT_ISLE_JAINA_TALK_06:    TalkAndNext(GetJaina(),    SAY_ISLE_JAINA_06,    13500ms); break;
 				case EVT_ISLE_ECHO_OF_ALUNETH:  HandleIsleEchoOfAluneth();    break;
 				case EVT_ISLE_ALUNETH_FREED:    HandleIsleAlunethFreed();     break;
 				case EVT_ISLE_JAINA_HIDE:       HandleIsleJainaHide();        break;
@@ -550,7 +550,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				case EVT_KINNDY_KNEEL:          HandleKinndyKneel();          break;
 				case EVT_KINNDY_TOUCH:          HandleKinndyTouch();          break;
 				case EVT_KINNDY_SCREAM:         TalkAndNext(GetJaina(), SAY_KINNDY_SCREAM_EMOTE, 3s); break;
-				case EVT_KINNDY_RAGE:           TalkAndNext(GetJaina(), SAY_KINNDY_RAGE_JAINA,   4s); break;
+				case EVT_KINNDY_RAGE:           TalkAndNext(GetJaina(), SAY_KINNDY_RAGE_JAINA,   8500ms); break;
 				case EVT_KINNDY_STAND:          HandleKinndyStand();          break;
 				case EVT_GLASS_PICK:            HandleGlassPick();            break;
 				case EVT_GLASS_TAKEN:           HandleGlassTaken();           break;
@@ -558,30 +558,30 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 
 				#pragma region LOOTERS
 				case EVT_LOOTERS_NOTICE:        HandleLootersNotice();        break;
-				case EVT_LOOTERS_HEAD:          TalkAndNext(GetWarlord(), SAY_LOOTERS_WARLORD_HEAD, 3s); break;
+				case EVT_LOOTERS_HEAD:          TalkAndNext(GetWarlord(), SAY_LOOTERS_WARLORD_HEAD, 4500ms); break;
 				case EVT_LOOTERS_ATTACK:        HandleLootersAttack();        break;
 				case EVT_LOOTERS_AGGRO_NUDGE:   HandleLootersAggroNudge();    break;
 				#pragma endregion
 
 				#pragma region LAST_SURVIVOR
 				case EVT_FINISHER_WALK:         MoveJaina(RFTLegs::Finisher); break;
-				case EVT_FINISHER_JAINA_01:     TalkAndNext(GetJaina(),   SAY_FINISHER_JAINA_01, 5s); break;
+				case EVT_FINISHER_JAINA_01:     TalkAndNext(GetJaina(),   SAY_FINISHER_JAINA_01, 6500ms); break;
 				case EVT_FINISHER_WARLORD:      TalkAndNext(GetWarlord(), SAY_FINISHER_WARLORD,  4s); break;
-				case EVT_FINISHER_JAINA_02:     TalkAndNext(GetJaina(),   SAY_FINISHER_JAINA_02, 5s); break;
+				case EVT_FINISHER_JAINA_02:     TalkAndNext(GetJaina(),   SAY_FINISHER_JAINA_02, 9s); break;
 				case EVT_FINISHER_STAB:         HandleFinisherStab();         break;
 				case EVT_FINISHER_KILL:         HandleFinisherKill();         break;
 				#pragma endregion
 
 				#pragma region BACK_TO_SENDER
 				case EVT_DOCKS_WALK:            MoveJaina(RFTLegs::Docks);    break;
-				case EVT_DOCKS_TALK_01:         TalkAndNext(GetJaina(), SAY_DOCKS_JAINA_01, 6s); break;
+				case EVT_DOCKS_TALK_01:         TalkAndNext(GetJaina(), SAY_DOCKS_JAINA_01, 5s); break;
 				case EVT_DOCKS_TALK_02:         TalkAndNext(GetJaina(), SAY_DOCKS_JAINA_02, 3s); break;
 				case EVT_DOCKS_LEAVE:           MoveJaina(RFTLegs::CraterRim); break;
-				case EVT_CRATER_RIM_TALK:       TalkAndNext(GetJaina(), SAY_CRATER_RIM_JAINA, 5s); break;
+				case EVT_CRATER_RIM_TALK:       TalkAndNext(GetJaina(), SAY_CRATER_RIM_JAINA, 4s); break;
 				case EVT_CRATER_DESCEND:        MoveJaina(RFTLegs::CraterBottom); break;
-				case EVT_IRIS_TALK_01:          TalkAndNext(GetJaina(), SAY_IRIS_JAINA_01, 4s); break;
+				case EVT_IRIS_TALK_01:          TalkAndNext(GetJaina(), SAY_IRIS_JAINA_01, 5s); break;
 				case EVT_IRIS_CHANNEL:          HandleIrisChannel();          break;
-				case EVT_IRIS_TALK_02:          TalkAndNext(GetJaina(), SAY_IRIS_JAINA_02, 5s); break;
+				case EVT_IRIS_TALK_02:          TalkAndNext(GetJaina(), SAY_IRIS_JAINA_02, 3500ms); break;
 				case EVT_IRIS_SEAL:             HandleIrisSeal();             break;
 				case EVT_IRIS_TALK_03:          TalkAndNext(GetJaina(), SAY_IRIS_JAINA_03, 4s); break;
 				case EVT_IRIS_SEALED:           HandleIrisSealed();           break;
@@ -751,7 +751,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				kalecgos->SetSpeedRate(MOVE_WALK, KALECGOS_WALK_SPEED_RATE);
 				kalecgos->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, KalecgosPoint02, true, KalecgosPoint02.GetOrientation());
 			}
-			Next(17s);
+			Next(19s);
 		}
 
 		// Jaina lance sa teleportation (l'echo d'Aluneth sert de visuel).
@@ -817,7 +817,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				kalecgos->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 				FaceFirstPlayer(kalecgos);
 			}
-			Next(2s);
+			Next(5s);
 		}
 
 		// Jaina reapparait dans les ruines et court vers le debut du parcours.
@@ -883,13 +883,13 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				Talk(jaina, SAY_TRAIL_RAT_JAINA);
 			}
 			TriggerGameEvent(EVENT_TRAIL_RAT);
-			Next(3s);
+			Next(4500ms);
 		}
 
 		void HandleTrailRatSurvivors()
 		{
 			Talk(GetJaina(), SAY_TRAIL_SURVIVORS_JAINA);
-			WaitForPlayers(RFTLegs::Pained, 3s);
+			WaitForPlayers(RFTLegs::Pained, 7s);
 		}
 
 		void HandleTrailPainedKneel()
@@ -907,7 +907,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 		{
 			Talk(GetJaina(), SAY_TRAIL_PAINED_JAINA);
 			TriggerGameEvent(EVENT_TRAIL_PAINED);
-			Next(3s);
+			Next(6s);
 		}
 
 		void HandleTrailPainedStand()
@@ -926,7 +926,7 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 				Talk(jaina, SAY_TRAIL_GENERALS_JAINA);
 			}
 			TriggerGameEvent(EVENT_TRAIL_GENERALS);
-			WaitForPlayers(RFTLegs::Kinndy, 4s);
+			WaitForPlayers(RFTLegs::Kinndy, 8s);
 		}
 
 		// =================================================================
@@ -952,9 +952,9 @@ class scenario_ruins_of_theramore : public InstanceMapScript
 			{
 				kinndy->RemoveAurasDueToSpell(SPELL_COSMETIC_PURPLE_VERTEX_STATE);
 				kinndy->RemoveAurasDueToSpell(SPELL_SHIMMERDUST);
-				kinndy->AddAura(SPELL_COSMETIC_ARCANE_DISSOLVE, kinndy);
-				kinndy->CastSpell(kinndy, SPELL_DISSOLVE_ARCANE_VISUAL, true);
-				kinndy->DespawnOrUnsummon(3s);
+				kinndy->CastSpell(kinndy, SPELL_COSMETIC_ARCANE_DISSOLVE);
+                if (TempSummon* trigger = kinndy->SummonCreature(WORLD_TRIGGER, kinndy->GetPosition(), TEMPSUMMON_TIMED_DESPAWN, 2s))
+                    trigger->CastSpell(trigger, SPELL_KINNDY_DUST);
 			}
 			Next(2s);
 		}

@@ -13,7 +13,8 @@
  *            puis Perith Stormhoove arrive annoncer l'attaque de la Horde.
  *   Acte 2 : Evacuation -> ALittleHelp -> Preparation
  *            Evacuation des civils, reparation des tanks, extinction des feux,
- *            arrivee des archimages de Dalaran par le portail.
+ *            arrivee des archimages de Dalaran par le portail, repartition
+ *            des generaux de la 7e Legion qui attendent Jaina sur la place.
  *   Acte 3 : TheBattle -> TheBattle_Survive
  *            Vagues de la Horde (voir HORDE_WAVES_COUNT) sous la protection
  *            du bouclier de Rhonin.
@@ -33,7 +34,7 @@
 
 // Decommenter pour raccourcir les cinematiques et sauter directement aux
 // phases de combat pendant les tests (voir les #ifdef CUSTOM_DEBUG du .cpp).
-#define CUSTOM_DEBUG
+//#define CUSTOM_DEBUG
 
 constexpr char const* BFTScriptName             = "scenario_battle_for_theramore";
 constexpr char const* DataHeader                = "BFT";
@@ -53,7 +54,9 @@ constexpr char const* WaveMemberStringId        = "WaveMembers";
 static constexpr uint8 PERITH_LOCATION          = 3;    // Acteurs qui accompagnent Perith Stormhoove
 static constexpr uint8 ARCHMAGES_LOCATION       = 6;    // Archimages de Dalaran sortant du portail
 static constexpr uint8 ARCHMAGES_RELOCATION     = 6;    // Positions des archimages apres la bataille
-static constexpr uint8 ACTORS_RELOCATION        = 10;   // Acteurs teleportes en debut de phase Evacuation
+static constexpr uint8 GENERALS_LOCATION        = 6;    // Generaux de la 7e Legion (arrivee au briefing)
+static constexpr uint8 GENERALS_AFTERMATH       = 5;    // Generaux reunis apres la bataille (Shandris est partie)
+static constexpr uint8 ACTORS_RELOCATION        = 16;   // Acteurs et generaux teleportes au debut de la bataille
 static constexpr uint8 BARRIERS_LOCATION        = 2;    // Barrieres mystiques (DATA_MYSTIC_BARRIER_01/02) - non utilisee actuellement
 static constexpr uint8 FIRE_LOCATION            = 32;   // Foyers d'incendie repartis dans la ville
 static constexpr uint8 TOWER_BARRIERS_LOCATION  = 8;    // Barrieres d'energie autour de la tour
@@ -117,8 +120,21 @@ enum BFTData
 	DATA_ROKNAH_HAG,
 	DATA_CAPTAIN_DROK,
 	DATA_WAVE_CALLER_GRUHTA,
+	// Generaux arrives avec la flotte de la 7e Legion (Tides of War)
+	DATA_MARCUS_JONATHAN,
+	DATA_THADDUS_STOUTBLOW,
+	DATA_HORRAN_REDMANE,
+	DATA_ADMIRAL_AUBREY,
+	DATA_SHANDRIS_FEATHERMOON,
+	DATA_GENERAL_TIRAS_ALAN,
+	// Evacuation (Tides of War, chapitre 7) : crieur et figurants des scenes du livre
+	DATA_THERAMORE_CRIER,
+	DATA_INNKEEPER_JANENE,
+	DATA_DOCTOR_VANHOWZEN,
+	DATA_MORNING_STAR_FIRST_MATE,
+	DATA_DRAENEI_SHAMAN,
 
-	DATA_SCENARIO_PHASE,                // Phase courante (BFTPhases)
+	DATA_SCENARIO_PHASE,               // Phase courante (BFTPhases)
 	DATA_WOUNDED_TROOPS,                // Compteur de blesses soignes
 	DATA_WAVE_GROUP_ID,                 // Point de spawn de la vague en cours (DATA_WAVE_*)
 
@@ -126,13 +142,15 @@ enum BFTData
 	DATA_KALECGOS_CIRCLE_EVENT,         // Demarre le vol en cercle au-dessus de Theramore
 	DATA_KALECGOS_CANCEL_EVENT,         // Stoppe tout et desactive la creature
 
+	// Scene du livre demandee par un temoin de l'evacuation (EvacuationScene)
+	DATA_EVACUATION_SCENE,
+
 	// GameObjects
 	DATA_PORTAL_TO_STORMWIND,
 	DATA_PORTAL_TO_DALARAN,
 	DATA_PORTAL_TO_ORGRIMMAR,
 	DATA_MYSTIC_BARRIER_01,
 	DATA_MYSTIC_BARRIER_02,
-	DATA_ENERGY_BARRIER,
 	DATA_POWDER_BARREL,
 
 	// Invokers - identifiants des groupes de spawn (voir HordeMembersInvoker).
@@ -171,6 +189,8 @@ enum BFTCreatures
 	NPC_THERAMORE_FOOTMAN               = 58612,
 	NPC_THERAMORE_CITIZEN_MALE          = 143773,
 	NPC_THERAMORE_CITIZEN_FEMALE        = 143776,
+	NPC_INNKEEPER_JANENE                = 121801,
+	NPC_DOCTOR_VANHOWZEN                = 121902,
 
 	// --- Horde (assaillants) ---
 	NPC_ROKNAH_GRUNT                    = 64732,
@@ -198,7 +218,20 @@ enum BFTCreatures
 	NPC_THADER_WINDERMERE               = 500009,
 	NPC_THALEN_SONGWEAVER               = 500010,
 	NPC_THERAMORE_WOUNDED_TROOP         = 500012,
-	NPC_THERAMORE_FIRE_CREDIT           = 500013
+	NPC_THERAMORE_FIRE_CREDIT           = 500013,
+	NPC_THERAMORE_CRIER                 = 500025,
+	NPC_THERAMORE_BOY                   = 500042,   // Enfants invoques aupres des civils (Evacuation),
+	NPC_THERAMORE_GIRL                  = 500045,   // une entry par sexe pour leurs voix
+	NPC_MORNING_STAR_FIRST_MATE         = 500043,   // Second de L'Etoile du matin, sur le quai
+	NPC_DRAENEI_SHAMAN                  = 500044,   // Chaman draenei qui hate la traversee
+
+	// --- Generaux de la 7e Legion ---
+	NPC_MARCUS_JONATHAN                 = 500036,
+	NPC_THADDUS_STOUTBLOW               = 500033,
+	NPC_HORRAN_REDMANE                  = 500038,
+	NPC_ADMIRAL_AUBREY                  = 500040,
+	NPC_SHANDRIS_FEATHERMOON            = 500039,
+	NPC_GENERAL_TIRAS_ALAN              = 500041
 };
 
 // =========================================================================
@@ -240,9 +273,24 @@ enum BFTMisc
 	GOB_PORTAL_TO_STORMWIND             = 353823,
 	GOB_PORTAL_TO_DALARAN               = 323842,
 	GOB_PORTAL_TO_ORGRIMMAR             = 353822,
-	GOB_ENERGY_BARRIER                  = 369744,
 	GOB_ENERGY_BARRIER_TOWER            = 396264,
 	GOB_LAVISH_REFRESHMENT_TABLE        = 1550006,
+
+	// Navires du port : gameobjects retires des ADT, ouverts et fermes par
+	// groupe de spawn (2026_10_27_00_world_theramore_ships.sql)
+	SPAWN_GROUP_SEVENTH_FLEET           = 50000,    // Flotte de la 7e Legion, apres le depart de L'Etoile du matin
+	SPAWN_GROUP_MORNING_STAR            = 50001,    // L'Etoile du matin, au port jusqu'a la fin de l'evacuation
+	SPAWN_GROUP_SEA_WOLF                = 50002,    // Loup de mer et son baril de poudre, avec le capitaine Drok
+
+	// Actions (DoAction) de l'evacuation
+	ACTION_EVACUATION_PREPARE           = 1,        // Civils : rassemblent leurs enfants
+	ACTION_EVACUATION_START             = 2,        // Crieur : debut des proclamations
+	ACTION_EVACUATION_END               = 3,        // Crieur : fin des proclamations
+	ACTION_ANSWER_CRIER                 = 4,        // Civil : repond (agace) au crieur
+	ACTION_MORNING_STAR_DEPARTS         = 5,        // Civils encore en route : embarquent d'office
+
+	// Scenes (scene_template)
+	SCENE_THERAMORE_INTRO               = 500000,   // Survol de la ville a l'entree (package 50000)
 
 	// Criteria Trees - chaque criteria tree valide une etape du scenario et
 	// declenche la transition correspondante dans OnCompletedCriteriaTree.
@@ -297,6 +345,10 @@ enum BFTMisc
     // Pendant la bataille : position des heros sur la carte, sans surbrillance.
     VIGNETTE_BATTLE_JAINA               = 50024,
     VIGNETTE_BATTLE_RHONIN              = 50025,
+    // Temoins de l'evacuation a qui parler (objectifs de l'etape)
+    VIGNETTE_INNKEEPER_JANENE           = 50033,
+    VIGNETTE_DOCTOR_VANHOWZEN           = 50034,
+    VIGNETTE_MORNING_STAR_FIRST_MATE    = 50035,
 
 	// Sounds
 	SOUND_FEARFUL_CROWD                 = 15003,
@@ -411,15 +463,39 @@ enum BFTTalks
 	SAY_PRE_BATTLE_14     = 30,
 	SAY_PRE_BATTLE_15     = 31,
 
+	// --- Repartition des generaux (insere entre SAY_PRE_BATTLE_12 et 13) ---
+	SAY_GENERALS_MARCUS_INTRO   = 1,    // Marcus : la flotte a jete l'ancre (arrivee, apres les archimages)
+	SAY_GENERALS_JAINA_THANKS   = 68,   // Jaina : remercie les generaux
+	SAY_GENERALS_MARCUS_01      = 0,    // Marcus : la 7e Legion est a vos ordres
+	SAY_GENERALS_JAINA_GATES    = 64,   // Jaina : Marcus et les nains aux portes principales
+	SAY_GENERALS_STOUTBLOW_01   = 0,
+	SAY_GENERALS_REDMANE_01     = 0,
+	SAY_GENERALS_JAINA_DOCKS    = 65,   // Jaina : Aubrey aux docks avec Tervosh
+	SAY_GENERALS_AUBREY_01      = 0,
+	SAY_GENERALS_JAINA_WEST     = 66,   // Jaina : Shandris a la porte Ouest
+	SAY_GENERALS_SHANDRIS_01    = 0,
+	SAY_GENERALS_JAINA_CITADEL  = 67,   // Jaina : Tiras'alan a la citadelle avec Rhonin
+	SAY_GENERALS_TIRAS_ALAN_01  = 0,
+
 	// --- Bataille (TheBattle / TheBattle_Survive) ---
 	SAY_BATTLE_01         = 32,
-	SAY_BATTLE_02         = 33,
-	SAY_BATTLE_03         = 34,
-	SAY_BATTLE_04         = 35,
+	SAY_BATTLE_GATE_BREAKS = 33,        // Jaina : la barriere va ceder
 	SAY_BATTLE_05         = 0,
 	SAY_BATTLE_06         = 0,
-	SAY_BATTLE_THALEN_BETRAYAL = 1,     // Thalen nargue Jaina apres la chute de la barriere
-	SAY_BATTLE_THALEN_BOMB     = 2,     // Thalen, gele, fait allusion a la bombe de mana
+
+	// --- Trahison et capture de Thalen (Tides of War, chapitre 17) ---
+	SAY_THALEN_NOTICE_JAINA     = 69,   // Jaina : la barriere faiblit, quelqu'un la defait de l'interieur
+	SAY_THALEN_TRAITOR_JAINA    = 34,   // Jaina : "Tissechant ! TRAITRE !"
+	SAY_THALEN_SNEER            = 1,    // Thalen ricane
+	SAY_THALEN_SPARED_JAINA     = 70,   // Jaina s'etonne que Peine ne l'ait pas tue
+	SAY_THALEN_USEFUL_PAINED    = 7,    // Peine : un traitre est utile, il parlera
+	SAY_THALEN_ONSLAUGHT_JAINA  = 71,   // Jaina : nous ne sommes pas l'Assaut ecarlate
+	SAY_THALEN_TEA_PAINED       = 8,    // Peine : l'inviter a prendre le the ?
+	SAY_THALEN_EVENCANE_JAINA   = 72,   // Jaina : il sera remis au capitaine Evencane
+	SAY_THALEN_ESCORT_HEDRIC    = 4,    // Hedric : deux soldats l'emportent
+	SAY_THALEN_VOUCHED_AMARA    = 1,    // Amara : Rhonin s'etait porte garant de lui
+	SAY_THALEN_ALONE_JAINA      = 73,   // Jaina : a-t-il agi seul ?
+	SAY_THALEN_ALONE_AMARA      = 2,    // Amara : je l'espere, sinon...
 	
 	// --- Annonces de vagues : une replique par point d arrivee ---
 	SAY_BATTLE_ALERT      = 36,
@@ -473,6 +549,20 @@ enum BFTTalks
 	SAY_IRIS_XPLOSION_09  = 60,
 	SAY_IRIS_XPLOSION_10  = 8,
 
+	// --- Evacuation (Tides of War, chapitre 7) ---
+	// Quai de L'Etoile du matin : second du navire et chaman draenei.
+	SAY_EVAC_MATE_BOARDING      = 0,    // Second : les enfants d'abord, cap sur Gadgetzan
+	SAY_EVAC_MATE_RATCHET       = 1,    // Second : pas Cabestan, trop de Horde y est passee
+	SAY_EVAC_SHAMAN_ELEMENTS    = 0,    // Chaman : les elementaires de l'air et de l'eau
+	SAY_EVAC_MATE_FAREWELL      = 2,    // Second : salut aux heros
+	SAY_EVAC_MATE_DEPARTURE     = 3,    // Second : on largue les amarres
+	// Auberge : Janene reste, le docteur cherche des volontaires.
+	SAY_EVAC_JANENE_STAYS       = 0,
+	SAY_EVAC_JANENE_CURFEW      = 1,
+	SAY_EVAC_JANENE_HOME        = 2,
+	SAY_EVAC_DOCTOR_VOLUNTEERS  = 0,
+	SAY_EVAC_DOCTOR_HARBOR      = 1,
+
 	// --- Repliques ponctuelles ---
 	SAY_WOUNDED_TROOP     = 61,
 
@@ -484,18 +574,237 @@ enum BFTTalks
 };
 
 // =========================================================================
+// Evacuation
+// =========================================================================
+
+// Scenes du livre jouees une fois chacune pendant l'evacuation, quand un
+// joueur parle au temoin (gossip de npc_theramore_evacuation_witness, qui
+// credite aussi l'objectif de l'etape : SetData(DATA_EVACUATION_SCENE, scene)).
+enum class EvacuationScene : uint32
+{
+	Docks,      // Second de L'Etoile du matin : Gadgetzan plutot que Cabestan
+	Janene,     // Janene reste a son auberge
+	Doctor,     // Le docteur garde ceux qui savent soigner
+	Max
+};
+
+// Reseau des rues de Theramore, releve en jeu (marqueurs .npc add 1, guid en
+// commentaire) : l'anneau autour de la tour, ses branches vers l'auberge et
+// les groupes de civils, et la route du port. Les quatre derniers noeuds
+// (passerelle et pont de L'Etoile du matin) ont ete releves au .gps.
+//
+// Un civil evacue part du noeud le plus proche et suit le plus court chemin
+// jusqu'au pont (THERAMORE_STREET_BOARDING). Entre deux noeuds, le
+// deplacement passe par les mmaps : les noeuds n'ont pas besoin d'etre serres.
+struct StreetNode
+{
+	float x, y, z;
+};
+
+// Liaison a double sens entre deux index de TheramoreStreets.
+struct StreetLink
+{
+	uint8 from, to;
+};
+
+static constexpr uint8 THERAMORE_STREET_NODES    = 82;
+static constexpr uint8 THERAMORE_STREET_LINKS    = 82;
+static constexpr uint8 THERAMORE_STREET_GANGPLANK = 78; // Pied de la passerelle : plus de decalage lateral a partir d'ici
+static constexpr uint8 THERAMORE_STREET_BOARDING = 81;  // Centre du pont de L'Etoile du matin
+
+StreetNode const TheramoreStreets[THERAMORE_STREET_NODES] =
+{
+	{  -3677.20f,  -4387.31f,  10.44f },   //  0 50000596
+	{  -3675.09f,  -4393.15f,  10.62f },   //  1 50000597
+	{  -3672.90f,  -4400.25f,  10.67f },   //  2 50000598
+	{  -3672.30f,  -4412.23f,  10.61f },   //  3 50000599
+	{  -3667.00f,  -4413.37f,  10.84f },   //  4 50000600
+	{  -3659.80f,  -4413.80f,  10.56f },   //  5 50000601
+	{  -3650.81f,  -4414.46f,  10.21f },   //  6 50000602
+	{  -3642.84f,  -4416.36f,   9.90f },   //  7 50000603
+	{  -3634.42f,  -4419.92f,   9.68f },   //  8 50000604
+	{  -3627.88f,  -4423.98f,  10.35f },   //  9 50000605
+	{  -3620.97f,  -4429.25f,  11.34f },   // 10 50000606
+	{  -3616.56f,  -4434.90f,  12.97f },   // 11 50000607
+	{  -3615.53f,  -4448.48f,  14.23f },   // 12 50000608
+	{  -3623.51f,  -4448.65f,  14.25f },   // 13 50000609
+	{  -3621.54f,  -4453.90f,  14.25f },   // 14 50000610
+	{  -3621.06f,  -4461.48f,  13.62f },   // 15 50000611
+	{  -3671.33f,  -4419.50f,  11.06f },   // 16 50000612
+	{  -3671.81f,  -4432.13f,  11.29f },   // 17 50000613
+	{  -3673.12f,  -4451.91f,  11.36f },   // 18 50000614
+	{  -3673.70f,  -4459.46f,  11.33f },   // 19 50000615
+	{  -3677.59f,  -4468.20f,  11.45f },   // 20 50000616
+	{  -3684.14f,  -4476.16f,  11.68f },   // 21 50000617
+	{  -3678.29f,  -4484.61f,  11.05f },   // 22 50000618
+	{  -3673.44f,  -4492.17f,  10.72f },   // 23 50000619
+	{  -3669.64f,  -4505.60f,  10.26f },   // 24 50000620
+	{  -3692.81f,  -4482.87f,  12.01f },   // 25 50000621
+	{  -3718.57f,  -4495.86f,  12.72f },   // 26 50000622
+	{  -3728.61f,  -4499.60f,  12.86f },   // 27 50000623
+	{  -3743.12f,  -4504.18f,  12.86f },   // 28 50000624
+	{  -3753.65f,  -4506.95f,  12.74f },   // 29 50000625
+	{  -3767.74f,  -4509.28f,  12.48f },   // 30 50000626
+	{  -3792.13f,  -4511.45f,  11.54f },   // 31 50000627
+	{  -3800.77f,  -4512.91f,  11.43f },   // 32 50000628
+	{  -3809.50f,  -4521.77f,   9.53f },   // 33 50000629
+	{  -3821.11f,  -4532.94f,   9.22f },   // 34 50000630
+	{  -3828.04f,  -4539.86f,   9.22f },   // 35 50000631
+	{  -3831.78f,  -4546.34f,   9.20f },   // 36 50000632
+	{  -3831.35f,  -4552.59f,   9.00f },   // 37 50000633
+	{  -3832.92f,  -4558.84f,   8.74f },   // 38 50000634
+	{  -3839.68f,  -4562.72f,   8.48f },   // 39 50000635
+	{  -3847.67f,  -4561.05f,   8.37f },   // 40 50000636
+	{  -3855.83f,  -4567.21f,   8.06f },   // 41 50000637
+	{  -3866.74f,  -4578.37f,   8.71f },   // 42 50000638
+	{  -3873.73f,  -4588.64f,   8.64f },   // 43 50000639
+	{  -3881.41f,  -4599.35f,   8.71f },   // 44 50000640
+	{  -3798.08f,  -4505.17f,  11.54f },   // 45 50000641
+	{  -3800.81f,  -4497.67f,  11.55f },   // 46 50000642
+	{  -3803.80f,  -4490.66f,  11.77f },   // 47 50000643
+	{  -3809.35f,  -4479.39f,  12.68f },   // 48 50000644
+	{  -3811.53f,  -4474.03f,  12.70f },   // 49 50000645
+	{  -3812.69f,  -4464.27f,  12.70f },   // 50 50000646
+	{  -3812.56f,  -4456.14f,  12.70f },   // 51 50000647
+	{  -3812.18f,  -4442.73f,  12.71f },   // 52 50000648
+	{  -3812.30f,  -4429.83f,  12.70f },   // 53 50000649
+	{  -3816.68f,  -4431.19f,  12.72f },   // 54 50000650
+	{  -3824.77f,  -4434.74f,  12.17f },   // 55 50000651
+	{  -3833.62f,  -4442.06f,  11.57f },   // 56 50000652
+	{  -3825.24f,  -4418.59f,  11.95f },   // 57 50000653
+	{  -3819.38f,  -4420.04f,  12.31f },   // 58 50000654
+	{  -3811.96f,  -4422.10f,  12.69f },   // 59 50000655
+	{  -3802.01f,  -4400.28f,  11.45f },   // 60 50000656
+	{  -3796.51f,  -4398.00f,  10.93f },   // 61 50000657
+	{  -3789.93f,  -4395.04f,  10.53f },   // 62 50000658
+	{  -3786.25f,  -4394.14f,  10.56f },   // 63 50000659
+	{  -3773.13f,  -4391.76f,  10.63f },   // 64 50000660
+	{  -3763.00f,  -4387.78f,  10.69f },   // 65 50000661
+	{  -3756.83f,  -4383.47f,  10.65f },   // 66 50000662
+	{  -3749.26f,  -4380.48f,  10.63f },   // 67 50000663
+	{  -3725.81f,  -4368.23f,  10.61f },   // 68 50000664
+	{  -3715.70f,  -4362.92f,  10.61f },   // 69 50000665
+	{  -3716.06f,  -4359.03f,  10.61f },   // 70 50000666
+	{  -3715.79f,  -4348.36f,  10.61f },   // 71 50000667
+	{  -3710.10f,  -4340.80f,  10.61f },   // 72 50000668
+	{  -3708.34f,  -4365.11f,  10.61f },   // 73 50000670
+	{  -3703.07f,  -4367.29f,  10.61f },   // 74 50000671
+	{  -3697.42f,  -4372.17f,  10.61f },   // 75 50000672
+	{  -3689.73f,  -4378.56f,  10.61f },   // 76 50000673
+	{  -3679.90f,  -4382.99f,  10.49f },   // 77 50000674
+	{  -3933.12f,  -4659.34f,   8.51f },   // 78 pied de la passerelle
+	{  -3924.09f,  -4668.30f,  13.50f },   // 79 haut de la passerelle
+	{  -3918.15f,  -4670.53f,  13.08f },   // 80 pont de L'Etoile du matin
+	{  -3907.22f,  -4666.13f,  13.25f },   // 81 centre du navire
+};
+
+StreetLink const TheramoreStreetLinks[THERAMORE_STREET_LINKS] =
+{
+	{  0,  1 },
+	{  1,  2 },
+	{  2,  3 },
+	{  3,  4 },
+	{  4,  5 },
+	{  5,  6 },
+	{  6,  7 },
+	{  7,  8 },
+	{  8,  9 },
+	{  9, 10 },
+	{ 10, 11 },
+	{ 11, 12 },
+	{ 12, 13 },
+	{ 13, 14 },
+	{ 14, 15 },
+	{ 16, 17 },
+	{ 17, 18 },
+	{ 18, 19 },
+	{ 19, 20 },
+	{ 20, 21 },
+	{ 21, 22 },
+	{ 22, 23 },
+	{ 23, 24 },
+	{ 25, 26 },
+	{ 26, 27 },
+	{ 27, 28 },
+	{ 28, 29 },
+	{ 29, 30 },
+	{ 30, 31 },
+	{ 31, 32 },
+	{ 32, 33 },
+	{ 33, 34 },
+	{ 34, 35 },
+	{ 35, 36 },
+	{ 36, 37 },
+	{ 37, 38 },
+	{ 38, 39 },
+	{ 39, 40 },
+	{ 40, 41 },
+	{ 41, 42 },
+	{ 42, 43 },
+	{ 43, 44 },
+	{ 45, 46 },
+	{ 46, 47 },
+	{ 47, 48 },
+	{ 48, 49 },
+	{ 49, 50 },
+	{ 50, 51 },
+	{ 51, 52 },
+	{ 52, 53 },
+	{ 53, 54 },
+	{ 54, 55 },
+	{ 55, 56 },
+	{ 57, 58 },
+	{ 58, 59 },
+	{ 59, 60 },
+	{ 60, 61 },
+	{ 61, 62 },
+	{ 62, 63 },
+	{ 63, 64 },
+	{ 64, 65 },
+	{ 65, 66 },
+	{ 66, 67 },
+	{ 67, 68 },
+	{ 68, 69 },
+	{ 69, 70 },
+	{ 70, 71 },
+	{ 71, 72 },
+	{ 73, 74 },
+	{ 74, 75 },
+	{ 75, 76 },
+	{ 76, 77 },
+	{  3, 16 },   // carrefour
+	{ 21, 25 },   // carrefour
+	{ 32, 45 },   // carrefour
+	{ 53, 59 },   // carrefour
+	{ 69, 73 },   // carrefour
+	{  0, 77 },   // carrefour
+	{ 44, 78 },   // quai
+	{ 78, 79 },   // passerelle
+	{ 79, 80 },   // a bord
+	{ 80, 81 },   // centre du navire
+};
+
+// =========================================================================
 // Helpers de spawn / relocalisation
 // =========================================================================
 
-// Associe un acteur (entry de creature OU data ID selon la table) a un point
-// de spawn et a une destination vers laquelle il se dirige ensuite.
-// Les tables de pure relocalisation laissent "position" a zero : seul
-// "destination" est utilise (NearTeleportTo / SetHomePosition).
+// Toutes les tables de placement de creatures partagent cette struct ;
+// chacune ne renseigne que les champs dont elle a besoin.
+//   dataId      : entry de creature (SummonCreature) OU data ID (GetCreature),
+//                 selon la table.
+//   position    : point de spawn. Les tables de pure relocalisation le
+//                 laissent a zero.
+//   destination : point vise (MovePoint, NearTeleportTo / SetHomePosition).
+//   path        : chemin suivi depuis "position", quand un MovePoint ne
+//                 suffit pas.
+//   delay       : attente avant le spawn.
 struct Location
 {
 	uint32 dataId;
 	Position const position;
 	Position const destination;
+	WaypointPath const* path = nullptr;
+	Milliseconds delay = 0ms;
 };
 
 // Un GameObject a besoin de son quaternion d'orientation en plus de sa position.
@@ -543,8 +852,9 @@ Location const archmagesLocation[ARCHMAGES_LOCATION] =
 };
 
 // Relocalisation des acteurs principaux au demarrage de la bataille : ils
-// sont teleportes en place le long de la ligne de front.
-// Ici "dataId" contient un DATA_* (GetCreature), pas une entry.
+// sont teleportes en place le long de la ligne de front, Z recale sur le
+// sol. Ici "dataId" contient un DATA_* (GetCreature), pas une entry.
+// Jaina doit rester en tete : actorsRelocation[0] est lu directement.
 Location const actorsRelocation[ACTORS_RELOCATION] =
 {
 	{ DATA_JAINA_PROUDMOORE,     { 0.f, 0.f, 0.f, 0.f }, { -3658.39f, -4372.87f,  9.35f, 0.69f } },
@@ -556,7 +866,30 @@ Location const actorsRelocation[ACTORS_RELOCATION] =
 	{ DATA_KINNDY_SPARKSHINE,    { 0.f, 0.f, 0.f, 0.f }, { -3786.55f, -4276.78f,  7.99f, 1.56f } },
 	{ DATA_AMARA_LEESON,         { 0.f, 0.f, 0.f, 0.f }, { -3649.58f, -4369.21f,  9.57f, 0.69f } },
 	{ DATA_THADER_WINDERMERE,    { 0.f, 0.f, 0.f, 0.f }, { -3779.07f, -4276.96f,  7.93f, 1.52f } },
-	{ DATA_KALECGOS,             { 0.f, 0.f, 0.f, 0.f }, { -3730.39f, -4550.39f, 27.11f, 0.54f } }
+	{ DATA_KALECGOS,             { 0.f, 0.f, 0.f, 0.f }, { -3730.39f, -4550.39f, 27.11f, 0.54f } },
+	// Generaux de la 7e Legion, aux cotes des defenseurs de chaque vague
+	{ DATA_MARCUS_JONATHAN,      { 0.f, 0.f, 0.f, 0.f }, { -3664.50f, -4373.00f,  9.35f, 0.69f } },    // portes principales
+	{ DATA_THADDUS_STOUTBLOW,    { 0.f, 0.f, 0.f, 0.f }, { -3656.00f, -4378.50f,  9.40f, 0.69f } },    // portes principales
+	{ DATA_HORRAN_REDMANE,       { 0.f, 0.f, 0.f, 0.f }, { -3653.50f, -4375.00f,  9.45f, 0.69f } },    // portes principales
+	{ DATA_ADMIRAL_AUBREY,       { 0.f, 0.f, 0.f, 0.f }, { -3806.50f, -4544.00f, 10.68f, 3.09f } },    // docks
+	{ DATA_SHANDRIS_FEATHERMOON, { 0.f, 0.f, 0.f, 0.f }, { -3791.38f, -4279.50f,  8.23f, 1.21f } },    // porte Ouest
+	{ DATA_GENERAL_TIRAS_ALAN,   { 0.f, 0.f, 0.f, 0.f }, { -3672.00f, -4524.50f, 10.10f, 1.50f } }     // citadelle
+};
+
+// L'arrivee des generaux (generalsLocation) suit leurs chemins : elle est
+// declaree apres les WaypointPath, plus bas.
+
+// Apres la bataille, les generaux se retrouvent la ou les Ruines de
+// Theramore exposeront leurs corps. "dataId" contient un DATA_*.
+// Shandris n'y figure pas : elle part traquer Thalen avec ses sentinelles
+// et survit a la bombe.
+Location const generalsAftermath[GENERALS_AFTERMATH] =
+{
+	{ DATA_MARCUS_JONATHAN,      { 0.f, 0.f, 0.f, 0.f }, { -3798.18f, -4373.19f, 16.75f, 1.57f } },    // face a Aubrey
+	{ DATA_THADDUS_STOUTBLOW,    { 0.f, 0.f, 0.f, 0.f }, { -3800.50f, -4400.87f, 11.37f, 3.15f } },    // face a Horran
+	{ DATA_HORRAN_REDMANE,       { 0.f, 0.f, 0.f, 0.f }, { -3819.44f, -4401.01f, 11.70f, 0.01f } },    // face a Thaddus
+	{ DATA_ADMIRAL_AUBREY,       { 0.f, 0.f, 0.f, 0.f }, { -3798.20f, -4366.80f, 16.79f, 4.71f } },    // face a Marcus
+	{ DATA_GENERAL_TIRAS_ALAN,   { 0.f, 0.f, 0.f, 0.f }, { -3812.56f, -4372.48f, 14.06f, 6.23f } }     // face a Marcus
 };
 
 // Regroupement des archimages autour de Jaina apres la bataille
@@ -569,6 +902,13 @@ Location const archmagesRelocation[ARCHMAGES_RELOCATION] =
 	{ DATA_RHONIN,               { 0.f, 0.f, 0.f, 0.f }, { -3624.61f, -4456.55f, 13.62f, 4.12f } },
 	{ DATA_KINNDY_SPARKSHINE,    { 0.f, 0.f, 0.f, 0.f }, { -3618.42f, -4463.22f, 13.62f, 2.41f } },
 	{ DATA_ARCHMAGE_TERVOSH,     { 0.f, 0.f, 0.f, 0.f }, { -3626.40f, -4453.89f, 14.24f, 0.44f } }
+};
+
+// Position des fantassins pour Thalen
+Position const thalenFootmenPos[2] =
+{
+    { -3653.13f, -4363.35f, 9.71f, 0.070452f },
+    { -3649.88f, -4366.72f, 9.58f, 1.327454f }
 };
 
 // =========================================================================
@@ -724,7 +1064,7 @@ WaypointPath const KalecPath02 =
 		{ 3, -3621.39f, -4453.81f, 14.24f, 5.10f },
 		{ 4, -3621.30f, -4459.18f, 13.62f, 4.72f }
 	},
-	WaypointMoveType::Run,
+	WaypointMoveType::Walk,
 	WaypointPathFlags::ExactSplinePath
 };
 
@@ -739,7 +1079,7 @@ WaypointPath const KalecPath03 =
 		{ 3, -3615.46f, -4448.43f, 14.23f, 4.72f },
 		{ 4, -3615.43f, -4440.26f, 14.23f, 4.72f }
 	},
-	WaypointMoveType::Run,
+	WaypointMoveType::Walk,
 	WaypointPathFlags::ExactSplinePath
 };
 
@@ -755,7 +1095,7 @@ WaypointPath const RhoninPath01 =
 		{ 4, -3615.46f, -4448.43f, 14.23f, 4.72f },
 		{ 5, -3615.43f, -4440.26f, 14.23f, 4.72f }
 	},
-	WaypointMoveType::Run,
+	WaypointMoveType::Walk,
 	WaypointPathFlags::ExactSplinePath
 };
 
@@ -772,7 +1112,27 @@ WaypointPath const AmaraPath01 =
 		{ 5, -3615.46f, -4448.43f, 14.23f, 4.72f },
 		{ 6, -3615.43f, -4440.26f, 14.23f, 4.72f }
 	},
-	WaypointMoveType::Run,
+	WaypointMoveType::Walk,
+	WaypointPathFlags::ExactSplinePath
+};
+
+// Escorte de Thalen : les deux fantassins et Thalen ligote suivent ce meme
+// chemin, depart decale (ESCORT_STAGGER), de la porte principale vers la
+// citadelle. C'est la route que Jaina reprend apres la bataille.
+WaypointPath const ThalenEscortPath =
+{
+	1,
+	{
+		{ 0, -3654.41f, -4365.62f,  9.50f, 3.98f },
+		{ 1, -3658.87f, -4370.27f,  9.49f, 3.98f },
+		{ 2, -3665.04f, -4377.06f,  9.36f, 3.94f },
+		{ 3, -3671.01f, -4382.33f,  9.75f, 3.74f },
+		{ 4, -3675.36f, -4386.72f, 10.36f, 4.37f },
+		{ 5, -3674.33f, -4392.62f, 10.61f, 5.17f },
+		{ 6, -3672.54f, -4403.67f, 10.67f, 4.74f },
+		{ 7, -3672.46f, -4412.88f, 10.70f, 4.73f }
+	},
+	WaypointMoveType::Walk,
 	WaypointPathFlags::ExactSplinePath
 };
 
@@ -886,7 +1246,7 @@ WaypointPath const JainaPath02 =
 		{ 4, -3615.46f, -4448.43f, 14.23f, 4.72f },
 		{ 5, -3615.43f, -4440.26f, 14.23f, 4.72f }
 	},
-	WaypointMoveType::Run,
+	WaypointMoveType::Walk,
 	WaypointPathFlags::ExactSplinePath
 };
 
@@ -906,6 +1266,106 @@ WaypointPath const KalecgosPath01 =
 	},
 	WaypointMoveType::Run,
 	WaypointPathFlags::FlyingPath
+};
+
+// -------------------------------------------------------------------------
+// Arrivee des generaux au briefing (citadelle)
+// -------------------------------------------------------------------------
+// Chaque general spawne sur son point de depart puis rejoint sa place
+// devant Jaina en suivant son chemin. Le point de spawn n'est pas repris
+// dans le chemin : le premier noeud est la premiere destination, le
+// dernier sa place au briefing (et sa position de repos).
+
+// Marcus Jonathan.
+WaypointPath const MarcusPath01 =
+{
+	1,
+	{
+		{ 0, -3707.11f, -4546.58f, 25.82f, 2.06f },
+		{ 1, -3712.55f, -4546.98f, 25.82f, 3.31f },
+		{ 2, -3714.47f, -4549.42f, 25.82f, 3.06f }
+	},
+	WaypointMoveType::Walk,
+	WaypointPathFlags::ExactSplinePath
+};
+
+// Thaddus Stoutblow.
+WaypointPath const ThaddusPath01 =
+{
+	1,
+	{
+		{ 0, -3706.48f, -4543.80f, 25.82f, 2.64f },
+		{ 1, -3713.89f, -4545.59f, 25.82f, 3.35f }
+	},
+	WaypointMoveType::Walk,
+	WaypointPathFlags::ExactSplinePath
+};
+
+// Horran Redmane.
+WaypointPath const HorranPath01 =
+{
+	1,
+	{
+		{ 0, -3715.97f, -4527.79f, 25.82f, 5.18f },
+		{ 1, -3717.43f, -4533.55f, 25.82f, 4.01f },
+		{ 2, -3720.98f, -4534.48f, 25.82f, 4.20f }
+	},
+	WaypointMoveType::Walk,
+	WaypointPathFlags::ExactSplinePath
+};
+
+// Amiral Aubrey.
+WaypointPath const AubreyPath01 =
+{
+	1,
+	{
+		{ 0, -3714.63f, -4527.30f, 25.82f, 5.08f },
+		{ 1, -3714.61f, -4532.58f, 25.82f, 4.38f },
+		{ 2, -3717.84f, -4535.68f, 25.82f, 3.97f }
+	},
+	WaypointMoveType::Walk,
+	WaypointPathFlags::ExactSplinePath
+};
+
+// Shandris Feathermoon : meme depart et premier point que Thaddus.
+WaypointPath const ShandrisPath01 =
+{
+	1,
+	{
+		{ 0, -3706.48f, -4543.80f, 25.82f, 2.64f },
+		{ 1, -3713.13f, -4542.09f, 25.82f, 3.60f }
+	},
+	WaypointMoveType::Walk,
+	WaypointPathFlags::ExactSplinePath
+};
+
+// General Tiras'alan : meme depart et premier point que Horran.
+WaypointPath const TirasAlanPath01 =
+{
+	1,
+	{
+		{ 0, -3715.97f, -4527.79f, 25.82f, 5.18f },
+		{ 1, -3712.89f, -4539.84f, 25.82f, 3.59f }
+	},
+	WaypointMoveType::Walk,
+	WaypointPathFlags::ExactSplinePath
+};
+
+// Generaux arrives avec la flotte de la 7e Legion (Tides of War). Ici
+// "dataId" contient une entry de creature (SummonCreature).
+//   position    : spawn a l'entree de la citadelle, juste apres les archimages.
+//   path        : marche jusqu'a leur place au briefing, devant Jaina.
+//   delay       : Shandris et Tiras'alan partent du meme point que Thaddus et
+//                 Horran ; les delais les font marcher l'un derriere l'autre.
+// Leur poste de combat est dans actorsRelocation.
+Location const generalsLocation[GENERALS_LOCATION] =
+{
+	{ NPC_MARCUS_JONATHAN,      { -3704.10f, -4552.23f, 25.82f, 2.06f }, { 0.f, 0.f, 0.f, 0.f }, &MarcusPath01,    0ms    },
+	{ NPC_THADDUS_STOUTBLOW,    { -3702.53f, -4550.60f, 25.82f, 2.02f }, { 0.f, 0.f, 0.f, 0.f }, &ThaddusPath01,   380ms  },
+	{ NPC_HORRAN_REDMANE,       { -3718.19f, -4524.01f, 25.82f, 5.25f }, { 0.f, 0.f, 0.f, 0.f }, &HorranPath01,    0ms    },
+	{ NPC_ADMIRAL_AUBREY,       { -3717.14f, -4521.72f, 25.82f, 5.12f }, { 0.f, 0.f, 0.f, 0.f }, &AubreyPath01,    650ms  },
+	{ NPC_SHANDRIS_FEATHERMOON, { -3702.53f, -4550.60f, 25.82f, 2.02f }, { 0.f, 0.f, 0.f, 0.f }, &ShandrisPath01,  800ms  },
+	{ NPC_GENERAL_TIRAS_ALAN,   { -3718.19f, -4524.01f, 25.82f, 5.25f }, { 0.f, 0.f, 0.f, 0.f }, &TirasAlanPath01, 1000ms }
 };
 
 // =========================================================================
@@ -970,25 +1430,25 @@ Position const KinndyPoint02    = { -3725.93f, -4543.47f, 25.82f, 0.11f }; // Ki
 Position const JainaPoint01     = { -3751.32f, -4438.13f, 30.55f, 0.40f }; // Jaina a la table du conseil (declenche EVENT_THE_COUNCIL)
 Position const JainaPoint02     = { -3731.47f, -4547.05f, 27.11f, 0.25f }; // Jaina sur la place, phase ALittleHelp
 Position const JainaPoint03     = { -3658.39f, -4372.87f,  9.35f, 0.69f }; // Jaina sur la ligne de front (porte est)
-Position const JainaPoint04     = { -3636.94f, -4355.86f,  7.44f, 0.69f }; // Cible du teleport de Jaina pendant la bataille
 Position const JainaPoint05     = { -3747.73f, -4447.16f, 64.91f, 3.83f }; // Jaina au sommet de la tour (RetrieveRhonin)
 Position const JainaPoint06     = { -3619.56f, -4461.36f, 13.62f, 2.96f }; // Jaina a la table de banquet (WaitForAmara)
 Position const RhoninPoint01    = { -3622.97f, -4461.50f, 13.62f, 0.44f }; // Rhonin a la table de banquet
 Position const RhoninPoint02    = { -3744.36f, -4453.88f, 64.98f, 5.41f }; // Rhonin au sommet de la tour, en train de canaliser
 Position const PainedPoint01    = { -3747.93f, -4442.05f, 30.54f, 1.54f }; // Pained a la table du conseil
+Position const PainedPoint02    = { -3660.60f, -4372.12f,  9.36f, 0.68f }; // Pained aux cotes de Jaina, porte principale (bataille)
+Position const PainedPoint03    = { -3659.07f, -4365.56f, 10.06f, 0.14f }; // Peine recule depuis Thalen
 Position const OfficerPoint01   = { -3748.43f, -4432.99f, 30.54f, 4.66f }; // Officier de Theramore dans la tour (inutilise)
 Position const QuillPoint01     = { -3751.32f, -4438.13f, 31.26f, 3.33f }; // Plume magique au-dessus de la table (inutilise)
 Position const TervoshPoint01   = { -3720.83f, -4551.10f, 25.82f, 1.35f }; // Tervosh sur la place, phase Evacuation
 Position const KalecgosPoint01  = { -3730.39f, -4550.39f, 27.11f, 0.54f }; // Kalecgos sur la place, phase Evacuation
 Position const PortalPoint01    = { -3712.42f, -4539.62f, 25.82f, 3.59f }; // Portail de Dalaran (arrivee des archimages)
 Position const PortalPoint02    = { -3783.51f, -4171.07f,  7.77f, 4.73f }; // Portail d'Orgrimmar (arrivee de la Horde)
-Position const PortalPoint03    = { -3750.82f, -4449.65f, 64.90f, 0.63f }; // Portail de Stormwind au sommet de la tour
+Position const PortalPoint03    = { -3750.82f, -4449.65f, 64.90f, 0.63f }; // Portail de Stormwind au sommet de la tour (Rhonin le detourne vers un ilot)
 Position const HedricPoint01    = { -3717.79f, -4522.24f, 25.82f, 5.16f }; // Hedric sur la place, phase Evacuation
 Position const HedricPoint02    = { -3725.24f, -4540.07f, 25.82f, 5.98f }; // Hedric recule devant le portail de Dalaran
 Position const HedricPoint03    = { -3625.58f, -4447.94f, 14.24f, 4.99f }; // Hedric a la table de banquet
 Position const ExplodingPoint01 = { -3648.24f, -4364.96f,  9.68f, 3.78f }; // Point d'impact des explosions cosmetiques
-Position const ThalenPoint01    = { -3632.12f, -4351.22f,  6.38f, 3.79f }; // Thalen Songweaver pendant la bataille
-Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f }; // Thalen Songweaver apres la bataille
+Position const ThalenPoint02    = { -3728.51f, -4555.08f,  4.74f, 2.78f }; // Cellule de Thalen, a la citadelle (des sa capture)
 Position const TablePoint01     = { -3627.93f, -4459.00f, 13.62f, 2.60f }; // Table de banquet invoquee pour le repas
 Position const TheramorePoint01 = { -3753.48f, -4444.54f, 90.07f, 0.00f }; // Centre du cercle de vol de Kalecgos dragon
 Position const VereesaPoint01   = { -3703.94f, -4555.59f, 25.82f, 3.61f }; // Vereesa Windrunner devant le portail
@@ -1043,12 +1503,24 @@ static_assert(sizeof(archmagesLocation) / sizeof(archmagesLocation[0]) == ARCHMA
 	"archmagesLocation count must match ARCHMAGES_LOCATION");
 static_assert(sizeof(actorsRelocation) / sizeof(actorsRelocation[0]) == ACTORS_RELOCATION,
 	"actorsRelocation count must match ACTORS_RELOCATION");
+static_assert(sizeof(generalsLocation) / sizeof(generalsLocation[0]) == GENERALS_LOCATION,
+	"generalsLocation count must match GENERALS_LOCATION");
+static_assert(sizeof(generalsAftermath) / sizeof(generalsAftermath[0]) == GENERALS_AFTERMATH,
+	"generalsAftermath count must match GENERALS_AFTERMATH");
 static_assert(sizeof(archmagesRelocation) / sizeof(archmagesRelocation[0]) == ARCHMAGES_RELOCATION,
 	"archmagesRelocation count must match ARCHMAGES_RELOCATION");
 static_assert(sizeof(FireLocation) / sizeof(FireLocation[0]) == FIRE_LOCATION,
 	"FireLocation count must match FIRE_LOCATION");
 static_assert(sizeof(UnitLocation) / sizeof(UnitLocation[0]) == ARCHMAGES_RELOCATION,
 	"UnitLocation count must match ARCHMAGES_RELOCATION");
+static_assert(sizeof(TheramoreStreets) / sizeof(TheramoreStreets[0]) == THERAMORE_STREET_NODES,
+	"TheramoreStreets count must match THERAMORE_STREET_NODES");
+static_assert(sizeof(TheramoreStreetLinks) / sizeof(TheramoreStreetLinks[0]) == THERAMORE_STREET_LINKS,
+	"TheramoreStreetLinks count must match THERAMORE_STREET_LINKS");
+static_assert(THERAMORE_STREET_BOARDING < THERAMORE_STREET_NODES,
+	"THERAMORE_STREET_BOARDING must be a node of TheramoreStreets");
+static_assert(THERAMORE_STREET_GANGPLANK < THERAMORE_STREET_BOARDING,
+	"THERAMORE_STREET_GANGPLANK must come before THERAMORE_STREET_BOARDING");
 
 // =========================================================================
 // Helper de registration pour les AIs des creatures du scenario

@@ -200,7 +200,9 @@ class TC_API_EXPORT CustomAI : public ScriptedAI
 
         uint32 FriendsInRange(float distance, uint8 pct);
         uint32 FriendsInFront(float distance, uint8 pct);
-        uint32 EnemiesInRange(float distance);
+        // Ennemis de la liste de menace a moins de `distance` de `center`
+        // (la creature elle-meme par defaut).
+        uint32 EnemiesInRange(float distance, Unit const* center = nullptr);
         uint32 EnemiesInFront(float distance);
 
         bool HasMechanic(SpellInfo const* spellInfo, Mechanics mechanic);

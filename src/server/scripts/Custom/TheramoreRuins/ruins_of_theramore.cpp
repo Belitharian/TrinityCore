@@ -426,7 +426,7 @@ struct npc_jaina_ruins : public CustomAI
 				}
 				break;
 			case PATH_JAINA_LEG_BASE + (uint32)RFTLegs::Kinndy:
-				if (nodeId == 6)    // Thaddus et l'ingenieur, puis Aden sur son toit
+				if (nodeId == 6)    // Thaddus et Horran, puis Aden sur son toit
 				{
 					FacePoint(ThaddusCorpsePoint);
 					Talk(SAY_TRAIL_THADDUS_EMOTE);

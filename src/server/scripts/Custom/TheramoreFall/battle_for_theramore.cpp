@@ -76,13 +76,6 @@ struct npc_jaina_theramore : public CustomAI
 
 	InstanceScript* instance;
 
-	void Reset() override
-	{
-		CustomAI::Reset();
-
-		textOnCooldown = false;
-	}
-
 	// Annonce vocale de la vague qui arrive. Appele par l'InstanceScript au
 	// moment du spawn, avec l'identifiant du point d'arrivee de la vague.
 	void DoAction(int32 actionId) override
@@ -123,11 +116,6 @@ struct npc_jaina_theramore : public CustomAI
 		}
 	}
 
-	void KilledUnit(Unit* /*victim*/) override
-	{
-		TalkInCombat(SAY_JAINA_SLAY_01);
-	}
-
 	void JustEngagedWith(Unit* /*who*/) override
 	{
 		// Jaina ouvre systematiquement avec ses elementaires d'eau.
@@ -137,7 +125,6 @@ struct npc_jaina_theramore : public CustomAI
 			// Filler : Fireball sur la victime, avec replique a cooldown.
 			.Schedule(1s, [this](TaskContext fireball)
 			{
-				TalkInCombat(SAY_JAINA_SPELL_01);
 				DoCastVictim(SPELL_FIREBALL);
 				fireball.Repeat(2s, 8s);
 			})
@@ -150,10 +137,7 @@ struct npc_jaina_theramore : public CustomAI
 			.Schedule(8s, [this](TaskContext blizzard)
 			{
 				if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-				{
-					TalkInCombat(SAY_JAINA_BLIZZARD_01);
 					DoCast(target, SPELL_BLIZZARD);
-				}
 				blizzard.Repeat(14s, 22s);
 			});
 	}
@@ -176,7 +160,9 @@ struct npc_jaina_theramore : public CustomAI
 		else if (pathId == 2)
 		{
 			// Faux teleport : Jaina disparait 2 secondes puis reapparait au
-			// sommet de la tour ou elle ouvre le portail vers Stormwind.
+			// sommet de la tour ou elle ouvre le portail vers Stormwind. Rhonin
+			// le detourne vers un ilot de la Grande mer (Tides of War) : c'est
+			// la que commencent les Ruines de Theramore.
 			me->SetVisible(false);
 			scheduler.Schedule(2s, [this](TaskContext /*context*/)
 			{
@@ -864,8 +850,11 @@ struct npc_tari_cogg : public CustomAI
 // =========================================================================
 // npc_pained - Pained, garde du corps de Jaina
 // =========================================================================
-// Aucune mecanique de combat : elle ne sert qu'a declencher l'arrivee de
-// Perith Stormhoove une fois sortie de la salle du conseil.
+// Aucune rotation de combat. Elle declenche l'arrivee de Perith Stormhoove
+// une fois sortie de la salle du conseil, puis reste aux cotes de Jaina a la
+// porte principale, ou elle assomme Thalen. Elle ne peut pas tomber pendant
+// la bataille : les Ruines de Theramore exposent son corps, elle meurt sous
+// la bombe.
 struct npc_pained : public ScriptedAI
 {
 	npc_pained(Creature* creature) : ScriptedAI(creature)
@@ -874,6 +863,12 @@ struct npc_pained : public ScriptedAI
 	}
 
 	InstanceScript* instance;
+
+	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
+	{
+		if (damage >= me->GetHealth())
+			damage = me->GetHealth() - 1;
+	}
 
 	// Path 1 : Pained quitte la salle, ce qui lance la scene du tauren inconnu.
 	void WaypointPathEnded(uint32 /*pointId*/, uint32 pathId) override
@@ -1021,7 +1016,7 @@ struct npc_ziradormi_theramore : public CustomAI
 		switch (gossipListId)
 		{
 			case 0:
-				player->TeleportTo(THERAMORE_MAP_ID, -3735.03f, -4425.95f, 30.55f, 0.f, TELE_REVIVE_AT_TELEPORT);
+				player->TeleportTo(THERAMORE_MAP_ID, -3676.36f, -4386.73f, 10.40f, 3.870f, TELE_REVIVE_AT_TELEPORT);
 				break;
 		}
 

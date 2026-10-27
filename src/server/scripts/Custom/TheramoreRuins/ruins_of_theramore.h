@@ -61,8 +61,8 @@ enum RFTCreatures
 	NPC_ROKNAH_HAG                      = 64734,
 	NPC_ROKNAH_WARLORD                  = 65442,     // Chef des pillards
 	NPC_ROKNAH_FELCASTER                = 65507,
-	NPC_GENERAL_TIRAS_ALAN              = 100007,
-	NPC_ADMIRAL_AUBREY                  = 121953,
+	NPC_GENERAL_TIRAS_ALAN              = 500041,
+	NPC_ADMIRAL_AUBREY                  = 500040,
 	NPC_ARCHMAGE_TERVOSH                = 500000,
 	NPC_KINNDY_SPARKSHINE               = 500001,
 	NPC_DEAD_ROKNAH_TROOP               = 500015,
@@ -73,10 +73,10 @@ enum RFTCreatures
 	NPC_KNIGHT_OF_THERAMORE             = 59654,     // Le soldat qui flotte (armurerie)
 	NPC_PAINED                          = 500002,
 	NPC_THADDUS_STOUTBLOW               = 500033,
-	NPC_DWARVEN_ENGINEER                = 500034,
 	NPC_LIEUTENANT_ADEN                 = 500035,
 	NPC_MARCUS_JONATHAN                 = 500036,
-	NPC_BLACK_RAT                       = 500037
+	NPC_BLACK_RAT                       = 500037,
+	NPC_HORRAN_REDMANE                  = 500038     // Le second nain, tombe pres de Thaddus
 };
 
 // StringId (table creature) des cadavres qui sortent du traitement par entry
@@ -136,7 +136,7 @@ enum RFTTalks
 	SAY_TRAIL_RIDER_EMOTE               = 26,    // Emote : le cavalier et son cheval
 	SAY_TRAIL_SOLDIERS_EMOTE            = 27,    // Emote : les soldats, l'arme au fourreau
 	SAY_TRAIL_BLOOD_EMOTE               = 28,    // Emote : le soldat dans son sang (armurerie)
-	SAY_TRAIL_THADDUS_EMOTE             = 29,    // Emote : Thaddus et l'ingenieur
+	SAY_TRAIL_THADDUS_EMOTE             = 29,    // Emote : Thaddus et Horran
 	SAY_TRAIL_ADEN_EMOTE                = 30,    // Emote : Aden sur son toit
 
 	// --- Kinndy ---
@@ -187,21 +187,21 @@ enum RFTSpells
 	SPELL_ECHO_OF_ALUNETH_SPAWN         = 211768,
 	SPELL_ALUNETH_FREED_EXPLOSION       = 225253,
 	SPELL_ALUNETH_DRINKS                = 212220,
-	SPELL_COSMETIC_ARCANE_DISSOLVE      = 254799,
 	SPELL_SHIMMERDUST                   = 278917,
 	SPELL_SKYBOX_EFFECT_ENTRANCE        = 148137,    // Skybox de l'ilot
+	SPELL_ARCANE_WAVE                   = 275167,    // "Ping Jaina" (dummy) avec le visuel de Time Stop 208944 (hotfix XSV 600000)
 	SPELL_BURNING                       = 282051,
 	SPELL_ARCANE_CHANNELING             = 294676,
 	SPELL_EMPOWERED_SUMMON              = 303681,
 	SPELL_SKYBOX_EFFECT_RUINS           = 310302,    // Skybox des ruines
 	SPELL_GLACIAL_SPIKE_COSMETIC        = 346559,
+    SPELL_KINNDY_DUST                   = 430829,
 	SPELL_ARCANE_DEBUFF_VISUAL          = 436058,    // Aussi : pillards affaiblis par l'onde arcanique de Jaina
-	SPELL_ARCANE_WAVE                   = 275167,    // "Ping Jaina" (dummy) avec le visuel de Time Stop 208944 (hotfix XSV 600000)
-	SPELL_DISSOLVE_ARCANE_VISUAL        = 460434,
 	SPELL_COSMETIC_ARCANE_ENERGY        = 1233488,
 	SPELL_COSMETIC_PURPLE_VERTEX_STATE  = 1247717,
 	SPELL_BLOOD_STAIN                   = 1289233,   // [DNT]Blood Stain : flaque de sang sous le cadavre
-	SPELL_DROWNED_ANIM                  = 1244365    // Animation de noye : le soldat qui flotte
+	SPELL_COSMETIC_ARCANE_DISSOLVE      = 1244360,
+	SPELL_DROWNED_ANIM                  = 1244365,    // Animation de noye : le soldat qui flotte
 };
 
 // =========================================================================
@@ -369,7 +369,7 @@ WaypointPath const JainaPathKinndy =
 		{ 3,  -3822.47f, -4383.36f, 11.59f, 4.44f },
 		{ 4,  -3823.96f, -4390.85f, 11.11f, 4.74f },
 		{ 5,  -3821.63f, -4397.22f, 11.44f, 5.43f },
-		{ 6,  -3813.97f, -4399.52f, 11.92f, 0.05f, 5000ms },   // Pause : Thaddus et l'ingenieur, Aden sur le toit
+		{ 6,  -3813.97f, -4399.52f, 11.92f, 0.05f, 5000ms },   // Pause : Thaddus et Horran, Aden sur le toit
 		{ 7,  -3805.93f, -4400.83f, 11.81f, 5.71f },
 		{ 8,  -3804.32f, -4406.16f, 12.19f, 4.26f },
 		{ 9,  -3809.00f, -4414.76f, 12.72f, 4.25f },
@@ -510,7 +510,7 @@ const Position HealerCorpsePoint    = { -3680.34f, -4391.30f,   4.57f };        
 const Position RiderCorpsePoint     = { -3694.79f, -4357.43f,  11.44f };        // Le cavalier et son cheval
 const Position SoldiersCorpsePoint  = { -3710.80f, -4341.20f,  10.62f };        // Les soldats tombes l'arme au fourreau
 const Position LostPagePoint        = { -3731.54f, -4325.81f,   9.89f };        // Page de sa bibliotheque (GO 620533)
-const Position ThaddusCorpsePoint   = { -3800.50f, -4400.87f,  11.37f };        // Thaddus Coup-Robuste et l'ingenieur
+const Position ThaddusCorpsePoint   = { -3800.50f, -4400.87f,  11.37f };        // Thaddus Coup-Robuste (Horran git plus loin)
 const Position AdenCorpsePoint      = { -3836.44f, -4402.62f,  17.59f };        // Le lieutenant Aden, sur le toit
 
 // =========================================================================

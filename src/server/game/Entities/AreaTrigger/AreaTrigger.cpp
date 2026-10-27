@@ -1511,15 +1511,14 @@ void AreaTrigger::InitSplines(std::vector<G3D::Vector3> const& splinePoints, Opt
     if (splinePoints.size() < 2)
         return;
 
-    _spline = std::make_unique<::Movement::Spline<float>>();
-    _reachedDestination = false;
+    std::unique_ptr<::Movement::Spline<float>> spline = std::make_unique<::Movement::Spline<float>>();
 
     std::vector<G3D::Vector3> offsets(splinePoints.size());
     for (std::size_t i = 0; i < splinePoints.size(); ++i)
         offsets[i] = PositionToVector3(GetStationaryPosition().GetPositionOffsetTo(Vector3ToPosition(splinePoints[i])));
 
-    _spline->init_spline(offsets.data(), offsets.size(), offsets.size() > 2 ? ::Movement::SplineBase::ModeCatmullrom : ::Movement::SplineBase::ModeLinear, _stationaryPosition.GetOrientation());
-    _spline->initLengths();
+    spline->init_spline(offsets.data(), offsets.size(), offsets.size() > 2 ? ::Movement::SplineBase::ModeCatmullrom : ::Movement::SplineBase::ModeLinear, _stationaryPosition.GetOrientation());
+    spline->initLengths();
 
     float speed = overrideSpeed.value_or(GetCreateProperties()->Speed);
     if (speed <= 0.0f)
@@ -1527,13 +1526,15 @@ void AreaTrigger::InitSplines(std::vector<G3D::Vector3> const& splinePoints, Opt
 
     uint32 timeToTarget = (speedIsTimeInSeconds.value_or(GetCreateProperties()->SpeedIsTime)
         ? speed
-        : _spline->length() / speed) * static_cast<float>(IN_MILLISECONDS);
+        : spline->length() / speed) * static_cast<float>(IN_MILLISECONDS);
 
+    // Degenerate spline: keep the current movement. Dropping _spline here would leave
+    // PathData set to a previous spline and crash in CalculateLocalSplinePositionAndRotation.
     if (!timeToTarget)
-    {
-        _spline.reset();
         return;
-    }
+
+    _spline = std::move(spline);
+    _reachedDestination = false;
 
     auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
     SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::TimeToTarget), timeToTarget);
