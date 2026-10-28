@@ -1847,7 +1847,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					{
 						if (Creature* jaina = GetJaina())
 							thalen->SetFacingToObject(jaina);
-						thalen->HandleEmoteCommand(EMOTE_ONESHOT_ARTDUALLOOP);
+						thalen->SetEmoteState(EMOTE_STATE_ARTDUALLOOP);
 						Talk(thalen, SAY_THALEN_SNEER);
 					}
 					Next(4500ms);
@@ -1863,13 +1863,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						if (Creature* pained = GetPained())
 						{
 							pained->SetFacingToObject(thalen);
-
-							uint32 const faction = thalen->GetFaction();
+                            thalen->SetEmoteState(EMOTE_STATE_NONE);
 							thalen->SetFaction(FACTION_ENEMY);
-                            thalen->SetFaction(faction);
-						}
+                            thalen->SetImmuneToAll(true);
+                        }
 					}
-					Next(900ms);
+					Next(350ms);
 					break;
 				// Les deux fantassins les plus proches de Jaina viennent le
 				// ligoter.
