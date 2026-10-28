@@ -32,8 +32,13 @@
 #include "CreatureAIImpl.h"
 #include "Position.h"
 
-// Decommenter pour raccourcir les cinematiques et sauter directement aux
-// phases de combat pendant les tests (voir les #ifdef CUSTOM_DEBUG du .cpp).
+// Decommenter pour les tests (voir les #ifdef CUSTOM_DEBUG des .cpp) :
+//   - aucune scene n'est jouee, ni l'introduction ni les dialogues : leurs
+//     signaux et leur fin s'appliquent aussitot ;
+//   - les temps morts avant l'arrivee de Perith et avant la scene de la
+//     bataille passent de 10 s a 1 s ;
+//   - un seul civil, un seul blesse ou une seule emote aux troupes suffit a
+//     valider son objectif.
 //#define CUSTOM_DEBUG
 
 constexpr char const* BFTScriptName             = "scenario_battle_for_theramore";
@@ -220,8 +225,6 @@ enum BFTCreatures
 	NPC_THERAMORE_WOUNDED_TROOP         = 500012,
 	NPC_THERAMORE_FIRE_CREDIT           = 500013,
 	NPC_THERAMORE_CRIER                 = 500025,
-	NPC_THERAMORE_BOY                   = 500042,   // Enfants invoques aupres des civils (Evacuation),
-	NPC_THERAMORE_GIRL                  = 500045,   // une entry par sexe pour leurs voix
 	NPC_MORNING_STAR_FIRST_MATE         = 500043,   // Second de L'Etoile du matin, sur le quai
 	NPC_DRAENEI_SHAMAN                  = 500044,   // Chaman draenei qui hate la traversee
 
@@ -264,6 +267,11 @@ enum BFTMisc
     SPELL_COSMETIC_DEATH                = 387851,
     SPELL_COSMETIC_FREEZE               = 114959,
 	SPELL_THROW_BOMB                    = 414422,
+	SPELL_WATER_BUCKET_AURA             = 42336,    // Seau d'eau : sa propre barre de remplacement (OverrideSpellData 740)
+	SPELL_EVACUATE_OVERRIDE             = 1295294,  // Override Spells : bouton "Evacuer le blesse" pres d'un blesse
+	SPELL_EVACUATE_WOUNDED              = 2000000,  // Evacuer le blesse (spell_theramore_evacuate_wounded)
+	EVACUATE_OVERRIDE_DATA              = 50000,    // OverrideSpellData de SPELL_EVACUATE_OVERRIDE : bouton + seau
+	EVACUATE_ONLY_OVERRIDE_DATA         = 50001,    // Bouton seul, quand le joueur n'a plus le seau (feux eteints)
 	SPELL_THROW_BOULDER                 = 258181,
 
 	// GameObjects
@@ -286,14 +294,32 @@ enum BFTMisc
 	SPAWN_GROUP_MORNING_STAR            = 50001,    // L'Etoile du matin, au port jusqu'a la validation de l'etape Une petite aide
 	SPAWN_GROUP_SEA_WOLF                = 50002,    // Loup de mer et son baril de poudre
 
+	// GetData de npc_wounded_theramore_troop
+	DATA_WOUNDED_EVACUABLE              = 1,        // Encore a evacuer
+	DATA_WOUNDED_TELEPORTED             = 2,        // Evacue et teleporte (faux pour le dernier, la bombe brouille le sort)
+
 	// Actions (DoAction) de l'evacuation
 	ACTION_EVACUATION_START             = 1,        // Crieur : debut des proclamations
 	ACTION_EVACUATION_END               = 2,        // Crieur : fin des proclamations ; civils : montent a bord
 	ACTION_ANSWER_CRIER                 = 3,        // Civil : repond (agace) au crieur
 	ACTION_FIGHT_FIRE                   = 4,        // Janene : eteint l'incendie devant l'auberge pendant la bataille
+	ACTION_WOUNDED_EVACUATION_END       = 5,        // Blesse : etape validee, plus de bouton "Evacuer le blesse"
 
 	// Scenes (scene_template)
 	SCENE_THERAMORE_INTRO               = 500000,   // Survol de la ville a l'entree (package 50000)
+	// Dialogues joues par des scenes client (packages 50001 a 50011, Lua dans
+	// sql/custom/scenes/battle_for_theramore, ScriptName scene_bft_dialogue)
+	SCENE_BFT_COUNCIL                   = 500001,   // Conseil de guerre dans la tour
+	SCENE_BFT_UNKNOWN_TAUREN            = 500002,   // Perith annonce l'attaque, sauf-conduit
+	SCENE_BFT_A_LITTLE_HELP             = 500003,   // Renforts de Dalaran, repartition des generaux
+	SCENE_BFT_THE_BATTLE                = 500004,   // Trahison et capture de Thalen
+	SCENE_BFT_EVACUATION_DOCKS          = 500005,   // Quai de L'Etoile du matin
+	SCENE_BFT_EVACUATION_JANENE         = 500006,   // Janene reste a son auberge
+	SCENE_BFT_EVACUATION_DOCTOR         = 500007,   // Le docteur garde ceux qui savent soigner
+	SCENE_BFT_HELP_THE_WOUNDED          = 500008,   // Apres-bataille, partie I (Hedric)
+	SCENE_BFT_WOUNDED_KINNDY            = 500009,   // Apres-bataille, partie II (Kinndy)
+	SCENE_BFT_WAIT_FOR_AMARA            = 500010,   // Avertissement de Kalecgos, retour d'Amara
+	SCENE_BFT_RETRIEVE_RHONIN           = 500011,   // Sommet de la tour, avant l'explosion
 
 	// Criteria Trees - chaque criteria tree valide une etape du scenario et
 	// declenche la transition correspondante dans OnCompletedCriteriaTree.
@@ -388,6 +414,9 @@ enum BFTMisc
 // propre table, donc SAY_REUNION_1 (Jaina, 0) et SAY_REUNION_2 (Kinndy, 0)
 // ne pointent pas sur le meme texte. Les noms (left side) suivent l'ordre
 // chronologique du scenario, pas l'ordre des groupId.
+// Les repliques des cinematiques sont dites par les scenes de dialogue :
+// sql/custom/scenes/build_scenes.py en fait des BroadcastText (macro T des
+// scripts Lua), il faut le relancer apres une modification de creature_text.
 enum BFTTalks
 {
 	// --- Retrouvailles dans la tour (phase TheCouncil) ---
@@ -567,13 +596,7 @@ enum BFTTalks
 	SAY_EVAC_DOCTOR_HARBOR      = 1,
 
 	// --- Repliques ponctuelles ---
-	SAY_WOUNDED_TROOP     = 61,
-
-	SAY_JAINA_SPELL_01    = 40,
-	SAY_JAINA_BLIZZARD_01 = 41,
-	SAY_JAINA_SLAY_01     = 42,
-
-	SAY_KALECGOS_SPELL_01 = 0,
+	SAY_WOUNDED_TROOP     = 61
 };
 
 // =========================================================================

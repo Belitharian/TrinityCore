@@ -10,40 +10,36 @@
  *      chaque validation on fait avancer DATA_SCENARIO_PHASE et on amorce la
  *      cinematique suivante.
  *
- *   2. Update / EventMap : la cinematique elle-meme est une chaine d'events
- *      numerotes. Next(delay) incremente eventId et planifie eventId + 1,
- *      donc l'ordre NUMERIQUE des case est l'ordre chronologique du scenario.
- *      Un event sans Next() est un point d'arret : la suite repart d'un
- *      criteria tree ou d'un TriggerGameEvent leve par une AI.
+ *   2. Scenes de dialogue : chaque cinematique est une scene client (Lua,
+ *      sql/custom/scenes/battle_for_theramore) qui fait apparaitre ses propres
+ *      acteurs a la place des vrais PNJ : repliques en bulle, regards,
+ *      emotes, deplacements, sorts et auras y sont joues. Le serveur masque
+ *      les vrais PNJ au debut ("Ready"), agit sur le monde aux signaux de la
+ *      scene (portail, barriere, escorte de Thalen...), puis remet les vrais
+ *      PNJ dans l'etat final et reprend le scenario quand tous les joueurs
+ *      ont fini (voir CustomScenario::DialogueSceneDirector et la region
+ *      DIALOGUE_SCENES).
  *
- * PLAN DES EVENTS (les #pragma region suivent ce decoupage)
+ * SCENES (dans l'ordre du scenario)
  *
- *      1 -  23  THE_COUNCIL          Conseil de guerre dans la tour
- *     24        WAITING              Temps mort avant l'arrivee de Perith
- *     25 -  70  THE_UNKNOWN_TAUREN   Perith annonce l'attaque de la Horde
- *     71 - 102  A_LITTLE_HELP        Arrivee des archimages et des generaux,
- *                                    repartition des generaux (88 - 97), mise
- *                                    en place
- *    103 - 120  THE_BATTLE           Trahison et capture de Thalen, debut de la
- *                                    bataille
- *    121 - 129  EVACUATION_SCENES    Scenes du livre pendant l'evacuation
- *                                    (quai, Janene, docteur), levees par le
- *                                    gossip de chaque temoin
- *    134 - 156  HELP_THE_WOUNDED     Dialogues d'apres-bataille (2 parties)
- *    162 - 180  WAIT_FOR_AMARA       Retour d'Amara Leeson (2 parties)
- *    181 - 192  RETRIEVE_RHONIN      Montee a la tour, scene de l'explosion
+ *    SCENE_BFT_COUNCIL            Conseil de guerre dans la tour
+ *    SCENE_BFT_UNKNOWN_TAUREN     Perith annonce l'attaque de la Horde, Jaina
+ *                                 redige son sauf-conduit
+ *    SCENE_BFT_EVACUATION_*       Scenes du livre pendant l'evacuation (quai,
+ *                                 Janene, docteur), levees par le gossip de
+ *                                 chaque temoin
+ *    SCENE_BFT_A_LITTLE_HELP      Arrivee des archimages et des generaux,
+ *                                 repartition des generaux, teleport de masse
+ *    SCENE_BFT_THE_BATTLE         Trahison et capture de Thalen, debut de la
+ *                                 bataille
+ *    SCENE_BFT_HELP_THE_WOUNDED   Apres-bataille, partie I (Hedric)
+ *    SCENE_BFT_WOUNDED_KINNDY     Apres-bataille, partie II (Kinndy),
+ *                                 annulee si l'etape se termine avant
+ *    SCENE_BFT_WAIT_FOR_AMARA     Avertissement de Kalecgos, retour d'Amara
+ *    SCENE_BFT_RETRIEVE_RHONIN    Sommet de la tour, avant l'explosion
  *
- * Les identifiants 130 a 133 et 157 a 161 ne sont pas utilises (marges libres
- * entre la bataille, l'apres-bataille et le retour d'Amara). Les scenes
- * d'evacuation tournent pendant que la chaine principale est a l'arret
- * (apres EVT_TAUREN_PAINED_LEAVE) : chacune a sa propre plage, et Next()
- * reste juste puisqu'il repart toujours de l'event qui vient d'etre execute.
- *
- * Les events sont nommes dans l'enum BFTEvents (voir plus bas), mais leurs
- * VALEURS restent porteuses de sens : Next() s'appuie sur eventId + 1, et
- * CRITERIA_TREE_HELP_THE_WOUNDED annule une plage entiere d'un coup via
- * EVT_WOUNDED_PART2_FIRST / EVT_WOUNDED_PART2_LAST. Renommer est libre,
- * reordonner ou inserer une valeur au milieu d'une chaine ne l'est pas.
+ * En CUSTOM_DEBUG, aucune scene n'est jouee : ses signaux sont rejoues d'un
+ * coup et le scenario passe directement a l'etat de fin de la scene.
  *
  * Commentaires en francais sans accents (encodage TC).
  */
@@ -78,10 +74,11 @@
 // Tables de correspondance NPC / GO <-> Data ID
 // =========================================================================
 
-// Nombre d'acteurs de dialogue en tete de creatureData : SetTarget et
-// ClearTarget ne parcourent que ces 20 premieres entrees, les suivantes
-// (Kalecgos dragon, Drok, Gruhta, figurants de l'evacuation) ne participent
-// pas aux cinematiques.
+// Nombre d'acteurs de dialogue en tete de creatureData : ClearTarget et la
+// mise en objet actif (OnCreatureCreate) ne parcourent que ces 20 premieres
+// entrees, les suivantes (Kalecgos dragon,
+// Drok, Gruhta, figurants de l'evacuation) ne participent pas aux
+// cinematiques.
 uint8 const eventCreatureDataCount = 20;
 
 const ObjectData creatureData[] =
@@ -131,234 +128,56 @@ const ObjectData gameobjectData[] =
 // =========================================================================
 // Identifiants des evenements internes de l'EventMap
 // =========================================================================
-// L'ordre numerique est SIGNIFICATIF : Next() incremente eventId de 1 et
-// planifie ainsi automatiquement l'event suivant dans la sequence. Ne pas
-// reordonner ni inserer une valeur au milieu d'une chaine sans verifier les
-// Next() concernes.
-// Les valeurs 130 a 133 et 157 a 161 restent libres (marges entre les blocs
-// d'events).
+// La chaine ne fait plus que laisser passer le delai prevu entre la
+// validation d'une etape et sa cinematique : chaque event lance une scene de
+// dialogue (region DIALOGUE_SCENES), dont la fin reprend le scenario.
 enum BFTEvents : uint32
 {
-	// -- The Council (1 - 23) : conseil de guerre dans la tour
-	EVT_COUNCIL_TERVOSH_ARRIVE          = 1,
-	EVT_COUNCIL_KINNDY_ARRIVE           = 2,    // Point de saut DEBUG vers EVT_COUNCIL_KALEC_LEAVE
-	EVT_COUNCIL_KINNDY_TALK_02          = 3,
-	EVT_COUNCIL_JAINA_TALK_03           = 4,
-	EVT_COUNCIL_KINNDY_TALK_04          = 5,
-	EVT_COUNCIL_JAINA_TALK_05           = 6,
-	EVT_COUNCIL_TERVOSH_TALK_06         = 7,
-	EVT_COUNCIL_KALEC_TALK_07           = 8,
-	EVT_COUNCIL_KALEC_TALK_08           = 9,
-	EVT_COUNCIL_TERVOSH_TALK_09         = 10,
-	EVT_COUNCIL_KINNDY_TALK_09_BIS      = 11,
-	EVT_COUNCIL_JAINA_TALK_10           = 12,
-	EVT_COUNCIL_KALEC_TALK_11           = 13,
-	EVT_COUNCIL_JAINA_TALK_12           = 14,
-	EVT_COUNCIL_KINNDY_TALK_13          = 15,
-	EVT_COUNCIL_KALEC_TALK_14           = 16,
-	EVT_COUNCIL_JAINA_TALK_15           = 17,
-	EVT_COUNCIL_KALEC_TALK_16           = 18,
-	EVT_COUNCIL_KALEC_TALK_17           = 19,
-	EVT_COUNCIL_KALEC_LEAVE             = 20,   // Dispersion - point d'entree DEBUG
-	EVT_COUNCIL_TERVOSH_LEAVE           = 21,
-	EVT_COUNCIL_KINNDY_LEAVE            = 22,
-	EVT_COUNCIL_JAINA_TO_TABLE          = 23,   // Point d'arret : l'AI de Jaina leve EVENT_THE_COUNCIL
-
-	// -- Waiting (24)
-	EVT_WAITING_TRIGGER                 = 24,   // EVENT_WAITING
-
-	// -- The Unknown Tauren (25 - 70) : Perith annonce l'attaque de la Horde
-	EVT_TAUREN_ESCORT_SPAWN             = 25,   // Point de saut DEBUG vers EVT_TAUREN_PAINED_LEAVE
-	EVT_TAUREN_JAINA_TARGET_PERITH      = 26,
-	EVT_TAUREN_PAINED_TALK_01           = 27,
-	EVT_TAUREN_JAINA_TALK_02            = 28,
-	EVT_TAUREN_PAINED_TALK_03           = 29,
-	EVT_TAUREN_PAINED_TALK_04           = 30,
-	EVT_TAUREN_JAINA_TALK_05            = 31,
-	EVT_TAUREN_PAINED_TALK_06           = 32,
-	EVT_TAUREN_PAINED_APPROACH          = 33,
-	EVT_TAUREN_PAINED_SALUTE            = 34,
-	EVT_TAUREN_PAINED_TALK_07           = 35,
-	EVT_TAUREN_JAINA_TALK_08            = 36,
-	EVT_TAUREN_JAINA_TALK_09            = 37,
-	EVT_TAUREN_JAINA_TALK_10            = 38,
-	EVT_TAUREN_KNIGHT_APPROACH          = 39,
-	EVT_TAUREN_KNIGHT_TALK_11           = 40,
-	EVT_TAUREN_JAINA_TALK_12            = 41,
-	EVT_TAUREN_PAINED_TALK_13           = 42,   // Sortie du chevalier
-	EVT_TAUREN_PERITH_TALK_14           = 43,
-	EVT_TAUREN_JAINA_TALK_15            = 44,
-	EVT_TAUREN_PERITH_TALK_16           = 45,
-	EVT_TAUREN_PERITH_TALK_17           = 46,
-	EVT_TAUREN_PERITH_TALK_18           = 47,
-	EVT_TAUREN_JAINA_TALK_19            = 48,
-	EVT_TAUREN_PERITH_TALK_20           = 49,
-	EVT_TAUREN_JAINA_TALK_21            = 50,
-	EVT_TAUREN_PERITH_TALK_22           = 51,
-	EVT_TAUREN_PERITH_TALK_23           = 52,
-	EVT_TAUREN_JAINA_TALK_24            = 53,
-	EVT_TAUREN_PERITH_TALK_25           = 54,
-	EVT_TAUREN_JAINA_TALK_26            = 55,
-	EVT_TAUREN_JAINA_TURN_AWAY          = 56,
-	EVT_TAUREN_JAINA_TALK_27            = 57,   // Ordre d'evacuation (SPELL_MAGIC_QUILL)
-	EVT_TAUREN_JAINA_QUILL_END          = 58,
-	EVT_TAUREN_JAINA_TALK_28            = 59,
-	EVT_TAUREN_PERITH_TALK_29           = 60,
-	EVT_TAUREN_PERITH_TALK_30           = 61,
-	EVT_TAUREN_JAINA_TALK_31            = 62,
-	EVT_TAUREN_PERITH_TALK_32           = 63,
-	EVT_TAUREN_JAINA_TALK_33            = 64,
-	EVT_TAUREN_PERITH_TALK_34           = 65,
-	EVT_TAUREN_PERITH_LEAVE             = 66,
-	EVT_TAUREN_JAINA_TALK_35            = 67,
-	EVT_TAUREN_PAINED_TALK_36           = 68,
-	EVT_TAUREN_JAINA_TALK_37            = 69,
-	EVT_TAUREN_PAINED_LEAVE             = 70,   // Point d'arret : l'AI de Pained leve EVENT_THE_UNKNOWN_TAUREN
-
-	// -- A Little Help (71 - 102) : arrivee des renforts de Dalaran et des
-	// generaux, repartition des generaux (88 - 97), mise en place
-	EVT_HELP_JAINA_TALK_02              = 71,
-	EVT_HELP_HEDRIC_TALK_01             = 72,
-	EVT_HELP_HEDRIC_TALK_03             = 73,
-	EVT_HELP_JAINA_TALK_04              = 74,
-	EVT_HELP_OPEN_PORTAL                = 75,   // Portail de Dalaran
-	EVT_HELP_HEDRIC_BACKSTEP            = 76,
-	EVT_HELP_ARCHMAGES_ARRIVAL          = 77,   // S'auto-repete (events.Repeat) tant qu'il reste un archimage
-	EVT_HELP_RHONIN_TALK_05             = 78,
-	EVT_HELP_JAINA_TALK_06              = 79,
-	EVT_HELP_JAINA_TALK_07              = 80,
-	EVT_HELP_THALEN_TALK_08             = 81,
-	EVT_HELP_MARCUS_INTRO               = 82,   // Le plus haut grade de la 7e Legion se presente
-	EVT_HELP_JAINA_THANKS_GENERALS      = 83,
-	EVT_HELP_JAINA_TALK_09              = 84,
-	EVT_HELP_JAINA_TALK_10              = 85,
-	EVT_HELP_RHONIN_TALK_11             = 86,
-	EVT_HELP_JAINA_TALK_12              = 87,
-	EVT_HELP_MARCUS_TALK_01             = 88,
-	EVT_HELP_JAINA_GATES                = 89,
-	EVT_HELP_STOUTBLOW_TALK_01          = 90,
-	EVT_HELP_REDMANE_TALK_01            = 91,
-	EVT_HELP_JAINA_DOCKS                = 92,
-	EVT_HELP_AUBREY_TALK_01             = 93,
-	EVT_HELP_JAINA_WEST                 = 94,
-	EVT_HELP_SHANDRIS_TALK_01           = 95,
-	EVT_HELP_JAINA_CITADEL              = 96,
-	EVT_HELP_TIRAS_ALAN_TALK_01         = 97,
-	EVT_HELP_VEREESA_TALK_13            = 98,
-	EVT_HELP_JAINA_TALK_14              = 99,
-	EVT_HELP_JAINA_TALK_15              = 100,
-	EVT_HELP_MASS_TELEPORT              = 101,
-	EVT_HELP_BATTLEFIELD_SETUP          = 102,  // Point d'arret : suite via CRITERIA_TREE_RETRIEVE_JAINA
-
-	// -- The Battle (103 - 120) : trahison et capture de Thalen, debut de la
-	// bataille
-	EVT_BATTLE_JAINA_NOTICE             = 103,  // Jaina sent la barriere faiblir alors que Thalen l'entretient
-	EVT_BATTLE_JAINA_STRIKE             = 104,  // Trait arcanique sur Thalen
-	EVT_BATTLE_THALEN_SNEER             = 105,  // Il ricane et leve les mains, Peine accourt
-	EVT_BATTLE_PAINED_KNOCKOUT          = 106,  // Coup de pommeau
-	EVT_BATTLE_SOLDIERS_BIND            = 107,  // Deux soldats le ligotent
-	EVT_BATTLE_JAINA_TALK_SPARED        = 108,
-	EVT_BATTLE_PAINED_TALK_USEFUL       = 109,
-	EVT_BATTLE_JAINA_TALK_ONSLAUGHT     = 110,
-	EVT_BATTLE_PAINED_TALK_TEA          = 111,
-	EVT_BATTLE_JAINA_TALK_EVENCANE      = 112,
-	EVT_BATTLE_HEDRIC_TALK_ESCORT       = 113,  // Les soldats emportent Thalen
-	EVT_BATTLE_AMARA_TALK_VOUCHED       = 114,
-	EVT_BATTLE_JAINA_TALK_ALONE         = 115,
-	EVT_BATTLE_AMARA_TALK_ALONE         = 116,
-	EVT_BATTLE_BARRIER_BREAKS           = 117,  // La barriere cede, la Horde entre
-	EVT_BATTLE_ARCHMAGES_READY          = 118,
-	EVT_BATTLE_THADER_WOUNDED           = 119,
-	EVT_BATTLE_FIRST_LANDING            = 120,  // Point d'arret : EVENT_MAINTAIN_THE_PROTECTION
-
-	// -- Evacuation scenes (121 - 129) : Tides of War, chapitre 7. Chaque
-	// scene est levee une seule fois par le gossip de son temoin
-	// (DATA_EVACUATION_SCENE).
-	// Quai de L'Etoile du matin (121 - 124)
-	EVT_EVAC_DOCKS_MATE_BOARDING        = 121,
-	EVT_EVAC_DOCKS_MATE_RATCHET         = 122,
-	EVT_EVAC_DOCKS_SHAMAN_ELEMENTS      = 123,
-	EVT_EVAC_DOCKS_MATE_FAREWELL        = 124,  // Fin de scene
-	// Janene, a l'auberge (125 - 127)
-	EVT_EVAC_INN_JANENE_STAYS           = 125,
-	EVT_EVAC_INN_JANENE_CURFEW          = 126,
-	EVT_EVAC_INN_JANENE_HOME            = 127,  // Fin de scene
-	// Le docteur, a l'auberge (128 - 129)
-	EVT_EVAC_INN_DOCTOR_VOLUNTEERS      = 128,
-	EVT_EVAC_INN_DOCTOR_HARBOR          = 129,  // Fin de scene
-
-	// 130 - 133 : libres
-
-	// -- Help the wounded (134 - 156) : dialogues d'apres-bataille
-	// Partie I (134 - 141) : toujours jouee
-	EVT_WOUNDED_JAINA_HEDRIC_FACE       = 134,
-	EVT_WOUNDED_JAINA_TALK_01           = 135,
-	EVT_WOUNDED_HEDRIC_TALK_02          = 136,
-	EVT_WOUNDED_HEDRIC_TALK_02_BIS      = 137,  // Thalen libere, Vereesa a sa poursuite
-	EVT_WOUNDED_JAINA_TALK_02_TER       = 138,
-	EVT_WOUNDED_JAINA_TALK_03           = 139,
-	EVT_WOUNDED_JAINA_WALK              = 140,
-	EVT_WOUNDED_HEDRIC_WALK             = 141,  // Point d'arret : la partie II part de CRITERIA_TREE_FOLLOW_JAINA
-	// Partie II (142 - 155) : jouee seulement si les joueurs suivent Jaina,
-	// annulee en bloc via [EVT_WOUNDED_PART2_FIRST, EVT_WOUNDED_PART2_LAST]
-	// si l'etape se termine avant la fin des dialogues.
-	EVT_WOUNDED_JAINA_KINNDY_FACE       = 142,
-	EVT_WOUNDED_KINNDY_TALK_04          = 143,
-	EVT_WOUNDED_JAINA_TALK_05           = 144,
-	EVT_WOUNDED_KINNDY_TALK_06          = 145,
-	EVT_WOUNDED_JAINA_TALK_07           = 146,
-	EVT_WOUNDED_KINNDY_TALK_08          = 147,
-	EVT_WOUNDED_JAINA_TALK_09           = 148,
-	EVT_WOUNDED_KINNDY_TALK_10          = 149,
-	EVT_WOUNDED_JAINA_TALK_11           = 150,
-	EVT_WOUNDED_KINNDY_TALK_11_BIS      = 151,
-	EVT_WOUNDED_JAINA_TALK_12           = 152,
-	EVT_WOUNDED_JAINA_TALK_13           = 153,
-	EVT_WOUNDED_KINNDY_TALK_14          = 154,
-	EVT_WOUNDED_JAINA_TALK_15           = 155,
-	EVT_WOUNDED_SCENE_END               = 156,
-
-	// 157 - 161 : libres
-
-	// Bornes de la partie II annulable (alias, pas de nouvelles valeurs)
-	EVT_WOUNDED_PART2_FIRST             = EVT_WOUNDED_JAINA_KINNDY_FACE,
-	EVT_WOUNDED_PART2_LAST              = EVT_WOUNDED_JAINA_TALK_15,
-
-	// -- Wait for Amara (162 - 180) : avertissement de Kalecgos puis retour d'Amara
-	EVT_AMARA_KALEC_APPROACH            = 162,
-	EVT_AMARA_KALEC_TALK_01             = 163,
-	EVT_AMARA_JAINA_TALK_02             = 164,
-	EVT_AMARA_KALEC_TALK_03             = 165,
-	EVT_AMARA_JAINA_TALK_04             = 166,
-	EVT_AMARA_KALEC_TALK_05             = 167,
-	EVT_AMARA_JAINA_TALK_06             = 168,
-	EVT_AMARA_JAINA_TALK_07             = 169,
-	EVT_AMARA_KALEC_TALK_08             = 170,
-	EVT_AMARA_RHONIN_TALK_09            = 171,
-	EVT_AMARA_KALEC_LEAVE               = 172,
-	EVT_AMARA_RHONIN_LEAVE              = 173,
-	EVT_AMARA_LEESON_PATH               = 174,
-	EVT_AMARA_LEESON_RETURN             = 175,  // Point d'arret : suite via CRITERIA_TREE_ARCHMAGE_LEESON
-	EVT_AMARA_JAINA_FACE                = 176,
-	EVT_AMARA_LEESON_TALK_10            = 177,
-	EVT_AMARA_JAINA_TALK_11             = 178,
-	EVT_AMARA_LEESON_LEAVE              = 179,
-	EVT_AMARA_JAINA_TO_TOWER            = 180,
-
-	// -- Retrieve Rhonin (181 - 192) : scene finale au sommet de la tour
-	EVT_RHONIN_JAINA_TALK_01            = 181,
-	EVT_RHONIN_JAINA_FACE               = 182,
-	EVT_RHONIN_TALK_02                  = 183,
-	EVT_RHONIN_JAINA_TALK_03            = 184,
-	EVT_RHONIN_TALK_04                  = 185,
-	EVT_RHONIN_TALK_05                  = 186,
-	EVT_RHONIN_TALK_06                  = 187,
-	EVT_RHONIN_JAINA_TALK_07            = 188,
-	EVT_RHONIN_TALK_08                  = 189,
-	EVT_RHONIN_JAINA_TALK_09            = 190,
-	EVT_RHONIN_TALK_10                  = 191,
-	EVT_RHONIN_REDUCE_IMPACT            = 192   // EVENT_REDUCE_IMPACT -> scene finale
+	EVT_WAITING_TRIGGER = 1,           // EVENT_WAITING, temps mort avant l'arrivee de Perith
+	EVT_TAUREN_SCENE,                  // SCENE_BFT_UNKNOWN_TAUREN
+	EVT_HELP_SCENE,                    // SCENE_BFT_A_LITTLE_HELP
+	EVT_BATTLE_SCENE,                  // SCENE_BFT_THE_BATTLE
+	EVT_EVAC_DOCKS_SCENE,              // SCENE_BFT_EVACUATION_DOCKS
+	EVT_EVAC_JANENE_SCENE,             // SCENE_BFT_EVACUATION_JANENE
+	EVT_EVAC_DOCTOR_SCENE,             // SCENE_BFT_EVACUATION_DOCTOR
+	EVT_WOUNDED_SCENE,                 // SCENE_BFT_HELP_THE_WOUNDED
+	EVT_WOUNDED_KINNDY_SCENE,          // SCENE_BFT_WOUNDED_KINNDY
+	EVT_AMARA_SCENE,                   // SCENE_BFT_WAIT_FOR_AMARA
+	EVT_RHONIN_SCENE                   // SCENE_BFT_RETRIEVE_RHONIN
 };
+
+// =========================================================================
+// Scenes de dialogue
+// =========================================================================
+// Signaux propres a chaque scene, dans l'ordre ou la scene les envoie (c'est
+// aussi l'ordre dans lequel CUSTOM_DEBUG les rejoue), et duree au-dela de
+// laquelle le serveur coupe la scene d'un client qui ne repond plus.
+namespace BFTScenes
+{
+	constexpr char const* HelpCues[]   = { "Portal", "ClosePortal" };
+	constexpr char const* BattleCues[] = { "Bind", "Kneel", "Escort", "BarrierBreaks", "ThaderWounded" };
+	constexpr char const* AmaraCues[]  = { "RhoninGone", "AmaraBack" };
+
+	constexpr CustomScenario::DialogueScene Council       = { SCENE_BFT_COUNCIL,           {},         6min };
+	constexpr CustomScenario::DialogueScene UnknownTauren = { SCENE_BFT_UNKNOWN_TAUREN,    {},         8min };
+	constexpr CustomScenario::DialogueScene ALittleHelp   = { SCENE_BFT_A_LITTLE_HELP,     HelpCues,   8min };
+	constexpr CustomScenario::DialogueScene TheBattle     = { SCENE_BFT_THE_BATTLE,        BattleCues, 4min };
+	constexpr CustomScenario::DialogueScene EvacDocks     = { SCENE_BFT_EVACUATION_DOCKS,  {},         2min };
+	constexpr CustomScenario::DialogueScene EvacJanene    = { SCENE_BFT_EVACUATION_JANENE, {},         2min };
+	constexpr CustomScenario::DialogueScene EvacDoctor    = { SCENE_BFT_EVACUATION_DOCTOR, {},         2min };
+	constexpr CustomScenario::DialogueScene Wounded       = { SCENE_BFT_HELP_THE_WOUNDED,  {},         3min };
+	constexpr CustomScenario::DialogueScene WoundedKinndy = { SCENE_BFT_WOUNDED_KINNDY,    {},         4min };
+	constexpr CustomScenario::DialogueScene WaitForAmara  = { SCENE_BFT_WAIT_FOR_AMARA,    AmaraCues,  5min };
+	constexpr CustomScenario::DialogueScene RetrieveRhonin = { SCENE_BFT_RETRIEVE_RHONIN,  {},         4min };
+
+	// Temps mort avant une scene (apres le conseil, avant la scene de la
+	// bataille), presque nul en CUSTOM_DEBUG.
+	#ifdef CUSTOM_DEBUG
+		constexpr Milliseconds StagingPause = 1s;
+	#else
+		constexpr Milliseconds StagingPause = 10s;
+	#endif
+}
 
 // =========================================================================
 // Evenements d'ambiance de la Horde (bombardement de fond)
@@ -386,64 +205,86 @@ class HordeBombardierThrowBomb : public BasicEvent
 		Unit* _caster;
 };
 
-// Demolisseur : il pilonne une bande de terrain fixe (le mur ouest). Chaque
-// tir vise un point tire au hasard dans cette bande, ce qui donne un
-// bombardement disperse mais toujours dans la meme zone.
+// Demolisseur : il pilonne une bande de terrain fixe. Chaque tir vise un
+// point tire au hasard dans cette bande, ce qui donne un bombardement
+// disperse mais toujours dans la meme zone. Il se tourne vers le point,
+// puis tire une fois tourne.
+// Bandes pilonnees (extremites) : le mur ouest, par les demolisseurs de
+// DATA_DECORATION_WEST ; l'ile, par celui de l'entree pose sur
+// EntranceDemolisherPoint (DATA_DECORATION_ENTRANCE, l'autre ne tire pas).
+Position const WestWallStripStart     = { -3771.834717f, -4261.928711f,  7.074570f };
+Position const WestWallStripEnd       = { -3793.766357f, -4260.671387f,  6.944610f };
+Position const IslandStripStart       = { -3635.380859f, -4372.370117f,  8.702263f };
+Position const IslandStripEnd         = { -3695.503662f, -4298.466797f, 11.432985f };
+Position const EntranceDemolisherPoint = { -3608.11f, -4283.15f, 13.5707f };
+
 class HordeDemolisherThrowBoulder : public BasicEvent
 {
-    public:
-    HordeDemolisherThrowBoulder(Unit* caster) : _caster(caster)
-    {
-        // Extremites de la bande pilonnee.
-        p1 = { -3771.834717f, -4261.928711f, 7.074570f, 4.655093f };
-        p2 = { -3793.766357f, -4260.671387f, 6.944610f, 4.655093f };
-    }
+	public:
+	HordeDemolisherThrowBoulder(Unit* caster, Position const& start, Position const& end) : _caster(caster), p1(start), p2(end), aiming(false)
+	{
+	}
 
-    // Largeur de la bande pilonnee, de part et d'autre de l'axe p1-p2.
-    static constexpr float STRIP_WIDTH = 4.0f;
+	// Largeur de la bande pilonnee, de part et d'autre de l'axe p1-p2.
+	static constexpr float STRIP_WIDTH = 4.0f;
+	// Le temps de se tourner vers le point vise.
+	static constexpr Milliseconds AIM_TIME = 1200ms;
 
-    bool Execute(uint64 /*execTime*/, uint32 /*diff*/) override
-    {
-        Position randomPos = GetRandomPointOnStrip(_caster, p1, p2, STRIP_WIDTH, _caster->GetMap());
-        // DEBUG temporaire : sans DONT_REPORT_CAST_ERROR, CheckCast renvoie la vraie raison de l'echec.
-        SpellCastResult result = _caster->CastSpell(randomPos, SPELL_THROW_BOULDER, TriggerCastFlags(TRIGGERED_FULL_MASK & ~TRIGGERED_DONT_REPORT_CAST_ERROR));
-        if (result != SPELL_CAST_OK)
-            TC_LOG_ERROR("scripts", "BFT: Boulder Throw a echoue ({}) depuis {} vers {}", uint32(result), _caster->GetPosition().ToString(), randomPos.ToString());
-        _caster->m_Events.AddEvent(this, _caster->m_Events.CalculateTime(Seconds(urand(8, 10))));
-        return false;
-    }
+	bool Execute(uint64 /*execTime*/, uint32 /*diff*/) override
+	{
+		// D'abord se tourner vers le point vise...
+		if (!aiming)
+		{
+			target = GetRandomPointOnStrip(_caster, p1, p2, STRIP_WIDTH, _caster->GetMap());
+			_caster->SetFacingTo(_caster->GetAbsoluteAngle(target));
+			aiming = true;
+			_caster->m_Events.AddEvent(this, _caster->m_Events.CalculateTime(AIM_TIME));
+			return false;
+		}
 
-    // Tire un point au hasard dans le rectangle centre sur le segment p1-p2 :
-    // on avance d'une fraction t le long du segment, puis on decale
-    // lateralement d'au plus widthMeters / 2.
-    Position GetRandomPointOnStrip(Unit* unit, Position const& p1, Position const& p2, float widthMeters, Map* map)
-    {
-        float dx = p2.GetPositionX() - p1.GetPositionX();
-        float dy = p2.GetPositionY() - p1.GetPositionY();
-        float len = std::sqrt(dx * dx + dy * dy);
+		// ... puis tirer.
+		aiming = false;
+		// DEBUG temporaire : sans DONT_REPORT_CAST_ERROR, CheckCast renvoie la vraie raison de l'echec.
+		SpellCastResult result = _caster->CastSpell(target, SPELL_THROW_BOULDER, TriggerCastFlags(TRIGGERED_FULL_MASK & ~TRIGGERED_DONT_REPORT_CAST_ERROR));
+		if (result != SPELL_CAST_OK)
+			TC_LOG_ERROR("scripts", "BFT: Boulder Throw a echoue ({}) depuis {} vers {}", uint32(result), _caster->GetPosition().ToString(), target.ToString());
+		_caster->m_Events.AddEvent(this, _caster->m_Events.CalculateTime(Seconds(urand(8, 10))));
+		return false;
+	}
 
-        float ux = dx / len, uy = dy / len;   // direction normalisee
-        float px = -uy, py = ux;              // perpendiculaire 2D
+	// Tire un point au hasard dans le rectangle centre sur le segment p1-p2 :
+	// on avance d'une fraction t le long du segment, puis on decale
+	// lateralement d'au plus widthMeters / 2.
+	Position GetRandomPointOnStrip(Unit* unit, Position const& p1, Position const& p2, float widthMeters, Map* map)
+	{
+		float dx = p2.GetPositionX() - p1.GetPositionX();
+		float dy = p2.GetPositionY() - p1.GetPositionY();
+		float len = std::sqrt(dx * dx + dy * dy);
 
-        float t = frand(0.0f, 1.0f);
-        float offset = frand(-widthMeters / 2.0f, widthMeters / 2.0f);
+		float ux = dx / len, uy = dy / len;   // direction normalisee
+		float px = -uy, py = ux;              // perpendiculaire 2D
 
-        float x = p1.GetPositionX() + dx * t + px * offset;
-        float y = p1.GetPositionY() + dy * t + py * offset;
-        float z = p1.GetPositionZ() + (p2.GetPositionZ() - p1.GetPositionZ()) * t;
+		float t = frand(0.0f, 1.0f);
+		float offset = frand(-widthMeters / 2.0f, widthMeters / 2.0f);
 
-        // Recalage sur le vrai sol plutot que sur l'interpolation lineaire :
-        // sans ca les rochers tombent dans le decor sur terrain accidente.
-        float groundZ = map->GetHeight(unit->GetPhaseShift(), x, y, z + 2.0f, true);
-        if (groundZ > INVALID_HEIGHT)
-            z = groundZ;
+		float x = p1.GetPositionX() + dx * t + px * offset;
+		float y = p1.GetPositionY() + dy * t + py * offset;
+		float z = p1.GetPositionZ() + (p2.GetPositionZ() - p1.GetPositionZ()) * t;
 
-        return Position(x, y, z, 0.f);
-    }
+		// Recalage sur le vrai sol plutot que sur l'interpolation lineaire :
+		// sans ca les rochers tombent dans le decor sur terrain accidente.
+		float groundZ = map->GetHeight(unit->GetPhaseShift(), x, y, z + 2.0f, true);
+		if (groundZ > INVALID_HEIGHT)
+			z = groundZ;
 
-    private:
-    Unit* _caster;
-    Position p1, p2;                        // Extremites de la bande pilonnee
+		return Position(x, y, z, 0.f);
+	}
+
+	private:
+	Unit* _caster;
+	Position p1, p2;                        // Extremites de la bande pilonnee
+	bool aiming;                            // Tourne vers target, tire au prochain passage
+	Position target;                        // Point vise par le prochain tir
 };
 
 // =========================================================================
@@ -456,13 +297,12 @@ class scenario_battle_for_theramore : public InstanceMapScript
 	{
 	}
 
-	struct scenario_battle_for_theramore_InstanceScript : public InstanceScript
+	struct scenario_battle_for_theramore_InstanceScript : public InstanceScript, public CustomScenario::DialogueSceneHost, public CustomScenario::AmbientVoiceHost
 	{
 		// Ordre d'initialisation aligne sur l'ordre de declaration des membres
 		// (voir "Etat interne" en bas de la classe) pour eviter tout -Wreorder.
 		scenario_battle_for_theramore_InstanceScript(InstanceMap* map) : InstanceScript(map),
-			eventId(EVT_COUNCIL_TERVOSH_ARRIVE), woundedTroops(0), archmagesIndex(0),
-			waves(0), phase(BFTPhases::FindJaina)
+			woundedTroops(0), waves(0), phase(BFTPhases::FindJaina)
 		{
 			SetHeaders(DataHeader);
 			LoadObjectData(creatureData, gameobjectData);
@@ -485,8 +325,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			SPELL_READING_BOOK_STANDING = 397765,
 			SPELL_AREA_TRIGGER_VISUAL   = 473554,
 			SPELL_CHARGE                = 1253149,
-            SPELL_ARCANIC_EXPLOSION     = 1285450,
-            SPELL_STUNNED               = 1304390,
+			SPELL_ARCANIC_EXPLOSION     = 1285450,
+			SPELL_STUNNED               = 1304390,
 		};
 
 		// Auras portees par les joueurs pendant une tranche de phases.
@@ -529,6 +369,16 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			return 0;
 		}
 
+		// L'Etoile du matin est au port des le debut. Son groupe de spawn est
+		// manuel : un groupe automatique sans condition est respawne par
+		// Map::UpdateSpawnGroupConditions des que le scenario change d'etape,
+		// et le navire revenait juste apres son depart.
+		void Create() override
+		{
+			InstanceScript::Create();
+			instance->SpawnGroupSpawn(SPAWN_GROUP_MORNING_STAR, true);
+		}
+
 		void OnPlayerEnter(Player* player) override
 		{
 			// Orage permanent : ambiance de la ville assiegee.
@@ -538,6 +388,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 			// Scene d'introduction : une fois par joueur, tant que Jaina n'a pas
 			// encore ete trouvee. Differee le temps de l'ecran de chargement.
+			// Sautee en CUSTOM_DEBUG, comme les scenes de dialogue.
+			#ifndef CUSTOM_DEBUG
 			if (phase == BFTPhases::FindJaina && introSeen.insert(player->GetGUID()).second)
 			{
 				player->m_Events.AddEventAtOffset([player]()
@@ -546,11 +398,35 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						player->GetSceneMgr().PlayScene(SCENE_THERAMORE_INTRO);
 				}, 3s);
 			}
+			#endif
+
+			// Reconnexion pendant une scene de dialogue : elle reprend pour lui
+			// a la replique ou il l'avait quittee, apres l'ecran de chargement.
+			player->m_Events.AddEventAtOffset([player]()
+			{
+				if (!player->IsInWorld() || player->GetMapId() != 5000)
+					return;
+				if (auto* host = dynamic_cast<CustomScenario::DialogueSceneHost*>(player->GetInstanceScript()))
+					host->GetDialogueScenes().OnPlayerEnter(player);
+			}, 3s);
 		}
 
 		void OnPlayerLeave(Player* player) override
 		{
 			CustomScenario::RemovePhaseAuras(player, PhaseAuras);
+			// Bouton "Evacuer le blesse" (npc_wounded_theramore_troop).
+			player->RemoveAurasDueToSpell(SPELL_EVACUATE_OVERRIDE);
+			scenes.OnPlayerLeave(player);
+		}
+
+		CustomScenario::DialogueSceneDirector& GetDialogueScenes() override
+		{
+			return scenes;
+		}
+
+		CustomScenario::AmbientVoices& GetAmbientVoices() override
+		{
+			return voices;
 		}
 
 		void SetData(uint32 dataId, uint32 value) override
@@ -636,26 +512,21 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					GetTervosh()->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					GetKinndy()->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					GetKalecgosHuman()->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-					if (Creature* jaina = GetCreature(DATA_JAINA_PROUDMOORE))
-					{
-						Talk(jaina, SAY_REUNION_1);
-						SetTarget(jaina);
-					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheCouncil);
-					events.ScheduleEvent(EVT_COUNCIL_TERVOSH_ARRIVE, 2s);
+					PlayCouncilScene();
 					break;
 				}
 				// Step 2 : The Council
 				case CRITERIA_TREE_THE_COUNCIL:
 				{
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Waiting);
-					events.ScheduleEvent(EVT_WAITING_TRIGGER, 10s);
+					events.ScheduleEvent(EVT_WAITING_TRIGGER, BFTScenes::StagingPause);
 					break;
 				}
 				// Step 3 : Waiting
 				case CRITERIA_TREE_WAITING:
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::UnknownTauren);
-					events.ScheduleEvent(EVT_TAUREN_ESCORT_SPAWN, 1s);
+					events.ScheduleEvent(EVT_TAUREN_SCENE, 1s);
 					break;
 				// Step 4 : The Unknow Tauren
 				case CRITERIA_TREE_UNKNOW_TAUREN:
@@ -680,7 +551,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					}
 					SetEvacuationWitnesses(true);
 					// Le crieur lit l'ordre d'evacuation que Jaina vient de
-					// rediger (EVT_TAUREN_JAINA_TALK_27).
+					// rediger (SCENE_BFT_UNKNOWN_TAUREN).
 					if (Creature* crier = GetCreature(DATA_THERAMORE_CRIER))
 					{
 						crier->SetVisible(true);
@@ -715,7 +586,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					});
 					if (Creature* jaina = GetJaina())
 					{
-                        jaina->SetVignette(VIGNETTE_LADY_JAINA_PROUDMOORE);
+						jaina->SetVignette(VIGNETTE_LADY_JAINA_PROUDMOORE);
 						jaina->NearTeleportTo(JainaPoint02);
 						jaina->SetHomePosition(JainaPoint02);
 						jaina->AI()->SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
@@ -742,7 +613,10 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						kalecgos->NearTeleportTo(KalecgosPoint01);
 						kalecgos->SetHomePosition(KalecgosPoint01);
 						kalecgos->RemoveUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+						kalecgos->SetImmuneToAll(false);
 						kalecgos->RemoveAllAuras();
+						// Masque depuis sa sortie de la tour (scene du conseil).
+						ShowAfterTeleport(kalecgos);
 					}
 					if (Creature* hedric = GetHedric())
 					{
@@ -753,7 +627,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						hedric->SetVisible(false);
 					}
 					// Les generaux de la 7e Legion n'arrivent qu'apres les
-					// archimages (EVT_HELP_ARCHMAGES_ARRIVAL).
+					// archimages (SCENE_BFT_A_LITTLE_HELP).
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::ALittleHelp);
 					break;
 				}
@@ -806,30 +680,27 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							}
 						}
 					}
-                    GetJaina()->SummonGameObject(GOB_PORTAL_TO_ORGRIMMAR, PortalPoint02, QuaternionData::QuaternionData(), 0s);
+					// Objet actif : aucun joueur ne passe pres du portail avant la
+					// bataille, sa grille se dechargerait et l'emporterait.
+					if (GameObject* portal = GetJaina()->SummonGameObject(GOB_PORTAL_TO_ORGRIMMAR, PortalPoint02, QuaternionData::QuaternionData(), 0s))
+						portal->setActive(true);
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Preparation);
-					#ifndef CUSTOM_DEBUG
-						events.ScheduleEvent(EVT_HELP_JAINA_TALK_02, 1s);
-					#else
-						for (uint8 i = 0; i < ARCHMAGES_LOCATION; i++)
-							instance->SummonCreature(archmagesLocation[i].dataId, PortalPoint01);
-						events.ScheduleEvent(EVT_HELP_BATTLEFIELD_SETUP, 2s);
-					#endif
+					events.ScheduleEvent(EVT_HELP_SCENE, 1s);
 					break;
 				}
 				// Step 7 : Preparation - Parent
 				case CRITERIA_TREE_PREPARATION:
-                    GetJaina()->SetVignette(VIGNETTE_LADY_JAINA_PROUDMOORE);
-                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle);
+					GetJaina()->SetVignette(VIGNETTE_LADY_JAINA_PROUDMOORE);
+					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle);
 					break;
 				// Step 7 : Preparation - Troops motivated
-                case CRITERIA_TREE_TOOPS_MOTIVATED:
-                    for (ObjectGuid guid : troops)
-                    {
-                        if (Creature* troop = instance->GetCreature(guid))
-                            troop->SetVignette(VIGNETTE_NONE);
-                    }
-                    break;
+				case CRITERIA_TREE_TOOPS_MOTIVATED:
+					for (ObjectGuid guid : troops)
+					{
+						if (Creature* troop = instance->GetCreature(guid))
+							troop->SetVignette(VIGNETTE_NONE);
+					}
+					break;
 				// Step 7 : Preparation - Speak with Rhonin
 				case CRITERIA_TREE_TALK_TO_RHONIN:
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::Preparation_Rhonin);
@@ -884,9 +755,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						if (Creature* tank = instance->GetCreature(tanks[i]))
 							tank->KillSelf();
 					}
-                    HordeMembersInvoker(DATA_DECORATION_WEST, true);
-                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle_Survive);
-					events.ScheduleEvent(EVT_BATTLE_JAINA_NOTICE, 10s);
+					HordeMembersInvoker(DATA_DECORATION_WEST, true);
+					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::TheBattle_Survive);
+					events.ScheduleEvent(EVT_BATTLE_SCENE, BFTScenes::StagingPause);
 					break;
 				}
 				// Step 9 : The Battle - Parent
@@ -905,7 +776,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					GetBarrier01()->ResetDoorOrButton();
 					GetBarrier02()->ResetDoorOrButton();
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::HelpTheWounded);
-					events.ScheduleEvent(EVT_WOUNDED_JAINA_HEDRIC_FACE, 3s);
+					events.ScheduleEvent(EVT_WOUNDED_SCENE, 3s);
 					break;
 				}
 				// Step 9 : The Battle - After 10 waves
@@ -914,44 +785,47 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					DespawnDummies();
 					if (Creature* kalecgos = GetKalecgosDragon())
 						kalecgos->AI()->SetData(DATA_KALECGOS_CANCEL_EVENT, 0U);
-                    break;
+					break;
 				}
-                // Step 9 : The Battle - After the protection broke
-                case CRITERIA_TREE_MAINTAIN_PROTECTION:
-                    NextWave();
-                    break;
+				// Step 9 : The Battle - After the protection broke
+				case CRITERIA_TREE_MAINTAIN_PROTECTION:
+					NextWave();
+					break;
 				// Step 10 : Help the wounded - Parent
 				case CRITERIA_TREE_HELP_THE_WOUNDED:
 				{
 					// Les joueurs ont fini avant la fin des dialogues : on
-					// coupe toute la partie II d'un bloc.
-					for (uint32 i = EVT_WOUNDED_PART2_FIRST; i <= EVT_WOUNDED_PART2_LAST; ++i)
-						events.CancelEvent(i);
-                    GetJaina()->SetVignette(VIGNETTE_LADY_JAINA_PROUDMOORE);
+					// coupe la partie II (sa fin remet Jaina et Kinndy en place).
+					events.CancelEvent(EVT_WOUNDED_KINNDY_SCENE);
+					scenes.Cancel(instance, SCENE_BFT_WOUNDED_KINNDY);
+					FaceAfterWounded();
+					GetJaina()->SetVignette(VIGNETTE_LADY_JAINA_PROUDMOORE);
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::WaitForAmara);
-					events.ScheduleEvent(EVT_WOUNDED_SCENE_END, 5ms);
 					break;
 				}
 				// Step 10 : Help the wounded - Rejoin Lady Jaina Proudmoore after the attack
 				case CRITERIA_TREE_FOLLOW_JAINA:
-					events.ScheduleEvent(EVT_WOUNDED_JAINA_KINNDY_FACE, 3s);
+					events.ScheduleEvent(EVT_WOUNDED_KINNDY_SCENE, 3s);
 					break;
 				// Step 10 : Help the wounded - Help teleporting the wounded troops
 				case CRITERIA_TREE_HELP_THE_TROOPS:
 				{
 					if (Creature* jaina = GetJaina())
 					{
-                        std::list<Creature*> results;
-                        jaina->GetCreatureListWithEntryInGrid(results, NPC_THERAMORE_WOUNDED_TROOP, SIZE_OF_GRIDS);
+						std::list<Creature*> results;
+						jaina->GetCreatureListWithEntryInGrid(results, NPC_THERAMORE_WOUNDED_TROOP, SIZE_OF_GRIDS);
 
 						if (results.empty())
 							return;
 
-                        for (Creature* woundedTroop : results)
-                        {
-                            woundedTroop->SetVignette(VIGNETTE_NONE);
-                            woundedTroop->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-                        }
+						// Etape validee : plus de bouton "Evacuer le blesse".
+						for (Creature* woundedTroop : results)
+						{
+							woundedTroop->SetVignette(VIGNETTE_NONE);
+							woundedTroop->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+							if (woundedTroop->IsAIEnabled())
+								woundedTroop->AI()->DoAction(ACTION_WOUNDED_EVACUATION_END);
+						}
 					}
 					break;
 				}
@@ -968,15 +842,14 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				{
 					if (Creature* kalecgos = GetKalecgosHuman())
 					{
-						kalecgos->SetVisible(true);
 						kalecgos->GetMotionMaster()->Clear();
 						kalecgos->GetMotionMaster()->MoveIdle();
 						kalecgos->NearTeleportTo(KalecPath02.Nodes[0].X, KalecPath02.Nodes[0].Y, KalecPath02.Nodes[0].Z, *KalecPath02.Nodes[0].Orientation);
+						ShowAfterTeleport(kalecgos);
 					}
+					// Rhonin rejoint la table de banquet dans la scene qui suit.
 					if (Creature* rhonin = GetRhonin())
 					{
-						rhonin->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, RhoninPoint01, true, RhoninPoint01.GetOrientation());
-
 						for (uint8 i = 0; i < TOWER_BARRIERS_LOCATION; i++)
 						{
 							rhonin->SummonGameObject(GOB_ENERGY_BARRIER_TOWER, TowerBarriers[i].position, TowerBarriers[i].quaternion, 0s);
@@ -988,12 +861,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							creature->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
 					}
 					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::WaitForAmara_JoinJaina);
-					events.ScheduleEvent(EVT_AMARA_KALEC_APPROACH, 1s);
+					events.ScheduleEvent(EVT_AMARA_SCENE, 1s);
 					break;
 				}
 				// Step 11 : Wait for Archmage Leeson returns - Wait for Archmage Leeson returns
+				// Leve par le signal "AmaraBack" : la scene SCENE_BFT_WAIT_FOR_AMARA
+				// enchaine elle-meme sur le dialogue avec Amara.
 				case CRITERIA_TREE_ARCHMAGE_LEESON:
-					events.ScheduleEvent(EVT_AMARA_JAINA_FACE, 1s);
 					break;
 				// Step 12 : Retrieve Rhonin - Parent
 				case CRITERIA_TREE_RETRIEVE_RHONIN:
@@ -1001,9 +875,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				// Step 12 : Retrieve Rhonin - Retrieve Rhonin at the top of the tower
 				case CRITERIA_TREE_RETRIEVE:
-                    GetRhonin()->SetVignette(VIGNETTE_NONE);
-                    SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin_JoinRhonin);
-					events.ScheduleEvent(EVT_RHONIN_JAINA_TALK_01, 1s);
+					GetRhonin()->SetVignette(VIGNETTE_NONE);
+					SetData(DATA_SCENARIO_PHASE, (uint32)BFTPhases::RetrieveRhonin_JoinRhonin);
+					events.ScheduleEvent(EVT_RHONIN_SCENE, 1s);
 					break;
 			}
 		}
@@ -1017,7 +891,22 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 			// Portee de visibilite maximale : la bataille se joue a l'echelle
 			// de toute la ville, on ne veut aucun pop-in.
-            creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
+			creature->SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
+
+			// Acteurs des cinematiques : objets actifs. Theramore est coupee
+			// entre deux grilles (tour et porte Ouest / place et portes
+			// principales) ; sans joueur a proximite, la grille de la tour se
+			// decharge pendant l'evacuation et emporte Jaina, Tervosh et
+			// Kinndy, recrees ensuite a leur spawn. Et un NearTeleportTo vers
+			// une grille non chargee renvoie la creature a son spawn.
+			for (uint8 i = 0; i < eventCreatureDataCount; i++)
+			{
+				if (creatureData[i].entry == creature->GetEntry())
+				{
+					creature->setActive(true);
+					break;
+				}
+			}
 
 			if (creature->IsCivilian())
 			{
@@ -1032,8 +921,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				case NPC_THERAMORE_CITIZEN_MALE:
 				case NPC_THERAMORE_CITIZEN_FEMALE:
 					creature->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-                    if (!creature->HasStringId("IgnoreClick"))
-					    citizens.push_back(creature->GetGUID());
+					if (!creature->HasStringId("IgnoreClick"))
+						citizens.push_back(creature->GetGUID());
 					break;
 				case NPC_ARCHMAGE_TERVOSH:
 					creature->SetEmoteState(EMOTE_STATE_READ_BOOK_AND_TALK);
@@ -1057,8 +946,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					break;
 				// N'apparait qu'avec l'ordre d'evacuation (CRITERIA_TREE_UNKNOW_TAUREN).
 				case NPC_THERAMORE_CRIER:
-                case NPC_KALECGOS_DRAGON:
-                    creature->SetVisible(false);
+				case NPC_KALECGOS_DRAGON:
+					creature->SetVisible(false);
 					break;
 				case NPC_JAINA_PROUDMOORE:
 					creature->SetVignette(VIGNETTE_LADY_JAINA_PROUDMOORE);
@@ -1070,7 +959,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		{
 			InstanceScript::OnGameObjectCreate(go);
 
-            go->SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
+			go->SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
 
 			switch (go->GetEntry())
 			{
@@ -1091,1360 +980,661 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		}
 
 		// =================================================================
-		// Chaine d'events cinematiques
+		// Lancement des cinematiques
 		// =================================================================
-		// L'affectation `eventId = events.ExecuteEvent()` est volontaire :
-		// elle memorise l'event en cours pour que Next() puisse planifier le
-		// suivant sans que chaque case ait a se nommer lui-meme.
+		// Chaque event laisse passer le delai prevu apres la validation d'une
+		// etape, puis lance la scene de dialogue correspondante (region
+		// DIALOGUE_SCENES).
 		void Update(uint32 diff) override
 		{
 			scheduler.Update(diff);
+			scenes.Update(instance, Milliseconds(diff));
 
 			events.Update(diff);
-			dialogue.Reset();
-			switch (eventId = events.ExecuteEvent())
+			switch (events.ExecuteEvent())
 			{
-				// The Council (1 - 23)
-				// Conseil de guerre dans la tour : Tervosh et Kinndy rejoignent
-				// Jaina et Kalecgos, longue passe de dialogues, puis tout le
-				// monde se disperse et Jaina rejoint la table (EVT_COUNCIL_JAINA_TO_TABLE, point
-				// d'arret : la suite depend de MOVEMENT_INFO_POINT_01).
-				#pragma region THE_COUNCIL
-
-				case EVT_COUNCIL_TERVOSH_ARRIVE:
-					if (Creature* tervosh = GetTervosh())
-					{
-						tervosh->SetEmoteState(EMOTE_STAND_STATE_NONE);
-						tervosh->GetMotionMaster()->MovePath(TervoshPath01, false);
-					}
-					Next(4s);
-					break;
-				case EVT_COUNCIL_KINNDY_ARRIVE:
-					if (Creature* kinndy = GetKinndy())
-					{
-						kinndy->SetWalk(true);
-						kinndy->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, KinndyPoint01, true, 1.09f);
-					}
-					// En debug on saute les dialogues 3 a 19 et on reprend
-					// directement a la dispersion des acteurs.
-					#ifdef CUSTOM_DEBUG
-						events.ScheduleEvent(EVT_COUNCIL_KALEC_LEAVE, 2s);
-					#else
-						Next(5s);
-					#endif
-					break;
-				case EVT_COUNCIL_KINNDY_TALK_02:
-					Talk(GetKinndy(), SAY_REUNION_2);
-					SetTarget(GetKinndy());
-					Next(10s);
-					break;
-				case EVT_COUNCIL_JAINA_TALK_03:
-					Talk(GetJaina(), SAY_REUNION_3);
-					SetTarget(GetJaina());
-					Next(9s);
-					break;
-				case EVT_COUNCIL_KINNDY_TALK_04:
-					Talk(GetKinndy(), SAY_REUNION_4);
-					SetTarget(GetKinndy());
-					Next(4s);
-					break;
-				case EVT_COUNCIL_JAINA_TALK_05:
-					Talk(GetJaina(), SAY_REUNION_5);
-					SetTarget(GetJaina());
-					Next(7s);
-					break;
-				case EVT_COUNCIL_TERVOSH_TALK_06:
-					Talk(GetTervosh(), SAY_REUNION_6);
-					SetTarget(GetTervosh());
-					Next(6500ms);
-					break;
-				case EVT_COUNCIL_KALEC_TALK_07:
-					Talk(GetKalecgosHuman(), SAY_REUNION_7);
-					SetTarget(GetKalecgosHuman());
-					Next(6s);
-					break;
-				case EVT_COUNCIL_KALEC_TALK_08:
-					Talk(GetKalecgosHuman(), SAY_REUNION_8);
-					Next(8s);
-					break;
-				case EVT_COUNCIL_TERVOSH_TALK_09:
-					Talk(GetTervosh(), SAY_REUNION_9);
-					Next(2s);
-					break;
-				case EVT_COUNCIL_KINNDY_TALK_09_BIS:
-					Talk(GetKinndy(), SAY_REUNION_9_BIS);
-					Next(4s);
-					break;
-				case EVT_COUNCIL_JAINA_TALK_10:
-					Talk(GetJaina(), SAY_REUNION_10);
-					SetTarget(GetJaina());
-					Next(4500ms);
-					break;
-				case EVT_COUNCIL_KALEC_TALK_11:
-					Talk(GetKalecgosHuman(), SAY_REUNION_11);
-					SetTarget(GetKalecgosHuman());
-					Next(3s);
-					break;
-				case EVT_COUNCIL_JAINA_TALK_12:
-					Talk(GetJaina(), SAY_REUNION_12);
-					SetTarget(GetJaina());
-					Next(6s);
-					break;
-				case EVT_COUNCIL_KINNDY_TALK_13:
-					Talk(GetKinndy(), SAY_REUNION_13);
-					SetTarget(GetKinndy());
-					Next(4s);
-					break;
-				case EVT_COUNCIL_KALEC_TALK_14:
-					Talk(GetKalecgosHuman(), SAY_REUNION_14);
-					SetTarget(GetKalecgosHuman());
-					Next(5s);
-					break;
-				case EVT_COUNCIL_JAINA_TALK_15:
-					Talk(GetJaina(), SAY_REUNION_15);
-					SetTarget(GetJaina());
-					Next(2s);
-					break;
-				case EVT_COUNCIL_KALEC_TALK_16:
-					Talk(GetKalecgosHuman(), SAY_REUNION_16);
-					SetTarget(GetKalecgosHuman());
-					Next(3s);
-					break;
-				case EVT_COUNCIL_KALEC_TALK_17:
-					Talk(GetKalecgosHuman(), SAY_REUNION_17);
-					Next(5s);
-					break;
-				// Dispersion : chacun repart vers son poste. Point d'entree
-				// DEBUG (voir EVT_COUNCIL_KINNDY_ARRIVE).
-				case EVT_COUNCIL_KALEC_LEAVE:
-					ClearTarget();
-                    GetKalecgosHuman()->GetMotionMaster()->MovePath(KalecPath01, false);
-					Next(2s);
-					break;
-				case EVT_COUNCIL_TERVOSH_LEAVE:
-					GetTervosh()->GetMotionMaster()->MovePath(TervoshPath02, false);
-					Next(5s);
-					break;
-				case EVT_COUNCIL_KINNDY_LEAVE:
-					GetKinndy()->GetMotionMaster()->MovePath(KinndyPath01, false);
-					Next(6s);
-					break;
-				// Point d'arret : Jaina rejoint la table du conseil. C'est son
-				// AI qui leve EVENT_THE_COUNCIL en arrivant sur le point.
-				case EVT_COUNCIL_JAINA_TO_TABLE:
-					GetJaina()->SetWalk(true);
-					GetJaina()->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, JainaPoint01, true, JainaPoint01.GetOrientation());
-					break;
-
-				#pragma endregion
-
-				// Waiting (24)
 				// Simple validation d'etape : laisse aux joueurs le temps de
 				// souffler avant l'arrivee de Perith.
-				#pragma region WAITING
-
 				case EVT_WAITING_TRIGGER:
 					TriggerGameEvent(EVENT_WAITING);
 					break;
-
-				#pragma endregion
-
-				// The Unknown Tauren (25 - 70)
-				// Perith Stormhoove et son escorte entrent dans la tour et
-				// annoncent l'attaque de la Horde. Longue scene de dialogue
-				// entre Pained, Jaina, le chevalier et Perith, entrecoupee de
-				// deplacements. Se termine sur EVT_TAUREN_PAINED_LEAVE (sortie de Pained).
-				#pragma region THE_UNKNOWN_TAUREN
-
-				// Spawn de l'escorte de Perith. En debug on la fait disparaitre
-				// aussitot et on saute directement a la fin de la scene.
-				case EVT_TAUREN_ESCORT_SPAWN:
-					for (uint8 i = 0; i < PERITH_LOCATION; i++)
-					{
-						if (Creature* creature = instance->SummonCreature(perithLocation[i].dataId, perithLocation[i].position))
-						{
-							if (creature->GetEntry() == NPC_KNIGHT_OF_THERAMORE)
-							{
-								creature->SetSheath(SHEATH_STATE_UNARMED);
-								creature->SetEmoteState(EMOTE_STATE_WAGUARDSTAND01);
-							}
-
-							creature->SetWalk(true);
-							creature->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-							creature->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, perithLocation[i].destination, false, perithLocation[i].destination.GetOrientation());
-						}
-					}
-					#ifdef CUSTOM_DEBUG
-					{
-						GetPerith()->DespawnOrUnsummon();
-						GetKnight()->DespawnOrUnsummon();
-
-						events.ScheduleEvent(EVT_TAUREN_PAINED_LEAVE, 2s);
-					}
-					#else
-						Next(7s);
-					#endif
+				case EVT_TAUREN_SCENE:
+					PlayUnknownTaurenScene();
 					break;
-				case EVT_TAUREN_JAINA_TARGET_PERITH:
-					GetJaina()->SetTarget(GetPerith()->GetGUID());
-					Next(2s);
+				case EVT_HELP_SCENE:
+					PlayALittleHelpScene();
 					break;
-				case EVT_TAUREN_PAINED_TALK_01:
-					Talk(GetPained(), SAY_WARN_1);
-					SetTarget(GetPained());
-					Next(1s);
+				case EVT_BATTLE_SCENE:
+					PlayTheBattleScene();
 					break;
-				case EVT_TAUREN_JAINA_TALK_02:
-					Talk(GetJaina(), SAY_WARN_2);
-					SetTarget(GetJaina());
-					Next(1s);
+				case EVT_EVAC_DOCKS_SCENE:
+					PlayWitnessScene(BFTScenes::EvacDocks, { DATA_MORNING_STAR_FIRST_MATE, DATA_DRAENEI_SHAMAN });
 					break;
-				case EVT_TAUREN_PAINED_TALK_03:
-					Talk(GetPained(), SAY_WARN_3);
-					SetTarget(GetPained());
-					Next(6s);
+				case EVT_EVAC_JANENE_SCENE:
+					PlayWitnessScene(BFTScenes::EvacJanene, { DATA_INNKEEPER_JANENE });
 					break;
-				case EVT_TAUREN_PAINED_TALK_04:
-					Talk(GetPained(), SAY_WARN_4);
-					Next(5500ms);
+				case EVT_EVAC_DOCTOR_SCENE:
+					PlayWitnessScene(BFTScenes::EvacDoctor, { DATA_DOCTOR_VANHOWZEN });
 					break;
-				case EVT_TAUREN_JAINA_TALK_05:
-					Talk(GetJaina(), SAY_WARN_5);
-					SetTarget(GetJaina());
-					Next(4500ms);
+				case EVT_WOUNDED_SCENE:
+					PlayHelpTheWoundedScene();
 					break;
-				case EVT_TAUREN_PAINED_TALK_06:
-					Talk(GetPained(), SAY_WARN_6);
-					SetTarget(GetPained());
-					Next(10s);
+				case EVT_WOUNDED_KINNDY_SCENE:
+					PlayWoundedKinndyScene();
 					break;
-				case EVT_TAUREN_PAINED_APPROACH:
-					ClearTarget();
-					GetPained()->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, GetJaina(), 1.8f);
-					Next(2s);
+				case EVT_AMARA_SCENE:
+					PlayWaitForAmaraScene();
 					break;
-				case EVT_TAUREN_PAINED_SALUTE:
-					SetTarget(GetJaina());
-					GetPained()->SetEmoteState(EMOTE_STATE_USE_STANDING);
-					Next(1s);
+				case EVT_RHONIN_SCENE:
+					PlayRetrieveRhoninScene();
 					break;
-				case EVT_TAUREN_PAINED_TALK_07:
-					GetJaina()->SetEmoteState(EMOTE_STATE_USE_STANDING);
-					GetPained()->SetEmoteState(EMOTE_STATE_NONE);
-					Talk(GetPained(), SAY_WARN_7);
-					Next(3s);
+				default:
 					break;
-				case EVT_TAUREN_JAINA_TALK_08:
-					GetJaina()->SetEmoteState(EMOTE_STATE_NONE);
-					Talk(GetJaina(), SAY_WARN_8);
-					Next(4s);
-					break;
-				case EVT_TAUREN_JAINA_TALK_09:
-					Talk(GetJaina(), SAY_WARN_9);
-					SetTarget(GetJaina());
-					Next(2s);
-					break;
-				case EVT_TAUREN_JAINA_TALK_10:
-					Talk(GetJaina(), SAY_WARN_10);
-					ClearTarget();
-					GetPained()->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_01, PainedPoint01, true, PainedPoint01.GetOrientation());
-					Next(2s);
-					break;
-				case EVT_TAUREN_KNIGHT_APPROACH:
-					GetKnight()->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_01, GetJaina(), 3.0f);
-					Next(2s);
-					break;
-				case EVT_TAUREN_KNIGHT_TALK_11:
-					Talk(GetKnight(), SAY_WARN_11);
-					SetTarget(GetKnight());
-					Next(5s);
-					break;
-				case EVT_TAUREN_JAINA_TALK_12:
-					Talk(GetJaina(), SAY_WARN_12);
-					SetTarget(GetJaina());
-					Next(5s);
-					break;
-				case EVT_TAUREN_PAINED_TALK_13:
-					ClearTarget();
-					Talk(GetPained(), SAY_WARN_13);
-					if (Creature* officer = GetKnight())
-					{
-						officer->GetMotionMaster()->MovePath(OfficerPath01, false);
-						officer->DespawnOrUnsummon(15s);
-					}
-					GetPerith()->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, GetJaina(), 3.0f);
-					Next(3s);
-					break;
-				case EVT_TAUREN_PERITH_TALK_14:
-					Talk(GetPerith(), SAY_WARN_14);
-					GetPerith()->SetTarget(GetJaina()->GetGUID());
-					SetTarget(GetPerith());
-					Next(9s);
-					break;
-				case EVT_TAUREN_JAINA_TALK_15:
-					Talk(GetJaina(), SAY_WARN_15);
-					Next(4s);
-					break;
-				case EVT_TAUREN_PERITH_TALK_16:
-					Talk(GetPerith(), SAY_WARN_16);
-					Next(12s);
-					break;
-				case EVT_TAUREN_PERITH_TALK_17:
-					Talk(GetPerith(), SAY_WARN_17);
-					Next(10500ms);
-					break;
-				case EVT_TAUREN_PERITH_TALK_18:
-					Talk(GetPerith(), SAY_WARN_18);
-					Next(11500ms);
-					break;
-				case EVT_TAUREN_JAINA_TALK_19:
-					Talk(GetJaina(), SAY_WARN_19);
-					Next(4200ms);
-					break;
-				case EVT_TAUREN_PERITH_TALK_20:
-					Talk(GetPerith(), SAY_WARN_20);
-					Next(5500ms);
-					break;
-				case EVT_TAUREN_JAINA_TALK_21:
-					Talk(GetJaina(), SAY_WARN_21);
-					Next(1500ms);
-					break;
-				case EVT_TAUREN_PERITH_TALK_22:
-					Talk(GetPerith(), SAY_WARN_22);
-					Next(14500ms);
-					break;
-				case EVT_TAUREN_PERITH_TALK_23:
-					Talk(GetPerith(), SAY_WARN_23);
-					Next(10s);
-					break;
-				case EVT_TAUREN_JAINA_TALK_24:
-					Talk(GetJaina(), SAY_WARN_24);
-					Next(11500ms);
-					break;
-				case EVT_TAUREN_PERITH_TALK_25:
-					Talk(GetPerith(), SAY_WARN_25);
-					Next(15500ms);
-					break;
-				case EVT_TAUREN_JAINA_TALK_26:
-					Talk(GetJaina(), SAY_WARN_26);
-					Next(5s);
-					break;
-				case EVT_TAUREN_JAINA_TURN_AWAY:
-					if (Creature* jaina = GetJaina())
-					{
-						jaina->SetTarget(ObjectGuid::Empty);
-						jaina->SetFacingTo(3.33f);
-					}
-					Next(2s);
-					break;
-				// Jaina redige l'ordre d'evacuation : la plume magique est un
-				// visuel de channel, retire a l'event suivant.
-				case EVT_TAUREN_JAINA_TALK_27:
-                    if (Creature* jaina = GetJaina())
-                    {
-                        Talk(jaina, SAY_WARN_27);
-                        jaina->CastSpell(jaina, SPELL_MAGIC_QUILL);
-                    }
-					Next(10s);
-					break;
-				case EVT_TAUREN_JAINA_QUILL_END:
-					if (Creature* jaina = GetJaina())
-					{
-						jaina->RemoveAurasDueToSpell(SPELL_MAGIC_QUILL);
-						jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-						jaina->SetFacingToObject(GetPerith());
-					}
-					Next(2s);
-					break;
-				case EVT_TAUREN_JAINA_TALK_28:
-					Talk(GetJaina(), SAY_WARN_28);
-					Next(5s);
-					break;
-				case EVT_TAUREN_PERITH_TALK_29:
-					Talk(GetPerith(), SAY_WARN_29);
-					Next(5s);
-					break;
-				case EVT_TAUREN_PERITH_TALK_30:
-					Talk(GetPerith(), SAY_WARN_30);
-					Next(8s);
-					break;
-				case EVT_TAUREN_JAINA_TALK_31:
-					Talk(GetJaina(), SAY_WARN_31);
-					Next(4s);
-					break;
-				case EVT_TAUREN_PERITH_TALK_32:
-					Talk(GetPerith(), SAY_WARN_32);
-					Next(3500ms);
-					break;
-				case EVT_TAUREN_JAINA_TALK_33:
-					Talk(GetJaina(), SAY_WARN_33);
-					Next(4s);
-					break;
-				case EVT_TAUREN_PERITH_TALK_34:
-					Talk(GetPerith(), SAY_WARN_34);
-					Next(3s);
-					break;
-				case EVT_TAUREN_PERITH_LEAVE:
-					ClearTarget();
-					GetPained()->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-					if (Creature* perith = GetPerith())
-					{
-						perith->GetMotionMaster()->MovePath(OfficerPath01, false);
-						perith->DespawnOrUnsummon(15s);
-					}
-					Next(5s);
-					break;
-				case EVT_TAUREN_JAINA_TALK_35:
-					Talk(GetJaina(), SAY_WARN_35);
-					GetJaina()->SetFacingToObject(GetPained());
-					GetPained()->SetFacingToObject(GetJaina());
-					Next(7s);
-					break;
-				case EVT_TAUREN_PAINED_TALK_36:
-					Talk(GetPained(), SAY_WARN_36);
-					Next(2500ms);
-					break;
-				case EVT_TAUREN_JAINA_TALK_37:
-					Talk(GetJaina(), SAY_WARN_37);
-					Next(2s);
-					break;
-				// Point d'arret : Pained sort de la salle. C'est son AI qui
-				// leve EVENT_THE_UNKNOWN_TAUREN a la fin du chemin.
-				case EVT_TAUREN_PAINED_LEAVE:
-					GetJaina()->SetFacingTo(0.39f);
-					GetPained()->GetMotionMaster()->MovePath(KinndyPath01, false);
-					break;
-
-				#pragma endregion
-
-				// A Little Help (71 - 100)
-				// Arrivee des renforts de Dalaran : Hedric ouvre la scene, le
-				// portail s'ouvre, les six archimages en sortent un a un
-				// (EVT_HELP_ARCHMAGES_ARRIVAL, qui se repete lui-meme), discours et harangue,
-				// puis teleport de masse et mise en place complete du champ
-				// de bataille (EVT_HELP_BATTLEFIELD_SETUP).
-				#pragma region A_LITTLE_HELP
-
-				case EVT_HELP_JAINA_TALK_02:
-					Talk(GetJaina(), SAY_PRE_BATTLE_2);
-					ScheduleCameraShakes();
-					HordeMembersInvoker(DATA_DECORATION_ENTRANCE, true);
-					if (Creature* hedric = GetHedric())
-					{
-						hedric->SetVisible(true);
-						hedric->PlayDirectSound(SOUND_FEARFUL_CROWD);
-						hedric->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-					}
-					Next(4500ms);
-					break;
-				case EVT_HELP_HEDRIC_TALK_01:
-					if (Creature* hedric = GetHedric())
-					{
-						Talk(hedric, SAY_PRE_BATTLE_1);
-						hedric->GetMotionMaster()->MovePath(HedricPath01, false);
-					}
-					Next(2s);
-					break;
-				case EVT_HELP_HEDRIC_TALK_03:
-					Talk(GetHedric(), SAY_PRE_BATTLE_3);
-					Next(5500ms);
-					break;
-				case EVT_HELP_JAINA_TALK_04:
-					Talk(GetJaina(), SAY_PRE_BATTLE_4);
-					Next(5s);
-					break;
-				case EVT_HELP_OPEN_PORTAL:
-					GetJaina()->SummonGameObject(GOB_PORTAL_TO_DALARAN, PortalPoint01, QuaternionData::QuaternionData(), 0s);
-					if (Creature* hedric = GetHedric())
-						hedric->SetFacingTo(0.461802f);
-					Next(500ms);
-					break;
-				case EVT_HELP_HEDRIC_BACKSTEP:
-					if (Creature* hedric = GetHedric())
-					{
-						hedric->SetWalk(true);
-						hedric->GetMotionMaster()->MoveBackward(MOVEMENT_INFO_POINT_01, HedricPoint02, nullptr, 1.4f);
-					}
-					Next(500ms);
-					break;
-				// Sortie du portail, un archimage a la fois : l'event se
-				// repete toutes les ~900ms tant qu'il en reste, puis passe la
-				// main au suivant une fois la table epuisee.
-				case EVT_HELP_ARCHMAGES_ARRIVAL:
-					if (archmagesIndex >= ARCHMAGES_LOCATION)
-					{
-						// Le dernier archimage est sorti : la 7e Legion entre a son
-						// tour dans la citadelle et se range pendant les salutations.
-						SpawnGenerals();
-						Next(2s);
-					}
-					else if (Creature* creature = instance->SummonCreature(archmagesLocation[archmagesIndex].dataId, PortalPoint01))
-					{
-						creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-						creature->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-						creature->SetSheath(SHEATH_STATE_UNARMED);
-						creature->CastSpell(creature, SPELL_TELEPORT_DUMMY);
-						creature->SetWalk(true);
-						creature->GetMotionMaster()->Clear();
-						creature->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, archmagesLocation[archmagesIndex].destination, false, archmagesLocation[archmagesIndex].destination.GetOrientation());
-						archmagesIndex++;
-						events.Repeat(800ms, 1s);
-					}
-					break;
-				case EVT_HELP_RHONIN_TALK_05:
-					Talk(GetRhonin(), SAY_PRE_BATTLE_5);
-					SetTarget(GetRhonin());
-					ClosePortal(DATA_PORTAL_TO_DALARAN);
-					Next(4500ms);
-					break;
-				case EVT_HELP_JAINA_TALK_06:
-					Talk(GetJaina(), SAY_PRE_BATTLE_6);
-					SetTarget(GetJaina());
-					Next(8s);
-					break;
-				case EVT_HELP_JAINA_TALK_07:
-					Talk(GetJaina(), SAY_PRE_BATTLE_7);
-					Next(9s);
-					break;
-				case EVT_HELP_THALEN_TALK_08:
-					Talk(GetThalen(), SAY_PRE_BATTLE_8);
-					SetTarget(GetThalen());
-					Next(6s);
-					break;
-				// Le plus haut grade de la 7e Legion se presente et Jaina
-				// remercie les generaux, avant de repartir les archimages.
-				case EVT_HELP_MARCUS_INTRO:
-					Talk(GetCreature(DATA_MARCUS_JONATHAN), SAY_GENERALS_MARCUS_INTRO);
-					SetTarget(GetCreature(DATA_MARCUS_JONATHAN));
-					Next(8500ms);
-					break;
-				case EVT_HELP_JAINA_THANKS_GENERALS:
-					Talk(GetJaina(), SAY_GENERALS_JAINA_THANKS);
-					SetTarget(GetJaina());
-					Next(7500ms);
-					break;
-				case EVT_HELP_JAINA_TALK_09:
-					Talk(GetJaina(), SAY_PRE_BATTLE_9);
-					SetTarget(GetJaina());
-					Next(7s);
-					break;
-				case EVT_HELP_JAINA_TALK_10:
-					Talk(GetJaina(), SAY_PRE_BATTLE_10);
-					Next(5500ms);
-					break;
-				case EVT_HELP_RHONIN_TALK_11:
-					Talk(GetRhonin(), SAY_PRE_BATTLE_11);
-					SetTarget(GetRhonin());
-					Next(2s);
-					break;
-				case EVT_HELP_JAINA_TALK_12:
-					Talk(GetJaina(), SAY_PRE_BATTLE_12);
-					SetTarget(GetTervosh());
-					Next(4s);
-					break;
-				// Repartition des generaux de la 7e Legion (Tides of War) : Jaina
-				// les poste aux cotes des defenseurs de chaque vague. Marcus et les
-				// deux nains aux portes principales, Aubrey aux docks, Shandris a
-				// la porte Ouest, Tiras'alan a la citadelle.
-				case EVT_HELP_MARCUS_TALK_01:
-					Talk(GetCreature(DATA_MARCUS_JONATHAN), SAY_GENERALS_MARCUS_01);
-					SetTarget(GetCreature(DATA_MARCUS_JONATHAN));
-					Next(6s);
-					break;
-				case EVT_HELP_JAINA_GATES:
-					Talk(GetJaina(), SAY_GENERALS_JAINA_GATES);
-					SetTarget(GetJaina());
-					Next(6s);
-					break;
-				case EVT_HELP_STOUTBLOW_TALK_01:
-					Talk(GetCreature(DATA_THADDUS_STOUTBLOW), SAY_GENERALS_STOUTBLOW_01);
-					SetTarget(GetCreature(DATA_THADDUS_STOUTBLOW));
-					Next(8s);
-					break;
-				case EVT_HELP_REDMANE_TALK_01:
-					Talk(GetCreature(DATA_HORRAN_REDMANE), SAY_GENERALS_REDMANE_01);
-					SetTarget(GetCreature(DATA_HORRAN_REDMANE));
-					Next(5s);
-					break;
-				case EVT_HELP_JAINA_DOCKS:
-					Talk(GetJaina(), SAY_GENERALS_JAINA_DOCKS);
-					SetTarget(GetJaina());
-					Next(6500ms);
-					break;
-				case EVT_HELP_AUBREY_TALK_01:
-					Talk(GetCreature(DATA_ADMIRAL_AUBREY), SAY_GENERALS_AUBREY_01);
-					SetTarget(GetCreature(DATA_ADMIRAL_AUBREY));
-					Next(5s);
-					break;
-				case EVT_HELP_JAINA_WEST:
-					Talk(GetJaina(), SAY_GENERALS_JAINA_WEST);
-					SetTarget(GetJaina());
-					Next(7s);
-					break;
-				case EVT_HELP_SHANDRIS_TALK_01:
-					Talk(GetCreature(DATA_SHANDRIS_FEATHERMOON), SAY_GENERALS_SHANDRIS_01);
-					SetTarget(GetCreature(DATA_SHANDRIS_FEATHERMOON));
-					Next(6s);
-					break;
-				case EVT_HELP_JAINA_CITADEL:
-					Talk(GetJaina(), SAY_GENERALS_JAINA_CITADEL);
-					SetTarget(GetJaina());
-					Next(6s);
-					break;
-				case EVT_HELP_TIRAS_ALAN_TALK_01:
-					Talk(GetCreature(DATA_GENERAL_TIRAS_ALAN), SAY_GENERALS_TIRAS_ALAN_01);
-					SetTarget(GetCreature(DATA_GENERAL_TIRAS_ALAN));
-					Next(4500ms);
-					break;
-				case EVT_HELP_VEREESA_TALK_13:
-					Talk(GetVereesa(), SAY_PRE_BATTLE_13);
-					SetTarget(GetVereesa());
-					Next(8s);
-					break;
-				case EVT_HELP_JAINA_TALK_14:
-					if (Creature* jaina = GetJaina())
-					{
-						Talk(jaina, SAY_PRE_BATTLE_14);
-						SetTarget(jaina);
-						jaina->SetTarget(ObjectGuid::Empty);
-						jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-					}
-					Next(10s);
-					break;
-				case EVT_HELP_JAINA_TALK_15:
-					if (Creature* jaina = GetJaina())
-					{
-						Talk(jaina, SAY_PRE_BATTLE_15);
-						if (Player* player = GetFirstPlayer())
-							SetTarget(player);
-					}
-					Next(5s);
-					break;
-				case EVT_HELP_MASS_TELEPORT:
-					ClearTarget();
-					GetJaina()->CastSpell(GetJaina(), SPELL_MASS_TELEPORT);
-					Next(4600ms);
-					break;
-				// Mise en place du champ de bataille : Kalecgos dragon prend
-				// son vol, tous les acteurs sont teleportes a leur poste
-				// (actorsRelocation) et recoivent leur role de la bataille
-				// (vignette, gossip, channel). Point d'arret : la suite passe
-				// par CRITERIA_TREE_RETRIEVE_JAINA.
-				case EVT_HELP_BATTLEFIELD_SETUP:
-					EnsureBarrierHasDamage();
-					if (Creature* kalecgos = GetKalecgosDragon())
-					{
-						kalecgos->setActive(true);
-						kalecgos->SetVisible(true);
-						kalecgos->SetSpeed(MOVE_RUN, 25.f);
-						kalecgos->AI()->SetData(DATA_KALECGOS_CIRCLE_EVENT, 0U);
-					}
-					for (uint8 i = 0; i < ACTORS_RELOCATION; i++)
-					{
-						if (Creature* creature = GetCreature(actorsRelocation[i].dataId))
-						{
-							// Z recale sur le sol : les points sont releves manuellement
-							Position destination = actorsRelocation[i].destination;
-							creature->UpdateAllowedPositionZ(destination.GetPositionX(), destination.GetPositionY(), destination.m_positionZ);
-
-							creature->RemoveAllAuras();
-							creature->SetTarget(ObjectGuid::Empty);
-							creature->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-							creature->SetSheath(SHEATH_STATE_MELEE);
-							creature->GetMotionMaster()->Clear();
-							creature->GetMotionMaster()->MoveIdle();
-							creature->NearTeleportTo(destination);
-							creature->SetHomePosition(destination);
-							creature->DoNotReacquireSpellFocusTarget();
-
-							switch (creature->GetEntry())
-							{
-								case NPC_AMARA_LEESON:
-									creature->CastSpell(creature, SPELL_PORTAL_CHANNELING_03);
-									break;
-								case NPC_RHONIN:
-									creature->SetVignette(VIGNETTE_RHONIN);
-									creature->CastSpell(creature, SPELL_CHAT_BUBBLE, true);
-									creature->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-									break;
-								case NPC_THADER_WINDERMERE:
-									creature->SetVignette(VIGNETTE_THADER_WINDERMERE);
-									creature->CastSpell(creature, SPELL_CHAT_BUBBLE, true);
-									creature->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-									break;
-								case NPC_THALEN_SONGWEAVER:
-									creature->CastSpell(creature, SPELL_PORTAL_CHANNELING_02);
-									break;
-								case NPC_JAINA_PROUDMOORE:
-									GetBarrier01()->UseDoorOrButton();
-									TeleportPlayers(GetJaina(), actorsRelocation[i].destination, 15.0f);
-									break;
-								case NPC_KALECGOS:
-								case NPC_VEREESA_WINDRUNNER:
-									creature->SetVisible(false);
-									break;
-							}
-						}
-					}
-					// Peine reste aux cotes de Jaina : c'est elle qui assommera
-					// Thalen (EVT_BATTLE_PAINED_KNOCKOUT). Masquee depuis sa
-					// sortie de la salle du conseil, elle reapparait ici.
-					if (Creature* pained = GetPained())
-					{
-						pained->SetVisible(true);
-						pained->SetSheath(SHEATH_STATE_MELEE);
-						pained->GetMotionMaster()->Clear();
-						pained->GetMotionMaster()->MoveIdle();
-						pained->NearTeleportTo(PainedPoint02);
-						pained->SetHomePosition(PainedPoint02);
-					}
-					break;
-
-				#pragma endregion
-
-				// The Battle (103 - 120)
-				// Trahison et capture de Thalen Songweaver (Tides of War,
-				// chapitre 17). La barriere magique des portes principales
-				// faiblit alors que Thalen est cense l'entretenir (dans le
-				// livre, c'est une porte) : Jaina comprend qu'il la defait,
-				// le frappe d'un trait arcanique, et Peine l'assomme pendant
-				// qu'il s'apprete a riposter. Deux
-				// soldats le ligotent et l'emportent vers la citadelle ; il
-				// n'est pas teleporte. Juste apres, la barriere cede et la Horde
-				// s'engouffre. Au meme moment, la porte Ouest est prise
-				// d'assaut : Thader et Kinndy y sont submerges.
-				#pragma region THE_BATTLE
-
-				case EVT_BATTLE_JAINA_NOTICE:
-					if (Creature* jaina = GetJaina())
-					{
-						Talk(jaina, SAY_THALEN_NOTICE_JAINA);
-                        if (Creature* thalen = GetThalen())
-                        {
-                            jaina->SetFacingToObject(thalen);
-                            jaina->SetEmoteState(EMOTE_STATE_NONE);
-                        }
-					}
-					Next(6500ms);
-					break;
-				// Le trait arcanique n'est qu'un visuel : Thalen reste allie
-				// jusqu'a sa capture, aucun sort hostile ne lui est lance.
-				case EVT_BATTLE_JAINA_STRIKE:
-					if (Creature* jaina = GetJaina())
-					{
-						Talk(jaina, SAY_THALEN_TRAITOR_JAINA);
-						jaina->HandleEmoteCommand(EMOTE_ONESHOT_SPELL_CAST_OMNI);
-
-						if (Creature* thalen = GetThalen())
-							thalen->RemoveAllAuras();
-					}
-					Next(2s);
-					break;
-				// Il ricane et leve les mains pour riposter. Peine, restee aux
-				// cotes de Jaina, le contourne pour le prendre a revers.
-				case EVT_BATTLE_THALEN_SNEER:
-					if (Creature* thalen = GetThalen())
-					{
-						if (Creature* jaina = GetJaina())
-							thalen->SetFacingToObject(jaina);
-						thalen->SetEmoteState(EMOTE_STATE_ARTDUALLOOP);
-						Talk(thalen, SAY_THALEN_SNEER);
-					}
-					Next(4500ms);
-					break;
-				// Peine l'assomme (Sap). Le sort exige une cible hostile et
-				// attaquable, alors que Thalen doit rester allie : il change de
-				// faction le temps du lancer, puis reprend la sienne. Le sort
-				// est instantane et resolu pendant CastSpell, dans la meme mise
-				// a jour : aucun allie n'a le temps de le prendre pour cible.
-				case EVT_BATTLE_PAINED_KNOCKOUT:
-					if (Creature* thalen = GetThalen())
-					{
-						if (Creature* pained = GetPained())
-						{
-							pained->SetFacingToObject(thalen);
-                            thalen->SetEmoteState(EMOTE_STATE_NONE);
-							thalen->SetFaction(FACTION_ENEMY);
-                            thalen->SetImmuneToAll(true);
-                        }
-					}
-					Next(350ms);
-					break;
-				// Les deux fantassins les plus proches de Jaina viennent le
-				// ligoter.
-				case EVT_BATTLE_SOLDIERS_BIND:
-					if (Creature* thalen = GetThalen())
-					{
-                        if (Creature* pained = GetPained())
-                        {
-                            pained->CastSpell(thalen, SPELL_CHARGE, TRIGGERED_IGNORE_CAST_TIME);
-                            pained->SetEmoteState(EMOTE_STATE_READY1H);
-                            thalen->CastSpell(thalen, SPELL_STUNNED);
-                        }
-
-						thalenEscort = SelectEscortFootmen();
-
-                        uint8 index = 0;
-						for (ObjectGuid const& guid : thalenEscort)
-						{
-							if (Creature* soldier = instance->GetCreature(guid))
-							{
-                                soldier->SetEmoteState(EMOTE_STATE_NONE);
-								soldier->GetMotionMaster()->Clear();
-								soldier->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, thalenFootmenPos[index],
-                                                                      true, thalen->GetAbsoluteAngle(soldier), {},
-                                                                      MovementWalkRunSpeedSelectionMode::ForceWalk);
-							}
-
-                            index++;
-						}
-					}
-					Next(1s);
-					break;
-				case EVT_BATTLE_JAINA_TALK_SPARED:
-                    if (Creature* thalen = GetThalen())
-                    {
-						thalen->AddAura(SPELL_TIED_UP, thalen);
-
-                        if (Creature* pained = GetPained())
-                        {
-                            pained->GetMotionMaster()->Clear();
-                            pained->GetMotionMaster()->MoveBackward(MOVEMENT_INFO_POINT_NONE, PainedPoint03,
-                                                                    thalen, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
-                        }
-                    }
-					for (ObjectGuid const& guid : thalenEscort)
-					{
-						if (Creature* soldier = instance->GetCreature(guid))
-							soldier->HandleEmoteCommand(EMOTE_ONESHOT_KNEEL);
-					}
-					if (Creature* jaina = GetJaina())
-						Talk(jaina, SAY_THALEN_SPARED_JAINA);
-					Next(4s);
-					break;
-				case EVT_BATTLE_PAINED_TALK_USEFUL:
-					Talk(GetPained(), SAY_THALEN_USEFUL_PAINED);
-					Next(5s);
-					break;
-				case EVT_BATTLE_JAINA_TALK_ONSLAUGHT:
-					Talk(GetJaina(), SAY_THALEN_ONSLAUGHT_JAINA);
-					Next(3s);
-					break;
-				case EVT_BATTLE_PAINED_TALK_TEA:
-					Talk(GetPained(), SAY_THALEN_TEA_PAINED);
-					Next(4s);
-					break;
-				case EVT_BATTLE_JAINA_TALK_EVENCANE:
-					if (Creature* jaina = GetJaina())
-					{
-						Talk(jaina, SAY_THALEN_EVENCANE_JAINA);
-                        if (Creature* hedric = GetHedric())
-                        {
-                            jaina->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-                            jaina->SetTarget(hedric->GetGUID());
-                            jaina->PlayOneShotAnimKitId(1530);
-                        }
-					}
-					Next(6s);
-					break;
-				// Hedric confie Thalen a ses deux soldats : ils l'emportent a
-				// pied vers la citadelle. Les trois suivent ThalenEscortPath en
-				// colonne (un soldat, Thalen, l'autre soldat).
-				case EVT_BATTLE_HEDRIC_TALK_ESCORT:
-					Talk(GetHedric(), SAY_THALEN_ESCORT_HEDRIC);
-					if (Creature* thalen = GetThalen())
-					{
-						std::array<Creature*, 3> const column =
-						{
-							thalenEscort.size() > 0 ? instance->GetCreature(thalenEscort[0]) : nullptr,
-							thalen,
-							thalenEscort.size() > 1 ? instance->GetCreature(thalenEscort[1]) : nullptr
-						};
-
-						for (uint8 i = 0; i < column.size(); i++)
-						{
-							if (!column[i])
-								continue;
-
-							ObjectGuid const guid = column[i]->GetGUID();
-							scheduler.Schedule(ESCORT_STAGGER * i, [this, guid](TaskContext /*context*/)
-							{
-								if (Creature* unit = instance->GetCreature(guid))
-								{
-									unit->GetMotionMaster()->Clear();
-                                    unit->GetMotionMaster()->MovePath(ThalenEscortPath, false,
-                                                                      {}, {},
-                                                                      MovementWalkRunSpeedSelectionMode::ForceWalk);
-								}
-							});
-						}
-
-						WatchThalenEscort();
-					}
-					Next(4s);
-					break;
-				case EVT_BATTLE_AMARA_TALK_VOUCHED:
-                    if (Creature* amara = GetAmara())
-                    {
-                        Talk(GetAmara(), SAY_THALEN_VOUCHED_AMARA);
-                        amara->RemoveAurasDueToSpell(SPELL_PORTAL_CHANNELING_03);
-                    }
-                    if (Creature* jaina = GetJaina())
-                    {
-                        jaina->SetTarget(ObjectGuid::Empty);
-                        jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-                    }
-					Next(6s);
-					break;
-				case EVT_BATTLE_JAINA_TALK_ALONE:
-					Talk(GetJaina(), SAY_THALEN_ALONE_JAINA);
-					Next(2500ms);
-					break;
-				case EVT_BATTLE_AMARA_TALK_ALONE:
-					Talk(GetAmara(), SAY_THALEN_ALONE_AMARA);
-					Next(2s);
-					break;
-				// La barriere cede. L'escorte est deja en route vers la citadelle
-				// (voir WatchThalenEscort).
-				case EVT_BATTLE_BARRIER_BREAKS:
-					Talk(GetJaina(), SAY_BATTLE_GATE_BREAKS);
-					if (GameObject* barrier = GetBarrier01())
-					{
-						scheduler.CancelGroup((uint32)BFTPhases::TheBattle);
-						barrier->ResetDoorOrButton();
-						if (Creature* trigger = barrier->SummonCreature(WORLD_TRIGGER, ExplodingPoint01, TEMPSUMMON_TIMED_DESPAWN, 5s))
-							trigger->CastSpell(trigger, SPELL_ARCANIC_EXPLOSION);
-					}
-					Next(3500ms);
-					break;
-				case EVT_BATTLE_ARCHMAGES_READY:
-                    if (Creature* amara = GetAmara())
-                        amara->CastSpell(amara, SPELL_PRISMATIC_BARRIER, true);
-					Next(3s);
-					break;
-				// A la porte Ouest, Thader et Kinndy sont pris d'assaut :
-				// Thader, a bout de forces, appelle des renforts et Kinndy le
-				// soigne. C'est ce tableau que les joueurs trouvent en arrivant.
-				case EVT_BATTLE_THADER_WOUNDED:
-					if (Creature* thader = GetCreature(DATA_THADER_WINDERMERE))
-					{
-						Talk(thader, SAY_BATTLE_05);
-						thader->RemoveAllAuras();
-						thader->SetRegenerateHealth(false);
-						thader->SetReactState(REACT_PASSIVE);
-						thader->SetStandState(UNIT_STAND_STATE_KNEEL);
-						thader->SetHealth(thader->CountPctFromMaxHealth(5));
-						thader->CastSpell(thader, SPELL_ARCANE_FX);
-
-						if (Creature* kinndy = GetCreature(DATA_KINNDY_SPARKSHINE))
-						{
-							kinndy->RemoveAllAuras();
-							kinndy->SetReactState(REACT_PASSIVE);
-							kinndy->CastSpell(kinndy, SPELL_CHANNEL_BLUE_MOVING);
-							kinndy->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, thader, 0.8f);
-						}
-					}
-					GetBarrier02()->ResetDoorOrButton();
-					Next(3s);
-					break;
-				// Premier debarquement et bascule en mode combat : la boucle
-				// de vagues demarre avec EVENT_MAINTAIN_THE_PROTECTION.
-				case EVT_BATTLE_FIRST_LANDING:
-					HordeMembersInvoker(DATA_WAVE_BOAT);
-                    TriggerGameEvent(EVENT_MAINTAIN_THE_PROTECTION);
-					break;
-
-				#pragma endregion
-
-				// Help the wounded (134 - 156)
-				// Deux blocs de dialogue apres la bataille. La partie I
-				// (134-141) se joue toujours ; la partie II (142-155) n'est
-				// lancee que si les joueurs suivent Jaina, et elle est annulee
-				// en bloc s'ils terminent l'etape avant la fin (voir
-				// CRITERIA_TREE_HELP_THE_WOUNDED).
-				#pragma region HELP_THE_WOUNDED
-
-				// PART I - Jaina et Hedric constatent les degats
-				case EVT_WOUNDED_JAINA_HEDRIC_FACE:
-					if (Creature* jaina = GetJaina())
-					{
-						if (Creature* hedric = GetHedric())
-						{
-							jaina->SetTarget(hedric->GetGUID());
-							jaina->SetEmoteState(EMOTE_STATE_STAND);
-
-							hedric->SetTarget(jaina->GetGUID());
-							hedric->SetEmoteState(EMOTE_STATE_STAND);
-						}
-					}
-					Next(800ms);
-					break;
-				case EVT_WOUNDED_JAINA_TALK_01:
-					Talk(GetJaina(), SAY_POST_BATTLE_01);
-					Next(2s);
-					break;
-				case EVT_WOUNDED_HEDRIC_TALK_02:
-					Talk(GetHedric(), SAY_POST_BATTLE_02);
-					Next(5s);
-					break;
-				// Thalen a ete libere pendant l'assaut : Vereesa et les
-				// sentinelles de Shandris sont parties le traquer dans le
-				// marecage, d'ou leur absence au moment de la bombe.
-				case EVT_WOUNDED_HEDRIC_TALK_02_BIS:
-					Talk(GetHedric(), SAY_POST_BATTLE_02_BIS);
-					Next(11s);
-					break;
-				case EVT_WOUNDED_JAINA_TALK_02_TER:
-					Talk(GetJaina(), SAY_POST_BATTLE_02_TER);
-					Next(6s);
-					break;
-				case EVT_WOUNDED_JAINA_TALK_03:
-					Talk(GetJaina(), SAY_POST_BATTLE_03);
-					Next(5500ms);
-					break;
-				case EVT_WOUNDED_JAINA_WALK:
-					ClearTarget();
-					if (Creature* jaina = GetJaina())
-					{
-						jaina->GetMotionMaster()->MovePath(JainaPath01, false);
-						jaina->SetHomePosition(JainaPoint06);
-					}
-					Next(1500ms);
-					break;
-				case EVT_WOUNDED_HEDRIC_WALK:
-					if (Creature* hedric = GetHedric())
-						hedric->GetMotionMaster()->MovePath(HedricPath02, false);
-					break;
-
-				// PART II - Jaina et Kinndy, pendant que les joueurs soignent
-				// les blesses (bloc annulable, voir plus haut)
-				case EVT_WOUNDED_JAINA_KINNDY_FACE:
-					if (Creature* jaina = GetJaina())
-					{
-						if (Creature* kinndy = GetKinndy())
-						{
-							jaina->SetTarget(kinndy->GetGUID());
-							kinndy->SetTarget(jaina->GetGUID());
-						}
-					}
-					Next(800ms);
-					break;
-				case EVT_WOUNDED_KINNDY_TALK_04:
-					Talk(GetKinndy(), SAY_POST_BATTLE_04);
-					Next(4s);
-					break;
-				case EVT_WOUNDED_JAINA_TALK_05:
-					Talk(GetJaina(), SAY_POST_BATTLE_05);
-					Next(7s);
-					break;
-				case EVT_WOUNDED_KINNDY_TALK_06:
-					if (Creature* kinndy = GetKinndy())
-					{
-						Talk(kinndy, SAY_POST_BATTLE_06);
-						kinndy->SetEmoteState(EMOTE_STATE_NONE);
-					}
-					Next(4s);
-					break;
-				case EVT_WOUNDED_JAINA_TALK_07:
-					Talk(GetJaina(), SAY_POST_BATTLE_07);
-					Next(3500ms);
-					break;
-				case EVT_WOUNDED_KINNDY_TALK_08:
-					Talk(GetKinndy(), SAY_POST_BATTLE_08);
-					Next(3s);
-					break;
-				case EVT_WOUNDED_JAINA_TALK_09:
-					Talk(GetJaina(), SAY_POST_BATTLE_09);
-					Next(13500ms);
-					break;
-				case EVT_WOUNDED_KINNDY_TALK_10:
-					Talk(GetKinndy(), SAY_POST_BATTLE_10);
-					Next(4s);
-					break;
-				case EVT_WOUNDED_JAINA_TALK_11:
-					Talk(GetJaina(), SAY_POST_BATTLE_11);
-					Next(7500ms);
-					break;
-				case EVT_WOUNDED_KINNDY_TALK_11_BIS:
-					Talk(GetKinndy(), SAY_POST_BATTLE_11_BIS);
-					Next(5s);
-					break;
-				case EVT_WOUNDED_JAINA_TALK_12:
-					Talk(GetJaina(), SAY_POST_BATTLE_12);
-					Next(8500ms);
-					break;
-				case EVT_WOUNDED_JAINA_TALK_13:
-					Talk(GetJaina(), SAY_POST_BATTLE_13);
-					Next(12s);
-					break;
-				case EVT_WOUNDED_KINNDY_TALK_14:
-					Talk(GetKinndy(), SAY_POST_BATTLE_14);
-					Next(3s);
-					break;
-				case EVT_WOUNDED_JAINA_TALK_15:
-					Talk(GetJaina(), SAY_POST_BATTLE_15);
-					Next(6500ms);
-					break;
-				case EVT_WOUNDED_SCENE_END:
-					ClearTarget();
-					if (Creature* jaina = GetJaina())
-					{
-						if (Creature* kinndy = GetKinndy())
-						{
-							jaina->SetFacingTo(3.15f);
-							kinndy->SetFacingTo(2.73f);
-						}
-					}
-					break;
-
-				#pragma endregion
-
-				// Wait for Archmage Leeson returns (162 - 180)
-				// Partie I (162-175) : Kalecgos previent Jaina du danger que
-				// represente l'iris, puis tout le monde regagne la table de
-				// banquet et Amara revient par le portail.
-				// Partie II (176-180) : dialogue avec Amara, puis Jaina se
-				// leve, ce qui enchaine sur la montee a la tour.
-				#pragma region WAIT_FOR_AMARA
-
-				// Part I - Avertissement de Kalecgos
-				case EVT_AMARA_KALEC_APPROACH:
-					GetKalecgosHuman()->GetMotionMaster()->MovePath(KalecPath02, false);
-					Next(8s);
-					break;
-				case EVT_AMARA_KALEC_TALK_01:
-					SetTarget(GetKalecgosHuman());
-					Talk(GetKalecgosHuman(), SAY_IRIS_WARN_01);
-					Next(1500ms);
-					break;
-				case EVT_AMARA_JAINA_TALK_02:
-					SetTarget(GetJaina());
-					Talk(GetJaina(), SAY_IRIS_WARN_02);
-					Next(2s);
-					break;
-				case EVT_AMARA_KALEC_TALK_03:
-					SetTarget(GetKalecgosHuman());
-					Talk(GetKalecgosHuman(), SAY_IRIS_WARN_03);
-					Next(5500ms);
-					break;
-				case EVT_AMARA_JAINA_TALK_04:
-					SetTarget(GetJaina());
-					Talk(GetJaina(), SAY_IRIS_WARN_04);
-					Next(8500ms);
-					break;
-				case EVT_AMARA_KALEC_TALK_05:
-					SetTarget(GetKalecgosHuman());
-					Talk(GetKalecgosHuman(), SAY_IRIS_WARN_05);
-					Next(2s);
-					break;
-				case EVT_AMARA_JAINA_TALK_06:
-					SetTarget(GetJaina());
-					Talk(GetJaina(), SAY_IRIS_WARN_06);
-					Next(8500ms);
-					break;
-				case EVT_AMARA_JAINA_TALK_07:
-					Talk(GetJaina(), SAY_IRIS_WARN_07);
-					Next(2s);
-					break;
-				case EVT_AMARA_KALEC_TALK_08:
-					SetTarget(GetKalecgosHuman());
-					Talk(GetKalecgosHuman(), SAY_IRIS_WARN_08);
-					Next(7s);
-					break;
-				case EVT_AMARA_RHONIN_TALK_09:
-					SetTarget(GetRhonin());
-					Talk(GetRhonin(), SAY_IRIS_WARN_09);
-					Next(6s);
-					break;
-				case EVT_AMARA_KALEC_LEAVE:
-					ClearTarget();
-					GetKalecgosHuman()->GetMotionMaster()->MovePath(KalecPath03, false);
-					Next(3s);
-					break;
-				case EVT_AMARA_RHONIN_LEAVE:
-                    GetRhonin()->GetMotionMaster()->MovePath(RhoninPath01, false);
-					Next(3s);
-					break;
-				case EVT_AMARA_LEESON_PATH:
-                    GetAmara()->GetMotionMaster()->MovePath(AmaraPath01, false);
-					Next(10s);
-					break;
-				case EVT_AMARA_LEESON_RETURN:
-					if (Creature* amara = GetAmara())
-					{
-						amara->SetVisible(true);
-						amara->GetMotionMaster()->MovePath(KalecPath02, false, {}, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
-					}
-					break;
-
-				// Part II - Retour d'Amara Leeson
-				case EVT_AMARA_JAINA_FACE:
-					if (Creature* jaina = GetJaina())
-					{
-						if (Creature* amara = GetAmara())
-						{
-							jaina->SetTarget(amara->GetGUID());
-							amara->SetTarget(jaina->GetGUID());
-						}
-					}
-					Next(1s);
-					break;
-				case EVT_AMARA_LEESON_TALK_10:
-					Talk(GetAmara(), SAY_IRIS_WARN_10);
-					Next(6s);
-					break;
-				case EVT_AMARA_JAINA_TALK_11:
-					Talk(GetJaina(), SAY_IRIS_WARN_11);
-					Next(4s);
-					break;
-				case EVT_AMARA_LEESON_LEAVE:
-					ClearTarget();
-					GetAmara()->GetMotionMaster()->MovePath(KalecPath03, false);
-					Next(4s);
-					break;
-				case EVT_AMARA_JAINA_TO_TOWER:
-					GetJaina()->GetMotionMaster()->MovePath(JainaPath02, false);
-					break;
-
-				#pragma endregion
-
-				// Retrieve Rhonin (181 - 192)
-				// Dernier acte au sommet de la tour : Jaina et Rhonin
-				// comprennent que la bombe va exploser. L'event 192 leve
-				// EVENT_REDUCE_IMPACT, qui bascule les joueurs dans la scene
-				// finale (voir scene_theramore_explosion en bas de fichier).
-				#pragma region RETRIEVE_RHONIN
-
-				case EVT_RHONIN_JAINA_TALK_01:
-					if (Creature* jaina = GetJaina())
-					{
-						Talk(jaina, SAY_IRIS_XPLOSION_01);
-						jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-					}
-					Next(5s);
-					break;
-				case EVT_RHONIN_JAINA_FACE:
-					if (Creature* jaina = GetJaina())
-					{
-						jaina->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-						jaina->SetFacingToObject(GetRhonin());
-						jaina->RemoveAllAuras();
-
-						if (Creature* rhonin = GetRhonin())
-						{
-							jaina->SetTarget(rhonin->GetGUID());
-
-							rhonin->SetTarget(jaina->GetGUID());
-							rhonin->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-						}
-					}
-					Next(3s);
-					break;
-				case EVT_RHONIN_TALK_02:
-					Talk(GetRhonin(), SAY_IRIS_XPLOSION_02);
-					Next(4s);
-					break;
-				case EVT_RHONIN_JAINA_TALK_03:
-					Talk(GetJaina(), SAY_IRIS_XPLOSION_03);
-					Next(5500ms);
-					break;
-				case EVT_RHONIN_TALK_04:
-					Talk(GetRhonin(), SAY_IRIS_XPLOSION_04);
-					Next(9s);
-					break;
-				case EVT_RHONIN_TALK_05:
-					Talk(GetRhonin(), SAY_IRIS_XPLOSION_05);
-					Next(11s);
-					break;
-				case EVT_RHONIN_TALK_06:
-					Talk(GetRhonin(), SAY_IRIS_XPLOSION_06);
-					Next(8s);
-					break;
-				case EVT_RHONIN_JAINA_TALK_07:
-					Talk(GetJaina(), SAY_IRIS_XPLOSION_07);
-					Next(6s);
-					break;
-				case EVT_RHONIN_TALK_08:
-					Talk(GetRhonin(), SAY_IRIS_XPLOSION_08);
-					Next(3500ms);
-					break;
-				case EVT_RHONIN_JAINA_TALK_09:
-					Talk(GetJaina(), SAY_IRIS_XPLOSION_09);
-					Next(6s);
-					break;
-				case EVT_RHONIN_TALK_10:
-					if (Creature* rhonin = GetRhonin())
-					{
-						Talk(rhonin, SAY_IRIS_XPLOSION_10);
-						rhonin->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
-						rhonin->RemoveAllAuras();
-					}
-					Next(13s);
-					break;
-				case EVT_RHONIN_REDUCE_IMPACT:
-					TriggerGameEvent(EVENT_REDUCE_IMPACT);
-					break;
-
-				#pragma endregion
-
-				// Evacuation scenes (121 - 129)
-				// Tides of War, chapitre 7. Quai : L'Etoile du matin part pour
-				// Gadgetzan, Cabestan ayant vu passer trop de soldats de la
-				// Horde. Auberge : Janene refuse de partir, et le docteur garde
-				// pres de lui ceux qui savent soigner.
-				#pragma region EVACUATION_SCENES
-
-				case EVT_EVAC_DOCKS_MATE_BOARDING:
-					Talk(GetCreature(DATA_MORNING_STAR_FIRST_MATE), SAY_EVAC_MATE_BOARDING);
-					Next(4s);
-					break;
-				case EVT_EVAC_DOCKS_MATE_RATCHET:
-					Talk(GetCreature(DATA_MORNING_STAR_FIRST_MATE), SAY_EVAC_MATE_RATCHET);
-					Next(5s);
-					break;
-				case EVT_EVAC_DOCKS_SHAMAN_ELEMENTS:
-					if (Creature* shaman = GetCreature(DATA_DRAENEI_SHAMAN))
-					{
-						Talk(shaman, SAY_EVAC_SHAMAN_ELEMENTS);
-						shaman->HandleEmoteCommand(EMOTE_ONESHOT_SPELL_CAST_OMNI);
-					}
-					Next(5s);
-					break;
-				case EVT_EVAC_DOCKS_MATE_FAREWELL:
-					Talk(GetCreature(DATA_MORNING_STAR_FIRST_MATE), SAY_EVAC_MATE_FAREWELL);
-					break;
-				case EVT_EVAC_INN_JANENE_STAYS:
-					Talk(GetCreature(DATA_INNKEEPER_JANENE), SAY_EVAC_JANENE_STAYS);
-					Next(4s);
-					break;
-				case EVT_EVAC_INN_JANENE_CURFEW:
-					Talk(GetCreature(DATA_INNKEEPER_JANENE), SAY_EVAC_JANENE_CURFEW);
-					Next(5s);
-					break;
-				case EVT_EVAC_INN_JANENE_HOME:
-					Talk(GetCreature(DATA_INNKEEPER_JANENE), SAY_EVAC_JANENE_HOME);
-					break;
-				case EVT_EVAC_INN_DOCTOR_VOLUNTEERS:
-					Talk(GetCreature(DATA_DOCTOR_VANHOWZEN), SAY_EVAC_DOCTOR_VOLUNTEERS);
-					Next(4s);
-					break;
-				case EVT_EVAC_INN_DOCTOR_HARBOR:
-					Talk(GetCreature(DATA_DOCTOR_VANHOWZEN), SAY_EVAC_DOCTOR_HARBOR);
-					break;
-
-				#pragma endregion
 			}
 		}
 
 		// =================================================================
+		// Scenes de dialogue
+		// =================================================================
+		// Chaque Play...Scene donne :
+		//   - les vrais PNJ que la scene remplace, et la place ou elle fait
+		//     apparaitre leur acteur (les memes constantes que le Lua, que le
+		//     generateur lit dans battle_for_theramore.h) : au signal "Ready",
+		//     ils y sont teleportes et masques ;
+		//   - ce que fait le serveur aux signaux propres a la scene ;
+		//   - l'etat dans lequel la scene laisse les vrais PNJ : ce que
+		//     faisaient les anciens events (fin de chemin, emote, aura...),
+		//     applique d'un coup quand tous les joueurs ont fini.
+		#pragma region DIALOGUE_SCENES
+
+		// Vrai PNJ remplace par un acteur de scene. Sans start, il reste ou il
+		// est (spawn en base, que le Lua lit aussi, ou place laissee par la
+		// scene precedente).
+		struct SceneActor
+		{
+			uint32 dataId;
+			Optional<Position> start = {};
+		};
+
+		using SceneCueHandler = CustomScenario::DialogueSceneDirector::CueHandler;
+		using SceneEndHandler = CustomScenario::DialogueSceneDirector::EndHandler;
+
+		void PlayDialogue(CustomScenario::DialogueScene const& scene, std::vector<SceneActor> cast,
+						  SceneCueHandler onCue, SceneEndHandler onEnd)
+		{
+			// En debug, les dialogues sont sautes : leur fin s'applique aussitot.
+			#ifdef CUSTOM_DEBUG
+				bool const skip = true;
+			#else
+				bool const skip = false;
+			#endif
+
+			scenes.Play(instance, scene, [this, cast = std::move(cast), onCue = std::move(onCue)](std::string_view cue)
+			{
+				if (cue == CustomScenario::SceneCue::Ready)
+					HideCast(cast);
+				else if (onCue)
+					onCue(cue);
+			}, std::move(onEnd), skip);
+		}
+
+		// Les acteurs viennent d'apparaitre : les vrais PNJ s'effacent a leur place.
+		void HideCast(std::vector<SceneActor> const& cast)
+		{
+			for (SceneActor const& actor : cast)
+			{
+				Creature* creature = GetCreature(actor.dataId);
+				if (!creature)
+					continue;
+
+				creature->GetMotionMaster()->Clear();
+				creature->GetMotionMaster()->MoveIdle();
+				creature->StopMoving();
+				if (actor.start)
+					creature->NearTeleportTo(*actor.start);
+				creature->SetVisible(false);
+			}
+		}
+
+		// Fin de scene : le vrai PNJ reprend la place ou son acteur s'est arrete.
+		Creature* Settle(uint32 dataId, Optional<Position> const& position = {}, bool visible = true)
+		{
+			Creature* creature = GetCreature(dataId);
+			if (!creature)
+				return nullptr;
+
+			creature->GetMotionMaster()->Clear();
+			creature->GetMotionMaster()->MoveIdle();
+			creature->StopMoving();
+			creature->SetTarget(ObjectGuid::Empty);
+			if (position)
+				creature->NearTeleportTo(*position);
+			if (!visible)
+				creature->SetVisible(false);
+			else if (position && !creature->IsVisible())
+				ShowAfterTeleport(creature);
+			else
+				creature->SetVisible(true);
+			return creature;
+		}
+
+		// Un PNJ masque ne recoit pas le paquet de teleport, et son changement
+		// de cellule n'est applique qu'a la mise a jour suivante de la carte :
+		// rendu visible tout de suite, il serait cree chez le client a son
+		// ancienne place et y resterait. On attend que la carte l'ait deplace.
+		void ShowAfterTeleport(Creature* creature)
+		{
+			ObjectGuid const guid = creature->GetGUID();
+			scheduler.Schedule(200ms, [this, guid](TaskContext /*context*/)
+			{
+				if (Creature* shown = instance->GetCreature(guid))
+					shown->SetVisible(true);
+			});
+		}
+
+		// Dernier point d'un chemin, la ou le MovePath aurait laisse le PNJ.
+		static Position PathEnd(WaypointPath const& path, Optional<float> facing = {})
+		{
+			WaypointNode const& node = path.Nodes.back();
+			return { node.X, node.Y, node.Z, facing.value_or(node.Orientation.value_or(0.f)) };
+		}
+
+		static Position WithFacing(Position position, float facing)
+		{
+			position.SetOrientation(facing);
+			return position;
+		}
+
+		// Destination d'une table Location indexee par data ID.
+		template <size_t N>
+		static Position Destination(Location const (&table)[N], uint32 dataId)
+		{
+			for (Location const& location : table)
+				if (location.dataId == dataId)
+					return location.destination;
+			return {};
+		}
+
+		// The Council : Kalecgos sort et se dissout, Tervosh monte a l'etage,
+		// Kinndy quitte la salle, Jaina rejoint la table, ce qui valide l'etape
+		// (npc_jaina_theramore, point 1).
+		void PlayCouncilScene()
+		{
+			PlayDialogue(BFTScenes::Council,
+			{
+				{ DATA_JAINA_PROUDMOORE }, { DATA_KALECGOS }, { DATA_ARCHMAGE_TERVOSH }, { DATA_KINNDY_SPARKSHINE }
+			}, {}, [this]()
+			{
+				ClearTarget();
+				// npc_kalecgos_theramore, path 1 : il s'est teleporte et dissous dans
+				// la scene, il reste masque jusqu'a l'evacuation.
+				if (Creature* kalecgos = Settle(DATA_KALECGOS, PathEnd(KalecPath01), false))
+				{
+					kalecgos->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+					kalecgos->SetImmuneToAll(true);
+				}
+				// npc_archmage_tervosh et npc_kinndy_sparkshine : sortis de scene.
+				if (Creature* tervosh = Settle(DATA_ARCHMAGE_TERVOSH, PathEnd(TervoshPath02, 2.14f), false))
+					tervosh->SetEmoteState(EMOTE_STATE_NONE);
+				Settle(DATA_KINNDY_SPARKSHINE, PathEnd(KinndyPath01, 4.62f), false);
+				if (Creature* jaina = Settle(DATA_JAINA_PROUDMOORE, JainaPoint01))
+					jaina->SetWalk(true);
+				TriggerGameEvent(EVENT_THE_COUNCIL);
+			});
+		}
+
+		// The Unknown Tauren : Perith et le chevalier n'existent que dans la
+		// scene. Peine y quitte la salle (npc_pained, path 1) : elle attend,
+		// masquee, la bataille, et sa sortie valide l'etape.
+		void PlayUnknownTaurenScene()
+		{
+			PlayDialogue(BFTScenes::UnknownTauren, { { DATA_JAINA_PROUDMOORE, JainaPoint01 } }, {}, [this]()
+			{
+				ClearTarget();
+				if (Creature* jaina = Settle(DATA_JAINA_PROUDMOORE, WithFacing(JainaPoint01, 0.39f)))
+				{
+					jaina->SetEmoteState(EMOTE_STATE_NONE);
+					jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+				}
+				if (Creature* pained = instance->SummonCreature(NPC_PAINED, PathEnd(KinndyPath01)))
+				{
+					pained->SetWalk(true);
+					pained->SetVisible(false);
+				}
+				TriggerGameEvent(EVENT_THE_UNKNOWN_TAUREN);
+			});
+		}
+
+		// A Little Help : Hedric ouvre la scene, les archimages sortent du
+		// portail de Dalaran, la 7e Legion se range devant Jaina, puis le
+		// teleport de masse emmene tout le monde sur le champ de bataille.
+		void PlayALittleHelpScene()
+		{
+			// Ambiance du siege et premiers figurants de la Horde, des le debut.
+			ScheduleCameraShakes();
+			HordeMembersInvoker(DATA_DECORATION_ENTRANCE, true);
+			// Les cris de la foule (SOUND_FEARFUL_CROWD) sont joues par la scene :
+			// Hedric est encore masque, personne ne les entendrait venir de lui.
+			if (Creature* hedric = GetHedric())
+				hedric->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+
+			PlayDialogue(BFTScenes::ALittleHelp,
+			{
+				{ DATA_JAINA_PROUDMOORE, JainaPoint02 }, { DATA_ARCHMAGE_TERVOSH, TervoshPoint01 },
+				{ DATA_KINNDY_SPARKSHINE, KinndyPoint02 }, { DATA_KALECGOS, KalecgosPoint01 },
+				{ DATA_HEDRIC_EVENCANE, HedricPoint01 }
+			}, [this](std::string_view cue)
+			{
+				if (cue == "Portal")
+				{
+					if (Creature* jaina = GetJaina())
+						jaina->SummonGameObject(GOB_PORTAL_TO_DALARAN, PortalPoint01, QuaternionData::QuaternionData(), 0s);
+				}
+				else if (cue == "ClosePortal")
+					ClosePortal(DATA_PORTAL_TO_DALARAN);
+			}, [this]()
+			{
+				// Les vrais archimages et generaux apparaissent la ou la scene a
+				// laisse les siens, juste avant la mise en place.
+				for (Location const& location : archmagesLocation)
+				{
+					if (Creature* archmage = instance->SummonCreature(location.dataId, location.destination))
+					{
+						archmage->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+						archmage->SetUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+						archmage->SetSheath(SHEATH_STATE_UNARMED);
+						archmage->SetWalk(true);
+					}
+				}
+				SpawnGenerals();
+				BattlefieldSetup();
+			});
+		}
+
+		// The Battle : trahison et capture de Thalen Songweaver (Tides of War,
+		// chapitre 17). La barriere magique des portes principales faiblit
+		// alors que Thalen est cense l'entretenir : Jaina le frappe d'un trait
+		// arcanique, Peine l'assomme, deux soldats le ligotent et l'emportent
+		// vers la citadelle. Juste apres, la barriere cede et la Horde
+		// s'engouffre, pendant qu'a la porte Ouest Thader et Kinndy sont
+		// submerges. Les deux soldats sont de vrais PNJ (OnTheBattleCue).
+		void PlayTheBattleScene()
+		{
+			PlayDialogue(BFTScenes::TheBattle,
+			{
+				{ DATA_JAINA_PROUDMOORE }, { DATA_HEDRIC_EVENCANE }, { DATA_THALEN_SONGWEAVER },
+				{ DATA_AMARA_LEESON }, { DATA_PAINED }
+			}, [this](std::string_view cue) { OnTheBattleCue(cue); }, [this]()
+			{
+				ClearTarget();
+				Position const thalenPost = Destination(actorsRelocation, DATA_THALEN_SONGWEAVER);
+				// Elle est revenue face a la porte, a l'orientation de son poste.
+				if (Creature* jaina = Settle(DATA_JAINA_PROUDMOORE))
+				{
+					jaina->SetFacingTo(Destination(actorsRelocation, DATA_JAINA_PROUDMOORE).GetOrientation());
+					jaina->SetEmoteState(EMOTE_STATE_NONE);
+					jaina->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+				}
+				Settle(DATA_HEDRIC_EVENCANE);
+				if (Creature* pained = Settle(DATA_PAINED, PainedPoint03))
+				{
+					pained->SetFacingTo(pained->GetAbsoluteAngle(thalenPost));
+					pained->SetEmoteState(EMOTE_STATE_READY1H);
+				}
+				if (Creature* amara = Settle(DATA_AMARA_LEESON))
+				{
+					amara->RemoveAurasDueToSpell(SPELL_PORTAL_CHANNELING_03);
+					// Son acteur vient de la lancer dans la scene : l'aura seule,
+					// sans rejouer le lancer.
+					amara->AddAura(SPELL_PRISMATIC_BARRIER, amara);
+				}
+				// Premier debarquement et bascule en mode combat : la boucle de
+				// vagues demarre avec EVENT_MAINTAIN_THE_PROTECTION.
+				HordeMembersInvoker(DATA_WAVE_BOAT);
+				TriggerGameEvent(EVENT_MAINTAIN_THE_PROTECTION);
+			});
+		}
+
+		void OnTheBattleCue(std::string_view cue)
+		{
+			// Peine vient d'assommer Thalen : les deux fantassins les plus proches
+			// de Jaina accourent.
+			if (cue == "Bind")
+			{
+				thalenEscort = SelectEscortFootmen();
+				Creature* thalen = GetThalen();
+
+				uint8 index = 0;
+				for (ObjectGuid const& guid : thalenEscort)
+				{
+					if (Creature* soldier = instance->GetCreature(guid))
+					{
+						float const facing = thalen ? thalen->GetAbsoluteAngle(soldier) : thalenFootmenPos[index].GetOrientation();
+						soldier->SetEmoteState(EMOTE_STATE_NONE);
+						soldier->GetMotionMaster()->Clear();
+						soldier->GetMotionMaster()->MovePoint(MOVEMENT_INFO_POINT_NONE, thalenFootmenPos[index],
+															  true, facing, {}, MovementWalkRunSpeedSelectionMode::ForceWalk);
+					}
+
+					index++;
+				}
+			}
+			// Ils le ligotent.
+			else if (cue == "Kneel")
+			{
+				for (ObjectGuid const& guid : thalenEscort)
+				{
+					if (Creature* soldier = instance->GetCreature(guid))
+						soldier->HandleEmoteCommand(EMOTE_ONESHOT_KNEEL);
+				}
+			}
+			// Hedric confie Thalen aux deux soldats : le vrai Thalen reprend la
+			// place de son acteur, assomme et ligote, et ils l'emportent a pied
+			// vers la citadelle en colonne (un soldat, Thalen, l'autre soldat).
+			// Thalen passe ennemi comme au moment ou Peine l'a assomme.
+			else if (cue == "Escort")
+			{
+				Creature* thalen = GetThalen();
+				if (!thalen)
+					return;
+
+				thalen->RemoveAllAuras();
+				thalen->SetEmoteState(EMOTE_STATE_NONE);
+				thalen->SetFaction(FACTION_ENEMY);
+				thalen->SetImmuneToAll(true);
+				thalen->CastSpell(thalen, SPELL_STUNNED);
+				thalen->AddAura(SPELL_TIED_UP, thalen);
+				thalen->SetVisible(true);
+
+				std::array<Creature*, 3> const column =
+				{
+					thalenEscort.size() > 0 ? instance->GetCreature(thalenEscort[0]) : nullptr,
+					thalen,
+					thalenEscort.size() > 1 ? instance->GetCreature(thalenEscort[1]) : nullptr
+				};
+
+				for (uint8 i = 0; i < column.size(); i++)
+				{
+					if (!column[i])
+						continue;
+
+					ObjectGuid const guid = column[i]->GetGUID();
+					scheduler.Schedule(ESCORT_STAGGER * i, [this, guid](TaskContext /*context*/)
+					{
+						if (Creature* unit = instance->GetCreature(guid))
+						{
+							unit->GetMotionMaster()->Clear();
+							unit->GetMotionMaster()->MovePath(ThalenEscortPath, false,
+															  {}, {},
+															  MovementWalkRunSpeedSelectionMode::ForceWalk);
+						}
+					});
+				}
+
+				WatchThalenEscort();
+			}
+			// La barriere cede. L'escorte est deja en route vers la citadelle
+			// (voir WatchThalenEscort).
+			else if (cue == "BarrierBreaks")
+			{
+				if (GameObject* barrier = GetBarrier01())
+				{
+					scheduler.CancelGroup((uint32)BFTPhases::TheBattle);
+					barrier->ResetDoorOrButton();
+					if (Creature* trigger = barrier->SummonCreature(WORLD_TRIGGER, ExplodingPoint01, TEMPSUMMON_TIMED_DESPAWN, 5s))
+						trigger->CastSpell(trigger, SPELL_ARCANIC_EXPLOSION);
+				}
+			}
+			// A la porte Ouest, Thader et Kinndy sont pris d'assaut : Thader, a
+			// bout de forces, appelle des renforts et Kinndy le soigne. C'est ce
+			// tableau que les joueurs trouvent en arrivant.
+			else if (cue == "ThaderWounded")
+			{
+				if (Creature* thader = GetCreature(DATA_THADER_WINDERMERE))
+				{
+					Talk(thader, SAY_BATTLE_05);
+					thader->RemoveAllAuras();
+					thader->SetRegenerateHealth(false);
+					thader->SetReactState(REACT_PASSIVE);
+					thader->SetStandState(UNIT_STAND_STATE_KNEEL);
+					thader->SetHealth(thader->CountPctFromMaxHealth(5));
+					thader->CastSpell(thader, SPELL_ARCANE_FX);
+
+					if (Creature* kinndy = GetCreature(DATA_KINNDY_SPARKSHINE))
+					{
+						kinndy->RemoveAllAuras();
+						kinndy->SetReactState(REACT_PASSIVE);
+						kinndy->CastSpell(kinndy, SPELL_CHANNEL_BLUE_MOVING);
+						kinndy->GetMotionMaster()->MoveCloserAndStop(MOVEMENT_INFO_POINT_NONE, thader, 0.8f);
+					}
+				}
+				GetBarrier02()->ResetDoorOrButton();
+			}
+		}
+
+		// Scenes du livre pendant l'evacuation (Tides of War, chapitre 7) :
+		// le temoin parle, puis reprend sa place.
+		void PlayWitnessScene(CustomScenario::DialogueScene const& scene, std::initializer_list<uint32> witnesses)
+		{
+			std::vector<SceneActor> cast;
+			for (uint32 dataId : witnesses)
+				cast.push_back({ dataId });
+
+			PlayDialogue(scene, std::move(cast), {}, [this, ids = std::vector<uint32>(witnesses)]()
+			{
+				for (uint32 dataId : ids)
+					Settle(dataId);
+			});
+		}
+
+		// Help The Wounded, partie I : Jaina et Hedric constatent les degats,
+		// puis Jaina gagne la place (npc_jaina_theramore, path 1 : elle s'y
+		// tourne vers les joueurs et leve EVENT_FIND_JAINA_04) et Hedric
+		// rejoint son poste de garde (npc_hedric_evencane, point 2). Hedric a
+		// combattu : il repart de son poste de la bataille.
+		void PlayHelpTheWoundedScene()
+		{
+			PlayDialogue(BFTScenes::Wounded,
+			{
+				{ DATA_JAINA_PROUDMOORE, JainaPoint03 },
+				{ DATA_HEDRIC_EVENCANE, Destination(actorsRelocation, DATA_HEDRIC_EVENCANE) }
+			}, {}, [this]()
+			{
+				ClearTarget();
+				if (Creature* jaina = Settle(DATA_JAINA_PROUDMOORE, PathEnd(JainaPath01)))
+				{
+					jaina->SetEmoteState(EMOTE_STATE_STAND);
+					jaina->SetHomePosition(JainaPoint06);
+					if (jaina->IsAIEnabled())
+						jaina->AI()->WaypointPathEnded(0, JainaPath01.Id);
+				}
+				if (Creature* hedric = Settle(DATA_HEDRIC_EVENCANE, HedricPoint03))
+				{
+					if (hedric->IsAIEnabled())
+						hedric->AI()->MovementInform(POINT_MOTION_TYPE, MOVEMENT_INFO_POINT_02);
+				}
+			});
+		}
+
+		// Help The Wounded, partie II : Jaina reconforte Kinndy pendant que les
+		// joueurs soignent les blesses (annulee par CRITERIA_TREE_HELP_THE_WOUNDED).
+		void PlayWoundedKinndyScene()
+		{
+			PlayDialogue(BFTScenes::WoundedKinndy, { { DATA_JAINA_PROUDMOORE }, { DATA_KINNDY_SPARKSHINE } }, {}, [this]()
+			{
+				Settle(DATA_JAINA_PROUDMOORE);
+				if (Creature* kinndy = Settle(DATA_KINNDY_SPARKSHINE))
+					kinndy->SetEmoteState(EMOTE_STATE_NONE);
+				FaceAfterWounded();
+			});
+		}
+
+		// Fin des dialogues d'apres-bataille, que la partie II ait ete jouee ou non.
+		void FaceAfterWounded()
+		{
+			ClearTarget();
+			if (Creature* jaina = GetJaina())
+				jaina->SetFacingTo(3.15f);
+			if (Creature* kinndy = GetKinndy())
+				kinndy->SetFacingTo(2.73f);
+		}
+
+		// Wait For Archmage Leeson : Kalecgos previent Jaina du danger que
+		// represente l'iris, Rhonin et Kalecgos s'en vont, Amara revient puis
+		// repart, et Jaina part vers le sommet de la tour (npc_jaina_theramore,
+		// path 2 : elle y reapparait et ouvre le portail vers Hurlevent).
+		void PlayWaitForAmaraScene()
+		{
+			PlayDialogue(BFTScenes::WaitForAmara,
+			{
+				{ DATA_JAINA_PROUDMOORE }, { DATA_KALECGOS }, { DATA_RHONIN }, { DATA_AMARA_LEESON },
+				{ DATA_KINNDY_SPARKSHINE }, { DATA_HEDRIC_EVENCANE }
+			}, [this](std::string_view cue)
+			{
+				// Rhonin quitte la place et reapparait au sommet de la tour
+				// (npc_rhonin, path 1).
+				if (cue == "RhoninGone")
+				{
+					if (Creature* rhonin = Settle(DATA_RHONIN, PathEnd(RhoninPath01), false))
+						if (rhonin->IsAIEnabled())
+							rhonin->AI()->WaypointPathEnded(0, RhoninPath01.Id);
+				}
+				// Retour d'Amara (npc_amara_leeson, path 2).
+				else if (cue == "AmaraBack")
+					TriggerGameEvent(EVENT_WAIT_ARCHMAGE_LESSON);
+			}, [this]()
+			{
+				ClearTarget();
+				// npc_kalecgos_theramore et npc_amara_leeson, path 3 : sortis de scene.
+				Settle(DATA_KALECGOS, PathEnd(KalecPath03), false);
+				Settle(DATA_AMARA_LEESON, PathEnd(KalecPath03), false);
+				Settle(DATA_KINNDY_SPARKSHINE);
+				Settle(DATA_HEDRIC_EVENCANE);
+				if (Creature* jaina = Settle(DATA_JAINA_PROUDMOORE, PathEnd(JainaPath02), false))
+					if (jaina->IsAIEnabled())
+						jaina->AI()->WaypointPathEnded(0, JainaPath02.Id);
+			});
+		}
+
+		// Retrieve Rhonin : dernier acte au sommet de la tour. La fin leve
+		// EVENT_REDUCE_IMPACT, qui bascule les joueurs dans la scene de
+		// l'explosion (voir scene_theramore_explosion en bas de fichier).
+		void PlayRetrieveRhoninScene()
+		{
+			PlayDialogue(BFTScenes::RetrieveRhonin, { { DATA_JAINA_PROUDMOORE }, { DATA_RHONIN } }, {}, [this]()
+			{
+				Creature* jaina = Settle(DATA_JAINA_PROUDMOORE);
+				Creature* rhonin = Settle(DATA_RHONIN);
+				if (jaina)
+				{
+					jaina->RemoveAllAuras();
+					if (rhonin)
+					{
+						jaina->SetFacingToObject(rhonin);
+						jaina->SetTarget(rhonin->GetGUID());
+					}
+				}
+				if (rhonin)
+				{
+					rhonin->RemoveAllAuras();
+					rhonin->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+					if (jaina)
+						rhonin->SetTarget(jaina->GetGUID());
+				}
+				TriggerGameEvent(EVENT_REDUCE_IMPACT);
+			});
+		}
+
+		// Mise en place du champ de bataille, au bout du teleport de masse :
+		// Kalecgos dragon prend son vol, tous les acteurs sont teleportes a leur
+		// poste (actorsRelocation) et recoivent leur role de la bataille
+		// (vignette, gossip, channel). La suite passe par
+		// CRITERIA_TREE_RETRIEVE_JAINA.
+		void BattlefieldSetup()
+		{
+			EnsureBarrierHasDamage();
+			if (Creature* kalecgos = GetKalecgosDragon())
+			{
+				kalecgos->setActive(true);
+				kalecgos->SetVisible(true);
+				kalecgos->SetSpeed(MOVE_RUN, 25.f);
+				kalecgos->AI()->SetData(DATA_KALECGOS_CIRCLE_EVENT, 0U);
+			}
+			for (uint8 i = 0; i < ACTORS_RELOCATION; i++)
+			{
+				if (Creature* creature = GetCreature(actorsRelocation[i].dataId))
+				{
+					// Z recale sur le sol : les points sont releves manuellement
+					Position destination = actorsRelocation[i].destination;
+					creature->UpdateAllowedPositionZ(destination.GetPositionX(), destination.GetPositionY(), destination.m_positionZ);
+
+					creature->RemoveAllAuras();
+					creature->SetTarget(ObjectGuid::Empty);
+					creature->RemoveUnitFlag2(UNIT_FLAG2_CANNOT_TURN);
+					creature->SetSheath(SHEATH_STATE_MELEE);
+					creature->GetMotionMaster()->Clear();
+					creature->GetMotionMaster()->MoveIdle();
+					creature->NearTeleportTo(destination);
+					creature->SetHomePosition(destination);
+					creature->DoNotReacquireSpellFocusTarget();
+					// Masques pendant la scene A Little Help (voir ShowAfterTeleport).
+					if (!creature->IsVisible() && creature->GetEntry() != NPC_KALECGOS
+						&& creature->GetEntry() != NPC_VEREESA_WINDRUNNER)
+						ShowAfterTeleport(creature);
+
+					switch (creature->GetEntry())
+					{
+						case NPC_AMARA_LEESON:
+							creature->CastSpell(creature, SPELL_PORTAL_CHANNELING_03);
+							break;
+						case NPC_RHONIN:
+							creature->SetVignette(VIGNETTE_RHONIN);
+							creature->CastSpell(creature, SPELL_CHAT_BUBBLE, true);
+							creature->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+							break;
+						case NPC_THADER_WINDERMERE:
+							creature->SetVignette(VIGNETTE_THADER_WINDERMERE);
+							creature->CastSpell(creature, SPELL_CHAT_BUBBLE, true);
+							creature->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+							break;
+						case NPC_THALEN_SONGWEAVER:
+							creature->CastSpell(creature, SPELL_PORTAL_CHANNELING_02);
+							break;
+						case NPC_JAINA_PROUDMOORE:
+							GetBarrier01()->UseDoorOrButton();
+							TeleportPlayers(GetJaina(), actorsRelocation[i].destination, 15.0f);
+							break;
+						case NPC_KALECGOS:
+						case NPC_VEREESA_WINDRUNNER:
+							creature->SetVisible(false);
+							break;
+					}
+				}
+			}
+			// Peine reste aux cotes de Jaina : c'est elle qui assommera Thalen
+			// (SCENE_BFT_THE_BATTLE). Masquee depuis sa sortie de la salle du
+			// conseil, elle reapparait ici.
+			if (Creature* pained = GetPained())
+			{
+				pained->SetSheath(SHEATH_STATE_MELEE);
+				pained->GetMotionMaster()->Clear();
+				pained->GetMotionMaster()->MoveIdle();
+				pained->NearTeleportTo(PainedPoint02);
+				pained->SetHomePosition(PainedPoint02);
+				ShowAfterTeleport(pained);
+			}
+		}
+
+		#pragma endregion
+
+		// =================================================================
 		// Etat interne
 		// =================================================================
-		EventMap events;                  // Chaine des events cinematiques
-		CustomScenario::DialogueClock dialogue;   // Temps de parole : Next() attend la fin de la replique
+		EventMap events;                  // Delais avant les cinematiques
+		CustomScenario::DialogueSceneDirector scenes;   // Scenes de dialogue en cours
+		CustomScenario::AmbientVoices voices{ scenes }; // Crieur et civils : une voix a la fois, aucune pendant une scene
 		TaskScheduler scheduler;          // Taches recurrentes (auras, explosions d'ambiance)
-		uint32 eventId;                   // Dernier event execute (sert a Next() pour planifier eventId + 1)
 		uint32 woundedTroops;             // Blesses deja evacues par les joueurs
-		uint8 archmagesIndex;             // Prochain archimage a faire sortir du portail (EVT_HELP_ARCHMAGES_ARRIVAL)
 		uint8 waves;                      // Index de la prochaine vague dans Waves[]
 		BFTPhases phase;                  // Phase courante du scenario
 
@@ -2499,7 +1689,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		#pragma region UTILS
 
 		// Rayon de dispersion et decalage vertical du teleport groupe.
-		static constexpr float TELEPORT_SPREAD_RADIUS = 8.0f;
+		static constexpr float TELEPORT_SPREAD_RADIUS     = 8.0f;
 		// Scene de Thalen : Peine le prend a revers pour l'assommer.
 		static constexpr float PAINED_BEHIND_DISTANCE     = 1.5f;
 		// Recul de Thalen sous le trait arcanique de Jaina.
@@ -2509,20 +1699,22 @@ class scenario_battle_for_theramore : public InstanceMapScript
 		// ecart entre les departs de la colonne sur ThalenEscortPath.
 		static constexpr float ESCORT_SEARCH_RANGE        = 60.0f;
 		static constexpr Milliseconds ESCORT_STAGGER      = 1500ms;
-		static constexpr float TELEPORT_Z_OFFSET      = 3.0f;
+		static constexpr float TELEPORT_Z_OFFSET          = 3.0f;
 		// Proportion des troupes survivantes qui laissent un blesse a evacuer.
 		static constexpr uint32 WOUNDED_SPAWN_CHANCE  = 80;
 		// Fin de l'evacuation -> le second crie l'ordre du depart (les civils
 		// disparaissent des la fin de l'etape ; le delai laisse finir la scene
 		// du quai si le second est le dernier temoin), puis monte a bord.
-		static constexpr Milliseconds MORNING_STAR_DEPARTURE_DELAY = 25s;
-		static constexpr Milliseconds MORNING_STAR_CAST_OFF_DELAY  = 6s;
+		static constexpr Milliseconds MORNING_STAR_DEPARTURE_DELAY = 32s;
+		static constexpr Milliseconds MORNING_STAR_CAST_OFF_DELAY  = 35s;
 
-		// Talk null-safe : un acteur despawne en cours de scene ne doit pas
-		// faire tomber le serveur, la replique est simplement perdue.
+		// Talk null-safe : un acteur despawne ne doit pas faire tomber le
+		// serveur, la replique est simplement perdue. Les dialogues des
+		// cinematiques, eux, sont dits par les scenes.
 		void Talk(Creature* creature, uint8 textId)
 		{
-			dialogue.Say(creature, textId);
+			if (creature && creature->IsAIEnabled())
+				creature->AI()->Talk(textId);
 		}
 
 		// Joueur au nom duquel crediter un criteria de scenario.
@@ -2560,14 +1752,6 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			if (playerList.empty())
 				return nullptr;
 			return playerList.begin()->GetSource();
-		}
-
-		// Enchaine sur l'event suivant de la chaine. C'est ce +1 qui rend
-		// l'ordre numerique des case significatif.
-		void Next(const Milliseconds& time)
-		{
-			eventId++;
-			events.ScheduleEvent(eventId, dialogue.Consume(time));
 		}
 
 		// Temoins de l'evacuation : gossip et vignette le temps de l'etape.
@@ -2615,13 +1799,13 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			switch (scene)
 			{
 				case EvacuationScene::Docks:
-					events.ScheduleEvent(EVT_EVAC_DOCKS_MATE_BOARDING, 1s);
+					events.ScheduleEvent(EVT_EVAC_DOCKS_SCENE, 1s);
 					break;
 				case EvacuationScene::Janene:
-					events.ScheduleEvent(EVT_EVAC_INN_JANENE_STAYS, 1s);
+					events.ScheduleEvent(EVT_EVAC_JANENE_SCENE, 1s);
 					break;
 				case EvacuationScene::Doctor:
-					events.ScheduleEvent(EVT_EVAC_INN_DOCTOR_VOLUNTEERS, 1s);
+					events.ScheduleEvent(EVT_EVAC_DOCTOR_SCENE, 1s);
 					break;
 				default:
 					break;
@@ -2647,42 +1831,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			});
 		}
 
-		// Met en scene un dialogue : tous les acteurs presents se tournent
-		// vers celui qui parle. Le locuteur lui-meme est exclu pour ne pas se
-		// cibler soi-meme.
-		void SetTarget(Unit* unit)
-		{
-			// Locuteur absent (general despawne, spawn manquant) : la replique est
-			// perdue par Talk, inutile de faire tourner les tetes.
-			if (!unit)
-				return;
-
-			ObjectGuid guid = unit->GetGUID();
-			for (uint8 i = 0; i < eventCreatureDataCount; i++)
-			{
-				if (Creature* creature = GetCreature(creatureData[i].type))
-				{
-					if (creature->IsTrigger())
-						continue;
-
-					if (creature->GetGUID() == guid)
-						continue;
-
-					// Hedric n'entre en scene qu'a partir de la preparation :
-					// avant, il est cense etre ailleurs et ne doit pas suivre
-					// les dialogues du regard.
-					if (creature->GetEntry() == NPC_HEDRIC_EVENCANE
-						&& phase < BFTPhases::Preparation)
-					{
-						continue;
-					}
-
-					creature->SetTarget(guid);
-				}
-			}
-		}
-
-		// Fin de dialogue : tout le monde relache sa cible.
+		// Fin de dialogue : tout le monde relache sa cible (les regards des
+		// scenes ne touchent que leurs acteurs, mais un vrai PNJ peut garder
+		// une cible d'avant la scene).
 		void ClearTarget()
 		{
 			for (uint8 i = 0; i < eventCreatureDataCount; i++)
@@ -2751,20 +1902,21 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			instance->SummonCreatureGroup(waveId, &members);
 			for (TempSummon* horde : members)
 			{
-                switch (horde->GetEntry())
-                {
-                    case NPC_WAVE_CALLER_GRUHTA:
-                        horde->SetVignette(VIGNETTE_WAVE_CALLER_GRUHTA);
-                        break;
-                    case NPC_CAPTAIN_DROK:
-                        horde->SetVignette(VIGNETTE_CAPTAIN_DROK);
-                        break;
-                }
+				switch (horde->GetEntry())
+				{
+					case NPC_WAVE_CALLER_GRUHTA:
+						horde->SetVignette(VIGNETTE_WAVE_CALLER_GRUHTA);
+						break;
+					case NPC_CAPTAIN_DROK:
+						horde->SetVignette(VIGNETTE_CAPTAIN_DROK);
+						break;
+				}
 
-                horde->SetRegenerateHealth(false);
+				horde->SetRegenerateHealth(false);
+				horde->setActive(true);
 
-                if (Unit* target = SelectNearestHostileInRange(horde))
-                    horde->AI()->AttackStart(target);
+				if (Unit* target = SelectNearestHostileInRange(horde))
+					horde->AI()->AttackStart(target);
 
 				if (scored)
 				{
@@ -2772,7 +1924,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 					waveMembers.push_back(horde->GetGUID());
 				}
 
-                if (dummies)
+				if (dummies)
 				{
 					horde->SetImmuneToAll(true);
 
@@ -2799,9 +1951,9 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 					switch (horde->GetEntry())
 					{
-                        case NPC_PORTAL_TO_ORGRIMMAR:
-                            horde->SetUninteractible(true);
-                            break;
+						case NPC_PORTAL_TO_ORGRIMMAR:
+							horde->SetUninteractible(true);
+							break;
 						case NPC_ROKNAH_LOA_SINGER:
 							horde->CastSpell(horde, SPELL_CHANNEL_WATER);
 							break;
@@ -2816,14 +1968,17 @@ class scenario_battle_for_theramore : public InstanceMapScript
 							horde->SetSpeedRate(MOVE_RUN, 2.f);
 							horde->SetSpeedRate(MOVE_FLIGHT, 2.f);
 							horde->m_Events.AddEvent(new HordeBombardierThrowBomb(horde),
-                                                     horde->m_Events.CalculateTime(Seconds(urand(2, 8))));
+													 horde->m_Events.CalculateTime(Seconds(urand(2, 8))));
 							break;
-                        case NPC_HORDE_DEMOLISHER:
-                            if (waveId == DATA_DECORATION_WEST)
-                                horde->m_Events.AddEvent(new HordeDemolisherThrowBoulder(horde),
-                                                        horde->m_Events.CalculateTime(Seconds(urand(2, 8))));
-                            break;
-                    }
+						case NPC_HORDE_DEMOLISHER:
+							if (waveId == DATA_DECORATION_WEST)
+								horde->m_Events.AddEvent(new HordeDemolisherThrowBoulder(horde, WestWallStripStart, WestWallStripEnd),
+														horde->m_Events.CalculateTime(Seconds(urand(2, 8))));
+							else if (waveId == DATA_DECORATION_ENTRANCE && horde->GetExactDist2d(EntranceDemolisherPoint) < 5.0f)
+								horde->m_Events.AddEvent(new HordeDemolisherThrowBoulder(horde, IslandStripStart, IslandStripEnd),
+														horde->m_Events.CalculateTime(Seconds(urand(2, 8))));
+							break;
+					}
 
 					dummyMembers.push_back(horde->GetGUID());
 				}
@@ -2952,8 +2107,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				{
 					troop->SetVisible(false);
 					if (Creature* wounded = troop->SummonCreature(NPC_THERAMORE_WOUNDED_TROOP,
-                                                                  troop->GetPosition(),
-                                                                  TempSummonType::TEMPSUMMON_MANUAL_DESPAWN))
+																  troop->GetPosition(),
+																  TempSummonType::TEMPSUMMON_MANUAL_DESPAWN))
 					{
 						uint32 health = troop->GetMaxHealth();
 						Powers power = troop->GetPowerType();
@@ -2965,8 +2120,8 @@ class scenario_battle_for_theramore : public InstanceMapScript
 						wounded->SetHealth(health * frand(0.15f, 0.20f));
 						wounded->SetDisplayId(troop->GetDisplayId());
 						wounded->SetImmuneToNPC(true);
-                        wounded->AddAura(SPELL_COSMETIC_DEATH, wounded);
-                        wounded->AddAura(SPELL_COSMETIC_FREEZE, wounded);
+						wounded->AddAura(SPELL_COSMETIC_DEATH, wounded);
+						wounded->AddAura(SPELL_COSMETIC_FREEZE, wounded);
 						wounded->SetVignette(VIGNETTE_ALLIANCE_TROOPS);
 					}
 				}
@@ -3075,37 +2230,26 @@ class scenario_battle_for_theramore : public InstanceMapScript
 			}
 		}
 
-		// La flotte de la 7e Legion a accoste : juste apres les archimages, ses
-		// generaux entrent dans la citadelle et viennent se ranger devant
-		// Jaina (voir generalsLocation). Ils remplacent les anciens spawns
-		// statiques d'Aubrey et de Tiras'alan (supprimes en base).
+		// La flotte de la 7e Legion a accoste : ses generaux sont entres dans
+		// la citadelle pendant la scene A Little Help (generalsLocation). Les
+		// vrais apparaissent a leur place du briefing, au bout de leur chemin
+		// d'arrivee. Ils remplacent les anciens spawns statiques d'Aubrey et de
+		// Tiras'alan (supprimes en base).
 		void SpawnGenerals()
 		{
-			for (uint8 i = 0; i < GENERALS_LOCATION; i++)
+			for (Location const& location : generalsLocation)
 			{
-				if (generalsLocation[i].delay == 0ms)
-					SpawnGeneral(i);
-				else
-					scheduler.Schedule(generalsLocation[i].delay, [this, i](TaskContext /*context*/) { SpawnGeneral(i); });
+				WaypointNode const& node = location.path->Nodes.back();
+				Position const place(node.X, node.Y, node.Z, node.Orientation.value_or(location.position.GetOrientation()));
+
+				Creature* general = instance->SummonCreature(location.dataId, place);
+				if (!general)
+					continue;
+
+				general->SetSheath(SHEATH_STATE_UNARMED);
+				general->SetHomePosition(place);
 			}
 		}
-
-		void SpawnGeneral(uint8 index)
-		{
-			Location const& location = generalsLocation[index];
-			Creature* general = instance->SummonCreature(location.dataId, location.position);
-			if (!general)
-				return;
-
-			// Le repos est fixe d'emblee sur la place du briefing : un evade en
-			// cours de route ne le renverrait pas a l'entree de la citadelle.
-			// Au bout du chemin, l'AI se tourne vers Jaina et pose
-			// UNIT_FLAG2_CANNOT_TURN (WaypointPathEnded).
-			WaypointNode const& place = location.path->Nodes.back();
-			general->SetSheath(SHEATH_STATE_UNARMED);
-			general->SetHomePosition(place.X, place.Y, place.Z, place.Orientation.value_or(location.position.GetOrientation()));
-			general->GetMotionMaster()->MovePath(*location.path, false);
-        }
 
 		// Les deux fantassins de la ville les plus proches de Jaina : ce sont
 		// eux qui ligotent et emportent Thalen. Seules les troupes statiques
@@ -3117,7 +2261,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 				return {};
 
 			std::vector<Creature*> candidates;
-            GetCreatureListWithEntryInGrid(candidates, jaina, NPC_THERAMORE_FOOTMAN, 10.f);
+			GetCreatureListWithEntryInGrid(candidates, jaina, NPC_THERAMORE_FOOTMAN, 10.f);
 
 			GuidVector escort;
 			for (Creature* troop : candidates)
@@ -3215,7 +2359,7 @@ class scenario_battle_for_theramore : public InstanceMapScript
 
 		// Explosions d'ambiance sur la barriere pendant toute la bataille.
 		// Taggee (uint32)BFTPhases::TheBattle pour pouvoir etre annulee en bloc
-		// quand la barriere cede (EVT_BATTLE_BARRIER_BREAKS).
+		// quand la barriere cede (signal "BarrierBreaks" de SCENE_BFT_THE_BATTLE).
 		void EnsureBarrierHasDamage()
 		{
 			scheduler.Schedule(1s, (uint32)BFTPhases::TheBattle, [this](TaskContext explosion)
@@ -3352,4 +2496,5 @@ void AddSC_scenario_battle_for_theramore()
 	new scenario_battle_for_theramore();
 	new scene_theramore_intro();
 	new scene_theramore_explosion();
+	new CustomScenario::DialogueSceneScript("scene_bft_dialogue");
 }

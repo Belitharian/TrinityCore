@@ -1827,6 +1827,8 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 		SPELL_ARCANE_BARRAGE        = 450499,
 		SPELL_ARCANE_BLAST          = 1222815,
 		SPELL_TITAN_FORCE_SHIELD    = 1223453,
+		SPELL_PRISMATIC_BOLT        = 1295924,
+		SPELL_PRISMATIC_BOLT_BUFF   = 1295942,
 	};
 
 	enum Misc
@@ -1835,6 +1837,12 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 	};
 
 	bool healDone;
+
+	// Trait prismatique ! remplace Arcane Blast tant que le buff est actif.
+	uint32 GetArcaneBlastSpell() const
+	{
+		return me->HasAura(SPELL_PRISMATIC_BOLT_BUFF) ? SPELL_PRISMATIC_BOLT : SPELL_ARCANE_BLAST;
+	}
 
 	void Reset() override
 	{
@@ -1889,7 +1897,7 @@ struct npc_sunreaver_summoner : public npc_sunreaver_unit
 		scheduler
 			.Schedule(1ms, [this](TaskContext arcane_blast)
 			{
-				DoCastVictim(SPELL_ARCANE_BLAST);
+				DoCastVictim(GetArcaneBlastSpell());
 				arcane_blast.Repeat(2300ms);
 			})
 			.Schedule(2s, [this](TaskContext /*arcane_blitz*/)

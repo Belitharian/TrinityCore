@@ -27,6 +27,7 @@
 
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
+#include "DB2Stores.h"
 #include "GameObject.h"
 #include "InstanceScript.h"
 #include "KillRewarder.h"
@@ -37,10 +38,12 @@
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
+#include "SpellAuraEffects.h"
 #include "WaypointDefines.h"
 #include "CustomAI.h"
 #include "spell_warlock.h"
 #include "battle_for_theramore.h"
+#include "../CustomScenario.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -88,6 +91,11 @@ struct npc_theramore_citizen : public CustomAI
 	// civil reste sur place.
 	static constexpr uint32 CRY_EMOTE_CHANCE = 60;
 	static constexpr uint32 ANSWER_CRIER_CHANCE = 30;
+	// Silence laisse autour d'un civil qui vient de parler : les voisins ne
+	// s'enchainent pas (CustomScenario::AmbientVoices). Une replique refusee
+	// n'est pas dite, le civil se contente de son emote.
+	static constexpr Milliseconds VOICE_GAP_MIN = 4s;
+	static constexpr Milliseconds VOICE_GAP_MAX = 5s;
 	// Arrive sur le pont : le temps de faire un pas a bord avant de disparaitre.
 	static constexpr Milliseconds BOARDING_DESPAWN_DELAY = 1s;
 	// Identifiants des chemins construits a la volee, recus par
@@ -107,7 +115,7 @@ struct npc_theramore_citizen : public CustomAI
 		{
 			case ACTION_ANSWER_CRIER:
 				if (!evacuating && roll_chance(ANSWER_CRIER_CHANCE))
-					Talk(SAY_THERAMORE_CITIZEN_FEARED);
+					Say(SAY_THERAMORE_CITIZEN_FEARED);
 				break;
 			// Etape validee : tout le monde est repute a bord, ceux qui
 			// marchaient encore vers le quai comme ceux qui attendaient.
@@ -185,16 +193,16 @@ struct npc_theramore_citizen : public CustomAI
 				case 1:
 				{
 					if (StartEvacuation())
-						Talk(SAY_THERAMORE_CITIZEN_FLEE);
+						Say(SAY_THERAMORE_CITIZEN_FLEE);
 					else if (roll_chance(CRY_EMOTE_CHANCE))
 					{
 						me->HandleEmoteCommand(RAND(EMOTE_STATE_CRY, EMOTE_STATE_COWER));
-						Talk(SAY_THERAMORE_CITIZEN_CRY);
+						Say(SAY_THERAMORE_CITIZEN_CRY);
 					}
 					else
 					{
 						me->HandleEmoteCommand(RAND(EMOTE_ONESHOT_WAVE, EMOTE_ONESHOT_NO));
-						Talk(SAY_THERAMORE_CITIZEN_FEARED);
+						Say(SAY_THERAMORE_CITIZEN_FEARED);
 					}
 					break;
 				}
@@ -205,6 +213,11 @@ struct npc_theramore_citizen : public CustomAI
 	private:
 	bool warned;            // Deja credite par un joueur
 	bool evacuating;        // En route vers L'Etoile du matin
+
+	void Say(uint8 textGroup)
+	{
+		CustomScenario::AmbientVoices::Talk(me, textGroup, randtime(VOICE_GAP_MIN, VOICE_GAP_MAX));
+	}
 
 	static float StreetDistance(uint8 a, uint8 b)
 	{
@@ -323,6 +336,10 @@ struct npc_theramore_citizen : public CustomAI
 		}
 
 		evacuating = true;
+		// Objet actif jusqu'a son embarquement : loin des joueurs, sa cellule
+		// n'est plus mise a jour, il s'arretait en route et ne disparaissait
+		// jamais a bord (les civils s'entassaient sur le pont).
+		me->setActive(true);
 		me->SetEmoteState(EMOTE_STATE_NONE);
 		me->SetWalk(false);
 		me->GetMotionMaster()->Clear();
@@ -368,6 +385,12 @@ struct npc_theramore_citizen : public CustomAI
 // portes fermees au coucher du soleil, couvre-feu deux cloches plus tard,
 // volontaires pour le docteur. Les civils voisins lui repondent parfois,
 // agaces de l'entendre repeter la meme chose.
+//
+// Il lit chaque annonce une fois (creature_text ne repete pas une replique du
+// groupe avant d'avoir dit les autres), puis se contente le plus souvent de
+// sonner la cloche. On l'entend dans toute la ville : il se tait quand
+// quelqu'un parle, ou que ce soit, ou qu'une scene se joue
+// (CustomScenario::AmbientVoices), et reessaie un peu plus tard.
 struct npc_theramore_crier : public CustomAI
 {
 	enum Spells
@@ -382,11 +405,19 @@ struct npc_theramore_crier : public CustomAI
 
 	// Intervalle entre deux proclamations.
 	static constexpr Milliseconds FIRST_PROCLAMATION_DELAY = 3s;
-	static constexpr Milliseconds PROCLAMATION_MIN = 25s;
-	static constexpr Milliseconds PROCLAMATION_MAX = 1min;
-	// Les civils a portee de voix lui repondent apres la proclamation.
-	static constexpr Milliseconds ANSWER_DELAY = 6s;
+	static constexpr Milliseconds PROCLAMATION_MIN = 45s;
+	static constexpr Milliseconds PROCLAMATION_MAX = 90s;
+	// Voix prise : nouvel essai apres ce delai.
+	static constexpr Milliseconds PROCLAMATION_RETRY = 3s;
+	// Annonces en base (creature_text 500025, groupe 0) : une fois toutes
+	// lues, il ne reprend la parole qu'une fois sur ANNOUNCE_AGAIN_CHANCE.
+	static constexpr uint8 PROCLAMATIONS_COUNT = 8;
+	static constexpr uint32 ANNOUNCE_AGAIN_CHANCE = 33;
+	// Silence laisse apres une proclamation, avant que quelqu'un lui reponde.
+	static constexpr Milliseconds VOICE_GAP = 1s;
+	static constexpr Milliseconds ANSWER_DELAY = 1500ms;
 	static constexpr float ANSWER_RANGE = 20.0f;
+	uint8 proclamations = 0;
     // Civils a portee de voix, memorises au debut des proclamations : ils se
     // tournent vers le crieur et lui repondent parfois. Des GUID et non des
     // pointeurs, car un civil evacue disparait a bord de L'Etoile du matin.
@@ -414,10 +445,27 @@ struct npc_theramore_crier : public CustomAI
 			    me->SetEmoteState(EMOTE_STATE_WACRIERSTAND01);
 			    scheduler.Schedule(FIRST_PROCLAMATION_DELAY, [this](TaskContext proclamation)
 			    {
-				    me->HandleEmoteCommand(EMOTE_ONESHOT_WACRIERTALK);
-				    Talk(SAY_PROCLAMATION);
+				    // Toutes les annonces lues : le plus souvent, juste la cloche.
+				    if (proclamations >= PROCLAMATIONS_COUNT && !roll_chance(ANNOUNCE_AGAIN_CHANCE))
+				    {
+					    me->HandleEmoteCommand(EMOTE_ONESHOT_WACRIERTALK);
+					    proclamation.Repeat(PROCLAMATION_MIN, PROCLAMATION_MAX);
+					    return;
+				    }
 
-				    proclamation.Schedule(ANSWER_DELAY, [this](TaskContext /*answer*/)
+				    // Crie a toute la ville (creature_text TextRange 1) : personne
+				    // ne parle par-dessus, ou qu'il soit.
+				    Optional<Milliseconds> const duration = CustomScenario::AmbientVoices::Talk(me, SAY_PROCLAMATION, VOICE_GAP, CustomScenario::AmbientVoices::Everywhere);
+				    if (!duration)
+				    {
+					    proclamation.Repeat(PROCLAMATION_RETRY);
+					    return;
+				    }
+
+				    me->HandleEmoteCommand(EMOTE_ONESHOT_WACRIERTALK);
+				    ++proclamations;
+
+				    proclamation.Schedule(*duration + VOICE_GAP + ANSWER_DELAY, [this](TaskContext /*answer*/)
 				    {
 					    if (listeners.empty())
 						    return;
@@ -591,72 +639,196 @@ struct npc_unmanned_tank : public CustomAI
 // -------------------------------------------------------------------------
 // npc_wounded_theramore_troop - Blesse a evacuer (phase HelpTheWounded)
 // -------------------------------------------------------------------------
-// Le joueur lance un sort de teleport sur le blesse pour l'evacuer. Le
-// compteur DATA_WOUNDED_TROOPS est tenu par l'InstanceScript : tous les
-// blesses despawnent en silence sauf le dernier, qui declenche la replique
-// de remerciement de Jaina.
+// A l'approche d'un blesse, le joueur recoit l'aura SPELL_EVACUATE_OVERRIDE
+// (Override Spells) : son bouton d'action devient "Evacuer le blesse"
+// (SPELL_EVACUATE_WOUNDED, voir spell_theramore_evacuate_wounded), qui
+// appelle Evacuate. Le compteur DATA_WOUNDED_TROOPS est tenu par
+// l'InstanceScript : tous les blesses sont teleportes et despawnent sauf le
+// dernier, dont la teleportation echoue a cause des interferences de la
+// bombe ; il declenche la replique de remerciement de Jaina.
 struct npc_wounded_theramore_troop : public ScriptedAI
 {
+	// Distance a laquelle le bouton d'action apparait.
+	static constexpr float EVACUATE_RANGE = 8.0f;
+	// Rythme de la verification de proximite.
+	static constexpr Milliseconds OVERRIDE_CHECK = 500ms;
+	// Le temps que le visuel de teleportation se joue avant le despawn.
+	static constexpr Milliseconds EVACUATED_DESPAWN = 2s;
+
 	npc_wounded_theramore_troop(Creature* creature) : ScriptedAI(creature),
-		preventClick(false)
+		evacuated(false), teleported(false), overrideCheck(0ms)
 	{
 		instance = creature->GetInstanceScript();
 	}
 
-	enum Spells
-	{
-		SPELL_TELEPORT_TROOP = 69074
-	};
-
 	InstanceScript* instance;
-	bool preventClick;                      // Anti double-comptage : un blesse ne compte qu'une fois
+	bool evacuated;                         // Anti double-comptage : un blesse ne compte qu'une fois
+	bool teleported;                        // Faux pour le dernier : la teleportation a echoue
+	Milliseconds overrideCheck;             // Avant la prochaine verification de proximite
+	GuidUnorderedSet overridden;            // Joueurs a qui ce blesse a donne le bouton
 
-	void SpellHit(WorldObject* caster, SpellInfo const* spell) override
+	void InitializeAI() override
 	{
-		if (spell->Id != SPELL_TELEPORT_TROOP)
-			return;
+		ScriptedAI::InitializeAI();
+		// L'ancien spellclick (sort 69074) est remplace par le bouton d'action.
+		me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+	}
 
-		// Deux joueurs peuvent lancer le sort en meme temps : on ne credite
-		// qu'une seule fois par blesse.
-		if (preventClick)
-			return;
-
-		if (Player* player = caster->ToPlayer())
+	// DATA_WOUNDED_EVACUABLE : encore a evacuer. DATA_WOUNDED_TELEPORTED :
+	// la derniere evacuation a reussi (spell_theramore_evacuate_wounded).
+	uint32 GetData(uint32 type) const override
+	{
+		switch (type)
 		{
-			#ifdef CUSTOM_DEBUG
-				for (uint8 i = 0; i < NUMBER_OF_WOUNDED; i++)
-					KillRewarder::Reward(player, me, NPC_THERAMORE_WOUNDED_TROOP);
-			#else
-				KillRewarder::Reward(player, me, NPC_THERAMORE_WOUNDED_TROOP);
-			#endif
+			case DATA_WOUNDED_EVACUABLE:  return evacuated ? 0 : 1;
+			case DATA_WOUNDED_TELEPORTED: return teleported ? 1 : 0;
+			default:                      return 0;
+		}
+	}
+
+	// Etape validee : les blesses restants ne sont plus a evacuer, le bouton
+	// disparait (UpdateOverride le retire a ceux qui l'avaient).
+	void DoAction(int32 action) override
+	{
+		if (action != ACTION_WOUNDED_EVACUATION_END)
+			return;
+
+		evacuated = true;
+		UpdateOverride();
+	}
+
+	void UpdateAI(uint32 diff) override
+	{
+		overrideCheck -= Milliseconds(diff);
+		if (overrideCheck > 0ms)
+			return;
+
+		overrideCheck = OVERRIDE_CHECK;
+		UpdateOverride();
+	}
+
+	// Le bouton suit la proximite : les joueurs a portee le recoivent, ceux qui
+	// s'eloignent le perdent, sauf si un autre blesse a evacuer est a portee.
+	void UpdateOverride()
+	{
+		if (!evacuated)
+		{
+			me->GetMap()->DoOnPlayers([this](Player* player)
+			{
+				if (!player->IsAlive() || !player->IsWithinDist(me, EVACUATE_RANGE))
+					return;
+
+				overridden.insert(player->GetGUID());
+				if (!player->HasAura(SPELL_EVACUATE_OVERRIDE))
+					player->CastSpell(player, SPELL_EVACUATE_OVERRIDE, true);
+				// Notre barre porte aussi le seau ; sans le seau (feux eteints
+				// avant la fin des evacuations), le bouton seul. Le seau, donne
+				// apres, ou retire, a pu changer la barre : on remet la notre.
+				uint32 const bar = player->HasAura(SPELL_WATER_BUCKET_AURA) ? EVACUATE_OVERRIDE_DATA : EVACUATE_ONLY_OVERRIDE_DATA;
+				if (*player->m_activePlayerData->OverrideSpellsID != int32(bar))
+					ShowOverrideBar(player, bar);
+			});
 		}
 
-		me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+		std::erase_if(overridden, [this](ObjectGuid const& guid)
+		{
+			Player* player = ObjectAccessor::GetPlayer(*me, guid);
+			if (!player)
+				return true;
+
+			if (!evacuated && player->IsAlive() && player->IsWithinDist(me, EVACUATE_RANGE))
+				return false;
+
+			if (!IsNearOtherWounded(player))
+				RemoveEvacuateButton(player);
+			return true;
+		});
+	}
+
+	// Un joueur n'a qu'une barre de remplacement : retirer celle du bouton
+	// remet l'OverrideSpellsID a zero, meme si le seau d'eau (aura 42336,
+	// sa propre barre) est encore la. On reapplique alors la barre du seau.
+	static void RemoveEvacuateButton(Player* player)
+	{
+		player->RemoveAurasDueToSpell(SPELL_EVACUATE_OVERRIDE);
+		if (AuraEffect const* bucket = player->GetAuraEffect(SPELL_WATER_BUCKET_AURA, EFFECT_0))
+			ShowOverrideBar(player, uint32(bucket->GetMiscValue()));
+	}
+
+	// Affiche une barre de remplacement comme le fait l'effet Override Spells,
+	// sans toucher aux auras. Rappeler HandleEffect(apply) sur une aura deja
+	// appliquee l'inscrivait une seconde fois dans les listes du joueur : la
+	// copie restait apres le retrait de l'aura (fin des feux) et la pose
+	// suivante du bouton plantait (Unit::IsHighestExclusiveAuraEffect).
+	static void ShowOverrideBar(Player* player, uint32 overrideId)
+	{
+		player->SetOverrideSpellsId(overrideId);
+		if (OverrideSpellDataEntry const* overrideSpells = sOverrideSpellDataStore.LookupEntry(overrideId))
+			for (int32 spellId : overrideSpells->Spells)
+				if (spellId)
+					player->AddTemporarySpell(uint32(spellId));
+	}
+
+	bool IsNearOtherWounded(Player* player) const
+	{
+		std::list<Creature*> wounded;
+		player->GetCreatureListWithEntryInGrid(wounded, NPC_THERAMORE_WOUNDED_TROOP, EVACUATE_RANGE);
+		for (Creature* other : wounded)
+		{
+			if (other != me && other->IsAIEnabled() && other->AI()->GetData(DATA_WOUNDED_EVACUABLE))
+				return true;
+		}
+		return false;
+	}
+
+	// Appele par spell_theramore_evacuate_wounded (effet DUMMY), le joueur en
+	// guid.
+	void SetGUID(ObjectGuid const& guid, int32 /*id*/) override
+	{
+		Player* player = ObjectAccessor::GetPlayer(*me, guid);
+		if (player)
+			Evacuate(player);
+	}
+
+	void Evacuate(Player* player)
+	{
+		// Deux joueurs peuvent lancer le sort en meme temps : on ne credite
+		// qu'une seule fois par blesse.
+		if (evacuated)
+			return;
+
+		evacuated = true;
+
+		#ifdef CUSTOM_DEBUG
+			for (uint8 i = 0; i < NUMBER_OF_WOUNDED; i++)
+				KillRewarder::Reward(player, me, NPC_THERAMORE_WOUNDED_TROOP);
+		#else
+			KillRewarder::Reward(player, me, NPC_THERAMORE_WOUNDED_TROOP);
+		#endif
+
 		me->SetVignette(VIGNETTE_NONE);
 
 		uint32 counter = instance->GetData(DATA_WOUNDED_TROOPS);
 
-		// Tous les blesses sauf le dernier partent discretement ; le dernier
-		// reste en place et declenche la replique de Jaina.
+		// Tous les blesses sauf le dernier sont teleportes ; la teleportation
+		// du dernier echoue (interferences de la bombe) : il reste en place
+		// et declenche la replique de Jaina.
 		if (counter < NUMBER_OF_WOUNDED - 1)
 		{
-			me->DespawnOrUnsummon();
+			teleported = true;
+			me->DespawnOrUnsummon(EVACUATED_DESPAWN);
 		}
 		else
 		{
-			if (Player* player = caster->ToPlayer())
-			{
-				me->PlayDistanceSound(SOUND_COUNTERSPELL, player);
-				if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
-					jaina->AI()->Talk(SAY_WOUNDED_TROOP, player);
-			}
+			me->PlayDistanceSound(SOUND_COUNTERSPELL, player);
+			if (Creature* jaina = instance->GetCreature(DATA_JAINA_PROUDMOORE))
+				jaina->AI()->Talk(SAY_WOUNDED_TROOP, player);
 		}
 
-		counter += 1;
+		instance->SetData(DATA_WOUNDED_TROOPS, counter + 1);
 
-		instance->SetData(DATA_WOUNDED_TROOPS, counter);
-
-		preventClick = true;
+		// Plus rien a evacuer ici : le bouton part avec le blesse.
+		UpdateOverride();
 	}
 };
 
@@ -1416,9 +1588,13 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 		SPELL_MASS_POLYMORPH            = 383121,
 		SPELL_ARCANE_TEMPO              = 383997,
 		SPELL_ARCANE_EXPLOSION          = 414381,
-		SPELL_ARCANE_ORB                = 440458
+		SPELL_ARCANE_ORB                = 440458,
+		SPELL_PRISMATIC_BOLT            = 1295924,
+		SPELL_PRISMATIC_BOLT_OVERRIDE   = 1295942
 	};
 
+	static constexpr uint32 ARCANE_CHARGES_MAX          = 4;        // Plafond des charges arcaniques
+	static constexpr uint32 PRISMATIC_BOLT_CHARGES      = 4;        // Charges generees par Trait prismatique
 	static constexpr int32  ARCANE_BARRAGE_MIN_CHARGES  = 4;        // Charges requises pour Barrage
 	static constexpr float  AOE_RANGE                   = 10.0f;    // Distance de detection AOE
 	static constexpr uint32 MASS_POLYMORPH_THRESHOLD    = 4;        // Au-dela de N ennemis -> Polymorph
@@ -1451,19 +1627,45 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 		DoCast(victim, SPELL_ARCANE_BARRAGE);
 	}
 
+	// Trait prismatique ! remplace Arcane Blast tant que le buff est actif.
+	uint32 GetArcaneBlastSpell() const
+	{
+		return me->HasAura(SPELL_PRISMATIC_BOLT_OVERRIDE) ? SPELL_PRISMATIC_BOLT : SPELL_ARCANE_BLAST;
+	}
+
+	// Charges arcaniques : +1 par Arcane Blast, +4 par Trait prismatique,
+	// remises a zero par Arcane Barrage (cycle normal ou kite).
+	void OnSpellCast(SpellInfo const* spell) override
+	{
+		switch (spell->Id)
+		{
+			case SPELL_ARCANE_BLAST:
+				arcaneCharges = std::min(ARCANE_CHARGES_MAX, arcaneCharges + 1);
+				break;
+			case SPELL_PRISMATIC_BOLT:
+				arcaneCharges = std::min(ARCANE_CHARGES_MAX, arcaneCharges + PRISMATIC_BOLT_CHARGES);
+				break;
+			case SPELL_ARCANE_BARRAGE:
+				arcaneCharges = 0;
+				break;
+			default:
+				break;
+		}
+	}
+
 	void JustEngagedWith(Unit* who) override
 	{
 		npc_theramore_troop::JustEngagedWith(who);
 
 		// Premier Arcane Blast immediat sur l'agresseur.
-		DoCast(who, SPELL_ARCANE_BLAST);
+		DoCast(who, GetArcaneBlastSpell());
 
 		scheduler
 			// --- Arcane Blast continu ---
 			// Re-schedule a la duree exacte du cast time (qui descend avec les charges).
 			.Schedule(2s, [this](TaskContext arcane_blast)
 			{
-				DoCastVictim(SPELL_ARCANE_BLAST);
+				DoCastVictim(GetArcaneBlastSpell());
 				arcane_blast.Repeat(1800ms);
 			})
 			// --- Arcane Missiles on Clearcasting ---
@@ -1491,11 +1693,9 @@ struct npc_theramore_arcanist : public npc_theramore_troop
 			// sinon on re-check toutes les 2s.
 			.Schedule(2s, [this](TaskContext arcane_barrage)
 			{
+				// La remise a zero se fait dans OnSpellCast, une fois le Barrage reellement lance.
 				if (arcaneCharges >= ARCANE_BARRAGE_MIN_CHARGES)
-				{
 					DoCastVictim(SPELL_ARCANE_BARRAGE);
-					arcaneCharges = 0;
-				}
 				arcane_barrage.Repeat(2s);
 			})
 			// --- Touch of the Magi ---
@@ -1562,6 +1762,7 @@ struct npc_theramore_faithful : public npc_theramore_troop
 		SPELL_RENEW                 = 294342,
 		SPELL_FLASH_HEAL            = 314655,
 		SPELL_POWER_WORD_SHIELD     = 318158,
+        SPELL_DIVINE_WORD_SANCTUAR  = 372784,
 		SPELL_HOLY_WORD_SERENITY    = 430546,
 		SPELL_SHADOW_WORD_PAIN      = 435397,
 	};
@@ -1663,7 +1864,15 @@ struct npc_theramore_faithful : public npc_theramore_troop
 				}
 
 				flash_heal.Repeat(1s);
-			});
+			})
+            .Schedule(8s, [this](TaskContext /*context*/)
+            {
+                if (Unit* target = FindLowestHealthFriend(me, STANDARD_RANGE, true))
+                {
+                    CastStop();
+                    DoCast(target, SPELL_DIVINE_WORD_SANCTUAR);
+                }
+            });
 	}
 };
 
@@ -1979,6 +2188,7 @@ struct npc_roknah_hag : public npc_theramore_horde
 	static constexpr float MELEE_FLEE_RANGE             = 12.0f;    // Distance "trop proche" pour fuir
 	static constexpr uint32 MELEE_FLEE_THRESHOLD        = 2;        // Au-dela de N ennemis melee, on fuit
 	static constexpr uint8 ICE_BLOCK_HP_PCT             = 20;       // Seuil de PV declenchant Ice Block + fuite
+	static constexpr float ICE_BLOCK_CHANCE             = 60.0f;    // Chance de lancer Ice Block
 	static constexpr uint32 ICE_BARRIER_PULL_CHANCE     = 30;       // Chance de se buffer Ice Barrier au pull
 	static constexpr float ICE_LANCE_RANGE              = 30.0f;    // Portee de selection des cibles Ice Lance
 	static constexpr uint32 FREEZING_STACKS_PER_LANCE   = 4;        // Stacks de Freezing consommes par un Ice Lance qui shatter
@@ -2074,7 +2284,7 @@ struct npc_roknah_hag : public npc_theramore_horde
 	{
 		// En dessous de 20% PV : on annule le coup et on declenche Ice Block + fuite.
 		// Cooldown interne d'1 min - Hypothermia empeche cote sort un re-block immediat.
-		if (!iceblock && HealthBelowPct(ICE_BLOCK_HP_PCT))
+		if (!iceblock && roll_chance(ICE_BLOCK_CHANCE) && HealthBelowPct(ICE_BLOCK_HP_PCT))
 		{
 			damage = 0;
 
@@ -2759,6 +2969,15 @@ struct npc_roknah_felcaster : public npc_theramore_horde
 		if (roll_chance(FELHUNTER_CHANCE))
 			DoCastSelf(SPELL_SUMMON_FELHUNTER, TRIGGERED_CAST_DIRECTLY);
 	}
+
+    // Supprime les eclats volants
+    void JustDied(Unit* killer)
+    {
+        CustomAI::JustDied(killer);
+
+        soulShardsCount = 0;
+        UpdateSoulShardVisuals();
+    }
 
 	void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spell*/) override
 	{
@@ -3502,6 +3721,68 @@ class spell_theramore_throw_bucket : public SpellScript
 	}
 };
 
+// Evacuer le blesse (2000000) : bouton d'action donne par l'aura 1295294
+// pres d'un blesse (npc_wounded_theramore_troop). Le sort vise le lanceur :
+// le bouton marche sans cible selectionnee, c'est le blesse a evacuer le plus
+// proche qui est pris. Le sort n'a pas de visuel : pendant l'incantation, le
+// lanceur ne joue que l'effet arcane dans les mains (le kit d'incantation du
+// visuel 162002, sans sa teleportation sur le lanceur). L'effet DUMMY evacue
+// le blesse, et la teleportation se joue sur lui si elle a reussi (pas pour
+// le dernier).
+class spell_theramore_evacuate_wounded : public SpellScript
+{
+	static constexpr uint32 SPELL_VISUAL_KIT_ARCANE_HANDS = 231954;    // SpellVisual 162002, evenement PrecastStart
+	static constexpr uint32 ARCANE_HANDS_DURATION = 1000;               // Temps d'incantation du sort, en ms
+	// Meme portee que le bouton (npc_wounded_theramore_troop::EVACUATE_RANGE).
+	static constexpr float EVACUATE_RANGE = 8.0f;
+
+	static Creature* FindWounded(Unit* caster)
+	{
+		std::list<Creature*> wounded;
+		caster->GetCreatureListWithEntryInGrid(wounded, NPC_THERAMORE_WOUNDED_TROOP, EVACUATE_RANGE);
+		wounded.remove_if([](Creature* creature)
+		{
+			return !creature->IsAIEnabled() || !creature->AI()->GetData(DATA_WOUNDED_EVACUABLE);
+		});
+		if (wounded.empty())
+			return nullptr;
+
+		wounded.sort(Trinity::ObjectDistanceOrderPred(caster));
+		return wounded.front();
+	}
+
+	SpellCastResult CheckCast()
+	{
+		if (!FindWounded(GetCaster()))
+			return SPELL_FAILED_BAD_TARGETS;
+
+		return SPELL_CAST_OK;
+	}
+
+	void OnPrecast() override
+	{
+		GetCaster()->SendPlaySpellVisualKit(SPELL_VISUAL_KIT_ARCANE_HANDS, 0, ARCANE_HANDS_DURATION);
+	}
+
+	void HandleDummy(SpellEffIndex /*effIndex*/)
+	{
+		Unit* caster = GetCaster();
+		Creature* target = FindWounded(caster);
+		if (!target)
+			return;
+
+		target->AI()->SetGUID(caster->GetGUID(), 0);
+		if (target->AI()->GetData(DATA_WOUNDED_TELEPORTED))
+			target->CastSpell(target, SPELL_TELEPORT_DUMMY, true);
+	}
+
+	void Register() override
+	{
+		OnCheckCast += SpellCheckCastFn(spell_theramore_evacuate_wounded::CheckCast);
+		OnEffectHitTarget += SpellEffectFn(spell_theramore_evacuate_wounded::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+	}
+};
+
 // Powder Keg - BasicEvent
 // Chaine d'explosions le long du bateau : l'event se replanifie lui-meme
 // toutes les 100-180ms et fait exploser un stalker de plus a chaque passage,
@@ -3870,7 +4151,10 @@ struct at_blizzard_theramore : AreaTriggerAI
 		{
 			if (Unit* caster = at->GetCaster())
 			{
-				for (ObjectGuid unit : at->GetInsideUnits())
+				// Copie : le sort peut tuer/retirer la cible du monde, ce qui
+				// la fait sortir de l'areatrigger et invaliderait l'iteration.
+				GuidUnorderedSet const insideUnits = at->GetInsideUnits();
+				for (ObjectGuid unit : insideUnits)
 				{
 					if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
 					{
@@ -3912,7 +4196,8 @@ struct at_consecration : AreaTriggerAI
 	{
 		if (Unit* caster = at->GetCaster())
 		{
-			for (ObjectGuid unit : at->GetInsideUnits())
+			GuidUnorderedSet const insideUnits = at->GetInsideUnits();
+			for (ObjectGuid unit : insideUnits)
 			{
 				if (Unit* target = ObjectAccessor::GetUnit(*caster, unit))
 				{
@@ -3961,7 +4246,8 @@ struct at_divine_word_sanctuary : AreaTriggerAI
 			// Recuperation du lanceur du sort
 			if (Unit* caster = at->GetCaster())
 			{
-				for (const ObjectGuid& unitGuid : at->GetInsideUnits())
+				GuidUnorderedSet const insideUnits = at->GetInsideUnits();
+				for (ObjectGuid unitGuid : insideUnits)
 				{
 					if (Unit* target = ObjectAccessor::GetUnit(*caster, unitGuid))
 					{
@@ -4147,6 +4433,7 @@ void AddSC_npcs_battle_for_theramore()
 	RegisterSpellScript(spell_roknah_hag_flurry);
 	RegisterSpellScript(spell_theramore_light_of_dawn);
 	RegisterSpellScript(spell_theramore_throw_bucket);
+	RegisterSpellScript(spell_theramore_evacuate_wounded);
 	RegisterSpellScript(spell_powder_keg);
 	RegisterSpellScript(spell_wild_imp);
 	RegisterSpellScript(spell_hand_of_guldan);

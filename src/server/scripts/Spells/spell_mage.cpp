@@ -44,10 +44,13 @@ enum MageSpells
 	SPELL_MAGE_ARCANE_ALTER_TIME_AURA            = 342246,
 	SPELL_MAGE_ARCANE_BARRAGE_ENERGIZE           = 321529,
 	SPELL_MAGE_ARCANE_BARRAGE_R3                 = 321526,
+	SPELL_MAGE_ARCANE_BLAST                      = 30451,
 	SPELL_MAGE_ARCANE_CHARGE                     = 36032,
 	SPELL_MAGE_ARCANE_MAGE                       = 137021,
 	SPELL_MAGE_ARCANE_MISSILES                   = 5143,
 	SPELL_MAGE_ARCANE_MISSILES_DAMAGE            = 7268,
+	SPELL_MAGE_ARCANE_SALVO                      = 1242974,
+	SPELL_MAGE_ARCANE_SALVO_TALENT               = 384452,
 	SPELL_MAGE_BLAZING_BARRIER_TRIGGER           = 235314,
 	SPELL_MAGE_BLINK                             = 1953,
 	SPELL_MAGE_BLIZZARD_DAMAGE                   = 190357,
@@ -101,6 +104,9 @@ enum MageSpells
 	SPELL_MAGE_MOLTEN_FURY                       = 458910,
 	SPELL_MAGE_PHOENIX_FLAMES                    = 257541,
 	SPELL_MAGE_PHOENIX_FLAMES_DAMAGE             = 257542,
+	SPELL_MAGE_PRISMATIC_BOLT                    = 1295924,
+	SPELL_MAGE_PRISMATIC_BOLT_OVERRIDE           = 1295942,
+	SPELL_MAGE_PRISMATIC_BOLT_TALENT             = 1295923,
 	SPELL_MAGE_PYROBLAST                         = 11366,
 	SPELL_MAGE_PYROTECHNICS                      = 157644,
 	SPELL_MAGE_RADIANT_SPARK_PROC_BLOCKER        = 376105,
@@ -291,6 +297,118 @@ class spell_mage_arcane_barrage : public SpellScript
 	}
 
 	ObjectGuid _primaryTarget;
+};
+
+// 44425 - Arcane Barrage
+// 450499 - Arcane Barrage (PNJ)
+// Salve arcanique : releve les stacks avant le calcul des degats (phase de lancement),
+// puis consomme l'aura apres le cast et tente le proc de Trait prismatique.
+class spell_mage_arcane_salvo_consumer : public SpellScript
+{
+	bool Validate(SpellInfo const* /*spellInfo*/) override
+	{
+		return ValidateSpellInfo({ SPELL_MAGE_ARCANE_SALVO, SPELL_MAGE_PRISMATIC_BOLT_OVERRIDE });
+	}
+
+	void SnapshotArcaneSalvo()
+	{
+		if (AuraEffect const* salvo = GetCaster()->GetAuraEffect(SPELL_MAGE_ARCANE_SALVO, EFFECT_0))
+		{
+			_salvoStacks = salvo->GetBase()->GetStackAmount();
+			_salvoPct = salvo->GetAmount();
+		}
+	}
+
+	// Les PNJ n'ont pas de spellmods : le bonus de Salve arcanique est applique ici
+	void ApplyNpcBonus(SpellEffIndex /*effIndex*/)
+	{
+		if (_salvoPct && !GetCaster()->GetSpellModOwner())
+			SetHitDamage(GetHitDamage() + CalculatePct(GetHitDamage(), _salvoPct));
+	}
+
+	void ConsumeArcaneSalvo()
+	{
+		if (!_salvoStacks)
+			return;
+
+		Unit* caster = GetCaster();
+
+		// Trait prismatique : 1 % de chances par charge de Salve arcanique consommee
+		if (AuraEffect const* prismatic = caster->GetAuraEffect(SPELL_MAGE_PRISMATIC_BOLT_TALENT, EFFECT_0))
+			if (roll_chance(_salvoStacks * prismatic->GetAmount()))
+				caster->CastSpell(caster, SPELL_MAGE_PRISMATIC_BOLT_OVERRIDE, TRIGGERED_FULL_MASK);
+
+		caster->RemoveAurasDueToSpell(SPELL_MAGE_ARCANE_SALVO);
+	}
+
+	void Register() override
+	{
+		BeforeCast += SpellCastFn(spell_mage_arcane_salvo_consumer::SnapshotArcaneSalvo);
+		OnEffectHitTarget += SpellEffectFn(spell_mage_arcane_salvo_consumer::ApplyNpcBonus, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
+		AfterCast += SpellCastFn(spell_mage_arcane_salvo_consumer::ConsumeArcaneSalvo);
+	}
+
+	uint8 _salvoStacks = 0;
+	int32 _salvoPct = 0;
+};
+
+// 333820 - Arcane Missiles (PNJ)
+// Salve arcanique : chaque vague ajoute un stack (20 max)
+class spell_mage_arcane_salvo_generator : public AuraScript
+{
+	bool Validate(SpellInfo const* /*spellInfo*/) override
+	{
+		return ValidateSpellInfo({ SPELL_MAGE_ARCANE_SALVO });
+	}
+
+	void HandleEffectPeriodic(AuraEffect const* /*aurEff*/)
+	{
+		if (Unit* caster = GetCaster())
+			if (caster->HasAura(SPELL_MAGE_ARCANE_SALVO_TALENT))
+				caster->CastSpell(caster, SPELL_MAGE_ARCANE_SALVO, TRIGGERED_FULL_MASK);
+	}
+
+	void Register() override
+	{
+		OnEffectPeriodic += AuraEffectPeriodicFn(spell_mage_arcane_salvo_generator::HandleEffectPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL);
+	}
+};
+
+// 30451 - Arcane Blast
+// 291336 - Arcane Blast (PNJ)
+// 1222815 - Arcane Blast (PNJ)
+// Les joueurs passent par l'override de barre d'action de Trait prismatique ! (1295942) ;
+// les PNJ lancent toujours Deflagration des arcanes, on la remplace donc ici par Trait prismatique.
+class spell_mage_arcane_blast_prismatic_bolt : public SpellScript
+{
+	bool Validate(SpellInfo const* /*spellInfo*/) override
+	{
+		return ValidateSpellInfo({ SPELL_MAGE_PRISMATIC_BOLT, SPELL_MAGE_PRISMATIC_BOLT_OVERRIDE });
+	}
+
+	SpellCastResult CheckCast()
+	{
+		Unit* caster = GetCaster();
+		Unit* target = GetExplTargetUnit();
+		if (caster->IsPlayer() || !target || !caster->HasAura(SPELL_MAGE_PRISMATIC_BOLT_OVERRIDE))
+			return SPELL_CAST_OK;
+
+		// Relance au prochain update : impossible de demarrer un autre cast pendant la preparation de celui-ci
+		ObjectGuid const targetGuid = target->GetGUID();
+		caster->m_Events.AddEventAtOffset([caster, targetGuid]
+		{
+			Unit* victim = ObjectAccessor::GetUnit(*caster, targetGuid);
+			if (victim && victim->IsAlive() && caster->HasAura(SPELL_MAGE_PRISMATIC_BOLT_OVERRIDE))
+				caster->CastSpell(victim, SPELL_MAGE_PRISMATIC_BOLT);
+		}, 0ms);
+
+		return SPELL_FAILED_DONT_REPORT;
+	}
+
+	void Register() override
+	{
+		OnCheckCast += SpellCheckCastFn(spell_mage_arcane_blast_prismatic_bolt::CheckCast);
+	}
 };
 
 // 195302 - Arcane Charge
@@ -2308,6 +2426,56 @@ class spell_mage_prismatic_barrier : public AuraScript
 	}
 };
 
+// 1295924 - Prismatic Bolt
+class spell_mage_prismatic_bolt : public SpellScript
+{
+	bool Validate(SpellInfo const* /*spellInfo*/) override
+	{
+		return ValidateSpellInfo({ SPELL_MAGE_PRISMATIC_BOLT_OVERRIDE });
+	}
+
+	void ConsumeOverride()
+	{
+		GetCaster()->RemoveAurasDueToSpell(SPELL_MAGE_PRISMATIC_BOLT_OVERRIDE);
+	}
+
+	void Register() override
+	{
+		AfterCast += SpellCastFn(spell_mage_prismatic_bolt::ConsumeOverride);
+	}
+};
+
+// 1295939 - Prismatic Bolt (zone)
+class spell_mage_prismatic_bolt_area : public SpellScript
+{
+	bool Validate(SpellInfo const* /*spellInfo*/) override
+	{
+		return ValidateSpellEffect({ { SPELL_MAGE_PRISMATIC_BOLT, EFFECT_3 } });
+	}
+
+	// Seuls les "autres adversaires proches" subissent la zone
+	void ExcludePrimaryTarget(std::list<WorldObject*>& targets)
+	{
+		if (Unit* primary = GetExplTargetUnit())
+			targets.remove(primary);
+	}
+
+	// Degats reduits au-dela de N cibles (EFFECT_3 de Trait prismatique)
+	void HandleTargetCap(SpellEffIndex /*effIndex*/)
+	{
+		int32 const cap = sSpellMgr->AssertSpellInfo(SPELL_MAGE_PRISMATIC_BOLT, GetCastDifficulty())->GetEffect(EFFECT_3).CalcValueAsInt(GetCaster());
+		int64 const count = GetUnitTargetCountForEffect(EFFECT_1);
+		if (cap > 0 && count > cap)
+			SetHitDamage(int32(GetHitDamage() * std::sqrt(float(cap) / float(count))));
+	}
+
+	void Register() override
+	{
+		OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_mage_prismatic_bolt_area::ExcludePrimaryTarget, EFFECT_1, TARGET_UNIT_DEST_AREA_ENEMY);
+		OnEffectHitTarget += SpellEffectFn(spell_mage_prismatic_bolt_area::HandleTargetCap, EFFECT_1, SPELL_EFFECT_SCHOOL_DAMAGE);
+	}
+};
+
 // 157642 - Pyrotechnics
 class spell_mage_pyrotechnics : public AuraScript
 {
@@ -2427,10 +2595,16 @@ class spell_mage_arcane_missiles : public AuraScript
 		Unit* target = GetTarget();
 
 		if (caster && target)
+		{
 			caster->CastSpell(target, SPELL_MAGE_ARCANE_MISSILES_DAMAGE, CastSpellExtraArgsInit
 				{
 					.TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR
 				});
+
+			// Salve arcanique : chaque vague ajoute un stack (20 max)
+			if (caster->HasAura(SPELL_MAGE_ARCANE_SALVO_TALENT))
+				caster->CastSpell(caster, SPELL_MAGE_ARCANE_SALVO, TRIGGERED_FULL_MASK);
+		}
 	}
 
 	void Register() override
@@ -2968,6 +3142,9 @@ void AddSC_mage_spell_scripts()
 	RegisterSpellScript(spell_mage_alter_time_aura);
 	RegisterSpellScript(spell_mage_alter_time_active);
 	RegisterSpellScript(spell_mage_arcane_barrage);
+	RegisterSpellScript(spell_mage_arcane_blast_prismatic_bolt);
+	RegisterSpellScript(spell_mage_arcane_salvo_consumer);
+	RegisterSpellScript(spell_mage_arcane_salvo_generator);
 	RegisterSpellScript(spell_mage_arcane_charge_clear);
 	RegisterSpellScript(spell_mage_arcane_explosion);
 	RegisterSpellScript(spell_mage_augury_abounds);
@@ -3025,6 +3202,8 @@ void AddSC_mage_spell_scripts()
 	RegisterSpellScript(spell_mage_arcane_orb);
 	RegisterSpellScript(spell_mage_polymorph_visual);
 	RegisterSpellScript(spell_mage_prismatic_barrier);
+	RegisterSpellScript(spell_mage_prismatic_bolt);
+	RegisterSpellScript(spell_mage_prismatic_bolt_area);
 	RegisterSpellScript(spell_mage_pyrotechnics);
 	RegisterSpellScript(spell_mage_radiant_spark);
 	RegisterSpellAndAuraScriptPair(spell_mage_ray_of_frost, spell_mage_ray_of_frost_aura);
