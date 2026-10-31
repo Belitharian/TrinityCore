@@ -167,47 +167,29 @@ struct npc_theramore_citizen : public CustomAI
 		me->SetEmoteState(EMOTE_STATE_NONE);
 		me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
 
-		// Sequence en deux temps : il se tourne vers le joueur, puis reagit.
-		// Le joueur est retrouve par son GUID : il peut s'etre deconnecte.
-		scheduler.Schedule(780ms, 1500ms, [this, playerGuid = player->GetGUID()](TaskContext context)
+        // Retire les auras d'ambiance posees par le creature_addon
+		// (peur, sanglots...) avant de jouer la reaction.
+		if (CreatureAddon const* creatureAddon = me->GetCreatureAddon())
 		{
-			switch (context.GetRepeatCounter())
+			if (!creatureAddon->auras.empty())
 			{
-				case 0:
-				{
-					if (Player* player = ObjectAccessor::GetPlayer(*me, playerGuid))
-						me->SetFacingToObject(player);
-					// Retire les auras d'ambiance posees par le creature_addon
-					// (peur, sanglots...) avant de jouer la reaction.
-					if (CreatureAddon const* creatureAddon = me->GetCreatureAddon())
-					{
-						if (!creatureAddon->auras.empty())
-						{
-							for (auto aura : creatureAddon->auras)
-								me->RemoveAurasDueToSpell(aura);
-						}
-					}
-					context.Repeat(780ms, 1500ms);
-					break;
-				}
-				case 1:
-				{
-					if (StartEvacuation())
-						Say(SAY_THERAMORE_CITIZEN_FLEE);
-					else if (roll_chance(CRY_EMOTE_CHANCE))
-					{
-						me->HandleEmoteCommand(RAND(EMOTE_STATE_CRY, EMOTE_STATE_COWER));
-						Say(SAY_THERAMORE_CITIZEN_CRY);
-					}
-					else
-					{
-						me->HandleEmoteCommand(RAND(EMOTE_ONESHOT_WAVE, EMOTE_ONESHOT_NO));
-						Say(SAY_THERAMORE_CITIZEN_FEARED);
-					}
-					break;
-				}
+				for (auto aura : creatureAddon->auras)
+					me->RemoveAurasDueToSpell(aura);
 			}
-		});
+		}
+
+        if (StartEvacuation())
+            Say(SAY_THERAMORE_CITIZEN_FLEE);
+        else if (roll_chance(CRY_EMOTE_CHANCE))
+        {
+            me->HandleEmoteCommand(RAND(EMOTE_STATE_CRY, EMOTE_STATE_COWER));
+            Say(SAY_THERAMORE_CITIZEN_CRY);
+        }
+        else
+        {
+            me->HandleEmoteCommand(RAND(EMOTE_ONESHOT_WAVE, EMOTE_ONESHOT_NO));
+            Say(SAY_THERAMORE_CITIZEN_FEARED);
+        }
 	}
 
 	private:
